@@ -1,4 +1,5 @@
 from sys import argv
+import os
 import faiss
 import numpy as np
 import clip
@@ -8,8 +9,7 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image as PILImage
 
-# TODO: ws2356, use platform agnostic path separator
-data_dir = Path("clip-retrieval\\embeddings\\metadata")
+data_dir = Path(os.path.join('clip-retrieval', 'embeddings', 'metadata'))
 df = pd.concat(
     pd.read_parquet(parquet_file)
     for parquet_file in data_dir.glob('*.parquet')
@@ -17,7 +17,7 @@ df = pd.concat(
 image_list = df["image_path"].tolist()
 
 
-ind = faiss.read_index("clip-retrieval\\knn.index")
+ind = faiss.read_index(os.path.join('clip-retrieval', 'knn.index'))
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
