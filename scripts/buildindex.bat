@@ -1,0 +1,1 @@
+autofaiss build_index --embeddings="clip-retrieval\embeddings\img_emb" --index_path="clip-retrieval\knn.index" --index_infos_path="clip-retrieval\infos.json" --metric_type="ip" --max_index_query_time_ms=5 --max_index_memory_usage="1GB"

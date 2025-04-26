@@ -1,0 +1,1 @@
+clip-retrieval inference clip-retrieval\image-dataset clip-retrieval\embeddings --num_prepro_workers 0  --enable_text False
