@@ -7,10 +7,8 @@ from IPython.display import Image, display
 from pathlib import Path
 import pandas as pd
 from PIL import Image as PILImage
-import os
 
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
+# TODO: ws2356, use platform agnostic path separator
 data_dir = Path("clip-retrieval\\embeddings\\metadata")
 df = pd.concat(
     pd.read_parquet(parquet_file)
