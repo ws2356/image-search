@@ -8,6 +8,8 @@
 ``` pip install -e .```
 2. Install pip deps
 ``` pip install -r clip-retrieval/requirements.txt```
+3. Reinstall faiss-cpu (refer to caveat #2)
+ `pip uninstall faiss-cpu; conda install faiss-cpu`
 
 # Caveats
 1. Use this patch to clip-retrieval - https://github.com/rom1504/clip-retrieval/commit/c2a67dc8f979dfeb39b1edeb777ee85f35a44461  
