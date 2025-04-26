@@ -12,4 +12,6 @@
 # Caveats
 1. Use this patch to clip-retrieval - https://github.com/rom1504/clip-retrieval/commit/c2a67dc8f979dfeb39b1edeb777ee85f35a44461  
 ``` pip install -e . ```
-2. Need to set env `os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"` to work around duplicate openmp issue
+2. Reinstall `faiss-cpu` using `pip uninstall faiss-cpu; conda install faiss-cpu`. On my machine, that would replace faiss-cpu==1.10.0 with faiss-cpu==1.9.0, which would fix the OpenMP runtime version conflict error
+    > OMP: Hint This means that multiple copies of the OpenMP runtime have been linked into the program. That is dangerous, since it can degrade performance or cause incorrect results. The best thing to do is to ensure that only a single OpenMP runtime is linked into the process, e.g. by avoiding static linking of the OpenMP runtime in any library. As an unsafe, unsupported, undocumented workaround you can set the environment variable KMP_DUPLICATE_LIB_OK=TRUE to allow the program to continue to execute, but that may cause crashes or silently produce incorrect results. For more information, please see http://openmp.llvm.org/
+3. [Deprecated, prefer #2] Need to set env `os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"` to work around duplicate openmp issue
