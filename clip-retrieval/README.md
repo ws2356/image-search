@@ -19,3 +19,4 @@
 3. [Deprecated, prefer #2] Need to set env `os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"` to work around duplicate openmp issue
 4. Need to install ray otherwise img2dataset will fail silently
 5. If img2dataset still fails with #4, consider this patch - https://github.com/ws2356/img2dataset/tree/ws2356/customize_base
+6. Install autofaiss and use the `update_index` branch for incremental index - https://github.com/ws2356/autofaiss/tree/update_index
