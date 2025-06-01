@@ -1,7 +1,7 @@
 open_clip_torch == 2.26.1
 # faiss-cpu > 1.0.0, < 2.0.0
-torch == 2.1.2
+torch > 2.0.0, < 3.0.0
 torchvision
 pillow
 tqdm
-numpy == 1.24.4
+numpy < 2.0.0
