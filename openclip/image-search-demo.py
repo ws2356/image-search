@@ -33,31 +33,36 @@ measure_time("Model loading")
 image_paths = []
 image_features = []
 
-print("Encoding images...")
-for fname in tqdm(os.listdir(IMAGE_FOLDER)):
-    if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
-        continue
+def get_clip_index():
+    print("Encoding images...")
+    for fname in tqdm(os.listdir(IMAGE_FOLDER)):
+        if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
+            continue
 
-    path = os.path.join(IMAGE_FOLDER, fname)
-    try:
-        image = Image.open(path).convert("RGB")
-        image_input = preprocess(image).unsqueeze(0).to(device)
+        path = os.path.join(IMAGE_FOLDER, fname)
+        try:
+            image = Image.open(path).convert("RGB")
+            image_input = preprocess(image).unsqueeze(0).to(device)
 
-        with torch.no_grad():
-            features = model.encode_image(image_input)
-            features = features / features.norm(dim=-1, keepdim=True)
+            with torch.no_grad():
+                features = model.encode_image(image_input)
+                features = features / features.norm(dim=-1, keepdim=True)
 
-        image_paths.append(path)
-        image_features.append(features.cpu().numpy())
-    except Exception as e:
-        print(f"Skipping {fname}: {e}")
-measure_time("Image encoding")
+            image_paths.append(path)
+            image_features.append(features.cpu().numpy())
+        except Exception as e:
+            print(f"Skipping {fname}: {e}")
+    measure_time("Image encoding")
 
-# --- Create FAISS index ---
-image_features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
-index = faiss.IndexFlatIP(image_features_np.shape[1])  # cosine similarity via normalized dot product
-index.add(image_features_np)
-measure_time("FAISS index creation")
+    # --- Create FAISS index ---
+    image_features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
+    index = faiss.IndexFlatIP(image_features_np.shape[1])  # cosine similarity via normalized dot product
+    index.add(image_features_np)
+    measure_time("FAISS index creation")
+
+    return index
+
+index = get_clip_index()
 
 # --- Encode text query ---
 text_tokens = tokenizer([QUERY_TEXT]).to(device)
