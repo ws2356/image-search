@@ -1,10 +1,17 @@
 import os
+import time
 import torch
 import open_clip
 from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
 import faiss
+
+start_time = time.perf_counter()
+def measure_time(msg=""):
+    elapsed = time.perf_counter() - start_time
+    print(f"{msg} completed at: {elapsed:.3f} seconds")
+    return elapsed
 
 import faulthandler; faulthandler.enable()
 
@@ -20,6 +27,7 @@ model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrai
 print("after loading model")
 tokenizer = open_clip.get_tokenizer('ViT-B-32')
 model = model.to(device).eval()
+measure_time("Model loading")
 
 # --- Encode images ---
 image_paths = []
@@ -43,11 +51,13 @@ for fname in tqdm(os.listdir(IMAGE_FOLDER)):
         image_features.append(features.cpu().numpy())
     except Exception as e:
         print(f"Skipping {fname}: {e}")
+measure_time("Image encoding")
 
 # --- Create FAISS index ---
 image_features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
 index = faiss.IndexFlatIP(image_features_np.shape[1])  # cosine similarity via normalized dot product
 index.add(image_features_np)
+measure_time("FAISS index creation")
 
 # --- Encode text query ---
 text_tokens = tokenizer([QUERY_TEXT]).to(device)
@@ -55,9 +65,12 @@ with torch.no_grad():
     text_features = model.encode_text(text_tokens)
     text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 text_vector = text_features.cpu().numpy()
+measure_time("Text encoding")
 
 # --- Search ---
 scores, indices = index.search(text_vector, TOP_K)
-print(f"\nTop {TOP_K} results for query: '{QUERY_TEXT}':\n")
+measure_time("Total time for image search")
+
+print(f"\nTop {TOP_K} results for query: '{QUERY_TEXT}':")
 for idx, score in zip(indices[0], scores[0]):
     print(f"{image_paths[idx]} (score: {score:.3f})")
