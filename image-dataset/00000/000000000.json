@@ -1,0 +1,12 @@
+{
+    "url": "http://piet.home/20200116_193955.jpg",
+    "key": "000000000",
+    "status": "success",
+    "error_message": null,
+    "width": 256,
+    "height": 256,
+    "original_width": 4032,
+    "original_height": 3024,
+    "exif": "{\"Image ImageWidth\": \"4032\", \"Image ImageLength\": \"3024\", \"Image Make\": \"samsung\", \"Image Model\": \"SM-G9730\", \"Image Orientation\": \"Rotated 90 CW\", \"Image XResolution\": \"72\", \"Image YResolution\": \"72\", \"Image ResolutionUnit\": \"Pixels/Inch\", \"Image Software\": \"G9730ZCU2BSL7\", \"Image DateTime\": \"2020:01:16 19:39:53\", \"Image YCbCrPositioning\": \"Centered\", \"Image ExifOffset\": \"238\", \"GPS GPSLatitudeRef\": \"N\", \"GPS GPSLatitude\": \"[40, 3, 10307519/1000000]\", \"GPS GPSLongitudeRef\": \"E\", \"GPS GPSLongitude\": \"[116, 17, 38140799/1000000]\", \"Image GPSInfo\": \"636\", \"Thumbnail ImageWidth\": \"320\", \"Thumbnail ImageLength\": \"240\", \"Thumbnail Compression\": \"JPEG (old-style)\", \"Thumbnail XResolution\": \"72\", \"Thumbnail YResolution\": \"72\", \"Thumbnail ResolutionUnit\": \"Pixels/Inch\", \"Thumbnail JPEGInterchangeFormat\": \"856\", \"Thumbnail JPEGInterchangeFormatLength\": \"38600\", \"EXIF ExposureTime\": \"1/50\", \"EXIF FNumber\": \"3/2\", \"EXIF ExposureProgram\": \"Program Normal\", \"EXIF ISOSpeedRatings\": \"400\", \"EXIF ExifVersion\": \"\", \"EXIF DateTimeOriginal\": \"2020:01:16 19:39:53\", \"EXIF DateTimeDigitized\": \"2020:01:16 19:39:53\", \"EXIF ShutterSpeedValue\": \"1/50\", \"EXIF ApertureValue\": \"29/25\", \"EXIF ExposureBiasValue\": \"0\", \"EXIF MaxApertureValue\": \"63/25\", \"EXIF MeteringMode\": \"CenterWeightedAverage\", \"EXIF Flash\": \"Flash did not fire\", \"EXIF FocalLength\": \"43/10\", \"EXIF ColorSpace\": \"sRGB\", \"EXIF ExifImageWidth\": \"4032\", \"EXIF ExifImageLength\": \"3024\", \"EXIF ExposureMode\": \"Auto Exposure\", \"EXIF WhiteBalance\": \"Auto\", \"EXIF DigitalZoomRatio\": \"1\", \"EXIF FocalLengthIn35mmFilm\": \"26\", \"EXIF SceneCaptureType\": \"Standard\", \"EXIF ImageUniqueID\": \"L12XLLD00SM\"}",
+    "sha256": "2cc38e6de9749896d0735f9316139309aa4b48b45dfa06e0c9b0c09b45b3269c"
+}

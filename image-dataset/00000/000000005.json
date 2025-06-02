@@ -1,0 +1,12 @@
+{
+    "url": "http://piet.home/20220215_201944.jpg",
+    "key": "000000005",
+    "status": "success",
+    "error_message": null,
+    "width": 256,
+    "height": 256,
+    "original_width": 4032,
+    "original_height": 3024,
+    "exif": "{\"Image ImageWidth\": \"4032\", \"Image ImageLength\": \"3024\", \"Image Make\": \"samsung\", \"Image Model\": \"SM-G9730\", \"Image Orientation\": \"Rotated 90 CW\", \"Image XResolution\": \"72\", \"Image YResolution\": \"72\", \"Image ResolutionUnit\": \"Pixels/Inch\", \"Image Software\": \"G9730ZCU6FUKB\", \"Image DateTime\": \"2022:02:15 20:19:45\", \"Image YCbCrPositioning\": \"Centered\", \"Image ExifOffset\": \"238\", \"GPS GPSLatitudeRef\": \"N\", \"GPS GPSLatitude\": \"[31, 16, 58681199/1000000]\", \"GPS GPSLongitudeRef\": \"E\", \"GPS GPSLongitude\": \"[120, 43, 47211/1250]\", \"Image GPSInfo\": \"696\", \"Thumbnail ImageWidth\": \"512\", \"Thumbnail ImageLength\": \"384\", \"Thumbnail Compression\": \"JPEG (old-style)\", \"Thumbnail XResolution\": \"72\", \"Thumbnail YResolution\": \"72\", \"Thumbnail ResolutionUnit\": \"Pixels/Inch\", \"Thumbnail JPEGInterchangeFormat\": \"916\", \"Thumbnail JPEGInterchangeFormatLength\": \"45403\", \"EXIF ExposureTime\": \"1/100\", \"EXIF FNumber\": \"3/2\", \"EXIF ExposureProgram\": \"Program Normal\", \"EXIF ISOSpeedRatings\": \"800\", \"EXIF ExifVersion\": \"\", \"EXIF DateTimeOriginal\": \"2022:02:15 20:19:45\", \"EXIF DateTimeDigitized\": \"2022:02:15 20:19:45\", \"EXIF OffsetTime\": \"+08:00\", \"EXIF OffsetTimeOriginal\": \"+08:00\", \"EXIF ShutterSpeedValue\": \"1/100\", \"EXIF ApertureValue\": \"29/25\", \"EXIF BrightnessValue\": \"29/100\", \"EXIF ExposureBiasValue\": \"0\", \"EXIF MaxApertureValue\": \"63/25\", \"EXIF MeteringMode\": \"CenterWeightedAverage\", \"EXIF Flash\": \"Flash did not fire\", \"EXIF FocalLength\": \"43/10\", \"EXIF ColorSpace\": \"sRGB\", \"EXIF ExifImageWidth\": \"4032\", \"EXIF ExifImageLength\": \"3024\", \"EXIF ExposureMode\": \"Auto Exposure\", \"EXIF WhiteBalance\": \"Auto\", \"EXIF DigitalZoomRatio\": \"1\", \"EXIF FocalLengthIn35mmFilm\": \"26\", \"EXIF SceneCaptureType\": \"Standard\", \"EXIF ImageUniqueID\": \"L12XLLD00SM\"}",
+    "sha256": "1ca6f9ad369440152fafa6d991c790b3f23d19d899ad532cffa510b594b9b67e"
+}
