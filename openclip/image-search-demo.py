@@ -1,10 +1,10 @@
 import os
-import faiss
 import torch
 import open_clip
 from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
+import faiss
 
 import faulthandler; faulthandler.enable()
 
