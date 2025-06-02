@@ -19,6 +19,7 @@ import faulthandler; faulthandler.enable()
 IMAGE_FOLDER = "../image-dataset/00000"
 QUERY_TEXT = "A bowl of noodles"
 TOP_K = 5
+knn_index_path = "knn_index.faiss"
 
 # --- Load model ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -30,10 +31,21 @@ model = model.to(device).eval()
 measure_time("Model loading")
 
 # --- Encode images ---
-image_paths = []
-image_features = []
+def get_image_db():
+    if not os.path.exists(IMAGE_FOLDER):
+        raise FileNotFoundError(f"Image folder '{IMAGE_FOLDER}' does not exist.")
+    return [os.path.join(IMAGE_FOLDER, fname) for fname in os.listdir(IMAGE_FOLDER) if fname.lower().endswith(('.jpg', '.jpeg', '.png'))]
+
+image_paths = get_image_db()
 
 def get_clip_index():
+    # --- Save index to disk ---
+    if os.path.exists(knn_index_path):
+        index = faiss.read_index(knn_index_path)
+        measure_time("Index loading")
+        return index
+
+    image_features = []
     print("Encoding images...")
     for fname in tqdm(os.listdir(IMAGE_FOLDER)):
         if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
@@ -58,8 +70,10 @@ def get_clip_index():
     image_features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
     index = faiss.IndexFlatIP(image_features_np.shape[1])  # cosine similarity via normalized dot product
     index.add(image_features_np)
-    measure_time("FAISS index creation")
 
+    # --- Save index to disk ---
+    faiss.write_index(index, knn_index_path)
+    measure_time("FAISS index creation")
     return index
 
 index = get_clip_index()
