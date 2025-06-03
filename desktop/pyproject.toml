@@ -2,4 +2,4 @@
 name = "desktop"
 
 [tool.pyside6-project]
-files = ["main.py", "mainwindow.ui"]
+files = ["main.py", "ui/mainwindow.ui"]
