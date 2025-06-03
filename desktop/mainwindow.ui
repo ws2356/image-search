@@ -16,6 +16,23 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
+     <widget class="QScrollArea" name="scrollArea">
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
+      <widget class="QWidget" name="scrollAreaWidgetContents">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>774</width>
+         <height>463</height>
+        </rect>
+       </property>
+      </widget>
+     </widget>
+    </item>
+    <item>
      <widget class="QLabel" name="pathLabel">
       <property name="text">
        <string>No folder selected.</string>
