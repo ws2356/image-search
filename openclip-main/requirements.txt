@@ -5,4 +5,4 @@ torchvision == 0.17.2
 pillow == 11.2.1
 tqdm == 4.67.1
 numpy == 1.26.4
-pyside6
+pyside6 == 6.9.0
