@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QLabel, QW
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 
-from mainwindow_ui import Ui_MainWindow
+from ui.mainwindow_ui import Ui_MainWindow
 
 class MainWindow(QMainWindow):
     def __init__(self):
