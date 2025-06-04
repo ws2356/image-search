@@ -22,6 +22,7 @@ class MainWindow(QMainWindow):
 
         self.ui.addFolderButton.clicked.connect(self.add_folder)
         self.ui.folderList.currentRowChanged.connect(self.display_folder_images)
+        self.ui.searchInput.textChanged.connect(self.handle_search)
 
 
     def add_folder(self):
@@ -58,6 +59,9 @@ class MainWindow(QMainWindow):
             if col >= 4:
                 col = 0
                 row += 1
+
+    def handle_search(self, query):
+        pass
 
 
 if __name__ == '__main__':

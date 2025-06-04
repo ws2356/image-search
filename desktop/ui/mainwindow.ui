@@ -26,7 +26,7 @@
       <property name="sizePolicy">
        <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
         <horstretch>0</horstretch>
-        <verstretch>1</verstretch>
+        <verstretch>0</verstretch>
        </sizepolicy>
       </property>
       <property name="minimumSize">
@@ -37,7 +37,7 @@
       </property>
       <property name="maximumSize">
        <size>
-        <width>16777215</width>
+        <width>300</width>
         <height>16777215</height>
        </size>
       </property>
@@ -49,6 +49,23 @@
       </property>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
+        <widget class="QLineEdit" name="lineEdit">
+         <property name="placeholderText">
+          <string>Search images ...</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListWidget" name="folderList">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="addFolderButton">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -57,17 +74,7 @@
           </sizepolicy>
          </property>
          <property name="text">
-          <string>Select Image Folder</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QListWidget" name="folderList">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Maximum" vsizetype="Expanding">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
+          <string>Add Folder</string>
          </property>
         </widget>
        </item>
@@ -84,7 +91,7 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>484</width>
+         <width>464</width>
          <height>523</height>
         </rect>
        </property>
