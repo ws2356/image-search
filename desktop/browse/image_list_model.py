@@ -11,6 +11,7 @@ class ImageListModel(QAbstractListModel):
         self.thumbnail_cache = {}
         self.placeholder_icon = QIcon(QPixmap(150, 150))  # empty gray or icon
         self.thread_pool = QThreadPool.globalInstance()
+        self.loading_paths = set()
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.image_paths)
@@ -24,11 +25,13 @@ class ImageListModel(QAbstractListModel):
             if path in self.thumbnail_cache:
                 return self.thumbnail_cache[path]
 
-            # Start async thumbnail job
-            signals = ThumbnailJobSignals()
-            signals.finished.connect(self._on_thumbnail_ready)
-            job = ThumbnailJob(index.row(), path, QSize(150, 150), signals)
-            self.thread_pool.start(job)
+            if path not in self.loading_paths:
+                self.loading_paths.add(path)
+                # Start async thumbnail job
+                signals = ThumbnailJobSignals()
+                signals.finished.connect(self._on_thumbnail_ready)
+                job = ThumbnailJob(index.row(), path, QSize(150, 150), signals)
+                self.thread_pool.start(job)
 
             return self.placeholder_icon
 
@@ -49,8 +52,8 @@ class ImageListModel(QAbstractListModel):
 
     def _on_thumbnail_ready(self, row, image):
         path = self.image_paths[row]
+        self.loading_paths.discard(path)
         self.thumbnail_cache[path] = QPixmap.fromImage(image)
         index = self.index(row)
 
-        thread = threading.current_thread()
         self.dataChanged.emit(index, index, [Qt.DecorationRole])
