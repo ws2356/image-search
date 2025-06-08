@@ -5,7 +5,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize
 
 from ui.mainwindow_ui import Ui_MainWindow
-from ui.models.image_list_model import ImageListModel
+from browse.BrowseController import BrowseController
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -13,16 +13,13 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
-        self.model = ImageListModel()
-
-        self.folder_paths = []
+        self.controller = BrowseController()
 
         self.ui.addFolderButton.clicked.connect(self.select_folder)
         self.ui.folderList.currentRowChanged.connect(self.display_folder_images)
         self.ui.searchInput.textChanged.connect(self.handle_search)
-        self.folder = None
 
-        self.ui.imageListView.setModel(self.model)
+        self.ui.imageListView.setModel(self.controller.image_list_model())
         self.ui.imageListView.setViewMode(QListView.IconMode)
         self.ui.imageListView.setResizeMode(QListView.Adjust)
         self.ui.imageListView.setUniformItemSizes(True)
@@ -32,14 +29,10 @@ class MainWindow(QMainWindow):
 
     def select_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
-        if folder and folder not in self.folder_paths:
-            self.folder_paths.append(folder)
-            self.model.load_images_from_folder(folder)
-
+        self.controller.on_folder_added(folder)
+    
     def display_folder_images(self, index):
-        if index < 0 or index >= len(self.folder_paths):
-            return
-        self.model.load_images_from_folder(self.folder_paths[index])
+        self.controller.on_folder_selected(index)
 
     def handle_search(self, query):
         pass
