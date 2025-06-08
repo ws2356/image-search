@@ -1,12 +1,16 @@
 import os
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex
-from PySide6.QtGui import QPixmap, QIcon
+import threading
+from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
+from PySide6.QtGui import QPixmap, QIcon, QImage
+from .thumbnail_job import ThumbnailJob, ThumbnailJobSignals
 
 class ImageListModel(QAbstractListModel):
     def __init__(self, image_paths=None, parent=None):
         super().__init__(parent)
         self.image_paths = image_paths or []
         self.thumbnail_cache = {}
+        self.placeholder_icon = QIcon(QPixmap(150, 150))  # empty gray or icon
+        self.thread_pool = QThreadPool.globalInstance()
 
     def rowCount(self, parent=QModelIndex()):
         return len(self.image_paths)
@@ -17,10 +21,16 @@ class ImageListModel(QAbstractListModel):
         path = self.image_paths[index.row()]
 
         if role == Qt.DecorationRole:
-            if path not in self.thumbnail_cache:
-                pixmap = QPixmap(path).scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.thumbnail_cache[path] = QIcon(pixmap)
-            return self.thumbnail_cache[path]
+            if path in self.thumbnail_cache:
+                return self.thumbnail_cache[path]
+
+            # Start async thumbnail job
+            signals = ThumbnailJobSignals()
+            signals.finished.connect(self._on_thumbnail_ready)
+            job = ThumbnailJob(index.row(), path, QSize(150, 150), signals)
+            self.thread_pool.start(job)
+
+            return self.placeholder_icon
 
         if role == Qt.ToolTipRole:
             return os.path.basename(path)
@@ -35,3 +45,12 @@ class ImageListModel(QAbstractListModel):
         self.image_paths = files
         self.thumbnail_cache.clear()
         self.endResetModel()
+
+    def _on_thumbnail_ready(self, row, image):
+        path = self.image_paths[row]
+        self.thumbnail_cache[path] = QPixmap.fromImage(image)
+        index = self.index(row)
+
+        thread = threading.current_thread()
+        print(f"Thumbnail reload [{thread.name} - {thread.ident}]: {row} - {path}")
+        self.dataChanged.emit(index, index, [Qt.DecorationRole])
