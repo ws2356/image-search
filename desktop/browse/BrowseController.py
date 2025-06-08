@@ -1,22 +1,38 @@
 from base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
 from .image_list_model import ImageListModel
+from .folder_list_model import FolderListModel
 
 class BrowseController(BaseController):
     def __init__(self):
         super().__init__()
-        self.model = None
+        self.folderListModel = None
+        self.imageListModel = None
 
     def folder_list_model(self) -> QAbstractListModel:
-        pass
+        if self.folderListModel is None:
+            self.folderListModel = FolderListModel([])
+        return self.folderListModel
 
     def image_list_model(self) -> QAbstractListModel:
-        if self.model is None:
-          self.model = ImageListModel()
-        return self.model
+        if self.imageListModel is None:
+          self.imageListModel = ImageListModel()
+        return self.imageListModel
 
     def on_folder_added(self, folder_path: str):
-        self.model.load_images_from_folder(folder_path)
+        if folder_path not in self.folder_list_model().folders:
+            print(f"on_folder_added: {folder_path}")
+            self.folderListModel.folders.append(folder_path)
+            self.folderListModel.layoutChanged.emit()
 
     def on_folder_selected(self, row: int):
-        pass
+        folder_path = self.folder_list_model().folders[row]
+        print(f"on_folder_selected: {folder_path}")
+        self.image_list_model().load_images_from_folder(folder_path)
+
+    def get_index_for_folder(self, folder_path: str) -> QModelIndex:
+        model = self.folder_list_model()
+        for row in range(model.rowCount()):
+            if model.data(model.index(row), Qt.ToolTipRole) == folder_path:
+                return model.index(row)
+        return QModelIndex()

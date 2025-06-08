@@ -38,6 +38,7 @@ class ImageListModel(QAbstractListModel):
         return None
 
     def load_images_from_folder(self, folder):
+        print(f"Loading images from folder: {folder}")
         # TODO: songwan, check if all image types are supported
         image_exts = (".jpg", ".jpeg", ".png", ".bmp", ".gif")
         files = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith(image_exts)]
@@ -52,5 +53,4 @@ class ImageListModel(QAbstractListModel):
         index = self.index(row)
 
         thread = threading.current_thread()
-        print(f"Thumbnail reload [{thread.name} - {thread.ident}]: {row} - {path}")
         self.dataChanged.emit(index, index, [Qt.DecorationRole])

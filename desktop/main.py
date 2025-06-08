@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractI
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize
 
-from ui.mainwindow_ui import Ui_MainWindow
+from view.mainwindow_ui import Ui_MainWindow
 from browse.BrowseController import BrowseController
 
 class MainWindow(QMainWindow):
@@ -15,8 +15,11 @@ class MainWindow(QMainWindow):
 
         self.controller = BrowseController()
 
-        self.ui.addFolderButton.clicked.connect(self.select_folder)
-        self.ui.folderList.currentRowChanged.connect(self.display_folder_images)
+        self.ui.addFolderButton.clicked.connect(self.on_add_folder_button_click)
+        self.ui.folderList.setModel(self.controller.folder_list_model())
+        self.ui.folderList.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.ui.folderList.selectionModel().currentChanged.connect(self.on_folder_selected)
+
         self.ui.searchInput.textChanged.connect(self.handle_search)
 
         self.ui.imageListView.setModel(self.controller.image_list_model())
@@ -27,12 +30,16 @@ class MainWindow(QMainWindow):
         self.ui.imageListView.setSpacing(10)
         self.ui.imageListView.setSelectionMode(QAbstractItemView.NoSelection)
 
-    def select_folder(self):
+    def on_add_folder_button_click(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         self.controller.on_folder_added(folder)
+        index = self.controller.get_index_for_folder(folder)
+        if index.isValid():
+            self.ui.folderList.setCurrentIndex(index)
+            self.ui.folderList.scrollTo(index)
     
-    def display_folder_images(self, index):
-        self.controller.on_folder_selected(index)
+    def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
+        self.controller.on_folder_selected(current.row())
 
     def handle_search(self, query):
         pass

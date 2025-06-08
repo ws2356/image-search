@@ -56,14 +56,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QListWidget" name="folderList">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-        </widget>
+        <widget class="QListView" name="folderList"/>
        </item>
        <item>
         <widget class="QPushButton" name="addFolderButton">
