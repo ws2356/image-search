@@ -82,21 +82,7 @@
      </widget>
     </item>
     <item>
-     <widget class="QScrollArea" name="imageScrollArea">
-      <property name="widgetResizable">
-       <bool>true</bool>
-      </property>
-      <widget class="QWidget" name="imageContainer">
-       <property name="geometry">
-        <rect>
-         <x>0</x>
-         <y>0</y>
-         <width>464</width>
-         <height>523</height>
-        </rect>
-       </property>
-      </widget>
-     </widget>
+     <widget class="QListView" name="imageListView"/>
     </item>
    </layout>
   </widget>
