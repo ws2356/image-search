@@ -1,2 +1,3 @@
 pipdeptree
 tomlkit
+pyinstaller

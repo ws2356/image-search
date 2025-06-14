@@ -1,0 +1,8 @@
+[project]
+name = "DTImageSearch"
+
+[tool.pyside6-project]
+files = ["main.py", "ui/mainwindow.ui"]
+
+[tool.setuptools.package-data]
+"dt_image_search.db" = ["db_schema.sql"]
