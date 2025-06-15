@@ -1,7 +1,7 @@
-from base.BaseController import BaseController
+from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
-from .image_list_model import ImageListModel
-from .folder_list_model import FolderListModel
+from dt_image_search.browse.image_list_model import ImageListModel
+from dt_image_search.browse.folder_list_model import FolderListModel
 
 class BrowseController(BaseController):
     def __init__(self):

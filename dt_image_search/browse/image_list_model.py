@@ -2,7 +2,7 @@ import os
 import threading
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
 from PySide6.QtGui import QPixmap, QIcon, QImage
-from .thumbnail_job import ThumbnailJob, ThumbnailJobSignals
+from dt_image_search.browse.thumbnail_job import ThumbnailJob, ThumbnailJobSignals
 
 class ImageListModel(QAbstractListModel):
     def __init__(self, image_paths=None, parent=None):

@@ -4,8 +4,8 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractI
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize
 
-from view.mainwindow_ui import Ui_MainWindow
-from browse.BrowseController import BrowseController
+from dt_image_search.view.mainwindow_ui import Ui_MainWindow
+from dt_image_search.browse.BrowseController import BrowseController
 
 class MainWindow(QMainWindow):
     def __init__(self):
