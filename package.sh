@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-pyinstaller DTImageSearch.spec
+rm -rf ./build ./dist && pyinstaller DTImageSearch.spec
