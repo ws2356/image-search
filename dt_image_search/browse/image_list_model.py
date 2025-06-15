@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
@@ -41,7 +42,7 @@ class ImageListModel(QAbstractListModel):
         return None
 
     def load_images_from_folder(self, folder):
-        print(f"Loading images from folder: {folder}")
+        logging.info(f"Loading images from folder: {folder}")
         # TODO: songwan, check if all image types are supported
         image_exts = (".jpg", ".jpeg", ".png", ".bmp", ".gif")
         files = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith(image_exts)]

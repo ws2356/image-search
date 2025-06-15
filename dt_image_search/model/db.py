@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from PySide6.QtCore import QStandardPaths, QDir
 from pathlib import Path
@@ -10,9 +11,9 @@ def _get_app_data_path() -> Path:
     data_path.mkdir(parents=True, exist_ok=True)
     return data_path
 
-def init_db():
+def create_db_conn():
     db_path = _get_app_data_path() / "app_data.sqlite"
-    print(f"Db path: {db_path}")
+    logging.info(f"Db path: {db_path}")
     db_exists = db_path.exists()
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row

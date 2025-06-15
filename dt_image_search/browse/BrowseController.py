@@ -1,3 +1,4 @@
+import logging
 from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
 from dt_image_search.browse.image_list_model import ImageListModel
@@ -21,13 +22,13 @@ class BrowseController(BaseController):
 
     def on_folder_added(self, folder_path: str):
         if folder_path not in self.folder_list_model().folders:
-            print(f"on_folder_added: {folder_path}")
+            logging.info(f"on_folder_added: {folder_path}")
             self.folderListModel.folders.append(folder_path)
             self.folderListModel.layoutChanged.emit()
 
     def on_folder_selected(self, row: int):
         folder_path = self.folder_list_model().folders[row]
-        print(f"on_folder_selected: {folder_path}")
+        logging.info(f"on_folder_selected: {folder_path}")
         self.image_list_model().load_images_from_folder(folder_path)
 
     def get_index_for_folder(self, folder_path: str) -> QModelIndex:

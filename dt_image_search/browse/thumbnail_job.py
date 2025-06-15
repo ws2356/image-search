@@ -1,3 +1,4 @@
+import logging
 import threading
 from PySide6.QtCore import QRunnable, Signal, QObject, Qt
 from PySide6.QtGui import QPixmap, QIcon, QImage
@@ -19,5 +20,5 @@ class ThumbnailJob(QRunnable):
             Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
         thread = threading.current_thread()
-        print(f"Thumbnail created [{thread.name} - {thread.ident}]: {self.row} - {self.path}")
+        logging.info(f"Thumbnail created [{thread.name} - {thread.ident}]: {self.row} - {self.path}")
         self.signals.finished.emit(self.row, image)
