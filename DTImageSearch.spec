@@ -51,5 +51,5 @@ app = BUNDLE(
     coll,
     name='DTImageSearch.app',
     icon='resources/appicon.icns',
-    bundle_identifier=None,
+    bundle_identifier='vip.wansong.dtimagesearch',
 )
