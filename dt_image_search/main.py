@@ -32,6 +32,8 @@ class MainWindow(QMainWindow):
 
     def on_add_folder_button_click(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+        if not folder:
+            return
         self.controller.on_folder_added(folder)
         index = self.controller.get_index_for_folder(folder)
         if index.isValid():
