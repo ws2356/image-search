@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS files (
     path TEXT NOT NULL,
     folder_id INTEGER NOT NULL,
     clip_index INTEGER,
-    status TEXT CHECK(status IN ('normal', 'removed')) DEFAULT 'normal',
+    status INTEGER NOT NULL DEFAULT 0, -- 0: pending, 1: indexed, 2: removed
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(folder_id) REFERENCES folders(id)
 );
