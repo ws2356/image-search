@@ -27,6 +27,8 @@ class FolderTreeModel(QStandardItemModel):
             root_item.setSelectable(True)
 
             self.appendRow(root_item)
+
+            self._populate_subfolders(root_item, path)
             self.root_paths.add(str(path))
 
     def deleteFolder(self, index: QModelIndex):
@@ -54,3 +56,14 @@ class FolderTreeModel(QStandardItemModel):
                 item.appendRow(child_item)
         except Exception as e:
             print(f"Failed to list {parent_path}: {e}")
+
+    def _populate_subfolders(self, parent_item: QStandardItem, parent_path: Path):
+        try:
+            for child in sorted(parent_path.iterdir()):
+                if child.is_dir() and self.folder_predicate(child):
+                    child_item = QStandardItem(child.name)
+                    child_item.setData(str(child.resolve()), Qt.UserRole)
+                    child_item.setEditable(False)
+                    parent_item.appendRow(child_item)
+        except Exception as e:
+            print(f"Could not read subfolders of {parent_path}: {e}")
