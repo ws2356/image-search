@@ -43,19 +43,10 @@ class FolderTreeModel(QStandardItemModel):
 
     def expand_subfolders(self, index: QModelIndex):
         item = self.itemFromIndex(index)
-        if not item or not item.hasChildren() or item.rowCount() > 0:
+        if not item or item.hasChildren():
             return
         parent_path = Path(item.data(Qt.UserRole))
-        try:
-            for child in sorted(parent_path.iterdir()):
-                if not child.is_dir() or not self.folder_predicate(child):
-                    continue
-                child_item = QStandardItem(child.name)
-                child_item.setData(str(child), Qt.UserRole)
-                child_item.setEditable(False)
-                item.appendRow(child_item)
-        except Exception as e:
-            print(f"Failed to list {parent_path}: {e}")
+        self._populate_subfolders(item, parent_path)
 
     def _populate_subfolders(self, parent_item: QStandardItem, parent_path: Path):
         try:
