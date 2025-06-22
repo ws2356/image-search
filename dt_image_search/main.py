@@ -1,6 +1,6 @@
 import os
 import sys
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize
 
@@ -19,9 +19,11 @@ class MainWindow(QMainWindow):
         self.controller = BrowseController()
 
         self.ui.addFolderButton.clicked.connect(self.on_add_folder_button_click)
-        self.ui.folderList.setModel(self.controller.folder_list_model())
-        self.ui.folderList.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.ui.folderList.selectionModel().currentChanged.connect(self.on_folder_selected)
+        self.ui.folderTreeView.setModel(self.controller.folder_list_model())
+        self.ui.folderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
+        self.ui.folderTreeView.expanded.connect(self.controller.on_item_expanded)
+        self.ui.folderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.ui.folderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
 
         self.ui.searchInput.textChanged.connect(self.handle_search)
 
@@ -38,16 +40,23 @@ class MainWindow(QMainWindow):
         if not folder:
             return
         self.controller.on_folder_added(folder)
-        index = self.controller.get_index_for_folder(folder)
-        if index.isValid():
-            self.ui.folderList.setCurrentIndex(index)
-            self.ui.folderList.scrollTo(index)
+        # index = self.controller.get_index_for_folder(folder)
+        # if index.isValid():
+        #     self.ui.folderList.setCurrentIndex(index)
+        #     self.ui.folderList.scrollTo(index)
     
-    def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
-        self.controller.on_folder_selected(current.row())
-
     def handle_search(self, query):
         pass
+
+    def show_tree_context_menu(self, pos):
+        index = self.ui.folderTreeView.indexAt(pos)
+        item = self.ui.folderTreeView.model().itemFromIndex(index)
+        if not item or item.parent():
+            return  # Only for root folders
+        menu = QMenu(self)
+        remove_action = menu.addAction("Remove Folder")
+        if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
+            self.controller.on_delete_folder(index)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

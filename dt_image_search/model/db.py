@@ -35,7 +35,26 @@ def insert_folder(conn, folder_path: str) -> int:
 
 def get_all_folders(conn):
     cursor = conn.execute("SELECT id, path FROM folders")
-    return cursor.fetchall()
+    return [row[1] for row in cursor.fetchall()]  # Ensure the query is executed
+
+def is_folder_exists(conn, folder_path: str) -> bool:
+    cursor = conn.execute("SELECT 1 FROM folders WHERE path = ?", (folder_path,))
+    return cursor.fetchone() is not None
+
+def match_parent_folder(conn, path: str) -> str:
+    cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE path || '%'", (path,))
+    return cursor.fetchone()[0] if cursor.fetchone() else None
+
+def remove_folders(conn, folder_paths: list):
+    if not folder_paths:
+        return
+    placeholders = ', '.join('?' for _ in folder_paths)
+    conn.execute(f"DELETE FROM folders WHERE path IN ({placeholders})", folder_paths)
+    conn.commit()
+
+def match_child_folders(conn, path: str) -> list:
+    cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE '%' || path", (path,))
+    return [row[0] for row in cursor.fetchall()]
 
 def insert_file(conn, path: str, folder_id: int, clip_index=None, status="normal"):
     conn.execute(

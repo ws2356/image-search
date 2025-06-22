@@ -1,7 +1,7 @@
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, QThreadPool, QSize
 
 class BaseController:
-    def folder_list_model(self) -> QAbstractListModel:
+    def folder_list_model(self) -> QAbstractItemModel:
         pass
 
     def image_list_model(self) -> QAbstractListModel:

@@ -1,0 +1,56 @@
+import typing
+from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtCore import Qt, QModelIndex
+from pathlib import Path
+from .DefaultFolderPredicate import DefaultFolderPredicate
+
+
+class FolderTreeModel(QStandardItemModel):
+    def __init__(self, parent=None, folder_predicate=DefaultFolderPredicate):
+        super().__init__(parent)
+        self.setHorizontalHeaderLabels(["Folders"])
+        self.root_paths = set()
+        self.folder_predicate = folder_predicate
+
+    def add_root_folder(self, path_strs: typing.List[str]):
+        for p in path_strs:
+            path = Path(p).resolve()
+            if not path.is_dir() or str(path) in self.root_paths:
+                continue
+            if not self.folder_predicate(path):
+                continue
+
+            root_item = QStandardItem(path.name)
+            root_item.setData(str(path), Qt.UserRole)
+            root_item.setEditable(False)
+            root_item.setCheckable(False)
+            root_item.setSelectable(True)
+
+            self.appendRow(root_item)
+            self.root_paths.add(str(path))
+
+    def deleteFolder(self, index: QModelIndex):
+        item = self.itemFromIndex(index)
+        if not item or item.parent():
+            return
+        folder_path = item.data(Qt.UserRole)
+        if not folder_path:
+            return
+        self.removeRow(item.row(), QModelIndex())
+        self.root_paths.discard(folder_path)
+
+    def expand_subfolders(self, index: QModelIndex):
+        item = self.itemFromIndex(index)
+        if not item or not item.hasChildren() or item.rowCount() > 0:
+            return
+        parent_path = Path(item.data(Qt.UserRole))
+        try:
+            for child in sorted(parent_path.iterdir()):
+                if not child.is_dir() or not self.folder_predicate(child):
+                    continue
+                child_item = QStandardItem(child.name)
+                child_item.setData(str(child), Qt.UserRole)
+                child_item.setEditable(False)
+                item.appendRow(child_item)
+        except Exception as e:
+            print(f"Failed to list {parent_path}: {e}")
