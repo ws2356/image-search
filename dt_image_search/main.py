@@ -10,11 +10,16 @@ from dt_image_search.logging import setup_logging
 
 setup_logging()
 
+_BrowseMode = 1
+_SearchMode = 2
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+
+        self._mode = _BrowseMode
 
         self.controller = BrowseController()
 
@@ -27,13 +32,20 @@ class MainWindow(QMainWindow):
 
         self.ui.searchInput.textChanged.connect(self.handle_search)
 
-        self.ui.imageListView.setModel(self.controller.image_list_model())
-        self.ui.imageListView.setViewMode(QListView.IconMode)
-        self.ui.imageListView.setResizeMode(QListView.Adjust)
-        self.ui.imageListView.setUniformItemSizes(True)
-        self.ui.imageListView.setIconSize(QSize(150, 150))
-        self.ui.imageListView.setSpacing(10)
-        self.ui.imageListView.setSelectionMode(QAbstractItemView.NoSelection)
+        self.image_list_view.setModel(self.controller.image_list_model())
+        self.image_list_view.setViewMode(QListView.IconMode)
+        self.image_list_view.setResizeMode(QListView.Adjust)
+        self.image_list_view.setUniformItemSizes(True)
+        self.image_list_view.setIconSize(QSize(150, 150))
+        self.image_list_view.setSpacing(10)
+        self.image_list_view.setSelectionMode(QAbstractItemView.NoSelection)
+
+    @property
+    def image_list_view(self):
+        if self._mode == _SearchMode:
+            return self.ui.searchImageListView
+        elif self._mode == _BrowseMode:
+            return self.ui.browseImageListView
 
     def on_add_folder_button_click(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
