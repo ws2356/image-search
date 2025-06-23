@@ -1,3 +1,4 @@
+from importlib.metadata import files
 import logging
 import os
 import threading
@@ -41,13 +42,9 @@ class ImageListModel(QAbstractListModel):
 
         return None
 
-    def load_images_from_folder(self, folder):
-        logging.info(f"Loading images from folder: {folder}")
-        # TODO: songwan, check if all image types are supported
-        image_exts = (".jpg", ".jpeg", ".png", ".bmp", ".gif")
-        files = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith(image_exts)]
+    def load_images_from_paths(self, paths):
         self.beginResetModel()
-        self.image_paths = files
+        self.image_paths = paths
         self.thumbnail_cache.clear()
         self.endResetModel()
 

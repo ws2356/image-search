@@ -3,10 +3,10 @@ from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex
 from PySide6.QtWidgets import QFileSystemModel
-from dt_image_search.browse.image_list_model import ImageListModel
+from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
 from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, remove_folders
-from ..base.FolderTreeModel import FolderTreeModel
+from dt_image_search.base.FolderTreeModel import FolderTreeModel
 
 class BrowseController(BaseController):
     def __init__(self):
@@ -22,7 +22,7 @@ class BrowseController(BaseController):
 
     def image_list_model(self) -> QAbstractListModel:
         if self.imageListModel is None:
-          self.imageListModel = ImageListModel()
+          self.imageListModel = FSImageListModel()
         return self.imageListModel
 
     def on_folder_added(self, folder_path: str):

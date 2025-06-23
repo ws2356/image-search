@@ -6,6 +6,7 @@ from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize
 
 from dt_image_search.view.mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
+from dt_image_search.search.SearchController import SearchController
 from dt_image_search.logging import setup_logging
 
 setup_logging()
@@ -19,6 +20,7 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
+        self._alternativeController = None
         self._mode = _BrowseMode
 
         self.controller = BrowseController()
@@ -30,15 +32,23 @@ class MainWindow(QMainWindow):
         self.ui.folderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
         self.ui.folderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
 
+        self.image_list_view.setModel(self.controller.image_list_model())
+
         self.ui.searchInput.textChanged.connect(self.handle_search)
 
-        self.image_list_view.setModel(self.controller.image_list_model())
-        self.image_list_view.setViewMode(QListView.IconMode)
-        self.image_list_view.setResizeMode(QListView.Adjust)
-        self.image_list_view.setUniformItemSizes(True)
-        self.image_list_view.setIconSize(QSize(150, 150))
-        self.image_list_view.setSpacing(10)
-        self.image_list_view.setSelectionMode(QAbstractItemView.NoSelection)
+        for view in [self.ui.searchImageListView, self.ui.browseImageListView]:
+            view.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            view.setDragEnabled(False)
+            view.setAcceptDrops(False)
+            view.setDropIndicatorShown(False)
+            view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+            view.setViewMode(QListView.IconMode)
+            view.setResizeMode(QListView.Adjust)
+            view.setUniformItemSizes(True)
+            view.setIconSize(QSize(150, 150))
+            view.setSpacing(10)
+            view.setSelectionMode(QAbstractItemView.NoSelection)
 
     @property
     def image_list_view(self):
@@ -58,7 +68,31 @@ class MainWindow(QMainWindow):
         #     self.ui.folderList.scrollTo(index)
     
     def handle_search(self, query):
-        pass
+        query = query.strip()
+        tmp_controller = self._alternativeController
+        if query:
+            if self._mode != _SearchMode:
+                self._mode = _SearchMode
+                self._alternativeController = self.controller
+                self.controller = tmp_controller or SearchController()
+                self.image_list_view.setModel(self.controller.image_list_model())
+                self.ui.mainStack.setCurrentWidget(self.ui.searchPage)
+                # Update layout
+                self.ui.browsePage.layout().removeWidget(self.ui.searchInput)
+                self.ui.searchPage.layout().insertWidget(0, self.ui.searchInput)
+
+                self.ui.searchInput.setFocus()
+            self.controller.on_search_query(query)
+        else:
+            if self._mode != _BrowseMode:
+                self._mode = _BrowseMode
+                self._alternativeController = self.controller
+                self.controller = tmp_controller or BrowseController()
+                self.image_list_view.setModel(self.controller.image_list_model())
+                self.ui.mainStack.setCurrentWidget(self.ui.browsePage)
+                # Update layout
+                self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
+                self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
 
     def show_tree_context_menu(self, pos):
         index = self.ui.folderTreeView.indexAt(pos)

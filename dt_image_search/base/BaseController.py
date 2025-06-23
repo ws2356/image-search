@@ -15,10 +15,3 @@ class BaseController:
     
     def on_folder_selected(self, row: int):
         pass
-
-    def get_index_for_folder(self, folder_path: str) -> QModelIndex:
-        model = self.folder_list_model()
-        for row in range(model.rowCount()):
-            if model.data(model.index(row), Qt.ToolTipRole) == folder_path:
-                return model.index(row)
-        return QModelIndex()
