@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex
@@ -6,12 +7,15 @@ from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
 from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, remove_folders
+from dt_image_search.model.folder import Folder
+from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 
 class SearchController(BaseController):
     def __init__(self):
         super().__init__()
         self.imageListModel = None
+        self._last_search_time = None
 
     def folder_list_model(self) -> QAbstractItemModel:
         raise NotImplementedError("SearchController does not implement folder_list_model")
@@ -23,3 +27,32 @@ class SearchController(BaseController):
 
     def on_search_query(self, query: str):
         logging.info(f"Search query: {query}")
+        search_time = datetime.now().timestamp()
+        if self._last_search_time and (search_time - self._last_search_time) < 2:
+            logging.info("Ignoring search query due to rate limiting")
+            return
+        self._last_search_time = search_time
+
+        results = []
+        with create_db_conn() as conn:
+            folders = get_all_folders(conn)
+            for folder in folders:
+                results.extend(self._search_in_folder(folder, query))
+        if results:
+            self.imageListModel.load_images_from_paths(results)
+        else:
+            logging.info("No results found for the search query")
+    
+    def _search_in_folder(self, folder: Folder, query: str):
+        logging.info(f"Searching in folder: {folder.path} with query: {query}")
+        # Implement the search logic here
+        # This could involve querying a database or filtering files in the folder
+        index_path = self._index_path_for_folder(folder)
+        if not Path(index_path).exists():
+            logging.warning(f"Index file does not exist for folder: {folder.path}")
+            return []
+        
+        return []
+    
+    def _index_path_for_folder(self, folder: Folder):
+        return f"{get_app_data_path()}/{folder.id}.faiss"

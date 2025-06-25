@@ -3,16 +3,11 @@ import sqlite3
 from PySide6.QtCore import QStandardPaths, QDir
 from pathlib import Path
 from importlib.resources import files
-
-def _get_app_data_path() -> Path:
-    APP_NAME = "DTImageSearch"
-    base_path = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-    data_path = Path(base_path) / APP_NAME
-    data_path.mkdir(parents=True, exist_ok=True)
-    return data_path
+from dt_image_search.model.folder import Folder
+from dt_image_search.model.fs import get_app_data_path
 
 def create_db_conn():
-    db_path = _get_app_data_path() / "app_data.sqlite"
+    db_path = get_app_data_path() / "app_data.sqlite"
     logging.info(f"Db path: {db_path}")
     db_exists = db_path.exists()
     conn = sqlite3.connect(db_path)
@@ -35,7 +30,7 @@ def insert_folder(conn, folder_path: str) -> int:
 
 def get_all_folders(conn):
     cursor = conn.execute("SELECT id, path FROM folders")
-    return [row[1] for row in cursor.fetchall()]  # Ensure the query is executed
+    return [Folder(id = row[0], path = row[1]) for row in cursor.fetchall()]  # Ensure the query is executed
 
 def is_folder_exists(conn, folder_path: str) -> bool:
     cursor = conn.execute("SELECT 1 FROM folders WHERE path = ?", (folder_path,))

@@ -62,7 +62,7 @@ class BrowseController(BaseController):
         with create_db_conn() as conn:
             folders = get_all_folders(conn)
             logging.info(f"Loaded {len(folders)} folders from the database.")
-            self.folder_list_model().add_root_folder(folders)
+            self.folder_list_model().add_root_folder([folder.path for folder in folders])
 
     def _create_model_for_folder(self) -> QAbstractItemModel:
         model = FolderTreeModel()
