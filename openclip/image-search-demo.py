@@ -15,8 +15,10 @@ def measure_time(msg=""):
 
 import faulthandler; faulthandler.enable()
 
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+
 # --- Config ---
-IMAGE_FOLDER = "../image-dataset/00000"
+IMAGE_FOLDER = f"{_script_dir}/../image-dataset/00000"
 QUERY_TEXT = "A bowl of noodles"
 TOP_K = 5
 knn_index_path = "knn_index.faiss"
@@ -69,7 +71,8 @@ def get_clip_index():
     # --- Create FAISS index ---
     image_features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
     index = faiss.IndexFlatIP(image_features_np.shape[1])  # cosine similarity via normalized dot product
-    index.add(image_features_np)
+    index = faiss.IndexIDMap2(index)  # to keep track of image paths
+    index.add_with_ids(image_features_np, [0, 1,2,3,4,5])
 
     # --- Save index to disk ---
     faiss.write_index(index, knn_index_path)
