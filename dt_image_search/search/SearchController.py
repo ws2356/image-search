@@ -10,6 +10,7 @@ from dt_image_search.model.db import create_db_conn, insert_folder, match_child_
 from dt_image_search.model.folder import Folder
 from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
+from dt_image_search.index.index import query_index, index_path_for_folder, build_index
 
 class SearchController(BaseController):
     def __init__(self):
@@ -47,12 +48,8 @@ class SearchController(BaseController):
         logging.info(f"Searching in folder: {folder.path} with query: {query}")
         # Implement the search logic here
         # This could involve querying a database or filtering files in the folder
-        index_path = self._index_path_for_folder(folder)
+        index_path = index_path_for_folder(folder)
         if not Path(index_path).exists():
             logging.warning(f"Index file does not exist for folder: {folder.path}")
             return []
-        
-        return []
-    
-    def _index_path_for_folder(self, folder: Folder):
-        return f"{get_app_data_path()}/{folder.id}.faiss"
+        return query_index(index_path, query)

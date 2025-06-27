@@ -4,6 +4,7 @@ from PySide6.QtCore import QStandardPaths, QDir
 from pathlib import Path
 from importlib.resources import files
 from dt_image_search.model.folder import Folder
+from dt_image_search.model.file import File
 from dt_image_search.model.fs import get_app_data_path
 
 def create_db_conn():
@@ -51,15 +52,24 @@ def match_child_folders(conn, path: str) -> list:
     cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE '%' || path", (path,))
     return [row[0] for row in cursor.fetchall()]
 
-def insert_file(conn, path: str, folder_id: int, clip_index=None, status="normal"):
+def insert_file(conn, path: str, folder_id: int, clip_index=None, status=0):
     conn.execute(
         "INSERT INTO files (path, folder_id, clip_index, status) VALUES (?, ?, ?, ?)",
         (path, folder_id, clip_index, status)
     )
     conn.commit()
 
-def get_files_for_folder(conn, folder_id: int):
-    return conn.execute(
-        "SELECT path FROM files WHERE folder_id = ? AND status = 'normal'",
+def get_files_by_clip_indices(conn, clip_indices: list):
+    if not clip_indices:
+        return []
+    placeholders = ', '.join('?' for _ in clip_indices)
+    cursor = conn.execute(f"SELECT path FROM files WHERE clip_index IN ({placeholders}) AND status = 1", clip_indices)
+    return [row[0] for row in cursor.fetchall()]
+
+def get_pending_files_for_folder(conn, folder_id: int):
+    cursor = conn.execute(
+        "SELECT id, path, clip_index, status FROM files WHERE folder_id = ? AND status = 0",
         (folder_id,)
     ).fetchall()
+    return [File(id=row[0], path=row[1], folder_id=folder_id, clip_index=row[2], status=row[3])
+            for row in cursor]

@@ -1,12 +1,15 @@
 import logging
+import os
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, remove_folders
+from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, remove_folders, insert_file
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
+from dt_image_search.index.index import index_path_for_folder, build_index, supported_image_types
+from dt_image_search.model.folder import Folder
 
 class BrowseController(BaseController):
     def __init__(self):
@@ -38,7 +41,17 @@ class BrowseController(BaseController):
             folder_id = insert_folder(conn, folder_path)
             logging.info(f"Inserted folder with ID: {folder_id}")
             self.folder_list_model().add_root_folder([folder_path])
+
+            # Enumerate images in the folder and add insert them into the database
+            for name in os.listdir(folder_path):
+                file_path = os.path.join(folder_path, name)
+                if os.path.isfile(file_path) and file_path.lower().endswith(supported_image_types):
+                    logging.info(f"Inserting file: {file_path} into folder ID: {folder_id}")
+                    insert_file(conn, file_path, folder_id)
+
             # TODO: start building clip index for the folder
+            index_path = index_path_for_folder(Folder(id=folder_id, path=folder_path))
+            build_index(index_path, folder_id)
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         folder_path = current.data(Qt.UserRole)
