@@ -5,6 +5,7 @@ import open_clip
 from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
+import numpy as np
 import faiss
 
 start_time = time.perf_counter()
@@ -72,7 +73,8 @@ def get_clip_index():
     image_features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
     index = faiss.IndexFlatIP(image_features_np.shape[1])  # cosine similarity via normalized dot product
     index = faiss.IndexIDMap2(index)  # to keep track of image paths
-    index.add_with_ids(image_features_np, [0, 1,2,3,4,5])
+    ids = np.arange(len(image_features_np)).astype('int64')
+    index.add_with_ids(image_features_np, ids)
 
     # --- Save index to disk ---
     faiss.write_index(index, knn_index_path)
