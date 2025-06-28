@@ -1,12 +1,19 @@
 import os
 import time
 import torch
+import argparse
 import open_clip
 from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
 import numpy as np
 import faiss
+
+# --- Setup ---
+parser = argparse.ArgumentParser(description="OpenCLIP Image Search Demo")
+parser.add_argument("--query", type=str, default="A bowl of noodles")
+args = parser.parse_args()
+QUERY_TEXT = args.query
 
 start_time = time.perf_counter()
 def measure_time(msg=""):
@@ -20,7 +27,6 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # --- Config ---
 IMAGE_FOLDER = f"{_script_dir}/../image-dataset/00000"
-QUERY_TEXT = "A bowl of noodles"
 TOP_K = 5
 knn_index_path = "knn_index.faiss"
 
