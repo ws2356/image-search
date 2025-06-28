@@ -111,8 +111,9 @@ def get_files_by_clip_indices(conn, clip_indices: list):
     if not clip_indices:
         return []
     placeholders = ', '.join('?' for _ in clip_indices)
-    cursor = conn.execute(f"SELECT path FROM files WHERE clip_index IN ({placeholders}) AND status = 1", clip_indices)
-    return [row[0] for row in cursor.fetchall()]
+    cursor = conn.execute(f"SELECT path, clip_index FROM files WHERE clip_index IN ({placeholders}) AND status = 1", clip_indices)
+    path_by_clip_index = {row[1]: row[0] for row in cursor.fetchall()}
+    return [path_by_clip_index.get(clip_index) for clip_index in clip_indices]
 
 def get_pending_files_for_folder(conn, folder_id: int):
     cursor = conn.execute(

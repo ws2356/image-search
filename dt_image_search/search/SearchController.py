@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
-from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, QTimer
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
@@ -13,6 +13,7 @@ from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.index import query_index, index_path_for_folder, build_index
 from dt_image_search.tools.debounce import debounce
 from dt_image_search.tools.perf import perffunc as profile
+from dt_image_search.tools.dispatcher import dispatcher
 
 class SearchController(BaseController):
     def __init__(self):
@@ -30,6 +31,9 @@ class SearchController(BaseController):
     @debounce(3)  # Debounce search queries to avoid excessive calls
     @profile
     def on_search_query(self, query: str):
+        if not self.is_active:
+            return
+
         logging.info(f"Search query: {query}")
         # TODO: do this in async job which can be cancelled
         results = []
@@ -37,7 +41,7 @@ class SearchController(BaseController):
             folders = get_all_folders(conn)
             for folder in folders:
                 results.extend(self._search_in_folder(folder, query))
-                self.imageListModel.load_images_from_paths(results)
+                dispatcher.post(lambda: self.imageListModel.load_images_from_paths(results))
         if not results:
             logging.info("No results found for the search query")
     

@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
         self._mode = _BrowseMode
 
         self.controller = BrowseController()
+        self.controller.is_active = True  # Set the controller to active state
 
         self.ui.addFolderButton.clicked.connect(self.on_add_folder_button_click)
         self.ui.folderTreeView.setModel(self.controller.folder_list_model())
@@ -97,6 +98,9 @@ class MainWindow(QMainWindow):
                 # Update layout
                 self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
                 self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
+        self._alternativeController._is_active = False  # Deactivate the alternative controller
+        self.controller._is_active = True
+        
 
     def show_tree_context_menu(self, pos):
         index = self.ui.folderTreeView.indexAt(pos)

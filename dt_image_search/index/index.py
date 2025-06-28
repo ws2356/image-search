@@ -39,9 +39,13 @@ def _query_internal(index_path: str, query_text: str) -> typing.List[str]:
     scores, indices = index.search(text_vector, _TOP_K)
 
     result = []
-    for idx, score in zip(indices[0], scores[0]):
-        if score > 0.2:
-            result.append(idx)
+    index_score_pairs = zip(indices[0], scores[0])
+    index_score_pairs = sorted(index_score_pairs, key=lambda x: x[1], reverse=True)
+    for idx, score in index_score_pairs:
+        print(f"Index: {idx}, Score: {score}")
+        if score <= 0.2:
+            break
+        result.append(idx)
     return [int(item) for item in result]  # Convert to int for consistency
 
 @profile
