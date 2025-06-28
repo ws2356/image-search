@@ -1,6 +1,6 @@
 import os
-import time
 import torch
+import threading
 import typing
 import open_clip
 from PIL import Image
@@ -25,6 +25,24 @@ def query_index(index_path: str, query_text: str) -> typing.List[str]:
         # Fetch file paths from the database using the indices
         return get_files_by_clip_indices(conn, faiss_indices)
 
+@profile
+def _query_internal(index_path: str, query_text: str) -> typing.List[str]:
+    index = _get_index(index_path)
+    _model, _, _tokenizer = _get_model()
+    # --- Encode text query ---
+    text_tokens = _tokenizer([query_text]).to(_device)
+    with torch.no_grad():
+        text_features = _model.encode_text(text_tokens)
+        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+    text_vector = text_features.cpu().numpy()
+    # --- Search ---
+    scores, indices = index.search(text_vector, _TOP_K)
+
+    result = []
+    for idx, score in zip(indices[0], scores[0]):
+        if score > 0.2:
+            result.append(idx)
+    return [int(item) for item in result]  # Convert to int for consistency
 
 @profile
 def create_index_if_needed(index_path: str):
@@ -113,38 +131,35 @@ _model = None
 _preprocess = None
 _tokenizer = None
 _TOP_K = 5
-
+_model_loaded_event = threading.Event()
 
 @profile
 def _get_model():
-    global _model, _preprocess, _tokenizer
+    global _model, _preprocess, _tokenizer, _model_loaded_event
 
     if _model is not None:
         return _model, _preprocess, _tokenizer
-    print("before loading model")
-    model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
-    print("after loading model")
-    _preprocess = preprocess
-    _tokenizer = open_clip.get_tokenizer('ViT-B-32')
-    _model = model.to(_device).eval()
+    _model_loaded_event.wait()  # Wait for the model to be preloaded
+
+    if _model is None:
+        raise RuntimeError("Model is not loaded. Please ensure the model is preloaded before querying.")
     return _model, _preprocess, _tokenizer
 
-
 @profile
-def _query_internal(index_path: str, query_text: str) -> typing.List[str]:
-    index = _get_index(index_path)
-    _model, _, _tokenizer = _get_model()
-    # --- Encode text query ---
-    text_tokens = _tokenizer([query_text]).to(_device)
-    with torch.no_grad():
-        text_features = _model.encode_text(text_tokens)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-    text_vector = text_features.cpu().numpy()
-    # --- Search ---
-    scores, indices = index.search(text_vector, _TOP_K)
+def _preload_model():
+    """Function to preload the model in background"""
+    global _model, _preprocess, _tokenizer
+    try:
+        print("before loading model")
+        model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+        print("after loading model")
+        _preprocess = preprocess
+        _tokenizer = open_clip.get_tokenizer('ViT-B-32')
+        _model = model.to(_device).eval()
+    except Exception as e:
+        print(f"Preloading model failed: {e}")
+    finally:
+        _model_loaded_event.set()
 
-    result = []
-    for idx, score in zip(indices[0], scores[0]):
-        if score > 0.2:
-            result.append(idx)
-    return [int(item) for item in result]  # Convert to int for consistency
+def init():
+    threading.Thread(target=_preload_model, daemon=True).start()

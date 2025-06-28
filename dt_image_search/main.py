@@ -8,12 +8,15 @@ from dt_image_search.view.mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
 from dt_image_search.logging import setup_logging
+from dt_image_search.index.index import init as index_init
 
 setup_logging()
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
 _BrowseMode = 1
 _SearchMode = 2
+
+index_init()  # Initialize the index system
 
 class MainWindow(QMainWindow):
     def __init__(self):
