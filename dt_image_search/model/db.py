@@ -6,6 +6,7 @@ from importlib.resources import files
 from dt_image_search.model.folder import Folder
 from dt_image_search.model.file import File
 from dt_image_search.model.fs import get_app_data_path
+from dt_image_search.tools.perf import perffunc
 
 def _sql_logger(statement):
     print("SQL:", statement)
@@ -55,6 +56,7 @@ def match_child_folders(conn, path: str) -> list:
     cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE '%' || path", (path,))
     return [row[0] for row in cursor.fetchall()]
 
+@perffunc
 def insert_file(conn, path: str, folder_id: int, clip_index=None, status=0):
     conn.execute(
         "INSERT INTO files (path, folder_id, clip_index, status) VALUES (?, ?, ?, ?)",
@@ -62,6 +64,7 @@ def insert_file(conn, path: str, folder_id: int, clip_index=None, status=0):
     )
     conn.commit()
 
+@perffunc
 def update_file(conn, file_id: int, path: str = None, folder_id: int = None, clip_index=None, status=None):
     updates = []
     params = []
@@ -89,6 +92,7 @@ def update_file(conn, file_id: int, path: str = None, folder_id: int = None, cli
     )
     conn.commit()
 
+@perffunc
 def update_files(conn, ids: list, clip_indices: list, statuses: list):
     if not ids or not clip_indices or not statuses:
         return
@@ -102,6 +106,7 @@ def update_files(conn, ids: list, clip_indices: list, statuses: list):
     )
     conn.commit()
 
+@perffunc
 def get_files_by_clip_indices(conn, clip_indices: list):
     if not clip_indices:
         return []

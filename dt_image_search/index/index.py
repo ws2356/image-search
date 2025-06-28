@@ -11,12 +11,14 @@ from dt_image_search.model.db import create_db_conn, get_files_by_clip_indices, 
 from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.model.folder import Folder
 from dt_image_search.model.file import File
+from dt_image_search.tools.perf import perffunc as profile
 
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
 
 supported_image_types = ('.jpg', '.jpeg', '.png')
 
+@profile
 def query_index(index_path: str, query_text: str) -> typing.List[str]:
     faiss_indices = _query_internal(index_path, query_text)
     with create_db_conn() as conn:
@@ -24,6 +26,7 @@ def query_index(index_path: str, query_text: str) -> typing.List[str]:
         return get_files_by_clip_indices(conn, faiss_indices)
 
 
+@profile
 def create_index_if_needed(index_path: str):
     if os.path.exists(index_path):
         return
@@ -36,6 +39,7 @@ def create_index_if_needed(index_path: str):
     faiss.write_index(index, index_path)
 
 
+@profile
 def add_to_index(index_path: str, image_files: typing.List[File]):
     index = _get_index(index_path)
     model, preprocess, _ = _get_model()
@@ -71,6 +75,7 @@ def add_to_index(index_path: str, image_files: typing.List[File]):
             )
 
 
+@profile
 def build_index(index_path: str, folder_id: int):
     """
     Build a FAISS index from images in the given folder path.
@@ -84,6 +89,7 @@ def build_index(index_path: str, folder_id: int):
     if not files:
         print(f"No files to index for folder ID {folder_id}.")
         return
+    # TODO: do this in batches
     for file in files:
         if file.clip_index is None and file.status == 0:
             add_to_index(
@@ -91,6 +97,7 @@ def build_index(index_path: str, folder_id: int):
                 [file])
 
 # TODO: cache the index in memory
+@profile
 def _get_index(index_path: str):
     return _load_index(index_path)
 
@@ -102,24 +109,28 @@ def _load_index(index_path: str):
 
 
 _device = "cuda" if torch.cuda.is_available() else "cpu"
-_mode = None
+_model = None
 _preprocess = None
 _tokenizer = None
 _TOP_K = 5
 
 
+@profile
 def _get_model():
-  if _mode is not None:
-    return _mode, _preprocess, _tokenizer
-  print("before loading model")
-  _model, _, _preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
-  print("after loading model")
-  _tokenizer = open_clip.get_tokenizer('ViT-B-32')
-  _model = _model.to(_device).eval()
-  _measure_time("Model loading")
-  return _model, _preprocess, _tokenizer
+    global _model, _preprocess, _tokenizer
+
+    if _model is not None:
+        return _model, _preprocess, _tokenizer
+    print("before loading model")
+    model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+    print("after loading model")
+    _preprocess = preprocess
+    _tokenizer = open_clip.get_tokenizer('ViT-B-32')
+    _model = model.to(_device).eval()
+    return _model, _preprocess, _tokenizer
 
 
+@profile
 def _query_internal(index_path: str, query_text: str) -> typing.List[str]:
     index = _get_index(index_path)
     _model, _, _tokenizer = _get_model()
@@ -137,11 +148,3 @@ def _query_internal(index_path: str, query_text: str) -> typing.List[str]:
         if score > 0.2:
             result.append(idx)
     return [int(item) for item in result]  # Convert to int for consistency
-
-
-# Performance measurement
-_start_time = time.perf_counter()
-def _measure_time(msg=""):
-    elapsed = time.perf_counter() - _start_time
-    print(f"{msg} completed at: {elapsed:.3f} seconds")
-    return elapsed

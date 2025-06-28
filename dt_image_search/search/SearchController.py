@@ -12,6 +12,7 @@ from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.index import query_index, index_path_for_folder, build_index
 from dt_image_search.tools.debounce import debounce
+from dt_image_search.tools.perf import perffunc as profile
 
 class SearchController(BaseController):
     def __init__(self):
@@ -27,6 +28,7 @@ class SearchController(BaseController):
         return self.imageListModel
 
     @debounce(3)  # Debounce search queries to avoid excessive calls
+    @profile
     def on_search_query(self, query: str):
         logging.info(f"Search query: {query}")
         # TODO: do this in async job which can be cancelled
@@ -39,6 +41,7 @@ class SearchController(BaseController):
         if not results:
             logging.info("No results found for the search query")
     
+    @profile
     def _search_in_folder(self, folder: Folder, query: str):
         logging.info(f"Searching in folder: {folder.path} with query: {query}")
         # Implement the search logic here

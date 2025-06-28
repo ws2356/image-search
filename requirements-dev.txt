@@ -1,3 +1,4 @@
 pipdeptree
 tomlkit
 pyinstaller
+profilehooks
