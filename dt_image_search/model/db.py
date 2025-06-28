@@ -7,13 +7,16 @@ from dt_image_search.model.folder import Folder
 from dt_image_search.model.file import File
 from dt_image_search.model.fs import get_app_data_path
 
+def _sql_logger(statement):
+    print("SQL:", statement)
+
 def create_db_conn():
     db_path = get_app_data_path() / "app_data.sqlite"
     logging.info(f"Db path: {db_path}")
     db_exists = db_path.exists()
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-
+    conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
     schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
     if not db_exists:
         conn.executescript(schema_sql)
@@ -56,6 +59,46 @@ def insert_file(conn, path: str, folder_id: int, clip_index=None, status=0):
     conn.execute(
         "INSERT INTO files (path, folder_id, clip_index, status) VALUES (?, ?, ?, ?)",
         (path, folder_id, clip_index, status)
+    )
+    conn.commit()
+
+def update_file(conn, file_id: int, path: str = None, folder_id: int = None, clip_index=None, status=None):
+    updates = []
+    params = []
+    
+    if path is not None:
+        updates.append("path = ?")
+        params.append(path)
+    if folder_id is not None:
+        updates.append("folder_id = ?")
+        params.append(folder_id)
+    if clip_index is not None:
+        updates.append("clip_index = ?")
+        params.append(clip_index)
+    if status is not None:
+        updates.append("status = ?")
+        params.append(status)
+
+    if not updates:
+        return  # No updates to perform
+
+    params.append(file_id)  # Add file_id to the end of the parameters
+    conn.execute(
+        f"UPDATE files SET {', '.join(updates)} WHERE id = ?",
+        params
+    )
+    conn.commit()
+
+def update_files(conn, ids: list, clip_indices: list, statuses: list):
+    if not ids or not clip_indices or not statuses:
+        return
+    if len(ids) != len(clip_indices) or len(ids) != len(statuses):
+        raise ValueError("Length of ids, clip_indices and statuses must match")
+    
+    placeholders = ', '.join('?' for _ in ids)
+    conn.execute(
+        f"UPDATE files SET clip_index = ?, status = ? WHERE id IN ({placeholders})",
+        [(clip_index, status) + (id,) for id, clip_index, status in zip(ids, clip_indices, statuses)]
     )
     conn.commit()
 

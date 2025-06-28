@@ -11,12 +11,12 @@ from dt_image_search.model.folder import Folder
 from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.index import query_index, index_path_for_folder, build_index
+from dt_image_search.tools.debounce import debounce
 
 class SearchController(BaseController):
     def __init__(self):
         super().__init__()
         self.imageListModel = None
-        self._last_search_time = None
 
     def folder_list_model(self) -> QAbstractItemModel:
         raise NotImplementedError("SearchController does not implement folder_list_model")
@@ -26,22 +26,17 @@ class SearchController(BaseController):
           self.imageListModel = ImageListModel()
         return self.imageListModel
 
+    @debounce(3)  # Debounce search queries to avoid excessive calls
     def on_search_query(self, query: str):
         logging.info(f"Search query: {query}")
-        search_time = datetime.now().timestamp()
-        if self._last_search_time and (search_time - self._last_search_time) < 2:
-            logging.info("Ignoring search query due to rate limiting")
-            return
-        self._last_search_time = search_time
-
+        # TODO: do this in async job which can be cancelled
         results = []
         with create_db_conn() as conn:
             folders = get_all_folders(conn)
             for folder in folders:
                 results.extend(self._search_in_folder(folder, query))
-        if results:
-            self.imageListModel.load_images_from_paths(results)
-        else:
+                self.imageListModel.load_images_from_paths(results)
+        if not results:
             logging.info("No results found for the search query")
     
     def _search_in_folder(self, folder: Folder, query: str):

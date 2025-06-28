@@ -43,11 +43,12 @@ class BrowseController(BaseController):
             self.folder_list_model().add_root_folder([folder_path])
 
             # Enumerate images in the folder and add insert them into the database
-            for name in os.listdir(folder_path):
-                file_path = os.path.join(folder_path, name)
-                if os.path.isfile(file_path) and file_path.lower().endswith(supported_image_types):
-                    logging.info(f"Inserting file: {file_path} into folder ID: {folder_id}")
-                    insert_file(conn, file_path, folder_id)
+            for root, _, fnames in os.walk(folder_path, followlinks=True):
+                for fname in fnames:
+                    file_path = os.path.join(root, fname)
+                    if os.path.isfile(file_path) and file_path.lower().endswith(supported_image_types):
+                        logging.info(f"Inserting file: {file_path} into folder ID: {folder_id}")
+                        insert_file(conn, file_path, folder_id)
 
             # TODO: start building clip index for the folder
             index_path = index_path_for_folder(Folder(id=folder_id, path=folder_path))

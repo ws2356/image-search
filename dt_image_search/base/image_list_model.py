@@ -45,7 +45,8 @@ class ImageListModel(QAbstractListModel):
     def load_images_from_paths(self, paths):
         self.beginResetModel()
         self.image_paths = paths
-        self.thumbnail_cache.clear()
+        # TODO: figure out the best timing for clearing the cache
+        # self.thumbnail_cache.clear()
         self.endResetModel()
 
     def _on_thumbnail_ready(self, row, image):

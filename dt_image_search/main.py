@@ -10,6 +10,7 @@ from dt_image_search.search.SearchController import SearchController
 from dt_image_search.logging import setup_logging
 
 setup_logging()
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
 _BrowseMode = 1
 _SearchMode = 2
