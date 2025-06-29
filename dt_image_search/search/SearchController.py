@@ -1,11 +1,13 @@
 import logging
+import os
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, QTimer
+from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, remove_folders
+from dt_image_search.model.db import create_db_conn, get_all_folders, delete_folders, get_folder_by_path, delete_files_by_folder_id
 from dt_image_search.model.folder import Folder
 from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
@@ -69,3 +71,23 @@ class SearchController(BaseController):
             logging.warning(f"Index file does not exist for folder: {folder.path}")
             return []
         return query_index(folder.id, index_path, query)
+
+    def on_delete_folder(self, item: QStandardItem):
+        with create_db_conn() as conn:
+            path = item.data(Qt.UserRole)
+            if not path:
+                logging.warning("No folder path provided for deletion.")
+                return
+            folder = get_folder_by_path(conn, path)
+            if not folder:
+                logging.warning(f"Folder {path} does not exist in the database.")
+                return
+            index_path = index_path_for_folder(folder)
+            if os.path.exists(index_path):
+                os.remove(index_path)
+                logging.info(f"Removed index file for folder {folder.path} at {index_path}")
+            else:
+                logging.warning(f"No index file found for folder {folder.path} at {index_path}")
+            # Remove folder from the database
+            delete_folders(conn, [folder.path])
+            delete_files_by_folder_id(conn, folder.id)

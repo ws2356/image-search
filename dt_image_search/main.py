@@ -113,6 +113,8 @@ class MainWindow(QMainWindow):
         remove_action = menu.addAction("Remove Folder")
         if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
             self.controller.on_delete_folder(index)
+            searchController = self._alternativeController or SearchController()
+            searchController.on_delete_folder(item)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

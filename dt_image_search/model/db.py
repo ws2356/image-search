@@ -24,6 +24,8 @@ def create_db_conn():
     return conn
 
 def insert_folder(conn, folder_path: str) -> int:
+    # Replace '\' with '/' for consistency
+    folder_path = folder_path.replace('\\', '/')
     cursor = conn.cursor()
     cursor.execute(
         "INSERT OR IGNORE INTO folders (path) VALUES (?)",
@@ -37,15 +39,30 @@ def get_all_folders(conn):
     cursor = conn.execute("SELECT id, path FROM folders")
     return [Folder(id = row[0], path = row[1]) for row in cursor.fetchall()]  # Ensure the query is executed
 
+def get_folder_by_path(conn, folder_path: str) -> Folder:
+    # Replace '\' with '/' for consistency
+    folder_path = folder_path.replace('\\', '/')
+    cursor = conn.execute("SELECT id, path FROM folders WHERE path = ?", (folder_path,))
+    row = cursor.fetchone()
+    if row:
+        return Folder(id=row[0], path=row[1])
+    return None
+
 def is_folder_exists(conn, folder_path: str) -> bool:
+    # Replace '\' with '/' for consistency
+    folder_path = folder_path.replace('\\', '/')
     cursor = conn.execute("SELECT 1 FROM folders WHERE path = ?", (folder_path,))
     return cursor.fetchone() is not None
 
 def match_parent_folder(conn, path: str) -> str:
+    # Replace '\' with '/' for consistency
+    path = path.replace('\\', '/')
     cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE path || '%'", (path,))
     return cursor.fetchone()[0] if cursor.fetchone() else None
 
-def remove_folders(conn, folder_paths: list):
+def delete_folders(conn, folder_paths: list):
+    # Replace '\' with '/' for consistency
+    folder_paths = [path.replace('\\', '/') for path in folder_paths]
     if not folder_paths:
         return
     placeholders = ', '.join('?' for _ in folder_paths)
@@ -53,11 +70,15 @@ def remove_folders(conn, folder_paths: list):
     conn.commit()
 
 def match_child_folders(conn, path: str) -> list:
+    # Replace '\' with '/' for consistency
+    path = path.replace('\\', '/')
     cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE '%' || path", (path,))
     return [row[0] for row in cursor.fetchall()]
 
 @perffunc
 def insert_file(conn, path: str, folder_id: int, clip_index=None, status=0):
+    # Replace '\' with '/' for consistency
+    path = path.replace('\\', '/')
     conn.execute(
         "INSERT INTO files (path, folder_id, clip_index, status) VALUES (?, ?, ?, ?)",
         (path, folder_id, clip_index, status)
@@ -70,6 +91,8 @@ def update_file(conn, file_id: int, path: str = None, folder_id: int = None, cli
     params = []
     
     if path is not None:
+        # Replace '\' with '/' for consistency
+        path = path.replace('\\', '/')
         updates.append("path = ?")
         params.append(path)
     if folder_id is not None:
@@ -126,3 +149,7 @@ def get_pending_files_for_folder(conn, folder_id: int):
     ).fetchall()
     return [File(id=row[0], path=row[1], folder_id=folder_id, clip_index=row[2], status=row[3])
             for row in cursor]
+
+def delete_files_by_folder_id(conn, folder_id: int):
+    conn.execute("DELETE FROM files WHERE folder_id = ?", (folder_id,))
+    conn.commit()

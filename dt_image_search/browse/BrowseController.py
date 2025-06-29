@@ -3,10 +3,11 @@ import os
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex
+from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, remove_folders, insert_file
+from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, insert_file
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.index import index_path_for_folder, build_index, supported_image_types
 from dt_image_search.model.folder import Folder
@@ -62,14 +63,13 @@ class BrowseController(BaseController):
     def on_item_expanded(self, index: QModelIndex):
         self.folder_list_model().expand_subfolders(index)
 
-    def on_delete_folder(self, index: QModelIndex):
-        item = self.folder_list_model().itemFromIndex(index)
+    def on_delete_folder(self, item: QStandardItem):
         if not item or item.parent():
             return
         folder_path = item.data(Qt.UserRole)
+        self.folder_list_model().indexForItem(item)
         logging.info(f"Removing folder: {folder_path}")
-        with create_db_conn() as conn:
-            remove_folders(conn, [folder_path])
+        index = self.folder_list_model().indexForItem(item)
         self.folder_list_model().deleteFolder(index)
 
     def _init_folders(self):
