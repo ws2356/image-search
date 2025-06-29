@@ -42,19 +42,22 @@ class SearchController(BaseController):
 
         logging.info(f"Search query: {query}")
         # TODO: do this in async job which can be cancelled
+        dispatcher.post(lambda: self.imageListModel.load_images_from_paths([]))
+
         results = []
         with create_db_conn() as conn:
             folders = get_all_folders(conn)
             for folder in folders:
                 results_in_folder = self._search_in_folder(folder, query)
+                if results_in_folder:
+                    dispatcher.post(lambda: self.imageListModel.add_image(results_in_folder[0]))
                 for item in results_in_folder:
                     logging.info(f"Found item: {item[0]} with score: {item[1]}")
                 results.extend(results_in_folder)
                 results = sorted(results, key=lambda x: x[1], reverse=True)[:TOP_K]
-                result_file_paths = [item[0] for item in results]
-                dispatcher.post(lambda: self.imageListModel.load_images_from_paths(result_file_paths))
         if not results:
             logging.info("No results found for the search query")
+        dispatcher.post(lambda: self.imageListModel.load_images(results))
     
     @profile
     def _search_in_folder(self, folder: Folder, query: str):

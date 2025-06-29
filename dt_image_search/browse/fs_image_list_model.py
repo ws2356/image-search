@@ -8,8 +8,8 @@ from dt_image_search.browse.thumbnail_job import ThumbnailJob, ThumbnailJobSigna
 from dt_image_search.base.image_list_model import ImageListModel
 
 class FSImageListModel(ImageListModel):
-    def __init__(self, image_paths=None, parent=None):
-        super().__init__(image_paths, parent)
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
     def load_images_from_folder(self, folder):
         logging.info(f"Loading images from folder: {folder}")

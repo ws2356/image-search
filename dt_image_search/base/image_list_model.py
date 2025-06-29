@@ -7,21 +7,23 @@ from PySide6.QtGui import QPixmap, QIcon, QImage
 from dt_image_search.browse.thumbnail_job import ThumbnailJob, ThumbnailJobSignals
 
 class ImageListModel(QAbstractListModel):
-    def __init__(self, image_paths=None, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.image_paths = image_paths or []
+        # _item is a list of tuples (path, weight)
+        # where path is the image file path and weight is an integer for sorting in descending order
+        self._item = []
         self.thumbnail_cache = {}
         self.placeholder_icon = QIcon(QPixmap(150, 150))  # empty gray or icon
         self.thread_pool = QThreadPool.globalInstance()
         self.loading_paths = set()
 
     def rowCount(self, parent=QModelIndex()):
-        return len(self.image_paths)
+        return len(self._item)
 
     def data(self, index, role):
         if not index.isValid():
             return None
-        path = self.image_paths[index.row()]
+        path = self._item[index.row()][0]
 
         if role == Qt.DecorationRole:
             if path in self.thumbnail_cache:
@@ -43,14 +45,32 @@ class ImageListModel(QAbstractListModel):
         return None
 
     def load_images_from_paths(self, paths):
+        self.load_images([(path, 0) for path in paths])
+
+    def load_images(self, paths_weight_pairs):
         self.beginResetModel()
-        self.image_paths = paths
+        self._item = paths_weight_pairs
         # TODO: figure out the best timing for clearing the cache
         # self.thumbnail_cache.clear()
         self.endResetModel()
+    
+    def add_image(self, path_weight_pair):
+        # binary search for insertion point
+        path, weight = path_weight_pair
+        left, right = 0, len(self._item) - 1
+        while left <= right:
+            mid = (left + right) // 2
+            if self._item[mid][1] > weight:
+                left = mid + 1
+            else:
+                right = mid - 1
+
+        self.beginInsertRows(QModelIndex(), left, left)
+        self._item.insert(left, path_weight_pair)
+        self.endInsertRows()
 
     def _on_thumbnail_ready(self, row, image):
-        path = self.image_paths[row]
+        path = self._item[row][0]
         self.loading_paths.discard(path)
         self.thumbnail_cache[path] = QPixmap.fromImage(image)
         index = self.index(row)
