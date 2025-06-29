@@ -80,12 +80,13 @@ class MainWindow(QMainWindow):
                 self._mode = _SearchMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or SearchController()
+                self._alternativeController._is_active = False  # Deactivate the alternative controller
+                self.controller._is_active = True
                 self.image_list_view.setModel(self.controller.image_list_model())
                 self.ui.mainStack.setCurrentWidget(self.ui.searchPage)
                 # Update layout
                 self.ui.browsePage.layout().removeWidget(self.ui.searchInput)
                 self.ui.searchPage.layout().insertWidget(0, self.ui.searchInput)
-
                 self.ui.searchInput.setFocus()
             self.controller.on_search_query(query)
         else:
@@ -93,13 +94,14 @@ class MainWindow(QMainWindow):
                 self._mode = _BrowseMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or BrowseController()
+                self._alternativeController._is_active = False  # Deactivate the alternative controller
+                self.controller._is_active = True
                 self.image_list_view.setModel(self.controller.image_list_model())
                 self.ui.mainStack.setCurrentWidget(self.ui.browsePage)
                 # Update layout
                 self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
                 self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
-        self._alternativeController._is_active = False  # Deactivate the alternative controller
-        self.controller._is_active = True
+                self.ui.searchInput.setFocus()
         
 
     def show_tree_context_menu(self, pos):
