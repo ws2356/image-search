@@ -16,7 +16,7 @@ from dt_image_search.tools.perf import perffunc as profile
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
 
-supported_image_types = ('.jpg', '.jpeg', '.png')
+supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif")
 
 @profile
 def query_index(folder_id: int, index_path: str, query_text: str) -> list:
