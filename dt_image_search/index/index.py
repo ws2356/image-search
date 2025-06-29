@@ -19,14 +19,15 @@ def index_path_for_folder(folder: Folder):
 supported_image_types = ('.jpg', '.jpeg', '.png')
 
 @profile
-def query_index(index_path: str, query_text: str) -> typing.List[str]:
-    faiss_indices = _query_internal(index_path, query_text)
+def query_index(folder_id: int, index_path: str, query_text: str) -> list:
+    index_score_pairs = _query_internal(index_path, query_text)
     with create_db_conn() as conn:
         # Fetch file paths from the database using the indices
-        return get_files_by_clip_indices(conn, faiss_indices)
+        file_paths = get_files_by_clip_indices(conn, folder_id, [item[0] for item in index_score_pairs])
+        return [(file, pair[1]) for file, pair in zip(file_paths, index_score_pairs) if file is not None]
 
 @profile
-def _query_internal(index_path: str, query_text: str) -> typing.List[str]:
+def _query_internal(index_path: str, query_text: str) -> list:
     index = _get_index(index_path)
     _model, _, _tokenizer = _get_model()
     # --- Encode text query ---
@@ -36,17 +37,12 @@ def _query_internal(index_path: str, query_text: str) -> typing.List[str]:
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
     text_vector = text_features.cpu().numpy()
     # --- Search ---
-    scores, indices = index.search(text_vector, _TOP_K)
+    scores, indices = index.search(text_vector, TOP_K)
 
     result = []
     index_score_pairs = zip(indices[0], scores[0])
     index_score_pairs = sorted(index_score_pairs, key=lambda x: x[1], reverse=True)
-    for idx, score in index_score_pairs:
-        print(f"Index: {idx}, Score: {score}")
-        if score <= 0.2:
-            break
-        result.append(idx)
-    return [int(item) for item in result]  # Convert to int for consistency
+    return [[int(item[0]), item[1]] for item in index_score_pairs if item[1] >= 0.2]  # Convert to int for consistency
 
 @profile
 def create_index_if_needed(index_path: str):
@@ -134,7 +130,7 @@ _device = "cuda" if torch.cuda.is_available() else "cpu"
 _model = None
 _preprocess = None
 _tokenizer = None
-_TOP_K = 5
+TOP_K = 5
 _model_loaded_event = threading.Event()
 
 @profile

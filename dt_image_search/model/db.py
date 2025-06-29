@@ -107,11 +107,15 @@ def update_files(conn, ids: list, clip_indices: list, statuses: list):
     conn.commit()
 
 @perffunc
-def get_files_by_clip_indices(conn, clip_indices: list):
+def get_files_by_clip_indices(conn, folder_id, clip_indices: list):
     if not clip_indices:
         return []
     placeholders = ', '.join('?' for _ in clip_indices)
-    cursor = conn.execute(f"SELECT path, clip_index FROM files WHERE clip_index IN ({placeholders}) AND status = 1", clip_indices)
+    # cursor = conn.execute(f"SELECT path, clip_index FROM files WHERE clip_index IN ({placeholders}) AND status = 1", clip_indices)
+    cursor = conn.execute(
+        f"SELECT path, clip_index FROM files WHERE folder_id = ? AND clip_index IN ({placeholders}) AND status = 1",
+        (folder_id, *clip_indices)
+    )
     path_by_clip_index = {row[1]: row[0] for row in cursor.fetchall()}
     return [path_by_clip_index.get(clip_index) for clip_index in clip_indices]
 

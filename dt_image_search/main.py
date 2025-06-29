@@ -80,8 +80,8 @@ class MainWindow(QMainWindow):
                 self._mode = _SearchMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or SearchController()
-                self._alternativeController._is_active = False  # Deactivate the alternative controller
-                self.controller._is_active = True
+                self._alternativeController.is_active = False  # Deactivate the alternative controller
+                self.controller.is_active = True
                 self.image_list_view.setModel(self.controller.image_list_model())
                 self.ui.mainStack.setCurrentWidget(self.ui.searchPage)
                 # Update layout
@@ -94,8 +94,8 @@ class MainWindow(QMainWindow):
                 self._mode = _BrowseMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or BrowseController()
-                self._alternativeController._is_active = False  # Deactivate the alternative controller
-                self.controller._is_active = True
+                self._alternativeController.is_active = False  # Deactivate the alternative controller
+                self.controller.is_active = True
                 self.image_list_view.setModel(self.controller.image_list_model())
                 self.ui.mainStack.setCurrentWidget(self.ui.browsePage)
                 # Update layout

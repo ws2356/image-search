@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, QTimer
@@ -10,7 +9,7 @@ from dt_image_search.model.db import create_db_conn, insert_folder, match_child_
 from dt_image_search.model.folder import Folder
 from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
-from dt_image_search.index.index import query_index, index_path_for_folder, build_index
+from dt_image_search.index.index import query_index, index_path_for_folder, TOP_K
 from dt_image_search.tools.debounce import debounce
 from dt_image_search.tools.perf import perffunc as profile
 from dt_image_search.tools.dispatcher import dispatcher
@@ -28,6 +27,13 @@ class SearchController(BaseController):
           self.imageListModel = ImageListModel()
         return self.imageListModel
 
+    # Override setter for is_active to reset the image list model
+    @BaseController.is_active.setter
+    def is_active(self, value: bool):
+        BaseController.is_active.fset(self, value)
+        if not value:
+            self.imageListModel.load_images_from_paths([])  # Reset the image list model
+
     @debounce(3)  # Debounce search queries to avoid excessive calls
     @profile
     def on_search_query(self, query: str):
@@ -40,8 +46,13 @@ class SearchController(BaseController):
         with create_db_conn() as conn:
             folders = get_all_folders(conn)
             for folder in folders:
-                results.extend(self._search_in_folder(folder, query))
-                dispatcher.post(lambda: self.imageListModel.load_images_from_paths(results))
+                results_in_folder = self._search_in_folder(folder, query)
+                for item in results_in_folder:
+                    logging.info(f"Found item: {item[0]} with score: {item[1]}")
+                results.extend(results_in_folder)
+                results = sorted(results, key=lambda x: x[1], reverse=True)[:TOP_K]
+                result_file_paths = [item[0] for item in results]
+                dispatcher.post(lambda: self.imageListModel.load_images_from_paths(result_file_paths))
         if not results:
             logging.info("No results found for the search query")
     
@@ -54,4 +65,4 @@ class SearchController(BaseController):
         if not Path(index_path).exists():
             logging.warning(f"Index file does not exist for folder: {folder.path}")
             return []
-        return query_index(index_path, query)
+        return query_index(folder.id, index_path, query)
