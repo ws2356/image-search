@@ -1,11 +1,12 @@
 import time
+from dt_image_search.logging import logging
 
 def perffunc(func):
     def wrapper(*args, **kwargs):
         start = time.perf_counter()
         result = func(*args, **kwargs)
         duration = time.perf_counter() - start
-        print(f"{func.__qualname__} took {duration:.6f} seconds (shallow)")
+        logging.debug(f"{func.__qualname__} took {duration:.6f} seconds (shallow)")
         return result
     return wrapper
 

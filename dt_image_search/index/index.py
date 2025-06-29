@@ -12,6 +12,7 @@ from dt_image_search.model.fs import get_app_data_path
 from dt_image_search.model.folder import Folder
 from dt_image_search.model.file import File
 from dt_image_search.tools.perf import perffunc as profile
+from dt_image_search.logging import logging
 
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
@@ -73,11 +74,11 @@ def add_to_index(index_path: str, image_files: typing.List[File]):
                 features = features / features.norm(dim=-1, keepdim=True)
             image_features.append(features.cpu().numpy())
         except Exception as e:
-            print(f"Skipping {path}: {e}")
+            logging.error(f"Skipping {path}: {e}")
 
     # Convert list of tensors to a single tensor
     ids = [file.id for file in image_files]
-    print(f"Adding {len(image_features)} images to index with ids: {ids}")
+    logging.info(f"Adding {len(image_features)} images to index with ids: {ids}")
     features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
     index.add_with_ids(features_np, np.array(ids, dtype='int64'))
     # Save the updated index
@@ -105,7 +106,7 @@ def build_index(index_path: str, folder_id: int):
         files = get_pending_files_for_folder(conn, folder_id)
     
     if not files:
-        print(f"No files to index for folder ID {folder_id}.")
+        logging.error(f"No files to index for folder ID {folder_id}.")
         return
     # TODO: do this in batches
     for file in files:
@@ -150,14 +151,14 @@ def _preload_model():
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
     try:
-        print("before loading model")
+        logging.info("before loading model")
         model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
-        print("after loading model")
+        logging.info("after loading model")
         _preprocess = preprocess
         _tokenizer = open_clip.get_tokenizer('ViT-B-32')
         _model = model.to(_device).eval()
     except Exception as e:
-        print(f"Preloading model failed: {e}")
+        logging.error(f"Preloading model failed: {e}")
     finally:
         _model_loaded_event.set()
 
