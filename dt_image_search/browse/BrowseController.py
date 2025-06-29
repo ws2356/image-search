@@ -34,10 +34,10 @@ class BrowseController(BaseController):
             if parent_folder:
                 # TODO: Select folder_path in the UI
                 return
-            child_folders = match_child_folders(conn, folder_path)
-            if child_folders:
-                # TODO: remove clip_index files
-                remove_folders(conn, child_folders)
+            # TODO: remove clip_index files
+            # child_folders = match_child_folders(conn, folder_path)
+            # if child_folders:
+                # remove_folders(conn, child_folders)
             folder_id = insert_folder(conn, folder_path)
             logging.info(f"Inserted folder with ID: {folder_id}")
             self.folder_list_model().add_root_folder([folder_path])
@@ -50,7 +50,7 @@ class BrowseController(BaseController):
                         logging.info(f"Inserting file: {file_path} into folder ID: {folder_id}")
                         insert_file(conn, file_path, folder_id)
 
-            # TODO: start building clip index for the folder
+            # TODO: build index async
             index_path = index_path_for_folder(Folder(id=folder_id, path=folder_path))
             build_index(index_path, folder_id)
 

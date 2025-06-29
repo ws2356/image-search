@@ -32,7 +32,7 @@ class SearchController(BaseController):
     def is_active(self, value: bool):
         BaseController.is_active.fset(self, value)
         if not value:
-            self.imageListModel.load_images_from_paths([])  # Reset the image list model
+            self.imageListModel.on_detach()
 
     @debounce(3)  # Debounce search queries to avoid excessive calls
     @profile

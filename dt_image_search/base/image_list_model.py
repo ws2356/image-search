@@ -50,8 +50,6 @@ class ImageListModel(QAbstractListModel):
     def load_images(self, paths_weight_pairs):
         self.beginResetModel()
         self._item = paths_weight_pairs
-        # TODO: figure out the best timing for clearing the cache
-        # self.thumbnail_cache.clear()
         self.endResetModel()
     
     def add_image(self, path_weight_pair):
@@ -68,6 +66,11 @@ class ImageListModel(QAbstractListModel):
         self.beginInsertRows(QModelIndex(), left, left)
         self._item.insert(left, path_weight_pair)
         self.endInsertRows()
+
+    def on_detach(self):
+        # Clear the thumbnail cache and loading paths when the model is detached
+        self.thumbnail_cache.clear()
+        self.load_images([])
 
     def _on_thumbnail_ready(self, row, image):
         path = self._item[row][0]
