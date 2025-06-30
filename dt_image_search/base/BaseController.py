@@ -1,4 +1,5 @@
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, QThreadPool, QSize
+from dt_image_search.view.image_viewer import ImageViewerDialog
 
 class BaseController:
     def __init__(self):
@@ -26,3 +27,9 @@ class BaseController:
     
     def on_folder_selected(self, row: int):
         pass
+
+    def on_image_double_clicked(self, index):
+        image_path = index.data(Qt.UserRole)  # or your role
+        if image_path:
+            viewer = ImageViewerDialog(image_path)
+            viewer.exec()

@@ -37,6 +37,8 @@ class MainWindow(QMainWindow):
         self.ui.folderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
         self.ui.folderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
 
+        self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
+
         self.image_list_view.setModel(self.controller.image_list_model())
 
         self.ui.searchInput.textChanged.connect(self.handle_search)
@@ -88,6 +90,9 @@ class MainWindow(QMainWindow):
                 self.ui.browsePage.layout().removeWidget(self.ui.searchInput)
                 self.ui.searchPage.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
+
+                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
+                self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
             self.controller.on_search_query(query)
         else:
             if self._mode != _BrowseMode:
@@ -102,6 +107,8 @@ class MainWindow(QMainWindow):
                 self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
                 self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
+                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
+                self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
         
 
     def show_tree_context_menu(self, pos):

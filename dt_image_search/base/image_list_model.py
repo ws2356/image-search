@@ -42,6 +42,9 @@ class ImageListModel(QAbstractListModel):
         if role == Qt.ToolTipRole:
             return os.path.basename(path)
 
+        if role == Qt.UserRole:
+            return path
+
         return None
 
     def load_images_from_paths(self, paths):
