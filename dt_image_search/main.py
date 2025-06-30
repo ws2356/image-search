@@ -79,6 +79,8 @@ class MainWindow(QMainWindow):
         tmp_controller = self._alternativeController
         if query:
             if self._mode != _SearchMode:
+                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
+
                 self._mode = _SearchMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or SearchController()
@@ -91,11 +93,12 @@ class MainWindow(QMainWindow):
                 self.ui.searchPage.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
 
-                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
                 self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
             self.controller.on_search_query(query)
         else:
             if self._mode != _BrowseMode:
+                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
+
                 self._mode = _BrowseMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or BrowseController()
@@ -107,7 +110,6 @@ class MainWindow(QMainWindow):
                 self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
                 self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
-                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
                 self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
         
 
