@@ -105,6 +105,7 @@ def build_index(index_path: str, folder_id: int):
         dict: Progress information after each batch is processed.
               Contains 'batch_start', 'batch_end', 'total_files', 'files_processed'
     """
+    logging.info(f"Start building index for folder ID {folder_id} at {index_path}")
     create_index_if_needed(index_path)
     with create_db_conn() as conn:
         files = get_pending_files_for_folder(conn, folder_id)

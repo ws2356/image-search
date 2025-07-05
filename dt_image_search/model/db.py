@@ -13,13 +13,13 @@ def _sql_logger(statement):
 
 def create_db_conn():
     db_path = get_app_data_path() / "app_data.sqlite"
-    logging.info(f"Db path: {db_path}")
     db_exists = db_path.exists()
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
     schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
     if not db_exists:
+        logging.info(f"Db path: {db_path}")
         conn.executescript(schema_sql)
     return conn
 
