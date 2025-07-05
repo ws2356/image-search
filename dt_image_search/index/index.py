@@ -15,7 +15,7 @@ from dt_image_search.tools.perf import perffunc as profile
 from dt_image_search.logging import logging
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
-import pickle
+import atexit
 
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
@@ -61,17 +61,24 @@ def create_index_if_needed(index_path: str):
     faiss.write_index(index, index_path)
 
 
-def process_image_batch(args):
-    """Process a batch of images in a separate process"""
-    file_paths, preprocess_config = args
-    
-    # Recreate preprocess function in worker process
-    # (since transforms aren't easily serializable)
+def _initialize_worker():
+    """Initialize worker process with preloaded model"""
+    global _worker_model, _worker_preprocess
     import open_clip
+    import torch
+    
+    # Load model once per worker process
+    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+    _worker_model = None  # We don't need model in worker, just preprocessing
+    _worker_preprocess = preprocess
+
+def process_image_batch_persistent(file_paths):
+    """Process a batch of images using the persistent worker's preloaded components"""
     from PIL import Image
     import torch
     
-    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+    # Use the preloaded preprocess function
+    global _worker_preprocess
     
     batch_images = []
     valid_files = []
@@ -79,11 +86,12 @@ def process_image_batch(args):
     for file_path in file_paths:
         try:
             image = Image.open(file_path).convert("RGB")
-            image_tensor = preprocess(image)
+            image_tensor = _worker_preprocess(image)
             batch_images.append(image_tensor)
             valid_files.append(file_path)
         except Exception as e:
-            logging.error(f"Skipping {file_path}: {e}")
+            # Note: logging might not work properly across processes
+            print(f"Error processing {file_path}: {e}")
             continue
     
     if batch_images:
@@ -92,56 +100,84 @@ def process_image_batch(args):
         return batch_tensor, valid_files
     return None, []
 
+# Global process pool that stays alive
+_process_pool = None
+_pool_lock = threading.Lock()
+
+def _get_process_pool():
+    """Get or create the persistent process pool"""
+    global _process_pool
+    
+    with _pool_lock:
+        if _process_pool is None:
+            cpu_count = min(mp.cpu_count(), 8)
+            _process_pool = ProcessPoolExecutor(
+                max_workers=cpu_count,
+                initializer=_initialize_worker
+            )
+            # Register cleanup function
+            atexit.register(_cleanup_process_pool)
+    
+    return _process_pool
+
+def _cleanup_process_pool():
+    """Clean up the process pool on exit"""
+    global _process_pool
+    if _process_pool is not None:
+        _process_pool.shutdown(wait=True)
+        _process_pool = None
+
 @profile
 def add_to_index(index_path: str, image_files: typing.List[File]):
     index = _get_index(index_path)
     model, preprocess, _ = _get_model()
     
+    # Use persistent process pool
+    pool = _get_process_pool()
+    
     # Split files into batches for multiprocessing
-    batch_size = 16  # Smaller batches for better load distribution
-    cpu_count = min(mp.cpu_count(), 8)  # Don't use all CPUs
+    batch_size = 16
     
     file_batches = []
     for i in range(0, len(image_files), batch_size):
         batch_files = image_files[i:i + batch_size]
         file_paths = [f.path for f in batch_files]
-        file_batches.append((file_paths, None))  # preprocess_config placeholder
+        file_batches.append(file_paths)
     
     all_features = []
     valid_files = []
     
-    # Process batches in parallel
-    with ProcessPoolExecutor(max_workers=cpu_count) as executor:
-        futures = [executor.submit(process_image_batch, batch) for batch in file_batches]
-        
-        for i, future in enumerate(futures):
-            try:
-                batch_tensor, batch_valid_files = future.result(timeout=60)  # 60s timeout
+    # Submit all batches to the persistent pool
+    futures = [pool.submit(process_image_batch_persistent, batch) for batch in file_batches]
+    
+    for i, future in enumerate(futures):
+        try:
+            batch_tensor, batch_valid_files = future.result(timeout=60)
+            
+            if batch_tensor is not None:
+                # Move to GPU and process with model (this stays in main process)
+                batch_tensor = batch_tensor.to(_device)
+                with torch.no_grad():
+                    features = model.encode_image(batch_tensor)
+                    features = features / features.norm(dim=-1, keepdim=True)
                 
-                if batch_tensor is not None:
-                    # Move to GPU and process with model
-                    batch_tensor = batch_tensor.to(_device)
-                    with torch.no_grad():
-                        features = model.encode_image(batch_tensor)
-                        features = features / features.norm(dim=-1, keepdim=True)
-                    
-                    features_np = features.cpu().numpy()
-                    all_features.append(features_np)
-                    
-                    # Map back to File objects
-                    batch_start = i * batch_size
-                    batch_files = image_files[batch_start:batch_start + len(batch_valid_files)]
-                    valid_files.extend(batch_files)
-                    
-            except Exception as e:
-                logging.error(f"Error processing batch {i}: {e}")
-                continue
+                features_np = features.cpu().numpy()
+                all_features.append(features_np)
+                
+                # Map back to File objects
+                batch_start = i * batch_size
+                batch_files = image_files[batch_start:batch_start + len(batch_valid_files)]
+                valid_files.extend(batch_files)
+                
+        except Exception as e:
+            logging.error(f"Error processing batch {i}: {e}")
+            continue
     
     if not all_features:
         logging.warning("No valid images to add to index")
         return
     
-    # Rest of the function remains the same
+    # Rest remains the same
     features_np = np.concatenate(all_features, axis=0)
     ids = np.array([file.id for file in valid_files], dtype='int64')
     
