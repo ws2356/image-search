@@ -23,7 +23,7 @@ def create_db_conn():
         conn.executescript(schema_sql)
     return conn
 
-def insert_folder(conn, folder_path: str) -> int:
+def insert_folder(conn, folder_path: str) -> Folder:
     # Replace '\' with '/' for consistency
     folder_path = folder_path.replace('\\', '/')
     cursor = conn.cursor()
@@ -32,21 +32,26 @@ def insert_folder(conn, folder_path: str) -> int:
         (folder_path,)
     )
     conn.commit()
-    cursor.execute("SELECT id FROM folders WHERE path = ?", (folder_path,))
-    return cursor.fetchone()[0]
+    cursor.execute("SELECT id, path, status, added_at FROM folders WHERE path = ?", (folder_path,))
+    row = cursor.fetchone()
+    return Folder(id=row[0], path=row[1], status=row[2], added_at=row[3]) if row else None
 
 def get_all_folders(conn):
-    cursor = conn.execute("SELECT id, path, added_at FROM folders")
-    return [Folder(id = row[0], path = row[1], added_at= row[2]) for row in cursor.fetchall()]  # Ensure the query is executed
+    cursor = conn.execute("SELECT id, path, status, added_at FROM folders")
+    return [Folder(id = row[0], path = row[1], status = row[2], added_at= row[3]) for row in cursor.fetchall()]  # Ensure the query is executed
 
 def get_folder_by_path(conn, folder_path: str) -> Folder:
     # Replace '\' with '/' for consistency
     folder_path = folder_path.replace('\\', '/')
-    cursor = conn.execute("SELECT id, path, added_at FROM folders WHERE path = ?", (folder_path,))
+    cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE path = ?", (folder_path,))
     row = cursor.fetchone()
     if row:
-        return Folder(id=row[0], path=row[1], added_at=row[2])
+        return Folder(id=row[0], path=row[1], status=row[2], added_at=row[3])
     return None
+
+def update_folder_status(conn, folder_id: int, status: int):
+    conn.execute("UPDATE folders SET status = ? WHERE id = ?", (status, folder_id))
+    conn.commit()
 
 def is_folder_exists(conn, folder_path: str) -> bool:
     # Replace '\' with '/' for consistency

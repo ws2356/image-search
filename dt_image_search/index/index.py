@@ -108,12 +108,11 @@ def build_index(index_path: str, folder_id: int):
     if not files:
         logging.error(f"No files to index for folder ID {folder_id}.")
         return
-    # TODO: do this in batches
-    for file in files:
-        if file.clip_index is None and file.status == 0:
-            add_to_index(
-                index_path,
-                [file])
+    step = 100
+    for i_slice in range(0, len(files), step):
+        files_slice = files[i_slice:i_slice + step]
+        logging.info(f"Processing slice {i_slice} to {i_slice + step} for indexing.")
+        add_to_index(index_path, [file for file in files_slice if file.clip_index is None and file.status == 0])
 
 # TODO: cache the index in memory
 @profile

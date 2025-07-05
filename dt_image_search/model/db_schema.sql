@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS folders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT UNIQUE NOT NULL,
+    status INTEGER NOT NULL DEFAULT 0, -- 0: scanning, 1: indexing, 2: indexed
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

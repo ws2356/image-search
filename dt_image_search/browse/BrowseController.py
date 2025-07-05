@@ -11,6 +11,7 @@ from dt_image_search.model.db import create_db_conn, insert_folder, match_child_
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.index import index_path_for_folder, build_index, supported_image_types
 from dt_image_search.model.folder import Folder
+from dt_image_search.index.index_worker import add_index_worker
 
 class BrowseController(BaseController):
     def __init__(self):
@@ -39,21 +40,10 @@ class BrowseController(BaseController):
             # child_folders = match_child_folders(conn, folder_path)
             # if child_folders:
                 # remove_folders(conn, child_folders)
-            folder_id = insert_folder(conn, folder_path)
-            logging.info(f"Inserted folder with ID: {folder_id}")
+            folder = insert_folder(conn, folder_path)
+            logging.info(f"Inserted folder with ID: {folder.id}")
             self.folder_list_model().add_root_folder([folder_path])
-
-            # Enumerate images in the folder and add insert them into the database
-            for root, _, fnames in os.walk(folder_path, followlinks=True):
-                for fname in fnames:
-                    file_path = os.path.join(root, fname)
-                    if os.path.isfile(file_path) and file_path.lower().endswith(supported_image_types):
-                        logging.info(f"Inserting file: {file_path} into folder ID: {folder_id}")
-                        insert_file(conn, file_path, folder_id)
-
-            # TODO: build index async
-            index_path = index_path_for_folder(Folder(id=folder_id, path=folder_path))
-            build_index(index_path, folder_id)
+            add_index_worker(folder, replace_existing=True)
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         folder_path = current.data(Qt.UserRole)
