@@ -45,7 +45,14 @@ class IndexWorker:
 
             update_folder_status(conn, folder_id, 1)
             index_path = index_path_for_folder(self.folder)
-            build_index(index_path, folder_id)
+            
+            # Iterate over the build_index generator and check for stop condition
+            for progress in build_index(index_path, folder_id):
+                if self._is_stopped:
+                    logging.info("Indexing stopped by user during build_index.")
+                    return
+                logging.info(f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
+            
             update_folder_status(conn, folder_id, 2)
 
 _max_workers = 4  # Maximum number of concurrent indexing workers

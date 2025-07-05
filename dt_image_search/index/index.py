@@ -100,6 +100,10 @@ def build_index(index_path: str, folder_id: int):
     Build a FAISS index from images in the given folder path.
     This function will create a new index if it does not exist,
     or update the existing index with new image features.
+    
+    Yields:
+        dict: Progress information after each batch is processed.
+              Contains 'batch_start', 'batch_end', 'total_files', 'files_processed'
     """
     create_index_if_needed(index_path)
     with create_db_conn() as conn:
@@ -108,11 +112,33 @@ def build_index(index_path: str, folder_id: int):
     if not files:
         logging.error(f"No files to index for folder ID {folder_id}.")
         return
+    
+    total_files = len(files)
     step = 100
+    files_processed = 0
+    
     for i_slice in range(0, len(files), step):
-        files_slice = files[i_slice:i_slice + step]
-        logging.info(f"Processing slice {i_slice} to {i_slice + step} for indexing.")
-        add_to_index(index_path, [file for file in files_slice if file.clip_index is None and file.status == 0])
+        batch_start = i_slice
+        batch_end = min(i_slice + step, total_files)
+        files_slice = files[i_slice:batch_end]
+        
+        logging.info(f"Processing slice {batch_start} to {batch_end} for indexing.")
+        
+        # Filter files that need to be indexed
+        files_to_index = [file for file in files_slice if file.clip_index is None and file.status == 0]
+        
+        if files_to_index:
+            add_to_index(index_path, files_to_index)
+            files_processed += len(files_to_index)
+        
+        # Yield progress information after each batch
+        yield {
+            'batch_start': batch_start,
+            'batch_end': batch_end,
+            'total_files': total_files,
+            'files_processed': files_processed,
+            'files_in_batch': len(files_to_index)
+        }
 
 # TODO: cache the index in memory
 @profile
