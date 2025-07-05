@@ -13,6 +13,9 @@ from dt_image_search.model.folder import Folder
 from dt_image_search.model.file import File
 from dt_image_search.tools.perf import perffunc as profile
 from dt_image_search.logging import logging
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+import pickle
 
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
@@ -58,40 +61,97 @@ def create_index_if_needed(index_path: str):
     faiss.write_index(index, index_path)
 
 
+def process_image_batch(args):
+    """Process a batch of images in a separate process"""
+    file_paths, preprocess_config = args
+    
+    # Recreate preprocess function in worker process
+    # (since transforms aren't easily serializable)
+    import open_clip
+    from PIL import Image
+    import torch
+    
+    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+    
+    batch_images = []
+    valid_files = []
+    
+    for file_path in file_paths:
+        try:
+            image = Image.open(file_path).convert("RGB")
+            image_tensor = preprocess(image)
+            batch_images.append(image_tensor)
+            valid_files.append(file_path)
+        except Exception as e:
+            logging.error(f"Skipping {file_path}: {e}")
+            continue
+    
+    if batch_images:
+        # Stack into batch tensor
+        batch_tensor = torch.stack(batch_images)
+        return batch_tensor, valid_files
+    return None, []
+
 @profile
 def add_to_index(index_path: str, image_files: typing.List[File]):
     index = _get_index(index_path)
     model, preprocess, _ = _get_model()
     
-    image_features = []
-    for file in image_files:
-        path = file.path
-        try:
-            image = Image.open(path).convert("RGB")
-            image_input = preprocess(image).unsqueeze(0).to(_device)
-            with torch.no_grad():
-                features = model.encode_image(image_input)
-                features = features / features.norm(dim=-1, keepdim=True)
-            image_features.append(features.cpu().numpy())
-        except Exception as e:
-            logging.error(f"Skipping {path}: {e}")
-
-    # Convert list of tensors to a single tensor
-    ids = [file.id for file in image_files]
-    logging.info(f"Adding {len(image_features)} images to index with ids: {ids}")
-    features_np = torch.cat([torch.from_numpy(f) for f in image_features]).numpy()
-    index.add_with_ids(features_np, np.array(ids, dtype='int64'))
-    # Save the updated index
+    # Split files into batches for multiprocessing
+    batch_size = 16  # Smaller batches for better load distribution
+    cpu_count = min(mp.cpu_count(), 8)  # Don't use all CPUs
+    
+    file_batches = []
+    for i in range(0, len(image_files), batch_size):
+        batch_files = image_files[i:i + batch_size]
+        file_paths = [f.path for f in batch_files]
+        file_batches.append((file_paths, None))  # preprocess_config placeholder
+    
+    all_features = []
+    valid_files = []
+    
+    # Process batches in parallel
+    with ProcessPoolExecutor(max_workers=cpu_count) as executor:
+        futures = [executor.submit(process_image_batch, batch) for batch in file_batches]
+        
+        for i, future in enumerate(futures):
+            try:
+                batch_tensor, batch_valid_files = future.result(timeout=60)  # 60s timeout
+                
+                if batch_tensor is not None:
+                    # Move to GPU and process with model
+                    batch_tensor = batch_tensor.to(_device)
+                    with torch.no_grad():
+                        features = model.encode_image(batch_tensor)
+                        features = features / features.norm(dim=-1, keepdim=True)
+                    
+                    features_np = features.cpu().numpy()
+                    all_features.append(features_np)
+                    
+                    # Map back to File objects
+                    batch_start = i * batch_size
+                    batch_files = image_files[batch_start:batch_start + len(batch_valid_files)]
+                    valid_files.extend(batch_files)
+                    
+            except Exception as e:
+                logging.error(f"Error processing batch {i}: {e}")
+                continue
+    
+    if not all_features:
+        logging.warning("No valid images to add to index")
+        return
+    
+    # Rest of the function remains the same
+    features_np = np.concatenate(all_features, axis=0)
+    ids = np.array([file.id for file in valid_files], dtype='int64')
+    
+    logging.info(f"Adding {len(features_np)} images to index with ids: {ids}")
+    index.add_with_ids(features_np, ids)
     faiss.write_index(index, index_path)
-    # Update files setting clip_index to be the file IDs
+    
     with create_db_conn() as conn:
-        for file in image_files:
-            update_file(
-                conn,
-                file.id,
-                clip_index=file.id,  # Assuming clip_index is the same as file ID
-                status=1  # Mark as indexed
-            )
+        for file in valid_files:
+            update_file(conn, file.id, clip_index=file.id, status=1)
 
 
 @profile
