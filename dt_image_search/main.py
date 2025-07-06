@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self.image_list_view.setModel(self.controller.image_list_model())
 
         self.ui.searchInput.textChanged.connect(self.handle_search)
+        self.ui.searchInput.setClearButtonEnabled(True)
 
         for view in [self.ui.searchImageListView, self.ui.browseImageListView]:
             view.setEditTriggers(QAbstractItemView.NoEditTriggers)
