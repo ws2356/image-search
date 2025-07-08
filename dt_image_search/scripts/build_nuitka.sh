@@ -29,5 +29,6 @@ python -m nuitka \
   --windows-console-mode=force \
   --enable-caching \
   --jobs=8 \
+  --include-package-data=open_clip \
   "${dev_args[@]}" \
   dt_image_search/__main__.py
