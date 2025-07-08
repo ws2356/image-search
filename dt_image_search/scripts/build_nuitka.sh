@@ -21,4 +21,5 @@ python -m nuitka \
   --windows-console-mode=force \
   --jobs=8 \
   --include-package-data=open_clip \
+  --include-package-data=dt_image_search \
   dt_image_search/__main__.py
