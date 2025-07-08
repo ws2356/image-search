@@ -1,5 +1,11 @@
 import os
 import sys
+
+# Add the parent directory of this file (i.e. the one that contains dt_image_search/)
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize

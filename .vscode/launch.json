@@ -8,7 +8,7 @@
       "name": "Python Debugger: Module",
       "type": "debugpy",
       "request": "launch",
-      "module": "dt_image_search.main"
+      "module": "dt_image_search.__main__"
     },
     {
       "name": "Debug current file",

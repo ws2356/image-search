@@ -2,3 +2,4 @@ pipdeptree
 tomlkit
 pyinstaller
 profilehooks
+Nuitka
