@@ -7,10 +7,10 @@ from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, insert_file
+from dt_image_search.model.dts_db import create_db_conn, insert_folder, match_child_folders, match_parent_folder, get_all_folders, insert_file
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
-from dt_image_search.index.index import index_path_for_folder, build_index, supported_image_types
-from dt_image_search.model.folder import Folder
+from dt_image_search.index.dts_index import index_path_for_folder, build_index, supported_image_types
+from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.index_worker import add_index_worker
 
 class BrowseController(BaseController):

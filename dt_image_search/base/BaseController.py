@@ -1,5 +1,5 @@
-from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, QThreadPool, QSize
-from dt_image_search.view.image_viewer import ImageViewerDialog
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt
+from dt_image_search.view.dts_image_viewer import ImageViewerDialog
 
 class BaseController:
     def __init__(self):

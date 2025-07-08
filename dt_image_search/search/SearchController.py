@@ -7,14 +7,14 @@ from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.db import create_db_conn, get_all_folders, delete_folders, get_folder_by_path, delete_files_by_folder_id
-from dt_image_search.model.folder import Folder
-from dt_image_search.model.fs import get_app_data_path
+from dt_image_search.model.dts_db import create_db_conn, get_all_folders, delete_folders, get_folder_by_path, delete_files_by_folder_id
+from dt_image_search.model.dts_folder import Folder
+from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
-from dt_image_search.index.index import query_index, index_path_for_folder, TOP_K
-from dt_image_search.tools.debounce import debounce
-from dt_image_search.tools.perf import perffunc as profile
-from dt_image_search.tools.dispatcher import dispatcher
+from dt_image_search.index.dts_index import query_index, index_path_for_folder, TOP_K
+from dt_image_search.tools.dts_debounce import debounce
+from dt_image_search.tools.dts_perf import perffunc as profile
+from dt_image_search.tools.dts_dispatcher import dispatcher
 
 class SearchController(BaseController):
     def __init__(self):

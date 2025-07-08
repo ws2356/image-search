@@ -7,12 +7,12 @@ from PIL import Image
 from torchvision import transforms
 import numpy as np
 import faiss
-from dt_image_search.model.db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file
-from dt_image_search.model.fs import get_app_data_path
-from dt_image_search.model.folder import Folder
-from dt_image_search.model.file import File
-from dt_image_search.tools.perf import perffunc as profile
-from dt_image_search.logging import logging
+from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file
+from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.model.dts_folder import Folder
+from dt_image_search.model.dts_file import File
+from dt_image_search.tools.dts_perf import perffunc as profile
+from dt_image_search.dts_logging import logging
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit

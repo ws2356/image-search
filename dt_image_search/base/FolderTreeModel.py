@@ -3,7 +3,7 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QModelIndex
 from pathlib import Path
 from .DefaultFolderPredicate import DefaultFolderPredicate
-from dt_image_search.logging import logging
+from dt_image_search.dts_logging import logging
 
 
 class FolderTreeModel(QStandardItemModel):

@@ -6,7 +6,7 @@ from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSi
 from PySide6.QtGui import QPixmap, QIcon, QImage
 from dt_image_search.browse.thumbnail_job import ThumbnailJob, ThumbnailJobSignals
 from dt_image_search.base.image_list_model import ImageListModel
-from dt_image_search.index.index import supported_image_types
+from dt_image_search.index.dts_index import supported_image_types
 
 class FSImageListModel(ImageListModel):
     def __init__(self, parent=None):

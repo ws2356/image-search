@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from dt_image_search.model.fs import get_app_data_path
+from dt_image_search.model.dts_fs import get_app_data_path
 
 def setup_logging():
     # # Choose a platform-appropriate app data folder

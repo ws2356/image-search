@@ -2,12 +2,12 @@ import datetime
 import logging
 import os
 import threading
-from dt_image_search.model.folder import Folder
-from dt_image_search.index.index import (
+from dt_image_search.model.dts_folder import Folder
+from dt_image_search.index.dts_index import (
     index_path_for_folder,
     build_index,
     supported_image_types)
-from dt_image_search.model.db import create_db_conn, insert_file, update_folder_status
+from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status
 
 _max_workers = 4  # Maximum number of concurrent indexing workers
 _index_workers = []  # List to keep track of active indexing workers

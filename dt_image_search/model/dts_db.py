@@ -3,10 +3,10 @@ import sqlite3
 from PySide6.QtCore import QStandardPaths, QDir
 from pathlib import Path
 from importlib.resources import files
-from dt_image_search.model.folder import Folder
-from dt_image_search.model.file import File
-from dt_image_search.model.fs import get_app_data_path
-from dt_image_search.tools.perf import perffunc
+from dt_image_search.model.dts_folder import Folder
+from dt_image_search.model.dts_file import File
+from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.tools.dts_perf import perffunc
 
 def _sql_logger(statement):
     print("SQL:", statement)

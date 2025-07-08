@@ -1,5 +1,5 @@
 import time
-from dt_image_search.logging import logging
+from dt_image_search.dts_logging import logging
 
 def perffunc(func):
     def wrapper(*args, **kwargs):
