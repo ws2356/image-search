@@ -8,6 +8,13 @@ fi
 script_dir="$(dirname "$script_path")"
 cd "$script_dir/../.."
 
+dev_args=()
+for arg in "$@"; do
+  if [[ "$arg" == "--dev" ]]; then
+    dev_args+=("--no-lto" "---debug")
+  fi
+done
+
 
 python -m nuitka \
   --standalone \
@@ -20,4 +27,7 @@ python -m nuitka \
   --output-filename=DTImageSearch \
   --include-package=dt_image_search \
   --windows-console-mode=force \
+  --enable-caching \
+  --jobs=8 \
+  "${dev_args[@]}" \
   dt_image_search/__main__.py
