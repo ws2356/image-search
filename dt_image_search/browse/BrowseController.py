@@ -53,13 +53,11 @@ class BrowseController(BaseController):
     def on_item_expanded(self, index: QModelIndex):
         self.folder_list_model().expand_subfolders(index)
 
-    def on_delete_folder(self, item: QStandardItem):
-        if not item or item.parent():
+    def on_delete_folder(self, item: QStandardItem, data: str = None, is_root_folder: bool = False):
+        if not is_root_folder:
             return
-        folder_path = item.data(Qt.UserRole)
-        self.folder_list_model().indexForItem(item)
-        logging.info(f"Removing folder: {folder_path}")
-        index = self.folder_list_model().indexForItem(item)
+        logging.info(f"Removing folder: {data}")
+        index = self.folder_list_model().indexFromItem(item)
         self.folder_list_model().deleteFolder(index)
 
     def _init_folders(self):

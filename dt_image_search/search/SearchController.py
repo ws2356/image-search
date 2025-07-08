@@ -72,15 +72,16 @@ class SearchController(BaseController):
             return []
         return query_index(folder.id, index_path, query)
 
-    def on_delete_folder(self, item: QStandardItem):
+    def on_delete_folder(self, item: QStandardItem, data: str = None, is_root_folder: bool = False):
+        if not is_root_folder:
+            return
         with create_db_conn() as conn:
-            path = item.data(Qt.UserRole)
-            if not path:
+            if not data:
                 logging.warning("No folder path provided for deletion.")
                 return
-            folder = get_folder_by_path(conn, path)
+            folder = get_folder_by_path(conn, data)
             if not folder:
-                logging.warning(f"Folder {path} does not exist in the database.")
+                logging.warning(f"Folder {data} does not exist in the database.")
                 return
             index_path = index_path_for_folder(folder)
             if os.path.exists(index_path):

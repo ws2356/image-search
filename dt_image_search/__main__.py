@@ -123,14 +123,16 @@ class MainWindow(QMainWindow):
     def show_tree_context_menu(self, pos):
         index = self.ui.folderTreeView.indexAt(pos)
         item = self.ui.folderTreeView.model().itemFromIndex(index)
-        if not item or item.parent():
-            return  # Only for root folders
+        is_root_folder = item and not item.parent()
+        if not is_root_folder:
+            return
+        folder_path = item.data(Qt.UserRole) if item else None
         menu = QMenu(self)
         remove_action = menu.addAction("Remove Folder")
         if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
-            self.controller.on_delete_folder(index)
+            self.controller.on_delete_folder(item, folder_path, is_root_folder)
             searchController = self._alternativeController or SearchController()
-            searchController.on_delete_folder(item)
+            searchController.on_delete_folder(item, folder_path, is_root_folder)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

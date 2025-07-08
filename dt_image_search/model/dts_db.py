@@ -63,7 +63,10 @@ def match_parent_folder(conn, path: str) -> str:
     # Replace '\' with '/' for consistency
     path = path.replace('\\', '/')
     cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE path || '%'", (path,))
-    return cursor.fetchone()[0] if cursor.fetchone() else None
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+    return None
 
 def delete_folders(conn, folder_paths: list):
     # Replace '\' with '/' for consistency
