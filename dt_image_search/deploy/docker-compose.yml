@@ -1,11 +1,9 @@
-version: "3.8"
-
 services:
   agent:
     image: grafana/agent:latest
     volumes:
-      - ./agent/agent.yml:/etc/agent-config.yaml
-    command: ["run", "--config.file=/etc/agent-config.yaml"]
+      - ./otel/agent/agent.yml:/etc/agent-config.yaml
+    command: ["run", "-config.file=/etc/agent-config.yaml"]
     ports:
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
@@ -19,7 +17,7 @@ services:
     volumes:
       - ./otel/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "-config.file=/etc/prometheus/prometheus.yml"
 
   tempo:
     image: grafana/tempo:latest
