@@ -5,7 +5,7 @@ services:
     image: otel/opentelemetry-collector:latest
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
-      - ./otel/collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ./otel/collector/otel-collector-config.yml:/etc/otel-collector-config.yaml
     ports:
       - "4318:4318"   # OTLP HTTP
       - "4317:4317"   # OTLP gRPC
