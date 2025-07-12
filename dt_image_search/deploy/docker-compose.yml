@@ -4,6 +4,8 @@ services:
     volumes:
       - ./otel/agent/agent.river:/etc/agent.river
     command: ["run", "/etc/agent.river"]
+    environment:
+      - AGENT_MODE=flow
     ports:
       - "4318:4318"  # OTLP HTTP
     depends_on:
