@@ -2,18 +2,14 @@ services:
   agent:
     image: grafana/agent:latest
     volumes:
-      - ./otel/agent/agent.yml:/etc/agent-config.yaml
-    entrypoint:
-      - /bin/grafana-agent
-      - run
-      - -config.file=/etc/agent-config.yaml
+      - ./otel/agent/agent.river:/etc/agent.river
+    command: ["run", "/etc/agent.river"]
     ports:
-      - "4318:4318"   # OTLP HTTP
+      - "4318:4318"  # OTLP HTTP
     depends_on:
       - prometheus
       - tempo
       - loki
-
   prometheus:
     image: prom/prometheus
     volumes:
