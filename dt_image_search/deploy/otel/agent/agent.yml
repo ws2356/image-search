@@ -1,0 +1,34 @@
+metrics:
+  wal_directory: /tmp/grafana-agent-wal
+  global:
+    scrape_interval: 60s
+
+  configs:
+    - name: from_app
+      remote_write:
+        - url: http://prometheus:9090/api/v1/write
+      receivers:
+        otlp:
+          protocols:
+            http: {}
+
+logs:
+  configs:
+    - name: from_app
+      receivers:
+        otlp:
+          protocols:
+            http: {}
+      clients:
+        - url: http://loki:3100/loki/api/v1/push
+
+traces:
+  configs:
+    - name: from_app
+      receivers:
+        otlp:
+          protocols:
+            http: {}
+      remote_write:
+        - endpoint: tempo:4317
+          insecure: true
