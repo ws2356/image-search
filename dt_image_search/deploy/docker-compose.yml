@@ -2,14 +2,14 @@ version: "3.8"
 
 services:
   otelcollector:
-    image: otel/opentelemetry-collector:latest
-    command: ["--config=/etc/otel-collector-config.yaml"]
+    image: grafana/otel-collector
     volumes:
-      - ./otel/collector/otel-collector-config.yml:/etc/otel-collector-config.yaml
+      - ./otel-collector-config.yml:/etc/otelcol/config.yaml
+    command: ["--config=/etc/otelcol/config.yaml"]
     ports:
-      - "4318:4318"   # OTLP HTTP
       - "4317:4317"   # OTLP gRPC
-      - "8889:8889"   # Prometheus metrics scrape
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus metrics endpoint
     depends_on:
       - prometheus
       - tempo
