@@ -1,3 +1,7 @@
+server:
+  log_level: info
+  http_listen_port: 4318
+
 metrics:
   wal_directory: /tmp/grafana-agent-wal
   global:
@@ -7,28 +11,19 @@ metrics:
     - name: from_app
       remote_write:
         - url: http://prometheus:9090/api/v1/write
-      receivers:
-        otlp:
-          protocols:
-            http: {}
+      scrape_configs: []  # No scraping needed
 
 logs:
   configs:
     - name: from_app
-      receivers:
-        otlp:
-          protocols:
-            http: {}
+      positions:
+        filename: /tmp/positions.yaml
       clients:
         - url: http://loki:3100/loki/api/v1/push
 
 traces:
   configs:
     - name: from_app
-      receivers:
-        otlp:
-          protocols:
-            http: {}
       remote_write:
         - endpoint: tempo:4317
           insecure: true
