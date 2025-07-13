@@ -3,7 +3,6 @@ import torch
 import threading
 import typing
 import open_clip
-from PIL import Image
 from torchvision import transforms
 import numpy as np
 import faiss
@@ -12,7 +11,7 @@ from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.tools.dts_perf import perffunc as profile
-from dt_image_search.dts_logging import logging
+from dt_image_search.telemetry.telemetry_client import log
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit
@@ -170,18 +169,18 @@ def add_to_index(index_path: str, image_files: typing.List[File]):
                 valid_files.extend(batch_files)
                 
         except Exception as e:
-            logging.error(f"Error processing batch {i}: {e}")
+            log("error", "embedding", message=f"Error processing batch {i}: {e}")
             continue
     
     if not all_features:
-        logging.warning("No valid images to add to index")
+        log("warning", "embedding", message="No valid images to add to index")
         return
     
     # Rest remains the same
     features_np = np.concatenate(all_features, axis=0)
     ids = np.array([file.id for file in valid_files], dtype='int64')
     
-    logging.info(f"Adding {len(features_np)} images to index with ids: {ids}")
+    log("info", message=f"Adding {len(features_np)} images to index with ids: {ids}")
     index.add_with_ids(features_np, ids)
     faiss.write_index(index, index_path)
     
@@ -201,13 +200,13 @@ def build_index(index_path: str, folder_id: int):
         dict: Progress information after each batch is processed.
               Contains 'batch_start', 'batch_end', 'total_files', 'files_processed'
     """
-    logging.info(f"Start building index for folder ID {folder_id} at {index_path}")
+    log("info", message=f"Start building index for folder ID {folder_id} at {index_path}")
     create_index_if_needed(index_path)
     with create_db_conn() as conn:
         files = get_pending_files_for_folder(conn, folder_id)
     
     if not files:
-        logging.error(f"No files to index for folder ID {folder_id}.")
+        log("error", "db", message=f"No files to index for folder ID {folder_id}.")
         return
     
     total_files = len(files)
@@ -219,7 +218,7 @@ def build_index(index_path: str, folder_id: int):
         batch_end = min(i_slice + step, total_files)
         files_slice = files[i_slice:batch_end]
         
-        logging.info(f"Processing slice {batch_start} to {batch_end} for indexing.")
+        log("info", message=f"Processing slice {batch_start} to {batch_end} for indexing.")
         
         # Filter files that need to be indexed
         files_to_index = [file for file in files_slice if file.clip_index is None and file.status == 0]
@@ -273,14 +272,14 @@ def _preload_model():
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
     try:
-        logging.info("before loading model")
+        log("info", message="before loading model")
         model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
-        logging.info("after loading model")
+        log("info", message="after loading model")
         _preprocess = preprocess
         _tokenizer = open_clip.get_tokenizer('ViT-B-32')
         _model = model.to(_device).eval()
     except Exception as e:
-        logging.error(f"Preloading model failed: {e}")
+        log("error", "model", message=f"Preloading model failed: {e}")
     finally:
         _model_loaded_event.set()
 

@@ -1,5 +1,4 @@
 import datetime
-import logging
 import os
 import threading
 from dt_image_search.model.dts_folder import Folder
@@ -8,6 +7,7 @@ from dt_image_search.index.dts_index import (
     build_index,
     supported_image_types)
 from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status
+from dt_image_search.telemetry.telemetry_client import log
 
 _max_workers = 4  # Maximum number of concurrent indexing workers
 _index_workers = []  # List to keep track of active indexing workers
@@ -42,10 +42,10 @@ class IndexWorker:
                     for fname in fnames:
                         file_path = os.path.join(root, fname)
                         if os.path.isfile(file_path) and file_path.lower().endswith(supported_image_types):
-                            logging.info(f"Inserting file: {file_path} into folder ID: {folder_id}")
+                            log("info", message=f"Inserting file: {file_path} into folder ID: {folder_id}")
                             insert_file(conn, file_path, folder_id)
                             if self._is_stopped:
-                                logging.info("Indexing stopped by user.")
+                                log("info", message="Indexing stopped by user.")
                                 return
 
                 update_folder_status(conn, folder_id, 1)
@@ -54,9 +54,9 @@ class IndexWorker:
                 # Iterate over the build_index generator and check for stop condition
                 for progress in build_index(index_path, folder_id):
                     if self._is_stopped:
-                        logging.info("Indexing stopped by user during build_index.")
+                        log("info", message="Indexing stopped by user during build_index.")
                         return
-                    logging.info(f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
+                    log("info", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
                 
                 update_folder_status(conn, folder_id, 2)
         finally:

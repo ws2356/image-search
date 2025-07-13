@@ -15,6 +15,7 @@ from dt_image_search.index.dts_index import query_index, index_path_for_folder, 
 from dt_image_search.tools.dts_debounce import debounce
 from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.tools.dts_dispatcher import dispatcher
+from dt_image_search.telemetry.telemetry_client import log
 
 class SearchController(BaseController):
     def __init__(self):
@@ -42,7 +43,7 @@ class SearchController(BaseController):
         if not self.is_active:
             return
 
-        logging.info(f"Search query: {query}")
+        log("info", message=f"Search query: {query}")
         # TODO: do this in async job which can be cancelled
         dispatcher.post(lambda: self.imageListModel.load_images_from_paths([]))
 
@@ -54,21 +55,21 @@ class SearchController(BaseController):
                 if results_in_folder:
                     dispatcher.post(lambda: self.imageListModel.add_image(results_in_folder[0]))
                 for item in results_in_folder:
-                    logging.info(f"Found item: {item[0]} with score: {item[1]}")
+                    log("info", message=f"Found item: {item[0]} with score: {item[1]}")
                 results.extend(results_in_folder)
                 results = sorted(results, key=lambda x: x[1], reverse=True)[:TOP_K]
         if not results:
-            logging.info("No results found for the search query")
+            log("info", message="No results found for the search query")
         dispatcher.post(lambda: self.imageListModel.load_images(results))
     
     @profile
     def _search_in_folder(self, folder: Folder, query: str):
-        logging.info(f"Searching in folder: {folder.path} with query: {query}")
+        log("info", message=f"Searching in folder: {folder.path} with query: {query}")
         # Implement the search logic here
         # This could involve querying a database or filtering files in the folder
         index_path = index_path_for_folder(folder)
         if not Path(index_path).exists():
-            logging.warning(f"Index file does not exist for folder: {folder.path}")
+            log("warning", "search", message=f"Index file does not exist for folder: {folder.path}")
             return []
         return query_index(folder.id, index_path, query)
 
@@ -77,18 +78,18 @@ class SearchController(BaseController):
             return
         with create_db_conn() as conn:
             if not data:
-                logging.warning("No folder path provided for deletion.")
+                log("warning", "delete", message="No folder path provided for deletion.")
                 return
             folder = get_folder_by_path(conn, data)
             if not folder:
-                logging.warning(f"Folder {data} does not exist in the database.")
+                log("warning", "delete", message=f"Folder {data} does not exist in the database.")
                 return
             index_path = index_path_for_folder(folder)
             if os.path.exists(index_path):
                 os.remove(index_path)
-                logging.info(f"Removed index file for folder {folder.path} at {index_path}")
+                log("info", message=f"Removed index file for folder {folder.path} at {index_path}")
             else:
-                logging.warning(f"No index file found for folder {folder.path} at {index_path}")
+                log("warning", "delete", message=f"No index file found for folder {folder.path} at {index_path}")
             # Remove folder from the database
             delete_folders(conn, [folder.path])
             delete_files_by_folder_id(conn, folder.id)

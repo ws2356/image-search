@@ -7,6 +7,7 @@ from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.tools.dts_perf import perffunc
+from dt_image_search.telemetry.telemetry_client import log
 
 def _sql_logger(statement):
     print("SQL:", statement)
@@ -19,7 +20,7 @@ def create_db_conn():
     conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
     schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
     if not db_exists:
-        logging.info(f"Db path: {db_path}")
+        log("info", message=f"Db path: {db_path}")
         conn.executescript(schema_sql)
     return conn
 

@@ -3,7 +3,7 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem
 from PySide6.QtCore import Qt, QModelIndex
 from pathlib import Path
 from .DefaultFolderPredicate import DefaultFolderPredicate
-from dt_image_search.dts_logging import logging
+from dt_image_search.telemetry.telemetry_client import log
 
 
 class FolderTreeModel(QStandardItemModel):
@@ -58,4 +58,4 @@ class FolderTreeModel(QStandardItemModel):
                     child_item.setEditable(False)
                     parent_item.appendRow(child_item)
         except Exception as e:
-            logging.error(f"Could not read subfolders of {parent_path}: {e}")
+            log("error", message=f"Could not read subfolders of {parent_path}: {e}")

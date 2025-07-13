@@ -13,10 +13,8 @@ from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
-from dt_image_search.dts_logging import setup_logging
 from dt_image_search.index.dts_index import init as index_init
 
-setup_logging()
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
 _BrowseMode = 1
