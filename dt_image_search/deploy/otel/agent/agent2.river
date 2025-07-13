@@ -24,7 +24,7 @@ otelcol.exporter.prometheus "default" {
 
 prometheus.remote_write "default" {
     endpoint {
-        url = "http://prometheus:9090/api/prom/push"
+        url = "http://minir:9009/api/v1/push"
     }
 }
 

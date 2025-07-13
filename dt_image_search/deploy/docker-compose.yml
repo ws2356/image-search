@@ -12,13 +12,13 @@ services:
       - prometheus
       - tempo
       - loki
-  prometheus:
-    image: prom/prometheus
+  mimir:
+    image: grafana/mimir:2.9.0
     volumes:
-      - ./otel/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-
+      - ./otel/mimir/config:/etc/mimir-config
+    entrypoint:
+      - /bin/mimir
+      - -config.file=/etc/mimir-config/mimir.yaml
   tempo:
     image: grafana/tempo:latest
     command: ["-config.file=/etc/tempo.yaml"]
