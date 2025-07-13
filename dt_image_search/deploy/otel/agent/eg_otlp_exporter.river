@@ -1,0 +1,29 @@
+otelcol.exporter.otlp "default" {
+  client {
+    endpoint = "my-otlp-grpc-server:4317"
+    auth     = otelcol.auth.basic.credentials.handler
+  }
+}
+
+otelcol.auth.basic "credentials" {
+  // Retrieve credentials using environment variables.
+
+  username = env("BASIC_AUTH_USER")
+  password = env("API_KEY")
+}
+
+otelcol.receiver.otlp "example" {
+  grpc {
+    endpoint = "127.0.0.1:4317"
+  }
+
+  http {
+    endpoint = "127.0.0.1:4318"
+  }
+
+  output {
+    metrics = [otelcol.exporter.otlp.default.input]
+    logs    = [otelcol.exporter.otlp.default.input]
+    traces  = [otelcol.exporter.otlp.default.input]
+  }
+}
