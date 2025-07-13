@@ -26,21 +26,21 @@ otelcol.processor.batch "default" {}
 otelcol.service "default" {
   pipelines {
     metrics = {
-      receivers  = [otelcol.receiver.otlp.default]
-      processors = [otelcol.processor.batch.default]
-      exporters  = [otelcol.exporter.prometheus.default]
+      receivers  = [otelcol.receiver.otlp.default],
+      processors = [otelcol.processor.batch.default],
+      exporters  = [otelcol.exporter.prometheus.default],
     }
 
     logs = {
-      receivers  = [otelcol.receiver.otlp.default]
-      processors = [otelcol.processor.batch.default]
-      exporters  = [otelcol.exporter.loki.default]
+      receivers  = [otelcol.receiver.otlp.default],
+      processors = [otelcol.processor.batch.default],
+      exporters  = [otelcol.exporter.loki.default],
     }
 
     traces = {
-      receivers  = [otelcol.receiver.otlp.default]
-      processors = [otelcol.processor.batch.default]
-      exporters  = [otelcol.exporter.otlp.tempo]
+      receivers  = [otelcol.receiver.otlp.default],
+      processors = [otelcol.processor.batch.default],
+      exporters  = [otelcol.exporter.otlp.tempo],
     }
   }
 }
