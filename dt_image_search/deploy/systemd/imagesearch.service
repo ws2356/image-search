@@ -5,12 +5,12 @@ Requires=docker.service
 After=docker.service
 
 [Service]
-WorkingDirectory=/path/to/your/project
-ExecStart=/usr/local/bin/docker-compose up -d
-ExecStop=/usr/local/bin/docker-compose down
-Restart=always
-RestartSec=10s
-TimeoutStartSec=0
+WorkingDirectory=/home/ws2356/dev/image-search/dt_image_search/deploy
+ExecStart=docker compose up
+ExecStop=docker compose down
+Restart=on-failure
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Install]
 WantedBy=multi-user.target
