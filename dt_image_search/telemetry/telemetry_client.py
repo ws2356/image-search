@@ -29,7 +29,7 @@ _resource = Resource.create(attributes={
 })
 
 # === METRICS SETUP ===
-_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, insecure=False)
+_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint)
 metric_reader = PeriodicExportingMetricReader(_metric_exporter)
 metrics.set_meter_provider(MeterProvider(metric_readers=[metric_reader], resource=_resource))
 _meter = metrics.get_meter(_image_search_client)
@@ -43,29 +43,28 @@ startup_counter.add(1)
 
 # === TRACING SETUP ===
 trace.set_tracer_provider(TracerProvider(resource=_resource))
-_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, insecure=False)
+_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint)
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter))
 tracer = trace.get_tracer(_image_search_client)
 
 # === LOGGING SETUP ===
 _logger_provider = LoggerProvider(resource=_resource)
-_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, insecure=False)
+_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint)
 _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter))
-otel_logger = _logger_provider.get_logger(_image_search_client)
+# otel_logger = _logger_provider.get_logger(_image_search_client)
 
-logging_handler = LoggingHandler(level=logging.INFO, logger=otel_logger)
+logging_handler = LoggingHandler(level=logging.INFO, logger_provider=_logger_provider)
 logging.basicConfig(level=logging.ERROR, handlers=[logging_handler] + get_other_handlers())
 _logger = logging.getLogger(_image_search_client)
 
 
 def log(severity: str, error_type: str = "", message: str = "", where: str = ""):
-    if severity not in ["debug", "info", "warning", "error", "critical"]:
+    if severity not in ["debug", "info", "warning", "error"]:
         raise ValueError(f"Invalid log severity: {severity}")
     log_function = getattr(_logger, severity, _logger.info)
     # Get current trace_id
     error_counter.add(1, {"type": error_type, "location": where})
-    log_function(f"{error_type} at {where}: {message}",
-                 extra={"type": error_type, "location": where, "message": message})
+    log_function(f"{error_type} at {where}: {message}")
 
 def add_span(name: str):
     """Context manager for tracing blocks of code."""
