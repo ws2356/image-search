@@ -1,0 +1,84 @@
+from functools import wraps
+import logging
+from opentelemetry import trace, metrics
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from dt_image_search.dts_logging import get_other_handlers
+from dt_image_search.telemetry.dt_device_id import get_device_id
+from dt_image_search.telemetry.dt_session_id import session_id
+
+
+_telemetry_upload_host = "https://otel.wansong.vip"
+_metrics_upload_endpoint = f"{_telemetry_upload_host}/v1/metrics"
+_traces_upload_endpoint = f"{_telemetry_upload_host}/v1/traces"
+_logs_upload_endpoint = f"{_telemetry_upload_host}/v1/logs"
+
+_image_search_client = "imagesearch_client"
+
+_resource = Resource.create(attributes={
+    "service.name": _image_search_client,
+})
+
+# === METRICS SETUP ===
+_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, insecure=False)
+metric_reader = PeriodicExportingMetricReader(_metric_exporter)
+metrics.set_meter_provider(MeterProvider(metric_readers=[metric_reader], resource=_resource))
+_meter = metrics.get_meter(_image_search_client)
+
+# Counters
+startup_counter = _meter.create_counter("app_startups")
+search_counter = _meter.create_counter("search")
+error_counter = _meter.create_counter("errors")
+
+startup_counter.add(1)
+
+# === TRACING SETUP ===
+trace.set_tracer_provider(TracerProvider(resource=_resource))
+_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, insecure=False)
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter))
+tracer = trace.get_tracer(_image_search_client)
+
+# === LOGGING SETUP ===
+_logger_provider = LoggerProvider(resource=_resource)
+_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, insecure=False)
+_logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter))
+otel_logger = _logger_provider.get_logger(_image_search_client)
+
+logging_handler = LoggingHandler(level=logging.INFO, logger=otel_logger)
+logging.basicConfig(level=logging.ERROR, handlers=[logging_handler] + get_other_handlers())
+_logger = logging.getLogger(_image_search_client)
+
+
+def log(severity: str, error_type: str = "", message: str = "", where: str = ""):
+    if severity not in ["debug", "info", "warning", "error", "critical"]:
+        raise ValueError(f"Invalid log severity: {severity}")
+    log_function = getattr(_logger, severity, _logger.info)
+    # Get current trace_id
+    error_counter.add(1, {"type": error_type, "location": where})
+    log_function(f"{error_type} at {where}: {message}",
+                 extra={"type": error_type, "location": where, "message": message})
+
+def add_span(name: str):
+    """Context manager for tracing blocks of code."""
+    return tracer.start_as_current_span(name)
+
+def with_trace(name=None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            span_name = name or func.__name__
+            with tracer.start_as_current_span(span_name) as span:
+                span.set_attribute("session_id", session_id)
+                span.set_attribute("device_id", get_device_id())
+                return func(*args, **kwargs)
+        return wrapper
+    return decorator
