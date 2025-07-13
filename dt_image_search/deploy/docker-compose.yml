@@ -9,16 +9,18 @@ services:
     ports:
       - "4318:4318"  # OTLP HTTP
     depends_on:
-      - prometheus
+      - mimir
       - tempo
       - loki
   mimir:
-    image: grafana/mimir:2.9.0
+    image: grafana/mimir:latest
     volumes:
       - ./otel/mimir/config:/etc/mimir-config
     entrypoint:
       - /bin/mimir
       - -config.file=/etc/mimir-config/mimir.yaml
+    ports:
+      - "9009:9009"
   tempo:
     image: grafana/tempo:latest
     command: ["-config.file=/etc/tempo.yaml"]
@@ -39,7 +41,7 @@ services:
     volumes:
       - grafana-storage:/var/lib/grafana
     depends_on:
-      - prometheus
+      - mimir
       - tempo
       - loki
 

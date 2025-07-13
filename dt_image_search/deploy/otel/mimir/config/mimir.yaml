@@ -49,8 +49,6 @@ compactor:
   sharding_ring:
     kvstore:
       store: inmemory
-  compaction:
-      block_retention: 720h
 
 ruler:
   enable_api: true
