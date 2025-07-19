@@ -26,6 +26,8 @@ services:
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./otel/tempo/tempo.yml:/etc/tempo.yaml
+    ports:
+      - "4317:4317"
 
   loki:
     image: grafana/loki:latest
