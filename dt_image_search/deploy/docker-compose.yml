@@ -39,6 +39,7 @@ services:
       - ./otel/grafana/.env
     volumes:
       - grafana-storage:/var/lib/grafana
+      - ./otel/grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - mimir
       - tempo
