@@ -54,7 +54,7 @@ _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter)
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
 logging_handler = LoggingHandler(level=logging.INFO, logger_provider=_logger_provider)
-logging.basicConfig(level=logging.ERROR, handlers=[logging_handler] + get_other_handlers())
+logging.basicConfig(level=logging.INFO, handlers=[logging_handler] + get_other_handlers())
 _logger = logging.getLogger(_image_search_client)
 
 
