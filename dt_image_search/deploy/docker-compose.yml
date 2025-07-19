@@ -35,9 +35,8 @@ services:
     image: grafana/grafana-oss
     ports:
       - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+    env_file:
+      - ./otel/grafana/secrets.env
     volumes:
       - grafana-storage:/var/lib/grafana
     depends_on:
