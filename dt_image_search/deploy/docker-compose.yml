@@ -36,7 +36,7 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - ./otel/grafana/secrets.env
+      - ./otel/grafana/.env
     volumes:
       - grafana-storage:/var/lib/grafana
     depends_on:
