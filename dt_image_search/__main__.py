@@ -8,12 +8,13 @@ if project_root not in sys.path:
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QSize
+from PySide6.QtCore import QCoreApplication, Qt, QModelIndex, QSize
 
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
 from dt_image_search.index.dts_index import init as index_init
+from dt_image_search.telemetry.telemetry_client import flush_telemetry
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -135,5 +136,6 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = MainWindow()
+    QCoreApplication.instance().aboutToQuit.connect(flush_telemetry)
     window.show()
     sys.exit(app.exec())

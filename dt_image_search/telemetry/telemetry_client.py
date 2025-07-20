@@ -27,6 +27,8 @@ _image_search_client = "imagesearch_client"
 _resource = Resource.create(attributes={
     "service.name": _image_search_client,
 })
+_BATCH_SIZE = 128 * 1024
+_QUEUE_SIZE = 1024 * 1024
 
 # === METRICS SETUP ===
 _metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint)
@@ -44,13 +46,13 @@ startup_counter.add(1)
 # === TRACING SETUP ===
 trace.set_tracer_provider(TracerProvider(resource=_resource))
 _trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint)
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000))
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 tracer = trace.get_tracer(_image_search_client)
 
 # === LOGGING SETUP ===
 _logger_provider = LoggerProvider(resource=_resource)
 _log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint)
-_logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000))
+_logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
 logging_handler = LoggingHandler(level=logging.INFO, logger_provider=_logger_provider)
@@ -81,3 +83,12 @@ def with_trace(name=None):
                 return func(*args, **kwargs)
         return wrapper
     return decorator
+
+def flush_telemetry():
+    """Flush telemetry data before the application exits."""
+    # Flush logs
+    _logger_provider.force_flush()
+    # Flush traces
+    trace.get_tracer_provider().force_flush()
+    # Flush metrics
+    metric_reader.force_flush()
