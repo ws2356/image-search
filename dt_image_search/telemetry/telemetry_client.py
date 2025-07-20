@@ -30,7 +30,7 @@ _resource = Resource.create(attributes={
 
 # === METRICS SETUP ===
 _metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint)
-metric_reader = PeriodicExportingMetricReader(_metric_exporter)
+metric_reader = PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)
 metrics.set_meter_provider(MeterProvider(metric_readers=[metric_reader], resource=_resource))
 _meter = metrics.get_meter(_image_search_client)
 
@@ -44,13 +44,13 @@ startup_counter.add(1)
 # === TRACING SETUP ===
 trace.set_tracer_provider(TracerProvider(resource=_resource))
 _trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint)
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter))
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000))
 tracer = trace.get_tracer(_image_search_client)
 
 # === LOGGING SETUP ===
 _logger_provider = LoggerProvider(resource=_resource)
 _log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint)
-_logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter))
+_logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000))
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
 logging_handler = LoggingHandler(level=logging.INFO, logger_provider=_logger_provider)
