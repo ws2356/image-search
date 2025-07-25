@@ -17,6 +17,16 @@ python -m nuitka \
   --windows-file-version="1.0.0" \
   --output-dir=build \
   --output-filename=DTImageSearch \
+  --include-package=opentelemetry.context \
+  --include-package=opentelemetry.trace \
+  --include-package=opentelemetry.metrics \
+  --include-package=opentelemetry._logs \
+  --include-package=opentelemetry.sdk \
+  --include-package=opentelemetry.sdk.metrics \
+  --include-package=opentelemetry.sdk._logs \
+  --include-package=opentelemetry.exporter.otlp.proto.http.trace_exporter \
+  --include-package=opentelemetry.exporter.otlp.proto.http.metric_exporter \
+  --include-package=opentelemetry.exporter.otlp.proto.http._log_exporter \
   --include-package=dt_image_search \
   --windows-console-mode=force \
   --jobs=8 \
