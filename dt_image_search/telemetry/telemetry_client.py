@@ -1,5 +1,10 @@
 from functools import wraps
 import logging
+import os
+
+# Ensure nuitka include this module which would otherwise be loaded dynamically
+import opentelemetry.context.contextvars_context
+
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider

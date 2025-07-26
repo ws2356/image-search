@@ -27,9 +27,11 @@ python -m nuitka \
   --include-package=opentelemetry.exporter.otlp.proto.http.trace_exporter \
   --include-package=opentelemetry.exporter.otlp.proto.http.metric_exporter \
   --include-package=opentelemetry.exporter.otlp.proto.http._log_exporter \
+  --include-module=opentelemetry.context.contextvars_context \
   --include-package=dt_image_search \
   --windows-console-mode=force \
   --jobs=8 \
   --include-package-data=open_clip \
   --include-package-data=dt_image_search \
+  --show-modules \
   dt_image_search/__main__.py
