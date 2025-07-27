@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
-datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz"])
+datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz", "model_configs/ViT-B-32*"])
 
 a = Analysis(
     ['__main__.py'],
