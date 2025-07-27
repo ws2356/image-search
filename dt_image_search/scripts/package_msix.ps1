@@ -13,6 +13,8 @@ Set-Location (Join-Path $scriptDir "../..")
 
 Write-Host "Changed to repository root: $(Get-Location)"
 
+. "$scriptDir\utils.ps1"
+
 # Run PyInstaller
 Write-Host "Running PyInstaller..."
 try {
@@ -66,12 +68,6 @@ if (Test-Path $iconSrc) {
 } else {
     Write-Error "Icon file not found at: $iconSrc"
     exit 1
-}
-
-# Function to search for makeappx.exe (equivalent to search_makeappx function)
-function Search-MakeAppx {
-    # Return the hardcoded path like the bash script
-    return 'D:\Windows Kits\10\bin\10.0.22621.0\x64\makeappx.exe'
 }
 
 # Find makeappx.exe
