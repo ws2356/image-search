@@ -1,4 +1,5 @@
 #!/bin/bash
+# Not working
 set -eu
 
 script_path="$0"
