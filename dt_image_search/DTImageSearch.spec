@@ -5,9 +5,10 @@ from PyInstaller.utils.hooks import collect_data_files
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
+datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz"])
 
 a = Analysis(
-    ['dt_image_search/main.py'],
+    ['__main__.py'],
     pathex=[],
     binaries=[],
     datas=datas,
@@ -50,6 +51,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='DTImageSearch.app',
-    icon='resources/appicon.icns',
+    icon='dt_image_search/resources/appicon.icns',
     bundle_identifier='vip.wansong.dtimagesearch',
 )
