@@ -1,4 +1,7 @@
 .venv_python3
 *.venv
+.venv*
 *_ui.py
 __pycache__
+/build
+/dist
