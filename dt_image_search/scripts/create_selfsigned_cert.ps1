@@ -15,5 +15,3 @@ if ($cert) {
 Export-Certificate -Cert $cert -FilePath "mydevcert.cer"
 
 Import-Certificate -FilePath "mydevcert.cer" -CertStoreLocation "Cert:\LocalMachine\Root"
-
-Import-Certificate -FilePath "mydevcert.cer" -CertStoreLocation "Cert:\LocalMachine\TrustedPublisher"
