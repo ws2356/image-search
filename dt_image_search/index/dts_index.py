@@ -19,7 +19,7 @@ import atexit
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
 
-supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif")
+supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 
 @profile
 def query_index(folder_id: int, index_path: str, query_text: str) -> list:
