@@ -6,7 +6,7 @@ from dt_image_search.index.dts_index import (
     index_path_for_folder,
     build_index,
     supported_image_types)
-from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status
+from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_all_folders
 from dt_image_search.telemetry.telemetry_client import log
 
 _max_workers = 4  # Maximum number of concurrent indexing workers
@@ -71,6 +71,10 @@ def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWor
     Add a new indexing worker for the specified folder.
     """
     with _workers_lock:
+        existing_worker = next((w for w in _index_workers if w.folder.id == folder.id), None)
+        if existing_worker:
+            return existing_worker  # Return existing worker if already indexing this folder
+
         if len(_index_workers) >= _max_workers and not replace_existing:
             return None  # Cannot add more workers if the limit is reached
         
@@ -86,3 +90,19 @@ def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWor
     # Start the worker outside the lock to avoid holding the lock during thread creation
     worker.run()  
     return worker
+
+_resume_thread = None
+def resume_index_workers():
+    global _resume_thread
+    if _resume_thread is not None:
+        return  # Resume thread is already running
+
+    def resume_logic():
+        with create_db_conn() as conn:
+            folders = [folder for folder in get_all_folders(conn) if folder.status != 2]
+            for folder in folders:
+                if not add_index_worker(folder):
+                    return
+                log("info", message=f"Resuming indexing for folder: {folder.path}")
+    _resume_thread = threading.Thread(target=resume_logic, daemon=True)
+    _resume_thread.start()

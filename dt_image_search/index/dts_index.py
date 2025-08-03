@@ -204,6 +204,8 @@ def build_index(index_path: str, folder_id: int):
               Contains 'batch_start', 'batch_end', 'total_files', 'files_processed'
     """
     log("info", message=f"Start building index for folder ID {folder_id} at {index_path}")
+    _model_loaded_event.wait()  # Ensure model is preloaded before starting indexing
+
     create_index_if_needed(index_path)
     with create_db_conn() as conn:
         files = get_pending_files_for_folder(conn, folder_id)

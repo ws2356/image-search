@@ -14,6 +14,7 @@ from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
 from dt_image_search.index.dts_index import init as index_init
+from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
@@ -22,6 +23,7 @@ _BrowseMode = 1
 _SearchMode = 2
 
 index_init()  # Initialize the index system
+resume_index_workers()  # Resume workers to continue indexing after app start
 
 class MainWindow(QMainWindow):
     def __init__(self):
