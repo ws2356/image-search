@@ -99,7 +99,8 @@ def resume_index_workers():
 
     def resume_logic():
         with create_db_conn() as conn:
-            folders = [folder for folder in get_all_folders(conn) if folder.status != 2]
+            all_folders = get_all_folders(conn)
+            folders = [folder for folder in all_folders if folder.status != 2]
             for folder in folders:
                 if not add_index_worker(folder):
                     return

@@ -93,14 +93,20 @@ def match_child_folders(conn, path: str) -> list:
     return [row[0] for row in cursor.fetchall()]
 
 @perffunc
-def insert_file(conn, path: str, folder_id: int, clip_index=None, status=0):
+def insert_file(conn, path: str, folder_id: int):
     # Replace '\' with '/' for consistency
     path = path.replace('\\', '/')
-    conn.execute(
-        "INSERT INTO files (path, folder_id, clip_index, status) VALUES (?, ?, ?, ?)",
-        (path, folder_id, clip_index, status)
-    )
-    conn.commit()
+    # Catch the case uniq constraint violation
+    try:
+        conn.execute(
+            "INSERT INTO files (path, folder_id) VALUES (?, ?)",
+            (path, folder_id)
+        )
+    except sqlite3.IntegrityError:
+        # If the file already exists, we can update it instead
+        pass
+    finally:
+        conn.commit()
 
 @perffunc
 def update_file(conn, file_id: int, path: str = None, folder_id: int = None, clip_index=None, status=None):
