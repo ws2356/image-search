@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import threading
 from PySide6.QtCore import QStandardPaths, QDir
 from pathlib import Path
 from importlib.resources import files
@@ -13,18 +14,22 @@ from dt_image_search.tools.dt_is_debug import is_debug
 def _sql_logger(statement):
     print("SQL:", statement)
 
+db_init_lock = threading.Lock()
 def create_db_conn():
     db_path = get_app_data_path() / "app_data.sqlite"
-    db_exists = db_path.exists()
-    conn = sqlite3.connect(db_path)
+    conn = None
+    with db_init_lock:
+        if not db_path.exists():
+            conn = sqlite3.connect(db_path)
+            schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
+            log("info", message=f"Db path: {db_path}")
+            conn.executescript(schema_sql)
+    if conn is None:
+        conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     if is_debug():
         conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
         print(f"db path: {db_path}")
-    schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
-    if not db_exists:
-        log("info", message=f"Db path: {db_path}")
-        conn.executescript(schema_sql)
     return conn
 
 def insert_folder(conn, folder_path: str) -> Folder:
