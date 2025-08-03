@@ -13,6 +13,9 @@ Set-Location (Join-Path $scriptDir "../..")
 
 Write-Host "Changed to repository root: $(Get-Location)"
 
+Remove-Item -Force -Recurse -ErrorAction Ignore .\DTImageSearchApp
+Remove-Item -Force -Recurse -ErrorAction Ignore .\build
+
 . "$scriptDir\utils.ps1"
 
 # Run PyInstaller
