@@ -9,7 +9,8 @@ $ErrorActionPreference = "Stop"
 # Get script directory and change to repo root (equivalent to bash path resolution)
 $scriptPath = $MyInvocation.MyCommand.Path
 $scriptDir = Split-Path -Parent $scriptPath
-Set-Location (Join-Path $scriptDir "../..")
+$repoRoot = Join-Path $scriptDir "../.."
+Set-Location $repoRoot
 
 Write-Host "Changed to repository root: $(Get-Location)"
 
@@ -35,7 +36,7 @@ try {
 
 # Create and clean DTImageSearchApp directory
 Write-Host "Setting up DTImageSearchApp directory..."
-$appDir = "DTImageSearchApp"
+$appDir = Join-Path $repoRoot "DTImageSearchApp"
 New-Item -ItemType Directory -Path $appDir -Force | Out-Null
 if (Test-Path "$appDir\*") {
     Remove-Item -Path "$appDir\*" -Recurse -Force
@@ -71,6 +72,17 @@ if (Test-Path $iconSrc) {
     Write-Host "Copied icon.png"
 } else {
     Write-Error "Icon file not found at: $iconSrc"
+    exit 1
+}
+
+# Execute bump_app_version.ps1 to update version
+$bumpScript = Join-Path $scriptDir "bump_app_version.ps1"
+Write-Host "Bumping app version..."
+try {
+    & $bumpScript -manifest $manifestDst
+    Write-Host "App version bumped successfully"
+} catch {
+    Write-Error "Failed to bump app version: $($_.Exception.Message)"
     exit 1
 }
 

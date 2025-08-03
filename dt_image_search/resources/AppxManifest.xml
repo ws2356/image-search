@@ -7,7 +7,7 @@
 
   <Identity Name="com.songwan.DTImageSearch"
             Publisher="CN=Wansong Dev Cert"
-            Version="1.0.0.0" />
+            Version="0.0.0.0" />
 
   <Properties>
     <DisplayName>DTImageSearch</DisplayName>
