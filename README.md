@@ -7,3 +7,5 @@ OMP: Hint This means that multiple copies of the OpenMP runtime have been linked
 5. Build index async: add a status field to folder (0: pending, 1: traversed, 2: indexed)
 6. Monitor fs to automatically adding new files to index
 7. Prevent model loading code from depending on web request
+8. TODO: download pretrained model
+9. Index on launch
