@@ -52,14 +52,18 @@ class IndexWorker:
                 update_folder_status(conn, folder_id, 1)
                 index_path = index_path_for_folder(self.folder)
                 
+                all_success = True
                 # Iterate over the build_index generator and check for stop condition
                 for progress in build_index(index_path, folder_id):
                     if self._is_stopped:
                         log("info", message="Indexing stopped by user during build_index.")
                         return
                     log("debug", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
+                    if not progress['batch_result']:
+                        all_success = False
                 
-                update_folder_status(conn, folder_id, 2)
+                if all_success:
+                    update_folder_status(conn, folder_id, 2)
         finally:
             # Always remove worker from list when done, even if an exception occurred
             with _workers_lock:

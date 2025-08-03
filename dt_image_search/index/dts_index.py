@@ -87,13 +87,16 @@ def process_image_batch_persistent(file_paths):
     
     for file_path in file_paths:
         try:
+            log("info", message=f"Proprocessing feature from image: {file_path}")
             image = Image.open(file_path).convert("RGB")
+            log("info", message=f"Opened image: {file_path}")
             image_tensor = _worker_preprocess(image)
+            log("info", message=f"Preprocessed image: {file_path}")
             batch_images.append(image_tensor)
             valid_files.append(file_path)
         except Exception as e:
             # Note: logging might not work properly across processes
-            print(f"Error processing {file_path}: {e}")
+            log("error", message=f"Error processing {file_path}: {e}")
             continue
     
     if batch_images:
@@ -130,7 +133,8 @@ def _cleanup_process_pool():
         _process_pool = None
 
 @profile
-def add_to_index(index_path: str, image_files: typing.List[File]):
+def add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
+    result = True
     index = _get_index(index_path)
     model, preprocess, _ = _get_model()
     
@@ -158,6 +162,7 @@ def add_to_index(index_path: str, image_files: typing.List[File]):
             
             if batch_tensor is not None:
                 # Move to GPU and process with model (this stays in main process)
+                log("info", message=f"Getting features from batch {i} {file_batches[i]}")
                 batch_tensor = batch_tensor.to(_device)
                 with torch.no_grad():
                     features = model.encode_image(batch_tensor)
@@ -166,6 +171,7 @@ def add_to_index(index_path: str, image_files: typing.List[File]):
                 features_np = features.cpu().numpy()
                 all_features.append(features_np)
                 
+                log("info", message=f"Got features from batch {i} {file_batches[i]}")
                 # Map back to File objects
                 batch_start = i * batch_size
                 batch_files = image_files[batch_start:batch_start + len(batch_valid_files)]
@@ -173,12 +179,13 @@ def add_to_index(index_path: str, image_files: typing.List[File]):
                 
         except Exception as e:
             log("error", "embedding", message=f"Error processing batch {i}: {e}")
+            result = False
             continue
-    
+
     if not all_features:
         log("warning", "embedding", message="No valid images to add to index")
-        return
-    
+        return False
+
     # Rest remains the same
     features_np = np.concatenate(all_features, axis=0)
     ids = np.array([file.id for file in valid_files], dtype='int64')
@@ -190,6 +197,7 @@ def add_to_index(index_path: str, image_files: typing.List[File]):
     with create_db_conn() as conn:
         for file in valid_files:
             update_file(conn, file.id, clip_index=file.id, status=1)
+    return result
 
 
 @profile
@@ -203,6 +211,7 @@ def build_index(index_path: str, folder_id: int):
         dict: Progress information after each batch is processed.
               Contains 'batch_start', 'batch_end', 'total_files', 'files_processed'
     """
+
     log("info", message=f"Start building index for folder ID {folder_id} at {index_path}")
     _model_loaded_event.wait()  # Ensure model is preloaded before starting indexing
 
@@ -228,8 +237,9 @@ def build_index(index_path: str, folder_id: int):
         # Filter files that need to be indexed
         files_to_index = [file for file in files_slice if file.clip_index is None and file.status == 0]
         
+        batch_result = False
         if files_to_index:
-            add_to_index(index_path, files_to_index)
+            batch_result = add_to_index(index_path, files_to_index)
             files_processed += len(files_to_index)
         
         # Yield progress information after each batch
@@ -238,7 +248,8 @@ def build_index(index_path: str, folder_id: int):
             'batch_end': batch_end,
             'total_files': total_files,
             'files_processed': files_processed,
-            'files_in_batch': len(files_to_index)
+            'files_in_batch': len(files_to_index),
+            'batch_result': batch_result
         }
 
 # TODO: cache the index in memory
