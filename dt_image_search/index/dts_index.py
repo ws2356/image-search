@@ -283,8 +283,11 @@ def _preload_model():
         log("info", message="after loading model")
         _preprocess = preprocess
         _tokenizer = open_clip.get_tokenizer('ViT-B-32')
+        log("info", message="get tokenizer")
         _model = model.to(_device).eval()
+        log("info", message="model eval")
     except Exception as e:
+        print(e)
         log("error", "model", message=f"Preloading model failed: {e}")
     finally:
         _model_loaded_event.set()
