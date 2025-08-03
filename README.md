@@ -9,3 +9,4 @@ OMP: Hint This means that multiple copies of the OpenMP runtime have been linked
 7. Prevent model loading code from depending on web request
 8. TODO: download pretrained model
 9. Index on launch
+10. debug on TestWin vm
