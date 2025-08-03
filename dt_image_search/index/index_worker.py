@@ -42,7 +42,8 @@ class IndexWorker:
                     for fname in fnames:
                         file_path = os.path.join(root, fname)
                         if os.path.isfile(file_path) and file_path.lower().endswith(supported_image_types):
-                            log("info", message=f"Inserting file: {file_path} into folder ID: {folder_id}")
+                            log("debug", message=f"Inserting file: {file_path} into folder ID: {folder_id}")
+
                             insert_file(conn, file_path, folder_id)
                             if self._is_stopped:
                                 log("info", message="Indexing stopped by user.")
@@ -56,7 +57,7 @@ class IndexWorker:
                     if self._is_stopped:
                         log("info", message="Indexing stopped by user during build_index.")
                         return
-                    log("info", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
+                    log("debug", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
                 
                 update_folder_status(conn, folder_id, 2)
         finally:

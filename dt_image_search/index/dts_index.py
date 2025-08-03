@@ -221,7 +221,7 @@ def build_index(index_path: str, folder_id: int):
         batch_end = min(i_slice + step, total_files)
         files_slice = files[i_slice:batch_end]
         
-        log("info", message=f"Processing slice {batch_start} to {batch_end} for indexing.")
+        log("debug", message=f"Processing slice {batch_start} to {batch_end} for indexing.")
         
         # Filter files that need to be indexed
         files_to_index = [file for file in files_slice if file.clip_index is None and file.status == 0]
