@@ -19,3 +19,6 @@ CREATE TABLE IF NOT EXISTS files (
 
 -- Optional index
 CREATE INDEX IF NOT EXISTS idx_files_folder_status ON files(folder_id, status);
+
+-- Unique constraint(folder_id + path) on files table
+CREATE UNIQUE INDEX IF NOT EXISTS idx_files_folder_path ON files(folder_id, path);
