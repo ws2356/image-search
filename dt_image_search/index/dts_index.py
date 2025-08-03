@@ -19,6 +19,9 @@ import atexit
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
 
+def get_local_pretrained_model_path():
+    return os.path.join(get_app_data_path(), "open_clip_pytorch_pretrained.bin")
+
 supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 
 @profile
@@ -67,7 +70,7 @@ def _initialize_worker():
     import torch
     
     # Load model once per worker process
-    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=get_local_pretrained_model_path())
     _worker_model = None  # We don't need model in worker, just preprocessing
     _worker_preprocess = preprocess
 
@@ -271,9 +274,10 @@ def _get_model():
 def _preload_model():
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
+    pretrained = get_local_pretrained_model_path()
     try:
         log("info", message="before loading model")
-        model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+        model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained)
         log("info", message="after loading model")
         _preprocess = preprocess
         _tokenizer = open_clip.get_tokenizer('ViT-B-32')
