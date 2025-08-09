@@ -20,6 +20,7 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from dt_image_search.dts_logging import get_other_handlers
 from dt_image_search.telemetry.dt_device_id import get_device_id
 from dt_image_search.telemetry.dt_session_id import session_id
+from dt_image_search.model.dts_config import get_log_level
 
 
 _telemetry_upload_host = "https://otel.wansong.vip"
@@ -60,8 +61,8 @@ _log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint)
 _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
-logging_handler = LoggingHandler(level=logging.INFO, logger_provider=_logger_provider)
-logging.basicConfig(level=logging.INFO, handlers=[logging_handler] + get_other_handlers())
+logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
+logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
 _logger = logging.getLogger(_image_search_client)
 
 
