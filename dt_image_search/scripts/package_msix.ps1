@@ -18,6 +18,7 @@ Remove-Item -Force -Recurse -ErrorAction Ignore .\DTImageSearchApp
 Remove-Item -Force -Recurse -ErrorAction Ignore .\build
 Remove-Item -Force -Recurse -ErrorAction Ignore .\dist
 
+& "$scriptDir\build.ps1"
 . "$scriptDir\utils.ps1"
 
 # Run PyInstaller
