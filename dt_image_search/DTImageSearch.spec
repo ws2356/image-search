@@ -7,12 +7,17 @@ sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
 datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz", "model_configs/ViT-B-32*"])
 
+hiddenimports = [
+    'debugpy._vendored',
+    'debugpy._vendored.force_pydevd',
+]
+
 a = Analysis(
     ['__main__.py'],
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
