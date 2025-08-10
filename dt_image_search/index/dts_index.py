@@ -16,6 +16,7 @@ from dt_image_search.telemetry.telemetry_client import log
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit
+from PIL import Image
 
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"

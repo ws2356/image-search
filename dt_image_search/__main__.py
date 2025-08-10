@@ -18,8 +18,8 @@ from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry
 
 from dt_image_search.model.dts_config import get_debugpy_port
+import debugpy
 if get_debugpy_port() > 0:
-    import debugpy
     debugpy.listen(("0.0.0.0", get_debugpy_port()))
     print(f"Waiting for debugger attach @ {get_debugpy_port()}")
     debugpy.wait_for_client()

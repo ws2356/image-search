@@ -14,3 +14,4 @@ OMP: Hint This means that multiple copies of the OpenMP runtime have been linked
                  It can be downloaded at https://aka.ms/vs/16/release/vc_redist.x64.exe
 12. Resource requirements: 8G memory
 13. `<TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />` determine the version range
+14. excessive otel logs...

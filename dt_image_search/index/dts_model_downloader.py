@@ -1,3 +1,4 @@
+import ctypes
 import os
 import platform
 import requests
@@ -29,7 +30,6 @@ def _is_cn() -> bool:
 def _get_system_region():
     system = platform.system()
     if system == "Windows":
-        import ctypes
         buf = ctypes.create_unicode_buffer(85)
         if ctypes.windll.kernel32.GetUserDefaultGeoName(buf, len(buf)):
             return buf.value
