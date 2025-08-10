@@ -36,9 +36,9 @@ def _get_system_region():
 
 
 def _get_local_pretrained_model_path():
-    return os.path.join(get_app_data_path(), "open_clip_pytorch_pretrained.bin")
+    return os.path.join(get_app_data_path(), "open_clip_pytorch_model.bin")
 
-_pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_pretrained.bin"
+_pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_model.bin"
 def _download_pretrained_model():
     # Download from `_pretrained_model_url` to file location `_get_local_pretrained_model_path`
     try:
