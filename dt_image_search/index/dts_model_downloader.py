@@ -6,12 +6,16 @@ import sys
 import threading
 from dt_image_search.model.dts_db import log
 from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.model.dts_config import get_override_model_path
 
 # When model_downloaded_event is set, the `_get_local_pretrained_model_path()` either exists because download success or skipped due to previous download,
 # or not exists because download fails. In latter case, fallback to pretrained model name, so that open_clip would download the model from huggingface
 model_downloaded_event = threading.Event()
 
 def get_pretrained_model() -> str:
+    override_model_path = get_override_model_path()
+    if override_model_path:
+        return override_model_path
     if _is_cn() and os.path.exists(_get_local_pretrained_model_path()):
         return _get_local_pretrained_model_path()
     return "laion2b_s34b_b79k"

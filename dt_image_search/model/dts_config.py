@@ -13,3 +13,7 @@ def get_log_level() -> int:
     config = get_config()
     level_str = config.get("log_level", "INFO")
     return getattr(logging, level_str.upper(), logging.INFO)
+
+def get_override_model_path() -> str:
+    config = get_config()
+    return config.get("override_model_path", "")
