@@ -17,3 +17,7 @@ def get_log_level() -> int:
 def get_override_model_path() -> str:
     config = get_config()
     return config.get("override_model_path", "")
+
+def get_debugpy_port() -> int:
+    config = get_config()
+    return config.get("debugpy_port", 0)
