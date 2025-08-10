@@ -8,6 +8,7 @@ import numpy as np
 import faiss
 from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file
 from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.index.dts_model_downloader import get_pretrained_model, model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.tools.dts_perf import perffunc as profile
@@ -18,9 +19,6 @@ import atexit
 
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
-
-def get_local_pretrained_model_path():
-    return os.path.join(get_app_data_path(), "open_clip_pytorch_pretrained.bin")
 
 supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 
@@ -70,7 +68,7 @@ def _initialize_worker():
     import torch
     
     # Load model once per worker process
-    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=get_local_pretrained_model_path())
+    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=get_pretrained_model())
     _worker_model = None  # We don't need model in worker, just preprocessing
     _worker_preprocess = preprocess
 
@@ -134,6 +132,8 @@ def _cleanup_process_pool():
 
 @profile
 def add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
+    model_downloaded_event.wait()  # Wait for the model to be downloaded
+
     result = True
     index = _get_index(index_path)
     model, preprocess, _ = _get_model()
@@ -287,7 +287,9 @@ def _get_model():
 def _preload_model():
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
-    pretrained = get_local_pretrained_model_path()
+    model_downloaded_event.wait()  # Wait for the model to be downloaded
+
+    pretrained = get_pretrained_model()
     try:
         log("info", message="before loading model")
         model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained)
