@@ -9,13 +9,37 @@
       "type": "debugpy",
       "request": "launch",
       "module": "dt_image_search.__main__",
-      "justMyCode": false
+      "justMyCode": false,
+      "logToFile": true,
+      "debugAdapterHost": "127.0.0.1",
+      "debugAdapterPort": 5678
     },
     {
       "name": "Debug current file",
       "type": "debugpy",
       "request": "launch",
       "program": "${file}",
+      "justMyCode": false
+    },
+    {
+      "name": "Debug DTImageSearch",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/dt_image_search/__main__.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Attach to Remote Debug",
+      "type": "python",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
       "justMyCode": false
     }
   ]

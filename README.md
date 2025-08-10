@@ -10,3 +10,6 @@ OMP: Hint This means that multiple copies of the OpenMP runtime have been linked
 8. TODO: download pretrained model
 9. Index on launch
 10. debug on TestWin vm
+11. Microsoft Visual C++ Redistributable is not installed, this may lead to the DLL load failure.
+                 It can be downloaded at https://aka.ms/vs/16/release/vc_redist.x64.exe
+12. Resource requirements: 8G memory
