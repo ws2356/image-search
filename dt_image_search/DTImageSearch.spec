@@ -1,23 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_all
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
 datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz", "model_configs/ViT-B-32*"])
 
-hiddenimports = [
-    'debugpy._vendored',
-    'debugpy._vendored.force_pydevd',
-]
+
+debugpy_datas, debugpy_binaries, debugpy_hiddenimports = collect_all("debugpy")
+datas += debugpy_datas
 
 a = Analysis(
     ['__main__.py'],
     pathex=[],
-    binaries=[],
+    binaries=debugpy_binaries,
     datas=datas,
-    hiddenimports=hiddenimports,
+    hiddenimports=debugpy_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
