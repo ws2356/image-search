@@ -11,6 +11,15 @@ datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz
 debugpy_datas, debugpy_binaries, debugpy_hiddenimports = collect_all("debugpy")
 datas += debugpy_datas
 
+debugpy_hiddenimports += [
+    "xmlrpc",
+    "xmlrpc.server",
+    "xmlrpc.client",
+    "queue",
+    "select",
+    "selectors",
+    "multiprocessing.connection",
+
 a = Analysis(
     ['__main__.py'],
     pathex=[],
