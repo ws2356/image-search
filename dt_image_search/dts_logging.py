@@ -1,4 +1,5 @@
 import logging
+import sys
 from dt_image_search.model.dts_fs import get_app_data_path
 
 def get_other_handlers():
@@ -13,7 +14,9 @@ def get_other_handlers():
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "app.log"
 
-    return [
+    ret = [
         logging.FileHandler(log_file, encoding="utf-8"),
-        logging.StreamHandler(),  # Optional: prints to terminal if launched from console
     ]
+    if sys.stdout:
+        ret.append(logging.StreamHandler(sys.stdout))
+    return ret
