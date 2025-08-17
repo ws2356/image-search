@@ -41,6 +41,15 @@
         "port": 5678
       },
       "justMyCode": false
+    },
+    {
+      "name": "Python: Listen for MSIX App",
+      "type": "python",
+      "request": "attach",
+      "listen": {
+        "host": "127.0.0.1",
+        "port": 5678
+      }
     }
   ]
 }

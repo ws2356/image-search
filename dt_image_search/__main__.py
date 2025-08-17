@@ -20,7 +20,7 @@ from dt_image_search.telemetry.telemetry_client import flush_telemetry
 from dt_image_search.model.dts_config import get_debugpy_port
 import debugpy
 if get_debugpy_port() > 0:
-    debugpy.listen(("0.0.0.0", get_debugpy_port()))
+    debugpy.connect(("127.0.0.1", get_debugpy_port()))
     print(f"Waiting for debugger attach @ {get_debugpy_port()}")
     debugpy.wait_for_client()
 
