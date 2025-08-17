@@ -19,4 +19,6 @@ def get_other_handlers():
     ]
     if sys.stdout:
         ret.append(logging.StreamHandler(sys.stdout))
+    elif sys.stderr:
+        ret.append(logging.StreamHandler(sys.stderr))
     return ret
