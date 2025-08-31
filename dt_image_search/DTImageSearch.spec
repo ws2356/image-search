@@ -19,6 +19,7 @@ debugpy_hiddenimports += [
     "select",
     "selectors",
     "multiprocessing.connection",
+]
 
 a = Analysis(
     ['__main__.py'],
