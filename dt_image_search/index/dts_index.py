@@ -68,15 +68,43 @@ def create_index_if_needed(index_path: str):
 _process_pool = None
 _pool_lock = threading.Lock()
 
+def _calculate_worker_count():
+    """Calculate optimal worker count based on available memory"""
+    try:
+        import psutil
+        # Get total memory in GB
+        total_memory_gb = psutil.virtual_memory().total / (1024**3)
+        
+        if total_memory_gb <= 8:
+            worker_count = 1
+        else:
+            # Increase worker count by 1 for each additional 2GB after 8GB
+            additional_memory = total_memory_gb - 8
+            additional_workers = int(additional_memory / 2)
+            worker_count = 1 + additional_workers
+        
+        # Cap at CPU count to avoid over-subscription
+        max_workers = min(worker_count, mp.cpu_count())
+        
+        log("info", message=f"Memory: {total_memory_gb:.1f}GB, calculated workers: {worker_count}, final workers: {max_workers}")
+        return max_workers
+        
+    except ImportError:
+        # Fallback if psutil is not available - use conservative approach
+        worker_count = 1
+        log("warning", message=f"psutil not available, using conservative worker count: {worker_count}")
+        return worker_count
+
 def _get_process_pool():
     """Get or create the persistent process pool"""
     global _process_pool
     
     with _pool_lock:
         if _process_pool is None:
-            cpu_count = min(mp.cpu_count(), 2)
+            # Calculate worker count based on available memory
+            worker_count = _calculate_worker_count()
             _process_pool = ProcessPoolExecutor(
-                max_workers=cpu_count,
+                max_workers=worker_count,
                 initializer=_initialize_worker
             )
             # Register cleanup function
@@ -260,6 +288,7 @@ def _preload_model():
         log("info", message="before loading model")
         model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained)
         log("info", message="after loading model")
+
         _preprocess = preprocess
         _tokenizer = open_clip.get_tokenizer('ViT-B-32')
         log("info", message="get tokenizer")
