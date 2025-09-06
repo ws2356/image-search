@@ -47,7 +47,7 @@ startup_counter = _meter.create_counter("app_startups")
 search_counter = _meter.create_counter("search")
 error_counter = _meter.create_counter("errors")
 
-startup_counter.add(1)
+# startup_counter.add(1)
 
 # === TRACING SETUP ===
 trace.set_tracer_provider(TracerProvider(resource=_resource))
@@ -62,7 +62,7 @@ _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter,
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
 logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
-logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
+logging.basicConfig(level=get_log_level(), handlers=[] + get_other_handlers())
 _logger = logging.getLogger(_image_search_client)
 
 

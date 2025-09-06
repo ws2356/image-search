@@ -14,7 +14,7 @@ class ThumbnailJob(QRunnable):
         self.icon_size = icon_size
         self.signals = signal_target
 
-    @with_trace("ThumbnailJob.run")
+    # @with_trace("ThumbnailJob.run")
     def run(self):
         image = QImage(self.path).scaled(
             self.icon_size.width(), self.icon_size.height(),
