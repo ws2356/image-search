@@ -15,3 +15,37 @@ OMP: Hint This means that multiple copies of the OpenMP runtime have been linked
 12. Resource requirements: 8G memory
 13. `<TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />` determine the version range
 14. excessive otel logs...
+15. subprocess is also creating window(s)
+16. subprocess killed for unknown reason:
+```
+INFO:imagesearch_client: at : Resuming indexing for folder: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000
+DEBUG:imagesearch_client: at : Inserting file: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000\000000000.jpg into folder ID: 1
+DEBUG:imagesearch_client:perf at : insert_file took 0.000527 seconds (shallow)
+DEBUG:imagesearch_client: at : Inserting file: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000\000000001.jpg into folder ID: 1
+DEBUG:imagesearch_client:perf at : insert_file took 0.000348 seconds (shallow)
+DEBUG:imagesearch_client: at : Inserting file: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000\000000002.jpg into folder ID: 1
+DEBUG:imagesearch_client:perf at : insert_file took 0.000307 seconds (shallow)
+DEBUG:imagesearch_client: at : Inserting file: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000\000000003.jpg into folder ID: 1
+DEBUG:imagesearch_client:perf at : insert_file took 0.000309 seconds (shallow)
+DEBUG:imagesearch_client: at : Inserting file: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000\000000004.jpg into folder ID: 1
+DEBUG:imagesearch_client:perf at : insert_file took 0.000301 seconds (shallow)
+DEBUG:imagesearch_client: at : Inserting file: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000\000000005.jpg into folder ID: 1
+DEBUG:imagesearch_client:perf at : insert_file took 0.000296 seconds (shallow)
+DEBUG:imagesearch_client:perf at : build_index took 0.000004 seconds (shallow)
+INFO:imagesearch_client: at : Start building index for folder ID 1 at C:\Users\ws2356\AppData\Roaming\DTImageSearch/1.faiss
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): huggingface.co:443
+DEBUG:urllib3.connectionpool:https://huggingface.co:443 "HEAD /laion/CLIP-ViT-B-32-laion2B-s34B-b79K/resolve/main/open_clip_pytorch_model.bin HTTP/1.1" 302 0
+INFO:root:Loading pretrained ViT-B-32 weights (laion2b_s34b_b79k).
+ERROR:imagesearch_client:embedding at : Error processing batch 0: A process in the process pool was terminated abruptly while the future was running or pending.
+WARNING:imagesearch_client:embedding at : No valid images to add to index
+DEBUG:imagesearch_client:perf at : add_to_index took 20.040357 seconds (shallow)
+DEBUG:imagesearch_client: at : Index progress: 6/6 files processed
+DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/metrics HTTP/1.1" 200 2
+DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.1" 200 2
+ERROR:imagesearch_client:embedding at : Error processing batch 0:
+WARNING:imagesearch_client:embedding at : No valid images to add to index
+DEBUG:imagesearch_client:perf at : add_to_index took 60.021945 seconds (shallow)
+DEBUG:imagesearch_client: at : Index progress: 6/6 files processed
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): otel.wansong.vip:443
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): otel.wansong.vip:443
+```
