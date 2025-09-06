@@ -144,6 +144,10 @@ class MainWindow(QMainWindow):
             searchController.on_delete_folder(item, folder_path, is_root_folder)
 
 if __name__ == '__main__':
+    # Protect against multiprocessing import issues on Windows
+    import multiprocessing
+    multiprocessing.freeze_support()
+    
     app = QApplication(sys.argv)
     window = MainWindow()
     QCoreApplication.instance().aboutToQuit.connect(flush_telemetry)
