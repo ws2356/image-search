@@ -30,8 +30,6 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 _BrowseMode = 1
 _SearchMode = 2
 
-index_init()  # Initialize the index system
-resume_index_workers()  # Resume workers to continue indexing after app start
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -147,6 +145,9 @@ if __name__ == '__main__':
     # Protect against multiprocessing import issues on Windows
     import multiprocessing
     multiprocessing.freeze_support()
+
+    index_init()  # Initialize the index system
+    resume_index_workers()  # Resume workers to continue indexing after app start
     
     app = QApplication(sys.argv)
     window = MainWindow()
