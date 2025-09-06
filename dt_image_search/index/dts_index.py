@@ -74,7 +74,7 @@ def _get_process_pool():
     
     with _pool_lock:
         if _process_pool is None:
-            cpu_count = min(mp.cpu_count(), 1)
+            cpu_count = min(mp.cpu_count(), 2)
             _process_pool = ProcessPoolExecutor(
                 max_workers=cpu_count,
                 initializer=_initialize_worker
@@ -92,12 +92,12 @@ def _cleanup_process_pool():
         _process_pool = None
 
 @profile
-def add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
+def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
     result = True
     index = _get_index(index_path)
-    model, preprocess, _ = _get_model()
+    model, _, _ = _get_model()
     
     # Use persistent process pool
     pool = _get_process_pool()
@@ -173,7 +173,7 @@ def build_index(index_path: str, folder_id: int):
               Contains 'batch_start', 'batch_end', 'total_files', 'files_processed'
     """
 
-    log("info", message=f"Start building index for folder ID {folder_id} at {index_path}")
+    log("info", message=f"Start build_index for folder ID {folder_id} at {index_path}")
     _model_loaded_event.wait()  # Ensure model is preloaded before starting indexing
 
     create_index_if_needed(index_path)
@@ -200,13 +200,13 @@ def build_index(index_path: str, folder_id: int):
         
         batch_result = False
         if files_to_index:
-            batch_result = add_to_index(index_path, files_to_index)
+            batch_result = _add_to_index(index_path, files_to_index)
             files_processed += len(files_to_index)
         else:
             log("info", message=f"No new files to index in slice {batch_start} to {batch_end}.")
         
         # Yield progress information after each batch
-        yield {
+        res = {
             'batch_start': batch_start,
             'batch_end': batch_end,
             'total_files': total_files,
@@ -214,6 +214,9 @@ def build_index(index_path: str, folder_id: int):
             'files_in_batch': len(files_to_index),
             'batch_result': batch_result
         }
+
+        log("debug", message=f"Batch add to index result: {res}")
+        yield res
 
 # TODO: cache the index in memory
 @profile
