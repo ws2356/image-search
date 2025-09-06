@@ -50,14 +50,15 @@ def _download_pretrained_model():
             log("debug", message=f"Model already exists at: {_get_local_pretrained_model_path()}")
             return
 
-        log("debug", message="Start downloading pretrained model")
+        log("info", message="Start downloading pretrained model")
         tmp_path = f"{_get_local_pretrained_model_path()}.tmp"
         _download_with_progress(_pretrained_model_url, tmp_path)
         os.path.rename(tmp_path, _get_local_pretrained_model_path())
-        log("debug", message="Finished downloading pretrained model")
+        log("info", message="Finished downloading pretrained model")
     except Exception as e:
         log("error", message=f"Failed to download pretrained model: {e}")
     finally:
+        log("info", message="Model download thread exiting")
         model_downloaded_event.set()
 
 def _download_with_progress(url, dest_path, chunk_size=4096, bar_width=50):
@@ -87,4 +88,5 @@ def _download_with_progress(url, dest_path, chunk_size=4096, bar_width=50):
 if _is_cn():
     threading.Thread(target=_download_pretrained_model).start()
 else:
+    log("info", message="Not in CN region, skipping model download")
     model_downloaded_event.set()  # Skip download in non-CN regions

@@ -243,6 +243,8 @@ def build_index(index_path: str, folder_id: int):
         if files_to_index:
             batch_result = add_to_index(index_path, files_to_index)
             files_processed += len(files_to_index)
+        else:
+            log("info", message=f"No new files to index in slice {batch_start} to {batch_end}.")
         
         # Yield progress information after each batch
         yield {

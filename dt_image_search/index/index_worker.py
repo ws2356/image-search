@@ -77,6 +77,7 @@ def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWor
     with _workers_lock:
         existing_worker = next((w for w in _index_workers if w.folder.id == folder.id), None)
         if existing_worker:
+            log("info", message=f"Index worker already exists for this folder: {folder.id}.")
             return existing_worker  # Return existing worker if already indexing this folder
 
         if len(_index_workers) >= _max_workers and not replace_existing:
@@ -87,6 +88,7 @@ def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWor
             worker = _index_workers.pop(0)
             worker.stop()
 
+        log("info", message=f"Index worker not already exists for this folder: {folder.id}, creating one")
         worker = IndexWorker(folder)
         _index_workers.append(worker)
         _index_workers.sort(key=lambda w: datetime.datetime.fromisoformat(w.folder.added_at))
@@ -99,10 +101,12 @@ _resume_thread = None
 def resume_index_workers():
     global _resume_thread
     if _resume_thread is not None:
+        log("info", message="Resuming index workers already running.")
         return  # Resume thread is already running
-
+    log("info", message=f"Resuming index workers for incomplete folders - init thread: {_resume_thread}")
     def resume_logic():
         with create_db_conn() as conn:
+            log("info", message="Resuming index workers for incomplete folders - db connected")
             all_folders = get_all_folders(conn)
             folders = [folder for folder in all_folders if folder.status != 2]
             for folder in folders:
