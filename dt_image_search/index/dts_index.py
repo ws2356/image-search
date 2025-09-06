@@ -18,6 +18,7 @@ from concurrent.futures import ProcessPoolExecutor
 import atexit
 from PIL import Image
 
+# TODO: refactor multiprocessing code: move all model/preprocess loading to worker processes
 def index_path_for_folder(folder: Folder):
     return f"{get_app_data_path()}/{folder.id}.faiss"
 
@@ -114,7 +115,7 @@ def _get_process_pool():
     
     with _pool_lock:
         if _process_pool is None:
-            cpu_count = min(mp.cpu_count(), 8)
+            cpu_count = min(mp.cpu_count(), 1)
             _process_pool = ProcessPoolExecutor(
                 max_workers=cpu_count,
                 initializer=_initialize_worker
@@ -179,7 +180,7 @@ def add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
                 valid_files.extend(batch_files)
                 
         except Exception as e:
-            log("error", "embedding", message=f"Error processing batch {i}: {e}")
+            log("error", "embedding", message=f"Error processing batch {i} {type(e).__name__}: {e}")
             result = False
             continue
 
