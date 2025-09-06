@@ -7,26 +7,12 @@ sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
 datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz", "model_configs/ViT-B-32*"])
 
-
-debugpy_datas, debugpy_binaries, debugpy_hiddenimports = collect_all("debugpy")
-datas += debugpy_datas
-
-debugpy_hiddenimports += [
-    "xmlrpc",
-    "xmlrpc.server",
-    "xmlrpc.client",
-    "queue",
-    "select",
-    "selectors",
-    "multiprocessing.connection",
-]
-
 a = Analysis(
     ['__main__.py'],
     pathex=[],
-    binaries=debugpy_binaries,
+    binaries=[],
     datas=datas,
-    hiddenimports=debugpy_hiddenimports,
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -46,7 +32,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

@@ -17,14 +17,6 @@ from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry
 
-# from dt_image_search.model.dts_config import get_debugpy_port
-# import debugpy
-# if get_debugpy_port() > 0:
-#     debugpy.connect(("127.0.0.1", get_debugpy_port()))
-#     print(f"Waiting for debugger attach @ {get_debugpy_port()}")
-#     debugpy.wait_for_client()
-
-
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
 _BrowseMode = 1
