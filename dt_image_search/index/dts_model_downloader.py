@@ -8,6 +8,7 @@ import threading
 from dt_image_search.model.dts_db import log
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.model.dts_config import get_override_model_path
+from dt_image_search.telemetry.telemetry_client import with_trace
 
 # When model_downloaded_event is set, the `_get_local_pretrained_model_path()` either exists because download success or skipped due to previous download,
 # or not exists because download fails. In latter case, fallback to pretrained model name, so that open_clip would download the model from huggingface
@@ -43,6 +44,7 @@ def _get_local_pretrained_model_path():
     return os.path.join(get_app_data_path(), "open_clip_pytorch_model.bin")
 
 _pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_model.bin"
+@with_trace("Model.Download")
 def _download_pretrained_model():
     # Download from `_pretrained_model_url` to file location `_get_local_pretrained_model_path`
     try:
@@ -53,7 +55,7 @@ def _download_pretrained_model():
         log("info", message="Start downloading pretrained model")
         tmp_path = f"{_get_local_pretrained_model_path()}.tmp"
         _download_with_progress(_pretrained_model_url, tmp_path)
-        os.path.rename(tmp_path, _get_local_pretrained_model_path())
+        os.rename(tmp_path, _get_local_pretrained_model_path())
         log("info", message="Finished downloading pretrained model")
     except Exception as e:
         log("error", message=f"Failed to download pretrained model: {e}")
@@ -63,10 +65,14 @@ def _download_pretrained_model():
 
 def _download_with_progress(url, dest_path, chunk_size=4096, bar_width=50):
     response = requests.get(url, stream=True)
+    if response.status_code != 200:
+        raise Exception(f"Failed to download file: {response.status_code}")
+
     total_length = response.headers.get("content-length")
     
     if total_length is None:
         # No content-length header
+        log("debug", message="No content-length header, downloading without progress")
         with open(dest_path, "wb") as f:
             f.write(response.content)
         return
@@ -77,6 +83,7 @@ def _download_with_progress(url, dest_path, chunk_size=4096, bar_width=50):
     with open(dest_path, "wb") as f:
         for chunk in response.iter_content(chunk_size=chunk_size):
             if not chunk:
+                log("debug", message=f"Download completed")
                 continue
             f.write(chunk)
             downloaded += len(chunk)
