@@ -16,7 +16,7 @@ from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.index_worker import resume_index_workers
-from dt_image_search.telemetry.telemetry_client import flush_telemetry
+from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -196,6 +196,8 @@ if __name__ == '__main__':
     # Install threading exception handler (available in Python 3.8+)
     if hasattr(threading, 'excepthook'):
         threading.excepthook = handle_threading_exception
+
+    startup_counter.add(1)
 
     index_init()  # Initialize the index system
     resume_index_workers()  # Resume workers to continue indexing after app start
