@@ -24,14 +24,12 @@ def process_image_batch_persistent(file_paths):
     
     batch_images = []
     valid_files = []
-    
+
+    log("info", message=f"Processing images: {len(file_paths)}")
     for file_path in file_paths:
         try:
-            log("info", message=f"Preprocessing feature from image: {file_path}")
             image = Image.open(file_path).convert("RGB")
-            log("info", message=f"Opened image: {file_path}")
             image_tensor = _worker_preprocess(image)
-            log("info", message=f"Preprocessed image: {file_path}")
             batch_images.append(image_tensor)
             valid_files.append(file_path)
         except Exception as e:
