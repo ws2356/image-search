@@ -1,6 +1,6 @@
 from functools import wraps
 import logging
-import os
+from urllib.parse import urlparse
 
 # Ensure nuitka include this module which would otherwise be loaded dynamically
 import opentelemetry.context.contextvars_context
@@ -8,11 +8,11 @@ import opentelemetry.context.contextvars_context
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics import MeterProvider, Counter, UpDownCounter, Histogram, ObservableCounter, ObservableUpDownCounter, ObservableGauge
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, ConsoleMetricExporter, AggregationTemporality
 
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -37,9 +37,19 @@ _BATCH_SIZE = 128 * 1024
 _QUEUE_SIZE = 1024 * 1024
 
 # === METRICS SETUP ===
-_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint)
+temporality = {
+                Counter: AggregationTemporality.DELTA,
+                UpDownCounter: AggregationTemporality.CUMULATIVE,
+                Histogram: AggregationTemporality.DELTA,
+                ObservableCounter: AggregationTemporality.DELTA,
+                ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+                ObservableGauge: AggregationTemporality.CUMULATIVE,
+            }
+_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality)
 metric_reader = PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)
-metrics.set_meter_provider(MeterProvider(metric_readers=[metric_reader], resource=_resource))
+_metric_exporter2 = ConsoleMetricExporter(preferred_temporality=temporality)
+metric_reader2 = PeriodicExportingMetricReader(_metric_exporter2, export_interval_millis=60_000)
+metrics.set_meter_provider(MeterProvider(metric_readers=[metric_reader, metric_reader2], resource=_resource))
 _meter = metrics.get_meter(_image_search_client)
 
 # Counters
@@ -51,6 +61,7 @@ error_counter = _meter.create_counter("errors")
 trace.set_tracer_provider(TracerProvider(resource=_resource))
 _trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint)
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
+trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 tracer = trace.get_tracer(_image_search_client)
 
 # === LOGGING SETUP ===
@@ -59,7 +70,25 @@ _log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint)
 _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
+# Temporary workaround to fix log loop: otel log handler -> upload via urllib3 -> urllib3 internal log -> otel log handler
+class OtelLogFilter(logging.Filter):
+    def __init__(self):
+        super().__init__()
+        # parse _telemetry_upload_host extracting host
+        self.telemetry_host = urlparse(_telemetry_upload_host).hostname
+
+    def filter(self, record):
+        if record.module != 'connectionpool':
+            return True
+        # Iterate values of record.args tuple
+        if not isinstance(record.args, tuple):
+            return True
+        for arg in record.args:
+            if arg == self.telemetry_host:
+                return False
+        return True
 logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
+logging_handler.addFilter(OtelLogFilter())
 logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
 _logger = logging.getLogger(_image_search_client)
 
