@@ -15,7 +15,6 @@ class FSImageListModel(ImageListModel):
 
     def load_images_from_folder(self, folder):
         log("info", message=f"Loading images from folder: {folder}")
-        # TODO: songwan, check if all image types are supported
         files = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith(supported_image_types)]
         self.load_images_from_paths(files)
     
