@@ -6,8 +6,9 @@ from dt_image_search.index.dts_index import (
     index_path_for_folder,
     build_index,
     supported_image_types)
-from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_all_folders
+from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_all_folders, get_folder_by_path
 from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.tools.dts_util import normalized_folder_path
 
 _max_workers = 4  # Maximum number of concurrent indexing workers
 _index_workers = []  # List to keep track of active indexing workers
@@ -37,17 +38,26 @@ class IndexWorker:
                 folder_id = self.folder.id
                 update_folder_status(conn, folder_id, 0)
                 folder_path = self.folder.path
-                # Enumerate images in the folder and add insert them into the database
-                for root, _, fnames in os.walk(folder_path, followlinks=True):
-                    for fname in fnames:
-                        file_path = os.path.join(root, fname)
-                        if os.path.isfile(file_path) and file_path.lower().endswith(supported_image_types):
-                            log("debug", message=f"Inserting file: {file_path} into folder ID: {folder_id}")
 
-                            insert_file(conn, file_path, folder_id)
-                            if self._is_stopped:
-                                log("info", message="Indexing stopped by user.")
-                                return
+                def _traverse_dir(folder_path: str):
+                    if self._is_stopped:
+                        return
+                    # traverse folder_path non recursively
+                    for entry in os.scandir(folder_path):
+                        _filepath = entry.path
+                        if entry.is_dir():
+                            _subfolder = get_folder_by_path(conn, normalized_folder_path(_filepath))
+                            if _subfolder:
+                                continue
+                            else:
+                                _traverse_dir(_filepath)
+                        elif entry.is_file() and entry.name.lower().endswith(supported_image_types):
+                            insert_file(conn, _filepath, folder_id)
+
+                _traverse_dir(folder_path=folder_path)
+                if self._is_stopped:
+                    log("info", message="Indexing stopped by user.")
+                    return
 
                 update_folder_status(conn, folder_id, 1)
                 index_path = index_path_for_folder(self.folder)

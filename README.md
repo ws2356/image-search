@@ -65,3 +65,9 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/metrics HTTP
 DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.1" 200 2
 ```
 18. Logs are not batched
+19. Folder add/remove logic
+    - add
+        - overlapping with existing [v]
+    - remove
+        - remove child [x]
+        - remove parent
