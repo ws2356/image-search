@@ -10,13 +10,12 @@ class FolderTreeModel(QStandardItemModel):
     def __init__(self, parent=None, folder_predicate=DefaultFolderPredicate):
         super().__init__(parent)
         self.setHorizontalHeaderLabels(["Folders"])
-        self.root_paths = set()
         self.folder_predicate = folder_predicate
 
     def add_root_folder(self, path_strs: typing.List[str]):
         for p in path_strs:
             path = Path(p).resolve()
-            if not path.is_dir() or str(path) in self.root_paths:
+            if not path.is_dir():
                 continue
             if not self.folder_predicate(path):
                 continue
@@ -30,7 +29,6 @@ class FolderTreeModel(QStandardItemModel):
             self.appendRow(root_item)
 
             self._populate_subfolders(root_item, path)
-            self.root_paths.add(str(path))
 
     def deleteFolder(self, index: QModelIndex):
         item = self.itemFromIndex(index)
@@ -40,7 +38,6 @@ class FolderTreeModel(QStandardItemModel):
         if not folder_path:
             return
         self.removeRow(item.row(), QModelIndex())
-        self.root_paths.discard(folder_path)
 
     def expand_subfolders(self, index: QModelIndex):
         item = self.itemFromIndex(index)

@@ -48,9 +48,6 @@ class BrowseController(BaseController):
             add_index_worker(folder, replace_existing=True)
         self._reload_folders()
 
-        # Trigger a reload for folder list
-        self.folder_list_model().reload()
-
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         folder_path = current.data(Qt.UserRole)
         log("info", message=f"on_folder_selected: {folder_path}")
