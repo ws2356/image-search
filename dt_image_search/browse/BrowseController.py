@@ -6,7 +6,7 @@ from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.dts_db import create_db_conn, insert_folder, match_parent_folder, get_all_folders
+from dt_image_search.model.dts_db import create_db_conn, insert_folder, match_parent_folder, get_all_folders, get_subfolders
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
 from dt_image_search.model.dts_folder import Folder
@@ -44,8 +44,12 @@ class BrowseController(BaseController):
             if not folder:
                 return
             log("info", message=f"Inserted folder with ID: {folder.id}")
-            self.folder_list_model().add_root_folder([folder_path])
+            # self.folder_list_model().add_root_folder([folder_path])
             add_index_worker(folder, replace_existing=True)
+        self._reload_folders()
+
+        # Trigger a reload for folder list
+        self.folder_list_model().reload()
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         folder_path = current.data(Qt.UserRole)
@@ -62,10 +66,25 @@ class BrowseController(BaseController):
         delete_folder(data)
 
     def _init_folders(self):
+        _root_folders = self._load_folders()
+        self.folder_list_model().add_root_folder([folder.path for folder in _root_folders])
+
+    def _reload_folders(self):
+        self.folder_list_model().clear()
+        self._init_folders()
+
+    def _load_folders(self) -> list[str]:
         with create_db_conn() as conn:
             folders = get_all_folders(conn)
-            log("info", message=f"Loaded {len(folders)} folders from the database.")
-            self.folder_list_model().add_root_folder([folder.path for folder in folders])
+            # sort folders asc
+            folders.sort(key=lambda f: f.path)
+            root_folders = []
+            for item in folders:
+                if len(root_folders) and item.path.startswith(root_folders[-1]):
+                    continue
+                root_folders.append(item.path)
+            log("info", message=f"Loaded {len(root_folders)} root folders from the database.")
+            return root_folders
 
     def _create_model_for_folder(self) -> QAbstractItemModel:
         model = FolderTreeModel()
