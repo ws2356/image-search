@@ -7,7 +7,7 @@ from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.dts_db import create_db_conn, get_all_folders, delete_folders, get_folder_by_path, delete_files_by_folder_id
+from dt_image_search.model.dts_db import create_db_conn, get_all_folders, delete_folders, get_folder_by_path
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
@@ -72,24 +72,3 @@ class SearchController(BaseController):
             log("warning", "search", message=f"Index file does not exist for folder: {folder.path}")
             return []
         return query_index(folder.id, index_path, query)
-
-    def on_delete_folder(self, item: QStandardItem, data: str = None, is_root_folder: bool = False):
-        if not is_root_folder:
-            return
-        with create_db_conn() as conn:
-            if not data:
-                log("warning", "delete", message="No folder path provided for deletion.")
-                return
-            folder = get_folder_by_path(conn, data)
-            if not folder:
-                log("warning", "delete", message=f"Folder {data} does not exist in the database.")
-                return
-            index_path = index_path_for_folder(folder)
-            if os.path.exists(index_path):
-                os.remove(index_path)
-                log("info", message=f"Removed index file for folder {folder.path} at {index_path}")
-            else:
-                log("warning", "delete", message=f"No index file found for folder {folder.path} at {index_path}")
-            # Remove folder from the database
-            delete_folders(conn, [folder.path])
-            delete_files_by_folder_id(conn, folder.id)

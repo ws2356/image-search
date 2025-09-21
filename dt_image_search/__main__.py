@@ -130,9 +130,7 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         remove_action = menu.addAction("Remove Folder")
         if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
-            self.controller.on_delete_folder(item, folder_path, is_root_folder)
-            searchController = self._alternativeController or SearchController()
-            searchController.on_delete_folder(item, folder_path, is_root_folder)
+            self.controller.on_delete_folder(item, folder_path)
 
 # Global exception handler functions (defined outside main block for testing)
 def handle_python_exception(exc_type, exc_value, exc_traceback):

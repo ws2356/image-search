@@ -8,7 +8,7 @@ from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
 from dt_image_search.model.dts_db import create_db_conn, insert_folder, match_parent_folder, get_all_folders
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
-from dt_image_search.index.dts_index import index_path_for_folder, supported_image_types
+from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
@@ -53,12 +53,11 @@ class BrowseController(BaseController):
     def on_item_expanded(self, index: QModelIndex):
         self.folder_list_model().expand_subfolders(index)
 
-    def on_delete_folder(self, item: QStandardItem, data: str = None, is_root_folder: bool = False):
-        if not is_root_folder:
-            return
+    def on_delete_folder(self, item: QStandardItem, data: str = None):
         log("info", message=f"Removing folder: {data}")
         index = self.folder_list_model().indexFromItem(item)
         self.folder_list_model().deleteFolder(index)
+        delete_folder(data)
 
     def _init_folders(self):
         with create_db_conn() as conn:
