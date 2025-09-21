@@ -53,7 +53,8 @@ def get_all_folders(conn):
     return [Folder(id = row[0], path = row[1], status = row[2], added_at= row[3]) for row in cursor.fetchall()]  # Ensure the query is executed
 
 def get_subfolders(conn, folder_path: str) -> list[Folder]:
-    cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE path LIKE ?", (folder_path + '/%',))
+    folder_path = folder_path.replace('\\', '/')
+    cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE path LIKE ?", (folder_path + '%',))
     return [Folder(id = row[0], path = row[1], status = row[2], added_at= row[3]) for row in cursor.fetchall()]  # Ensure the query is executed
 
 def get_folder_by_path(conn, folder_path: str) -> Folder:

@@ -71,6 +71,7 @@ class BrowseController(BaseController):
 
     def _reload_folders(self):
         self.folder_list_model().clear()
+        self.folder_list_model().setHorizontalHeaderLabels(["Folders"])
         self._init_folders()
 
     def _load_folders(self) -> list[str]:

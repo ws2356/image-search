@@ -263,7 +263,7 @@ def delete_folder(folder_path: str = None):
         if not folder_path:
             log("warning", "delete", message="No folder path provided for deletion.")
             return
-        folders = get_subfolders(folder_path)
+        folders = get_subfolders(conn, folder_path)
         for folder in folders:
             if not folder:
                 log("warning", "delete", message=f"Folder {folder_path} does not exist in the database.")
