@@ -67,7 +67,7 @@ class BrowseController(BaseController):
 
     def _init_folders(self):
         _root_folders = self._load_folders()
-        self.folder_list_model().add_root_folder([folder.path for folder in _root_folders])
+        self.folder_list_model().add_root_folder(_root_folders)
 
     def _reload_folders(self):
         self.folder_list_model().clear()
