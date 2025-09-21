@@ -6,7 +6,7 @@ import open_clip
 from torchvision import transforms
 import numpy as np
 import faiss
-from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, get_folder_by_path, delete_folders, delete_files_by_folder_id
+from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, get_folder_by_path, delete_folders, delete_files_by_folder_id, get_subfolders
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import get_pretrained_model, model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
@@ -263,19 +263,20 @@ def delete_folder(folder_path: str = None):
         if not folder_path:
             log("warning", "delete", message="No folder path provided for deletion.")
             return
-        folder = get_folder_by_path(conn, folder_path)
-        if not folder:
-            log("warning", "delete", message=f"Folder {folder_path} does not exist in the database.")
-            return
-        index_path = index_path_for_folder(folder)
-        if os.path.exists(index_path):
-            os.remove(index_path)
-            log("info", message=f"Removed index file for folder {folder.path} at {index_path}")
-        else:
-            log("warning", "delete", message=f"No index file found for folder {folder.path} at {index_path}")
-        # Remove folder from the database
-        delete_folders(conn, [folder.path])
-        delete_files_by_folder_id(conn, folder.id)
+        folders = get_subfolders(folder_path)
+        for folder in folders:
+            if not folder:
+                log("warning", "delete", message=f"Folder {folder_path} does not exist in the database.")
+                return
+            index_path = index_path_for_folder(folder)
+            if os.path.exists(index_path):
+                os.remove(index_path)
+                log("info", message=f"Removed index file for folder {folder.path} at {index_path}")
+            else:
+                log("warning", "delete", message=f"No index file found for folder {folder.path} at {index_path}")
+            # Remove folder from the database
+            delete_folders(conn, [folder.path])
+            delete_files_by_folder_id(conn, folder.id)
 
 
 _device = "cuda" if torch.cuda.is_available() else "cpu"
