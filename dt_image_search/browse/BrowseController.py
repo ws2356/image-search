@@ -41,6 +41,8 @@ class BrowseController(BaseController):
             # if child_folders:
                 # remove_folders(conn, child_folders)
             folder = insert_folder(conn, folder_path)
+            if not folder:
+                return
             log("info", message=f"Inserted folder with ID: {folder.id}")
             self.folder_list_model().add_root_folder([folder_path])
             add_index_worker(folder, replace_existing=True)

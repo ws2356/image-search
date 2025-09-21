@@ -41,6 +41,9 @@ def insert_folder(conn, folder_path: str) -> Folder:
         (folder_path,)
     )
     conn.commit()
+    # If no row was inserted, return None
+    if cursor.rowcount == 0:
+        return None
     cursor.execute("SELECT id, path, status, added_at FROM folders WHERE path = ?", (folder_path,))
     row = cursor.fetchone()
     return Folder(id=row[0], path=row[1], status=row[2], added_at=row[3]) if row else None

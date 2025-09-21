@@ -17,6 +17,7 @@ from dt_image_search.search.SearchController import SearchController
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
+from dt_image_search.tools.dts_util import normalized_folder_path
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -75,7 +76,8 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if not folder:
             return
-        self.controller.on_folder_added(folder)
+
+        self.controller.on_folder_added(normalized_folder_path(folder))
         # index = self.controller.get_index_for_folder(folder)
         # if index.isValid():
         #     self.ui.folderList.setCurrentIndex(index)
@@ -130,7 +132,7 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         remove_action = menu.addAction("Remove Folder")
         if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
-            self.controller.on_delete_folder(item, folder_path)
+            self.controller.on_delete_folder(item, normalized_folder_path(folder_path))
 
 # Global exception handler functions (defined outside main block for testing)
 def handle_python_exception(exc_type, exc_value, exc_traceback):
