@@ -1,6 +1,6 @@
 # TODO
 1. Package for different architectures
-2. Show a tree view on left panel
+2. Show a tree view on left panel [v]
 3. Create a clip index for any directory in the trees, based on the folder size
 4. Fix following warning: OMP: Error #15: Initializing libomp140.x86_64.dll, but found libiomp5md.dll already initialized.
 OMP: Hint This means that multiple copies of the OpenMP runtime have been linked into the program. That is dangerous, since it can degrade performance or cause incorrect results. The best thing to do is to ensure that only a single OpenMP runtime is linked into the process, e.g. by avoiding static linking of the OpenMP runtime in any library. As an unsafe, unsupported, undocumented workaround you can set the environment variable KMP_DUPLICATE_LIB_OK=TRUE to allow the program to continue to execute, but that may cause crashes or silently produce incorrect results. For more information, please see http://openmp.llvm.org/
@@ -14,9 +14,9 @@ OMP: Hint This means that multiple copies of the OpenMP runtime have been linked
                  It can be downloaded at https://aka.ms/vs/16/release/vc_redist.x64.exe
 12. Resource requirements: 8G memory
 13. `<TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />` determine the version range
-14. excessive otel logs...
-15. subprocess is also creating window(s)
-16. subprocess killed for unknown reason:
+14. excessive otel logs... [v]
+15. subprocess is also creating window(s) [v]
+16. subprocess killed for unknown reason: [v] (bug causing too many subprocesses being spawned)
 ```
 INFO:imagesearch_client: at : Resuming indexing for folder: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000
 DEBUG:imagesearch_client: at : Inserting file: C:/Users/ws2356/Downloads/image-dataset/image-dataset/00000\000000000.jpg into folder ID: 1
@@ -49,7 +49,7 @@ DEBUG:imagesearch_client: at : Index progress: 6/6 files processed
 DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): otel.wansong.vip:443
 DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): otel.wansong.vip:443
 ```
-17. Empty log/metric request?
+17. Empty log/metric request? [v]
 ```
 DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): otel.wansong.vip:443
 DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): otel.wansong.vip:443
@@ -65,9 +65,10 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/metrics HTTP
 DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.1" 200 2
 ```
 18. Logs are not batched
-19. Folder add/remove logic
+19. Folder add/remove logic [v]
     - add
         - overlapping with existing [v]
     - remove
         - remove child [x]
-        - remove parent
+        - remove parent [v]
+20. Branding
