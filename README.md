@@ -72,3 +72,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
         - remove child [x]
         - remove parent [v]
 20. Branding
+21. Crash when logging
