@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 from dt_image_search.model.dts_fs import get_app_data_path
 
@@ -14,11 +15,14 @@ def get_other_handlers():
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "app.log"
 
-    ret = [
-        logging.FileHandler(log_file, encoding="utf-8"),
-    ]
-    if sys.stdout:
-        ret.append(logging.StreamHandler(sys.stdout))
-    elif sys.stderr:
-        ret.append(logging.StreamHandler(sys.stderr))
-    return ret
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10_000_000,
+        backupCount=5
+    )
+    formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s %(name)s %(message)s'
+    )
+    file_handler.setFormatter(formatter)
+
+    return [file_handler]
