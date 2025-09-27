@@ -7,7 +7,7 @@ from torchvision import transforms
 import numpy as np
 import faiss
 from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, get_folder_by_path, delete_folders, delete_files_by_folder_id, get_subfolders
-from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.model.dts_fs import get_app_data_path, get_pretrained_model_cache_path
 from dt_image_search.index.dts_model_downloader import get_pretrained_model, model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
@@ -307,7 +307,7 @@ def _preload_model():
     pretrained = get_pretrained_model()
     try:
         log("info", message="before loading model")
-        model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained)
+        model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained, cache_dir=str(get_pretrained_model_cache_path()))
         log("info", message="after loading model")
 
         _preprocess = preprocess

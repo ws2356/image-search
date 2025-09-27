@@ -13,3 +13,6 @@ def get_app_data_path() -> Path:
     data_path.mkdir(parents=True, exist_ok=True)
     _data_path = data_path
     return _data_path
+
+def get_pretrained_model_cache_path() -> Path:
+    return get_app_data_path() / "hf_cache"
