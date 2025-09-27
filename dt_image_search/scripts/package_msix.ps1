@@ -38,18 +38,13 @@ try {
 # Create and clean DTImageSearchApp directory
 Write-Host "Setting up DTImageSearchApp directory..."
 $appDir = Join-Path $repoRoot "DTImageSearchApp"
-New-Item -ItemType Directory -Path $appDir -Force | Out-Null
-if (Test-Path "$appDir\*") {
-    Remove-Item -Path "$appDir\*" -Recurse -Force
+if (Test-Path "$appDir") {
+    Remove-Item -Path "$appDir" -Recurse -Force
 }
 
 # Move dist contents to DTImageSearchApp
 if (Test-Path "dist") {
-    $distItems = Get-ChildItem -Path "dist"
-    foreach ($item in $distItems) {
-        Move-Item -Path $item.FullName -Destination $appDir -Force
-    }
-    Write-Host "Moved contents from dist to DTImageSearchApp"
+    Move-Item -Path "dist" -Destination "$appDir"
 } else {
     Write-Error "dist directory not found"
     exit 1
