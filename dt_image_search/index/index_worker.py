@@ -73,6 +73,7 @@ class IndexWorker:
                         all_success = False
                 
                 if all_success:
+                    log("info", message="Indexing succeeded.")
                     update_folder_status(conn, folder_id, 2)
         finally:
             # Always remove worker from list when done, even if an exception occurred
