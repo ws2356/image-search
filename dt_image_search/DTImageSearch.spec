@@ -1,11 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metadata
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
 datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz", "model_configs/ViT-B-32*"])
+datas += copy_metadata('hf_xet')
 
 a = Analysis(
     ['__main__.py'],
