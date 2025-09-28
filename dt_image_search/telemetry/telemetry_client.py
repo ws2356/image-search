@@ -1,5 +1,7 @@
 from functools import wraps
 import logging
+import os
+import sys
 from urllib.parse import urlparse
 
 # Ensure nuitka include this module which would otherwise be loaded dynamically
@@ -46,10 +48,12 @@ temporality = {
                 ObservableGauge: AggregationTemporality.CUMULATIVE,
             }
 _metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality)
-metric_reader = PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)
-_metric_exporter2 = ConsoleMetricExporter(preferred_temporality=temporality)
-metric_reader2 = PeriodicExportingMetricReader(_metric_exporter2, export_interval_millis=60_000)
-metrics.set_meter_provider(MeterProvider(metric_readers=[metric_reader, metric_reader2], resource=_resource))
+metric_readers = [PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)]
+if sys.stdout is not None and sys.stderr is not None:
+    _metric_exporter2 = ConsoleMetricExporter(preferred_temporality=temporality)
+    metric_reader2 = PeriodicExportingMetricReader(_metric_exporter2, export_interval_millis=60_000)
+    metric_readers.append(metric_reader2)
+metrics.set_meter_provider(MeterProvider(metric_readers=metric_readers, resource=_resource))
 _meter = metrics.get_meter(_image_search_client)
 
 # Counters
@@ -61,7 +65,8 @@ error_counter = _meter.create_counter("errors")
 trace.set_tracer_provider(TracerProvider(resource=_resource))
 _trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint)
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
+if sys.stdout is not None and sys.stderr is not None:
+    trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 tracer = trace.get_tracer(_image_search_client)
 
 # === LOGGING SETUP ===
@@ -92,6 +97,13 @@ logging_handler.addFilter(OtelLogFilter())
 logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
 _logger = logging.getLogger(_image_search_client)
 
+
+# Open the system’s null device for writing:
+# ── '/dev/null' on Unix, 'nul' on Windows
+devnull = open(os.devnull, 'w')
+# Redirect both Python stdout and stderr so that naive dependencies that write to stdout/stderr won't break the app
+sys.stdout = devnull
+sys.stderr = devnull
 
 def log(severity: str, error_type: str = "", message: str = "", where: str = ""):
     if severity not in ["debug", "info", "warning", "error"]:
@@ -125,4 +137,5 @@ def flush_telemetry():
     # Flush traces
     trace.get_tracer_provider().force_flush()
     # Flush metrics
-    metric_reader.force_flush()
+    for reader in metric_readers:
+        reader.force_flush()

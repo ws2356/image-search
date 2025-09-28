@@ -12,7 +12,9 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=[
+        'hf_xet'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
