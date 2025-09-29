@@ -1,0 +1,1 @@
+IS_MODEL_DOWNLOADED = "is_model_downloaded"
