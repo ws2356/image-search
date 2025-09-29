@@ -7,6 +7,7 @@ from dt_image_search.model.dts_db import log
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.model.dts_config import get_override_model_path
 from dt_image_search.telemetry.telemetry_client import with_trace
+from dt_image_search.base.status_bar_messenger import status_bar_messenger
 
 # When model_downloaded_event is set, the `_get_local_pretrained_model_path()` either exists because download success or skipped due to previous download,
 # or not exists because download fails. In latter case, fallback to pretrained model name, so that open_clip would download the model from huggingface
@@ -52,11 +53,14 @@ def _download_pretrained_model():
 
         log("info", message="Start downloading pretrained model")
         tmp_path = f"{_get_local_pretrained_model_path()}.tmp"
+        status_bar_messenger.show_status_message.emit("Downloading model...")
         _download_with_progress(_pretrained_model_url, tmp_path)
         os.rename(tmp_path, _get_local_pretrained_model_path())
         log("info", message="Succeeded downloading pretrained model")
+        status_bar_messenger.show_status_message.emit("Model downloaded")
     except Exception as e:
         log("error", message=f"Failed to download pretrained model: {e}")
+        status_bar_messenger.show_status_message.emit("Model download failed")
     finally:
         model_downloaded_event.set()
 
