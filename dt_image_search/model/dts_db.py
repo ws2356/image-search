@@ -1,3 +1,13 @@
+def get_config(conn, key: str, default=None):
+    """Read a config value from app_config table. Returns default if not found."""
+    cursor = conn.execute("SELECT value FROM app_config WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    return row[0] if row else default
+
+def set_config(conn, key: str, value: str):
+    """Write a config value to app_config table. Overwrites if exists."""
+    conn.execute("INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+    conn.commit()
 import logging
 import sqlite3
 import threading

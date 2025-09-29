@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS files (
     FOREIGN KEY(folder_id) REFERENCES folders(id)
 );
 
+-- app_config table
+CREATE TABLE IF NOT EXISTS app_config (
+    key CHAR(128) NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+) WITHOUT ROWID;
+
 -- Optional index
 CREATE INDEX IF NOT EXISTS idx_files_folder_status ON files(folder_id, status);
 
