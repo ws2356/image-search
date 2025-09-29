@@ -75,9 +75,9 @@ class MainWindow(QMainWindow):
         elif self._mode == _BrowseMode:
             return self.ui.browseImageListView
 
-    @Slot(str, int)
-    def _on_show_status_message(self, message, timeout = 1000):
-        self.statusBar().showMessage(message, timeout)
+    @Slot(str)
+    def _on_show_status_message(self, message):
+        self.statusBar().showMessage(message, 60000)
 
     def on_add_folder_button_click(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")

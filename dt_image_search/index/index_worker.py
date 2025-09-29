@@ -74,6 +74,7 @@ class IndexWorker:
                         status_bar_messenger.show_status_message.emit(f"Indexing canceled: {self.folder.path}")
                         return
                     log("debug", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
+                    status_bar_messenger.show_status_message.emit(f"Indexing folder: {self.folder.path}")
                     if not progress['batch_result']:
                         all_success = False
                 
