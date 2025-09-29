@@ -15,6 +15,7 @@ from dt_image_search.model.dts_file import File
 from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.dts_constants import IS_MODEL_DOWNLOADED
+from dt_image_search.base.status_bar_messenger import status_bar_messenger
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit
@@ -311,6 +312,7 @@ def _preload_model():
         log("info", message="before loading model")
         model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained, cache_dir=str(get_pretrained_model_cache_path()))
         log("info", message="model downloaded")
+        status_bar_messenger.show_status_message.emit("Model downloaded")
 
         _preprocess = preprocess
         _tokenizer = open_clip.get_tokenizer('ViT-B-32')
@@ -318,6 +320,8 @@ def _preload_model():
 
         _model = model.to(_device).eval()
         log("info", message="model eval")
+
+        status_bar_messenger.show_status_message.emit("Model inited")
         # with create_db_conn() as conn:
         #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
     except Exception as e:

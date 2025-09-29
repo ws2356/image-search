@@ -9,7 +9,7 @@ if project_root not in sys.path:
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import QCoreApplication, Qt, QModelIndex, QSize
+from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize
 
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
@@ -18,6 +18,7 @@ from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
 from dt_image_search.tools.dts_util import normalized_folder_path
+from dt_image_search.base.status_bar_messenger import status_bar_messenger
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -65,12 +66,18 @@ class MainWindow(QMainWindow):
             view.setSpacing(10)
             view.setSelectionMode(QAbstractItemView.NoSelection)
 
+        status_bar_messenger.show_status_message.connect(self._on_show_status_message)
+
     @property
     def image_list_view(self):
         if self._mode == _SearchMode:
             return self.ui.searchImageListView
         elif self._mode == _BrowseMode:
             return self.ui.browseImageListView
+
+    @Slot(str, int)
+    def _on_show_status_message(self, message, timeout = 1000):
+        self.statusBar().showMessage(message, timeout)
 
     def on_add_folder_button_click(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
