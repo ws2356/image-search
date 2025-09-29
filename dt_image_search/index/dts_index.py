@@ -318,9 +318,8 @@ def _preload_model():
 
         _model = model.to(_device).eval()
         log("info", message="model eval")
-
-        with create_db_conn() as conn:
-            set_config(conn, IS_MODEL_DOWNLOADED, "1")
+        # with create_db_conn() as conn:
+        #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
     except Exception as e:
         print(e)
         log("error", "model", message=f"Preloading model failed: {e}")
