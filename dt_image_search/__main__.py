@@ -19,6 +19,7 @@ from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -67,6 +68,9 @@ class MainWindow(QMainWindow):
             view.setSelectionMode(QAbstractItemView.NoSelection)
 
         status_bar_messenger.show_status_message.connect(self._on_show_status_message)
+
+        self.esc_clear_filter = DTSEscClearEventFilter(self)
+        self.ui.searchInput.installEventFilter(self.esc_clear_filter)
 
     @property
     def image_list_view(self):
