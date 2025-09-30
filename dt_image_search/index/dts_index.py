@@ -1,6 +1,7 @@
 import os
 import torch
 import threading
+import time
 import typing
 import open_clip
 from torchvision import transforms
@@ -308,27 +309,33 @@ def _preload_model():
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
     pretrained = get_pretrained_model()
-    try:
-        log("info", message="before loading model")
-        model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained, cache_dir=str(get_pretrained_model_cache_path()))
-        log("info", message="model downloaded")
-        status_bar_messenger.show_status_message.emit("Model downloaded")
+    _MAX_ATTEMPTS = 3
+    for _attempt in range(_MAX_ATTEMPTS):
+        try:
+            log("info", message=f"Attempt {_attempt + 1} before loading model")
+            model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained, cache_dir=str(get_pretrained_model_cache_path()))
+            log("info", message=f"Attempt {_attempt + 1} model downloaded")
+            status_bar_messenger.show_status_message.emit("Model downloaded")
 
-        _preprocess = preprocess
-        _tokenizer = open_clip.get_tokenizer('ViT-B-32')
-        log("info", message="tokenizer init")
+            _preprocess = preprocess
+            _tokenizer = open_clip.get_tokenizer('ViT-B-32')
+            log("info", message=f"Attempt {_attempt + 1} tokenizer init")
 
-        _model = model.to(_device).eval()
-        log("info", message="model eval")
+            _model = model.to(_device).eval()
+            log("info", message=f"Attempt {_attempt + 1} model eval")
 
-        status_bar_messenger.show_status_message.emit("Model inited")
-        # with create_db_conn() as conn:
-        #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
-    except Exception as e:
-        print(e)
-        log("error", "model", message=f"Preloading model failed: {e}")
-    finally:
-        _model_loaded_event.set()
+            status_bar_messenger.show_status_message.emit("Model inited")
+            # with create_db_conn() as conn:
+            #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
+            break
+        except Exception as e:
+            log("error", "model", message=f"Attempt {_attempt + 1}. Preloading model failed: {e}")
+            if _attempt == _MAX_ATTEMPTS - 1:
+                status_bar_messenger.show_status_message.emit("Model load failed")
+            else:
+                # wait a bit before retrying
+                time.sleep(3)
+    _model_loaded_event.set()
 
 def init():
     threading.Thread(target=_preload_model, daemon=True).start()
