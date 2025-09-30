@@ -162,6 +162,7 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         reveal_action = menu.addAction("Reveal File Location")
+        copy_path_action = menu.addAction("Copy File Path")
         action = menu.exec(self.image_list_view.viewport().mapToGlobal(pos))
         if action == reveal_action:
             folder = os.path.dirname(file_path)
@@ -172,6 +173,9 @@ class MainWindow(QMainWindow):
                 subprocess.run(['open', '-R', file_path])
             else:  # Linux
                 QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+        elif action == copy_path_action:
+            clipboard = QApplication.instance().clipboard()
+            clipboard.setText(file_path)
 
 # Global exception handler functions (defined outside main block for testing)
 def handle_python_exception(exc_type, exc_value, exc_traceback):
