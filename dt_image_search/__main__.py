@@ -9,7 +9,9 @@ if project_root not in sys.path:
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize
+from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize, QUrl
+from PySide6.QtGui import QDesktopServices
+import subprocess
 
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
@@ -99,8 +101,6 @@ class MainWindow(QMainWindow):
         tmp_controller = self._alternativeController
         if query:
             if self._mode != _SearchMode:
-                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
-
                 self._mode = _SearchMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or SearchController()
@@ -113,12 +113,14 @@ class MainWindow(QMainWindow):
                 self.ui.searchPage.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
 
+                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
                 self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
+                self.image_list_view.setContextMenuPolicy(Qt.CustomContextMenu)
+                self.image_list_view.customContextMenuRequested.disconnect(self.on_image_list_context_menu)
+                self.image_list_view.customContextMenuRequested.connect(self.on_image_list_context_menu)
             self.controller.on_search_query(query)
         else:
             if self._mode != _BrowseMode:
-                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
-
                 self._mode = _BrowseMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or BrowseController()
@@ -130,7 +132,11 @@ class MainWindow(QMainWindow):
                 self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
                 self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
+                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
                 self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
+                self.image_list_view.setContextMenuPolicy(Qt.CustomContextMenu)
+                self.image_list_view.customContextMenuRequested.disconnect(self.on_image_list_context_menu)
+                self.image_list_view.customContextMenuRequested.connect(self.on_image_list_context_menu)
         
 
     def show_tree_context_menu(self, pos):
@@ -144,6 +150,28 @@ class MainWindow(QMainWindow):
         remove_action = menu.addAction("Remove Folder")
         if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
             self.controller.on_delete_folder(item, normalized_folder_path(folder_path))
+
+    def on_image_list_context_menu(self, pos):
+        index = self.image_list_view.indexAt(pos)
+        if not index.isValid():
+            return
+        # Get image file path from model
+        file_path = index.data(Qt.UserRole)  # Or use your model's method to get the file path
+        if not file_path:
+            return
+
+        menu = QMenu(self)
+        reveal_action = menu.addAction("Reveal File Location")
+        action = menu.exec(self.image_list_view.viewport().mapToGlobal(pos))
+        if action == reveal_action:
+            folder = os.path.dirname(file_path)
+            # Open folder and select file (platform-specific)
+            if sys.platform == "win32":
+                subprocess.run(['explorer', '/select,', file_path])
+            elif sys.platform == "darwin":
+                subprocess.run(['open', '-R', file_path])
+            else:  # Linux
+                QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
 # Global exception handler functions (defined outside main block for testing)
 def handle_python_exception(exc_type, exc_value, exc_traceback):
