@@ -48,8 +48,6 @@ class MainWindow(QMainWindow):
         self.ui.folderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
         self.ui.folderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
 
-        self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
-
         self.image_list_view.setModel(self.controller.image_list_model())
 
         self.ui.searchInput.textChanged.connect(self.handle_search)
@@ -73,6 +71,8 @@ class MainWindow(QMainWindow):
 
         self.esc_clear_filter = DTSEscClearEventFilter(self)
         self.ui.searchInput.installEventFilter(self.esc_clear_filter)
+        self._register_image_list_double_click_handler()
+        self._register_image_list_context_menu_handler()
 
     @property
     def image_list_view(self):
@@ -80,6 +80,17 @@ class MainWindow(QMainWindow):
             return self.ui.searchImageListView
         elif self._mode == _BrowseMode:
             return self.ui.browseImageListView
+
+    def _register_image_list_context_menu_handler(self):
+        self.image_list_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.image_list_view.customContextMenuRequested.disconnect(self.on_image_list_context_menu)
+        self.image_list_view.customContextMenuRequested.connect(self.on_image_list_context_menu)
+
+    def _register_image_list_double_click_handler(self):
+        self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
+
+    def _unregister_image_list_double_click_handler(self):
+        self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
 
     @Slot(str)
     def _on_show_status_message(self, message):
@@ -101,7 +112,10 @@ class MainWindow(QMainWindow):
         tmp_controller = self._alternativeController
         if query:
             if self._mode != _SearchMode:
+                self._unregister_image_list_double_click_handler()
+
                 self._mode = _SearchMode
+
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or SearchController()
                 self._alternativeController.is_active = False  # Deactivate the alternative controller
@@ -113,14 +127,13 @@ class MainWindow(QMainWindow):
                 self.ui.searchPage.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
 
-                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
-                self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
-                self.image_list_view.setContextMenuPolicy(Qt.CustomContextMenu)
-                self.image_list_view.customContextMenuRequested.disconnect(self.on_image_list_context_menu)
-                self.image_list_view.customContextMenuRequested.connect(self.on_image_list_context_menu)
+                self._register_image_list_double_click_handler()
+                self._register_image_list_context_menu_handler()
             self.controller.on_search_query(query)
         else:
             if self._mode != _BrowseMode:
+                self._unregister_image_list_double_click_handler()
+
                 self._mode = _BrowseMode
                 self._alternativeController = self.controller
                 self.controller = tmp_controller or BrowseController()
@@ -132,11 +145,8 @@ class MainWindow(QMainWindow):
                 self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
                 self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
                 self.ui.searchInput.setFocus()
-                self.image_list_view.doubleClicked.disconnect(self.controller.on_image_double_clicked)
-                self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
-                self.image_list_view.setContextMenuPolicy(Qt.CustomContextMenu)
-                self.image_list_view.customContextMenuRequested.disconnect(self.on_image_list_context_menu)
-                self.image_list_view.customContextMenuRequested.connect(self.on_image_list_context_menu)
+                self._register_image_list_double_click_handler()
+                self._register_image_list_context_menu_handler()
         
 
     def show_tree_context_menu(self, pos):

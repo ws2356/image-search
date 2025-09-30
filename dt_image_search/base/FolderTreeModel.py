@@ -41,10 +41,13 @@ class FolderTreeModel(QStandardItemModel):
 
     def expand_subfolders(self, index: QModelIndex):
         item = self.itemFromIndex(index)
-        if not item or item.hasChildren():
+        if not item:
             return
-        parent_path = Path(item.data(Qt.UserRole))
-        self._populate_subfolders(item, parent_path)
+        # Iterate children of item and populate subfolders for each if not already populated
+        for row in range(item.rowCount()):
+            child_item = item.child(row)
+            if child_item and child_item.rowCount() == 0:
+                self._populate_subfolders(child_item, Path(child_item.data(Qt.UserRole)))
 
     def _populate_subfolders(self, parent_item: QStandardItem, parent_path: Path):
         try:
