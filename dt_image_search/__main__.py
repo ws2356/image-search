@@ -156,9 +156,11 @@ class MainWindow(QMainWindow):
         if not index.isValid():
             return
         # Get image file path from model
-        file_path = index.data(Qt.UserRole)  # Or use your model's method to get the file path
+        file_path = index.data(Qt.UserRole)
         if not file_path:
             return
+        if file_path and sys.platform == "win32":
+            file_path = file_path.replace('/', '\\')
 
         menu = QMenu(self)
         reveal_action = menu.addAction("Reveal File Location")
