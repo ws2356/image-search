@@ -1,4 +1,5 @@
 import ctypes
+import hashlib
 import os
 import platform
 import requests
@@ -43,12 +44,15 @@ def _get_system_region():
 def _get_local_pretrained_model_path():
     return os.path.join(get_app_data_path(), "open_clip_pytorch_model.bin")
 
+_md5_hash = '2fc036aea9cd7306f5ce7ce6abb8d0bf'
 _pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_model.bin"
+# _pretrained_model_url = "http://192.168.50.10/open_clip_pytorch_model.bin"
 @with_trace("Model.Download")
 def _download_pretrained_model():
     # Download from `_pretrained_model_url` to file location `_get_local_pretrained_model_path`
     try:
-        if os.path.exists(_get_local_pretrained_model_path()):
+        # file exists and md5 matches, skip download
+        if os.path.exists(_get_local_pretrained_model_path()) and _check_md5(_get_local_pretrained_model_path(), _md5_hash):
             log("debug", message=f"Model already exists at: {_get_local_pretrained_model_path()}")
             return
 
@@ -66,27 +70,24 @@ def _download_pretrained_model():
         model_downloaded_event.set()
 
 def _download_with_progress(url, dest_path, chunk_size=4096):
-    response = requests.get(url, stream=True)
-    if response.status_code != 200:
+    downloaded = 0
+    headers = {}
+    if os.path.exists(dest_path):
+        downloaded = os.path.getsize(dest_path)
+        headers = {"Range": f"bytes={downloaded}-"}
+    response = requests.get(url, stream=True, headers=headers)
+    if response.status_code not in (200, 206):
         raise Exception(f"Failed to download file: {response.status_code}")
 
     total_length = response.headers.get("content-length")
-    
-    if total_length is None:
-        # No content-length header
-        log("debug", message="No content-length header, downloading without progress")
-        with open(dest_path, "wb") as f:
-            f.write(response.content)
-        return
+    if total_length is not None:
+        total_length = int(total_length) + downloaded
 
-    total_length = int(total_length)
-    downloaded = 0
-
-    _last_report_time = None # datetime.datetime.now()
-    with open(dest_path, "wb") as f:
+    _last_report_time = None
+    mode = "ab" if downloaded > 0 else "wb"
+    with open(dest_path, mode) as f:
         for chunk in response.iter_content(chunk_size=chunk_size):
             if not chunk:
-                log("debug", message=f"Download completed")
                 continue
             f.write(chunk)
             downloaded += len(chunk)
@@ -94,13 +95,27 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
             # Calculate progress
             percent = downloaded / total_length * 100
             now = datetime.datetime.now()
-            if _last_report_time is None or (now - _last_report_time).total_seconds() >= 5 or percent >= 100:
+            if _last_report_time is None or (now - _last_report_time).total_seconds() >= 3 or percent >= 100:
                 _last_report_time = now
-                status_bar_messenger.show_status_message.emit(f"Downloading model... {percent:.2f}%")
-                log("debug", message=f"Download progress: {percent:.2f}%")
+                status_bar_messenger.show_status_message.emit(f"Downloading model... {percent:.1f}%")
+                log("debug", message=f"Download progress: {percent:.1f}%")
 
 if _is_cn():
     threading.Thread(target=_download_pretrained_model).start()
 else:
     log("debug", message="Not in CN region, skipping model download")
     model_downloaded_event.set()  # Skip download in non-CN regions
+
+def _check_md5(file_path, expected_md5):
+    """Return True if file's md5 matches expected_md5, else False."""
+    if not os.path.exists(file_path):
+        return False
+    hash_md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest() == expected_md5
+    except Exception as e:
+        log("error", message=f"MD5 check failed for {file_path}: {e}")
+        return False
