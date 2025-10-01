@@ -65,7 +65,7 @@ def _download_pretrained_model():
     finally:
         model_downloaded_event.set()
 
-def _download_with_progress(url, dest_path, chunk_size=4096, bar_width=50):
+def _download_with_progress(url, dest_path, chunk_size=4096):
     response = requests.get(url, stream=True)
     if response.status_code != 200:
         raise Exception(f"Failed to download file: {response.status_code}")
