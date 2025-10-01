@@ -3,6 +3,7 @@ import os
 import platform
 import requests
 import threading
+import datetime
 from dt_image_search.model.dts_db import log
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.model.dts_config import get_override_model_path
@@ -81,6 +82,7 @@ def _download_with_progress(url, dest_path, chunk_size=4096, bar_width=50):
     total_length = int(total_length)
     downloaded = 0
 
+    _last_report_time = None # datetime.datetime.now()
     with open(dest_path, "wb") as f:
         for chunk in response.iter_content(chunk_size=chunk_size):
             if not chunk:
@@ -91,7 +93,11 @@ def _download_with_progress(url, dest_path, chunk_size=4096, bar_width=50):
 
             # Calculate progress
             percent = downloaded / total_length * 100
-            log("debug", message=f"Download progress: {percent:.2f}%")
+            now = datetime.datetime.now()
+            if _last_report_time is None or (now - _last_report_time).total_seconds() >= 5 or percent >= 100:
+                _last_report_time = now
+                status_bar_messenger.show_status_message.emit(f"Downloading model... {percent:.2f}%")
+                log("debug", message=f"Download progress: {percent:.2f}%")
 
 if _is_cn():
     threading.Thread(target=_download_pretrained_model).start()
