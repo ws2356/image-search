@@ -2,7 +2,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$cn = "Wansong Dev Cert"
+$cn = "6B7B4C3A-1C14-4AAB-984C-D80695D0FB64"
 # Modify dt_image_search/resources/AppxManifest.xml file 'Package/Identity/Publisher' attribute to be "CN=$cn"
 $currentScriptPath = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
 $appxManifestPath = Join-Path -Path $currentScriptPath -ChildPath "..\resources\AppxManifest.xml"
@@ -27,12 +27,11 @@ if ($cert) {
     Write-Host "Certificate already exists: $($cert.Subject)"
 } else {
     Write-Host "Creating new self-signed certificate..."
-    $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Wansong Dev Cert" -CertStoreLocation "Cert:\CurrentUser\My"
+    $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=$cn" -CertStoreLocation "Cert:\CurrentUser\My"
 }
 
 Export-Certificate -Cert $cert -FilePath "mydevcert.cer"
 $pwd = ConvertTo-SecureString -String "123456" -Force -AsPlainText
 Export-PfxCertificate -Cert $cert -FilePath MyDevCert.pfx -Password $pwd
-# Export-PfxCertificate -Cert $cert -FilePath MyDevCert.pfx -Password $pwd
 
 Import-Certificate -FilePath "mydevcert.cer" -CertStoreLocation "Cert:\LocalMachine\Root"

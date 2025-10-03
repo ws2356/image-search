@@ -7,7 +7,7 @@
          IgnorableNamespaces="uap desktop rescap">
 
   <Identity Name="com.songwan.DTImageSearch"
-            Publisher="CN=Wansong Dev Cert"
+            Publisher="CN=6B7B4C3A-1C14-4AAB-984C-D80695D0FB64"
             Version="0.0.0.0" />
 
   <Properties>
