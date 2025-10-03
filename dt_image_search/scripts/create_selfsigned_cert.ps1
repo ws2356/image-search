@@ -33,4 +33,6 @@ if ($cert) {
 Export-Certificate -Cert $cert -FilePath "mydevcert.cer"
 $pwd = ConvertTo-SecureString -String "123456" -Force -AsPlainText
 Export-PfxCertificate -Cert $cert -FilePath MyDevCert.pfx -Password $pwd
+# Export-PfxCertificate -Cert $cert -FilePath MyDevCert.pfx -Password $pwd
+
 Import-Certificate -FilePath "mydevcert.cer" -CertStoreLocation "Cert:\LocalMachine\Root"

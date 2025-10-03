@@ -10,9 +10,7 @@
       "request": "launch",
       "module": "dt_image_search.__main__",
       "justMyCode": false,
-      "logToFile": true,
-      "debugAdapterHost": "127.0.0.1",
-      "debugAdapterPort": 5678
+      "logToFile": true
     },
     {
       "name": "Debug current file",
