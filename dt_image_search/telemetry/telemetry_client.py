@@ -25,7 +25,7 @@ from dt_image_search.telemetry.dt_session_id import session_id
 from dt_image_search.model.dts_config import get_log_level
 
 
-_telemetry_upload_host = "https://otel.wansong.vip"
+_telemetry_upload_host = "https://otel.boldman.net"
 _metrics_upload_endpoint = f"{_telemetry_upload_host}/v1/metrics"
 _traces_upload_endpoint = f"{_telemetry_upload_host}/v1/traces"
 _logs_upload_endpoint = f"{_telemetry_upload_host}/v1/logs"
