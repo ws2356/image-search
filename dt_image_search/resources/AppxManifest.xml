@@ -8,6 +8,7 @@
 
   <Identity Name="WS2356Original.AIImageViewer"
             Publisher="CN=6B7B4C3A-1C14-4AAB-984C-D80695D0FB64"
+            ProcessorArchitecture="x64"
             Version="1.0.0.0" />
 
   <Properties>
@@ -18,7 +19,10 @@
 
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19045.6332" MaxVersionTested="12.0.0.0" />
-    <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop" MinVersion="14.0.27323.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop"
+        MinVersion="14.0.27323.0"
+        Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+        Architecture="x64" />
   </Dependencies>
 
   <Resources>
