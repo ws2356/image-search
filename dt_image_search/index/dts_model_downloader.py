@@ -64,8 +64,9 @@ def _get_local_pretrained_model_path():
     return os.path.join(get_app_data_path(), "open_clip_pytorch_model.bin")
 
 _md5_hash = '2fc036aea9cd7306f5ce7ce6abb8d0bf'
-_pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_model.bin"
+# _pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_model.bin"
 # _pretrained_model_url = "http://192.168.50.10/open_clip_pytorch_model.bin"
+_pretrained_model_url = "https://imagesearch.boldman.net/open_clip_pytorch_model.bin"
 @with_trace("Model.Download")
 def _download_pretrained_model():
     # Download from `_pretrained_model_url` to file location `_get_local_pretrained_model_path`
