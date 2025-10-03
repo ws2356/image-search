@@ -8,11 +8,11 @@
 
   <Identity Name="com.songwan.DTImageSearch"
             Publisher="CN=6B7B4C3A-1C14-4AAB-984C-D80695D0FB64"
-            Version="0.0.0.0" />
+            Version="1.0.0.0" />
 
   <Properties>
-    <DisplayName>DTImageSearch</DisplayName>
-    <PublisherDisplayName>Song Wan</PublisherDisplayName>
+    <DisplayName>AI Image Viewer</DisplayName>
+    <PublisherDisplayName>WS2356 Original</PublisherDisplayName>
     <Logo>icon.png</Logo>
   </Properties>
 
@@ -20,6 +20,11 @@
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19045.6332" MaxVersionTested="12.0.0.0" />
     <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop" MinVersion="14.0.27323.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
   </Dependencies>
+
+  <Resources>
+    <Resource Language="en-US" />
+    <!-- Add others as needed -->
+  </Resources>
 
   <Applications>
     <Application Id="DTImageSearch"

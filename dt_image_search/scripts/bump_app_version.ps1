@@ -6,7 +6,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$revision = git rev-list --count '@'
+$buildVersion = git rev-list --count '@'
 
 # Get the Identity/Version value of dt_image_search\resources\AppxManifest.xml 
 if (Test-Path $manifest) {
@@ -18,7 +18,7 @@ if ($identityVersion -match '(\d+)\.(\d+)\.(\d+)') {
     $major = $matches[1]
     $minor = $matches[2]
     $build = $matches[3]
-    $newVersion = "$major.$minor.$build.$revision"
+    $newVersion = "$major.$minor.$buildVersion.0"
 } else {
     Write-Error "Failed to parse version from AppxManifest.xml"
     exit 1
