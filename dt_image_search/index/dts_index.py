@@ -313,7 +313,7 @@ def _preload_model():
     for _attempt in range(_MAX_ATTEMPTS):
         try:
             log("info", message=f"Attempt {_attempt + 1} before loading model")
-            model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained, cache_dir=str(get_pretrained_model_cache_path()))
+            model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained)
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
             status_bar_messenger.show_status_message.emit("Model downloaded")
 
