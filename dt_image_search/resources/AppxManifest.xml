@@ -41,11 +41,6 @@
           BackgroundColor="transparent" />
     <Extensions>
       <desktop:Extension Category="windows.fullTrustProcess" />
-      <uap3:Extension Category="windows.appExecutionAlias" Executable="DTImageSearch\DTImageSearch.exe" EntryPoint="Windows.FullTrustApplication">
-        <uap3:AppExecutionAlias>
-          <desktop:ExecutionAlias Alias="dtimagesearch.exe" />
-        </uap3:AppExecutionAlias>
-      </uap3:Extension>
     </Extensions>
     </Application>
   </Applications>
