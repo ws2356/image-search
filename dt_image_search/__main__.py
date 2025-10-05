@@ -8,10 +8,11 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
+from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize, QUrl
+
 QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
 
-from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize, QUrl
 from PySide6.QtGui import QDesktopServices
 import subprocess
 
