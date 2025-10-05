@@ -10,6 +10,9 @@ function Search-Codesign {
 }
 
 function WindowsKitBinDir {
-    # Return the hardcoded path like the bash script
-    return 'D:\Windows Kits\10\bin\10.0.22621.0\x64'
+    $res = $env:WindowsSdkDir
+    if (-not $res) {
+        $res = 'D:\Windows Kits\10\bin\10.0.22621.0\x64'
+    }
+    return $res
 }
