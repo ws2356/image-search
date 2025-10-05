@@ -1,52 +1,29 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
-         xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
-         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
-         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-         IgnorableNamespaces="uap desktop rescap">
-
-  <Identity Name="WS2356Original.AIImageViewer"
-            Publisher="CN=6B7B4C3A-1C14-4AAB-984C-D80695D0FB64"
-            ProcessorArchitecture="x64"
-            Version="1.0.0.0" />
-
-  <Properties>
-    <DisplayName>AI Image Viewer</DisplayName>
-    <PublisherDisplayName>WS2356 Original</PublisherDisplayName>
-    <Logo>icon.png</Logo>
-  </Properties>
-
-  <Dependencies>
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19045.6332" MaxVersionTested="12.0.0.0" />
-    <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop"
-        MinVersion="14.0.27323.0"
-        Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
-  </Dependencies>
-
-  <Resources>
-    <Resource Language="en-US" />
-    <!-- Add others as needed -->
-  </Resources>
-
-  <Applications>
-    <Application Id="DTImageSearch"
-                 Executable="DTImageSearch\DTImageSearch.exe"
-                 EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements
-          DisplayName="DTImageSearch"
-          Description="Image search application"
-          Square150x150Logo="icon.png"
-          Square44x44Logo="icon.png"
-          BackgroundColor="transparent" />
-    <Extensions>
-      <desktop:Extension Category="windows.fullTrustProcess" />
-    </Extensions>
-    </Application>
-  </Applications>
-
-  <Capabilities>
-    <Capability Name="internetClient" />
-    <rescap:Capability Name="runFullTrust" />
-  </Capabilities>
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap desktop rescap">
+    <Identity Name="WS2356Original.AIImageViewer" Publisher="CN=6B7B4C3A-1C14-4AAB-984C-D80695D0FB64" ProcessorArchitecture="x64" Version="1.0.0.0" />
+    <Properties>
+        <DisplayName>AI Image Viewer</DisplayName>
+        <PublisherDisplayName>WS2356 Original</PublisherDisplayName>
+        <Logo>icon.png</Logo>
+    </Properties>
+    <Dependencies>
+        <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19045.6332" MaxVersionTested="12.0.0.0" />
+        <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop" MinVersion="14.0.27323.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    </Dependencies>
+    <Resources>
+        <Resource Language="en-US" />
+        <!-- Add others as needed -->
+    </Resources>
+    <Applications>
+        <Application Id="DTImageSearch" Executable="DTImageSearch\DTImageSearch.exe" EntryPoint="Windows.FullTrustApplication">
+            <uap:VisualElements DisplayName="DTImageSearch" Description="Image search application" Square150x150Logo="icon.png" Square44x44Logo="icon.png" BackgroundColor="transparent" />
+            <Extensions>
+                <desktop:Extension Category="windows.fullTrustProcess" />
+            </Extensions>
+        </Application>
+    </Applications>
+    <Capabilities>
+        <Capability Name="internetClient" />
+        <rescap:Capability Name="runFullTrust" />
+    </Capabilities>
 </Package>
