@@ -21,7 +21,7 @@ def get_other_handlers():
         backupCount=5
     )
     formatter = logging.Formatter(
-        '%(asctime)s %(levelname)s %(name)s %(message)s'
+        '%(asctime)s [pid:%(process)d] %(levelname)s %(name)s %(message)s'
     )
     file_handler.setFormatter(formatter)
 
