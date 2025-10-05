@@ -78,3 +78,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
 24. Fix this warning: WARNING huggingface_hub.file_download Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet` [v]
 25. Support GPU
 26. Refactor
+27. Span not working?

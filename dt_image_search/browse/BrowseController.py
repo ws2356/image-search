@@ -36,15 +36,10 @@ class BrowseController(BaseController):
             if parent_folder:
                 # TODO: Select folder_path in the UI
                 return
-            # TODO: remove clip_index files
-            # child_folders = match_child_folders(conn, folder_path)
-            # if child_folders:
-                # remove_folders(conn, child_folders)
             folder = insert_folder(conn, folder_path)
             if not folder:
                 return
             log("info", message=f"Inserted folder with ID: {folder.id}")
-            # self.folder_list_model().add_root_folder([folder_path])
             add_index_worker(folder, replace_existing=True)
         self._reload_folders()
 
