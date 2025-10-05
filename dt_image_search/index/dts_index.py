@@ -151,7 +151,7 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     
     for i, future in enumerate(futures):
         try:
-            batch_tensor, batch_valid_files = future.result(timeout=60)
+            batch_tensor, batch_valid_files = future.result(timeout=600)
             
             if batch_tensor is not None:
                 # Move to GPU and process with model (this stays in main process)
