@@ -86,13 +86,13 @@ def is_folder_exists(conn, folder_path: str) -> bool:
     cursor = conn.execute("SELECT 1 FROM folders WHERE path = ?", (folder_path,))
     return cursor.fetchone() is not None
 
-def match_parent_folder(conn, path: str) -> str:
+def match_parent_folder(conn, path: str) -> Folder:
     # Replace '\' with '/' for consistency
     path = path.replace('\\', '/')
-    cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE path || '%'", (path,))
+    cursor = conn.execute("SELECT id, path, status FROM folders WHERE ? LIKE path || '%' ORDER BY LENGTH(path) DESC LIMIT 1", (path,))
     row = cursor.fetchone()
     if row:
-        return row[0]
+        return Folder(id=row[0], path=row[1], status=row[2])
     return None
 
 def delete_folders(conn, folder_paths: list):
