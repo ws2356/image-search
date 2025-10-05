@@ -220,7 +220,7 @@ def build_index(index_path: str, folder_id: int):
     step = 100
     files_processed = 0
     
-    for i_slice in range(0, len(files), step):
+    for i_slice in range(0, total_files, step):
         batch_start = i_slice
         batch_end = min(i_slice + step, total_files)
         files_slice = files[i_slice:batch_end]
