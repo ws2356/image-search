@@ -12,6 +12,7 @@ from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.fs.bm_fs_monitor import add_path
 
 class BrowseController(BaseController):
     def __init__(self):
@@ -41,6 +42,7 @@ class BrowseController(BaseController):
                 return
             log("info", message=f"Inserted folder with ID: {folder.id}")
             add_index_worker(folder, replace_existing=True)
+            add_path(folder.path)
         self._reload_folders()
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):

@@ -250,6 +250,11 @@ def build_index(index_path: str, folder_id: int):
         log("debug", message=f"Batch add to index result: {res}")
         yield res
 
+# TODO: implement append_to_index
+@profile
+def append_to_index(index_path: str, folder_id: int, file_paths: list[str] = None):
+    pass
+
 # TODO: cache the index in memory
 @profile
 def _get_index(index_path: str):
