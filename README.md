@@ -79,3 +79,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
 25. Support GPU
 26. Refactor
 27. Span not working?
+28. Multi-language model
