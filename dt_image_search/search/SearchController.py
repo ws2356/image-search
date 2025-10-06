@@ -55,7 +55,7 @@ class SearchController(BaseController):
                 if results_in_folder:
                     dispatcher.post(lambda: self.imageListModel.add_image(results_in_folder[0]))
                 for item in results_in_folder:
-                    log("info", message=f"Found item: {item[0]} with score: {item[1]}")
+                    log("debug", message=f"Found item: {item[0]} with score: {item[1]}")
                 results.extend(results_in_folder)
                 results = sorted(results, key=lambda x: x[1], reverse=True)[:TOP_K]
         if not results:
