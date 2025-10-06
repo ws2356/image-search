@@ -123,7 +123,7 @@ def resume_index_workers():
         with create_db_conn() as conn:
             log("info", message="Resuming index workers for incomplete folders - db connected")
             all_folders = get_all_folders(conn)
-            folders = [folder for folder in all_folders if folder.status != 2]
+            folders = [folder for folder in all_folders if folder.status in (0, 1)]
             for folder in folders:
                 if not add_index_worker(folder):
                     return
