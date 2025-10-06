@@ -253,7 +253,29 @@ def build_index(index_path: str, folder_id: int):
 # TODO: implement append_to_index
 @profile
 def append_to_index(index_path: str, folder_id: int, file_paths: list[str] = None):
-    pass
+    _model_loaded_event.wait()  # Wait for the model to be downloaded
+    if not file_paths:
+        return
+    create_index_if_needed(index_path)
+    total_files = len(file_paths)
+    step = 100
+    files_processed = 0
+
+    for i_slice in range(0, total_files, step):
+        batch_files = file_paths[i_slice:i_slice + step]
+        log("debug", message=f"Processing batch {i_slice} to {i_slice + step} for appending.")
+        batch_result = _add_to_index(index_path, batch_files)
+        files_processed += len(batch_files) if batch_result else 0
+        yield {
+            'batch_start': i_slice,
+            'batch_end': min(i_slice + step, total_files),
+            'total_files': total_files,
+            'files_processed': files_processed,
+            'files_in_batch': len(batch_files),
+            'batch_result': batch_result
+        }
+
+    log("info", message=f"Finished appending to index for folder ID {folder_id}. Total files processed: {files_processed}.")
 
 # TODO: cache the index in memory
 @profile

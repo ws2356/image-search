@@ -11,6 +11,7 @@ from dt_image_search.model.dts_db import create_db_conn, insert_file, update_fol
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.index.index_worker import resume_index_workers
 
 _max_activate = 4  # Maximum number of workers to activate at once
 _index_workers = []  # List to keep track of active indexing workers
@@ -25,6 +26,7 @@ class IncrementalIndexWorker:
 
     def run(self):
         # start the indexing process in a separate thread
+        self._is_stopped = False
         self.active = True
         self._thread = threading.Thread(target=self._run_impl, daemon=True)
         self._thread.start()
@@ -33,6 +35,7 @@ class IncrementalIndexWorker:
         """
         Stop the indexing process.
         """
+        self.active = False
         self._is_stopped = True
 
     def _run_impl(self):
@@ -43,7 +46,7 @@ class IncrementalIndexWorker:
                 folderId2Folders = {}
                 for file_path in self.files:
                     parent_folder = match_parent_folder(conn, file_path)
-                    if parent_folder and parent_folder.status in (2, 3):  # Only consider indexed or partially indexed folders
+                    if parent_folder:
                         folderId2FilePaths.setdefault(parent_folder.id, []).append(file_path)
                         folderId2Folders.setdefault(parent_folder.id, parent_folder)
 
@@ -55,23 +58,27 @@ class IncrementalIndexWorker:
 
                 for folder_id, files in folderId2FilePaths.items():
                     folder = folderId2Folders.get(folder_id)
-                    log("info", message=f"Incremental indexing for folder: {folder.path} with {len(files)} new files")
+                    log("info", message=f"Incremental indexing for folder: {folder_id} with {len(files)} new files")
                     update_folder_status(conn, folder_id, 3)  # Set status to partially indexed
                     for file in files:
                         insert_file(conn, file, folder_id)
 
                     all_success = True
                     for progress in append_to_index(index_path_for_folder(folder), folder_id, files):
+                        log("debug", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
                         if self._is_stopped:
                             log("info", message="Incremental indexing stopped by user.")
                             return
                     if not progress['batch_result']:
                         all_success = False
+
                 if all_success:
                     update_folder_status(conn, folder_id, 2)  # Set status to fully indexed
                     status_bar_messenger.show_status_message.emit(f"Incremental updating index completed.")
                 else:
-                    status_bar_messenger.show_status_message.emit(f"Incremental updating index completed with some errors.")
+                    update_folder_status(conn, folder_id, 1)  # For failing case, set status to indexing so that it can be picked up by index_worker
+                    status_bar_messenger.show_status_message.emit(f"Incremental updating index failed.")
+                    resume_index_workers()
         finally:
             # Always remove worker from list when done, even if an exception occurred
             with _workers_lock:
@@ -88,7 +95,6 @@ def add_incremental_index_worker(files: list[str]):
         worker = IncrementalIndexWorker(files)
         _index_workers.append(worker)
     try_activate_workers()
-    return worker
 
 def try_activate_workers():
     # Activate at most _max_activate workers if they are idle
