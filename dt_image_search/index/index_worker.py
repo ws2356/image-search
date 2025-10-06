@@ -87,6 +87,8 @@ class IndexWorker:
             with _workers_lock:
                 if self in _index_workers:
                     _index_workers.remove(self)
+                    # Try to activate other workers if any are idle
+                    resume_index_workers()
 
 def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWorker:
     """
@@ -115,13 +117,8 @@ def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWor
     worker.run()  
     return worker
 
-_resume_thread = None
 def resume_index_workers():
-    global _resume_thread
-    if _resume_thread is not None:
-        log("info", message="Resuming index workers already running.")
-        return  # Resume thread is already running
-    log("info", message=f"Resuming index workers for incomplete folders - init thread: {_resume_thread}")
+    log("info", message=f"Resuming index workers for incomplete folders.")
     def resume_logic():
         with create_db_conn() as conn:
             log("info", message="Resuming index workers for incomplete folders - db connected")
