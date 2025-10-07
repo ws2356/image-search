@@ -258,11 +258,11 @@ if __name__ == '__main__':
 
     startup_counter.add(1)
 
+    app = QApplication(sys.argv)
+
     index_init()  # Initialize the index system
     resume_index_workers()  # Resume workers to continue indexing after app start
     start_watch()  # Start watching file system changes
-
-    app = QApplication(sys.argv)
     
     # Install Qt message handler
     from PySide6.QtCore import qInstallMessageHandler
