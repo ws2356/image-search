@@ -127,6 +127,16 @@ def insert_file(conn, path: str, folder_id: int):
         conn.commit()
 
 @perffunc
+def get_file_by_path(conn, path: str) -> File:
+    # Replace '\' with '/' for consistency
+    path = path.replace('\\', '/')
+    cursor = conn.execute("SELECT id, path, folder_id, clip_index, status FROM files WHERE path = ?", (path,))
+    row = cursor.fetchone()
+    if row:
+        return File(id=row[0], path=row[1], folder_id=row[2], clip_index=row[3], status=row[4])
+    return None
+
+@perffunc
 def update_file(conn, file_id: int, path: str = None, folder_id: int = None, clip_index=None, status=None):
     updates = []
     params = []

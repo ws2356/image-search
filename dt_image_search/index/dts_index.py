@@ -8,7 +8,7 @@ from torchvision import transforms
 import numpy as np
 import faiss
 import hf_xet
-from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, get_folder_by_path, delete_folders, delete_files_by_folder_id, get_subfolders, set_config
+from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, get_folder_by_path, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path
 from dt_image_search.model.dts_fs import get_app_data_path, get_pretrained_model_cache_path
 from dt_image_search.index.dts_model_downloader import get_pretrained_model, model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
@@ -264,7 +264,13 @@ def append_to_index(index_path: str, folder_id: int, file_paths: list[str] = Non
     for i_slice in range(0, total_files, step):
         batch_files = file_paths[i_slice:i_slice + step]
         log("debug", message=f"Processing batch {i_slice} to {i_slice + step} for appending.")
-        batch_result = _add_to_index(index_path, batch_files)
+        batch_file_objs = []
+        with create_db_conn() as conn:
+            for file_path in batch_files:
+                file_obj = get_file_by_path(conn, file_path)
+                if file_obj and file_obj.clip_index is None and file_obj.status == 0:
+                    batch_file_objs.append(file_obj)
+        batch_result = _add_to_index(index_path, batch_file_objs)
         files_processed += len(batch_files) if batch_result else 0
         yield {
             'batch_start': i_slice,
