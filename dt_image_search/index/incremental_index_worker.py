@@ -72,13 +72,12 @@ class IncrementalIndexWorker:
                     if not progress['batch_result']:
                         all_success = False
 
-                if all_success:
-                    update_folder_status(conn, folder_id, 2)  # Set status to fully indexed
-                    status_bar_messenger.show_status_message.emit(f"Incremental updating index completed.")
-                else:
-                    update_folder_status(conn, folder_id, 1)  # For failing case, set status to indexing so that it can be picked up by index_worker
-                    status_bar_messenger.show_status_message.emit(f"Incremental updating index failed.")
-                    resume_index_workers()
+                    if all_success:
+                        update_folder_status(conn, folder_id, 2)  # Set status to fully indexed
+                    else:
+                        update_folder_status(conn, folder_id, 1)  # For failing case, set status to indexing so that it can be picked up by index_worker
+                        resume_index_workers()
+                status_bar_messenger.show_status_message.emit(f"Incremental updating index completed.")
         finally:
             # Always remove worker from list when done, even if an exception occurred
             with _workers_lock:
