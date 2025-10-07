@@ -5,6 +5,7 @@ from dt_image_search.index.incremental_index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.model.dts_db import get_all_folders
 from dt_image_search.index.incremental_index_worker import add_incremental_index_worker
+from dt_image_search.model.dts_db import create_db_conn
 
 _watcher: QFileSystemWatcher | None = None
 
@@ -14,8 +15,9 @@ def start_watch():
         _watcher = QFileSystemWatcher()
         _watcher.directoryChanged.connect(on_directory_changed)
         log("debug", message="File system watcher started.")
-    for folder in get_all_folders():
-        add_path(folder.path)
+    with create_db_conn() as conn:
+        for folder in get_all_folders(conn):
+            add_path(folder.path)
 
 def stop_watch():
     global _watcher
