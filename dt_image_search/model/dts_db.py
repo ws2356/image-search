@@ -89,10 +89,10 @@ def is_folder_exists(conn, folder_path: str) -> bool:
 def match_parent_folder(conn, path: str) -> Folder:
     # Replace '\' with '/' for consistency
     path = path.replace('\\', '/')
-    cursor = conn.execute("SELECT id, path, status FROM folders WHERE ? LIKE path || '%' ORDER BY LENGTH(path) DESC LIMIT 1", (path,))
+    cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE ? LIKE path || '%' ORDER BY LENGTH(path) DESC LIMIT 1", (path,))
     row = cursor.fetchone()
     if row:
-        return Folder(id=row[0], path=row[1], status=row[2])
+        return Folder(id=row[0], path=row[1], status=row[2], added_at=row[3])
     return None
 
 def delete_folders(conn, folder_paths: list):
