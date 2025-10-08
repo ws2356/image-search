@@ -23,30 +23,11 @@ def get_pretrained_model() -> str:
         return _get_local_pretrained_model_path()
     return "laion2b_s34b_b79k"
 
-_is_cn_result = None
-_is_cn_lock = threading.Lock()
 def _is_cn() -> bool:
-    import socket
-    import urllib.parse
-
-    global _is_cn_result
-
-    with _is_cn_lock:
-        if _is_cn_result is not None:
-            return _is_cn_result
-
-        """Return True if huggingface.co is NOT reachable (assume CN), else False."""
-        url = "https://huggingface.co"
-        try:
-            parsed = urllib.parse.urlparse(url)
-            host = parsed.hostname
-            # Try to connect to huggingface.co:443 with short timeout
-            with socket.create_connection((host, 443), timeout=5):
-                _is_cn_result = False
-        except Exception:
-            _is_cn_result = True
-        return _is_cn_result
-
+    region = _get_system_region()
+    if region.lower() == "cn":
+        return True
+    return False
 
 def _get_system_region():
     system = platform.system()
