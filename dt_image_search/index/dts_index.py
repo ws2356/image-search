@@ -147,7 +147,11 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     valid_files = []
     
     # Submit all batches to the persistent pool
-    futures = [pool.submit(process_image_batch_persistent, batch) for batch in file_batches]
+    futures = []
+    try:
+        futures = [pool.submit(process_image_batch_persistent, batch) for batch in file_batches]
+    except Exception as e:
+        log("error", message=f"Failed to pool.submit: {e}")
     
     for i, future in enumerate(futures):
         try:

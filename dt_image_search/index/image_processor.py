@@ -37,7 +37,9 @@ def process_image_batch_persistent(file_paths):
             continue
     
     if batch_images:
-        # Stack into batch tensor
-        batch_tensor = torch.stack(batch_images)
-        return batch_tensor, valid_files
+        try:
+            batch_tensor = torch.stack(batch_images)
+            return batch_tensor, valid_files
+        except Exception as e:
+            log("error", message=f"Error stacking tensors: {e}")
     return None, []

@@ -88,7 +88,11 @@ class IndexWorker:
                 if self in _index_workers:
                     _index_workers.remove(self)
                     # Try to activate other workers if any are idle
-                    resume_index_workers()
+                    with create_db_conn() as conn:
+                        folder = get_folder_by_path(conn, self.folder.path)
+                        # Only recur if the previous folder was completed to avoid infinite loops
+                        if folder.status == 2:
+                            resume_index_workers()
 
 def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWorker:
     """
