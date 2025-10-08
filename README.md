@@ -83,3 +83,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
 29. Ads
 30. Span contains device_id, not correlated to logs
 31. Automated functional test
+32. Rate limit on AFD side
