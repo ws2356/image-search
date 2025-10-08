@@ -82,3 +82,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
 28. Multi-language model
 29. Ads
 30. Span contains device_id, not correlated to logs
+31. Automated functional test
