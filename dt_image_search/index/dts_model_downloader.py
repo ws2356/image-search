@@ -60,7 +60,17 @@ def _download_pretrained_model():
         log("info", message="Start downloading pretrained model")
         tmp_path = f"{_get_local_pretrained_model_path()}.tmp"
         status_bar_messenger.show_status_message.emit("Downloading model...")
-        _download_with_progress(_pretrained_model_url, tmp_path)
+
+        for _ in range(3):
+            try:
+                _download_with_progress(_pretrained_model_url, tmp_path)
+                if _check_md5(tmp_path, _md5_hash):
+                    break
+                os.remove(tmp_path)
+                log("error", message=f"Pretrained model checksum failed")
+            except Exception as e:
+                log("error", message=f"Pretrained model download failed: {e}")
+
         os.rename(tmp_path, _get_local_pretrained_model_path())
         log("info", message="Succeeded downloading pretrained model")
         status_bar_messenger.show_status_message.emit("Model downloaded")
