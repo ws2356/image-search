@@ -59,6 +59,16 @@ def _download_pretrained_model():
 
         log("info", message="Start downloading pretrained model")
         tmp_path = f"{_get_local_pretrained_model_path()}.tmp"
+
+        try:
+            os.remove(tmp_path)
+        except:
+            pass
+        try:
+            os.remove(_get_local_pretrained_model_path())
+        except:
+            pass
+
         status_bar_messenger.show_status_message.emit("Downloading model...")
 
         for _ in range(3):
