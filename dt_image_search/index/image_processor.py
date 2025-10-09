@@ -25,6 +25,8 @@ def process_image_batch_persistent(files):
     
     batch_images = []
     valid_files = []
+    invalid_files = []
+    deleted_files = []
 
     log("info", message=f"Processing images: {len(files)}")
     for file in files:
@@ -33,17 +35,19 @@ def process_image_batch_persistent(files):
             image = Image.open(file_path).convert("RGB")
             image_tensor = _worker_preprocess(image)
             batch_images.append(image_tensor)
-            valid_files.append(file_path)
+            valid_files.append(file)
         except Exception as e:
             log("debug", message=f"Error processing {file_path}: {e}")
-            with create_db_conn() as conn:
-                update_file(conn, file_id=file.id, status=2)
+            if isinstance(e, FileNotFoundError):
+                deleted_files.append(file)
+            else:
+                invalid_files.append(file)
             continue
     
     if batch_images:
         try:
             batch_tensor = torch.stack(batch_images)
-            return batch_tensor, valid_files
+            return batch_tensor, valid_files, deleted_files, invalid_files
         except Exception as e:
             log("error", message=f"Error stacking tensors: {e}")
-    return None, []
+    return None, [], [], []

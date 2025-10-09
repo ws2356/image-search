@@ -181,6 +181,17 @@ def update_files(conn, ids: list, clip_indices: list, statuses: list):
     conn.commit()
 
 @perffunc
+def mark_files_deleted(conn, ids: list):
+    if not ids:
+        return
+    placeholders = ', '.join('?' for _ in ids)
+    conn.execute(
+        f"UPDATE files SET status = 2 WHERE id IN ({placeholders})",
+        ids
+    )
+    conn.commit()
+
+@perffunc
 def get_files_by_clip_indices(conn, folder_id, clip_indices: list):
     if not clip_indices:
         return []

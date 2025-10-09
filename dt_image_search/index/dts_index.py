@@ -8,7 +8,7 @@ from torchvision import transforms
 import numpy as np
 import faiss
 import hf_xet
-from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, get_folder_by_path, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path
+from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path
 from dt_image_search.model.dts_fs import get_app_data_path, get_pretrained_model_cache_path
 from dt_image_search.index.dts_model_downloader import get_pretrained_model, model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
@@ -139,8 +139,8 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     
     file_batches = []
     for i in range(0, len(image_files), batch_size):
-        batch_files = image_files[i:i + batch_size]
-        file_batches.append(batch_files)
+        _batch_files = image_files[i:i + batch_size]
+        file_batches.append(_batch_files)
     
     all_features = []
     valid_files = []
@@ -154,8 +154,7 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     
     for i, future in enumerate(futures):
         try:
-            batch_tensor, batch_valid_files = future.result(timeout=600)
-            
+            batch_tensor, batch_valid_files, deleted_files, _ = future.result(timeout=600)
             if batch_tensor is not None:
                 # Move to GPU and process with model (this stays in main process)
                 log("info", message=f"Getting features from batch {i}")
@@ -164,14 +163,13 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
                     features = model.encode_image(batch_tensor)
                     features = features / features.norm(dim=-1, keepdim=True)
                 
+                log("info", message=f"Got features from batch {i}")
                 features_np = features.cpu().numpy()
                 all_features.append(features_np)
-                
-                log("info", message=f"Got features from batch {i}")
-                # Map back to File objects
-                batch_start = i * batch_size
-                batch_files = image_files[batch_start:batch_start + len(batch_valid_files)]
-                valid_files.extend(batch_files)
+                valid_files.extend(batch_valid_files)
+            
+            with create_db_conn() as conn:
+                mark_files_deleted(conn, [file.id for file in deleted_files])
                 
         except Exception as e:
             log("error", "embedding", message=f"Error processing batch {i} {type(e).__name__}: {e}")
