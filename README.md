@@ -84,3 +84,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
 30. Span contains device_id, not correlated to logs
 31. Automated functional test
 32. Rate limit on AFD side
+33. When file deletion detected, refresh image list view
