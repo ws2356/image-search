@@ -6,10 +6,9 @@ import open_clip
 from PIL import Image, ImageFile
 from dt_image_search.index.dts_model_downloader import get_pretrained_model
 from dt_image_search.telemetry.telemetry_client import log
-from dt_image_search.model.dts_db import create_db_conn, update_file
 
 # Allow loading of truncated images
-# ImageFile.LOAD_TRUNCATED_IMAGES = True
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # Global worker state (loaded once per worker process)
 _worker_preprocess = None
