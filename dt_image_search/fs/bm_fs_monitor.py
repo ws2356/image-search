@@ -4,7 +4,6 @@ from PySide6.QtCore import QFileSystemWatcher
 from dt_image_search.index.incremental_index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.model.dts_db import get_all_folders
-from dt_image_search.index.incremental_index_worker import add_incremental_index_worker
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.tools.dts_event_bus import default_bus
 

@@ -269,7 +269,7 @@ def append_to_index(index_path: str, folder_id: int, file_paths: list[str] = Non
         with create_db_conn() as conn:
             for file_path in batch_files:
                 file_obj = get_file_by_path(conn, file_path)
-                if file_obj and file_obj.clip_index is None and file_obj.status == 0:
+                if file_obj and file_obj.status == 0:
                     batch_file_objs.append(file_obj)
         if not batch_file_objs:
             log("debug", message=f"No new files to index in batch {i_slice} to {i_slice + step}.")

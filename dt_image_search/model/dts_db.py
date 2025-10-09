@@ -115,8 +115,11 @@ def insert_file(conn, path: str, folder_id: int):
             (path, folder_id)
         )
     except sqlite3.IntegrityError:
-        # If the file already exists, we can update it instead
-        pass
+        # If the file already exists, we can set status = 0 if it was 2 otherwise do nothing
+        conn.execute(
+            "UPDATE files SET status = 0 WHERE path = ? and folder_id == ? and status == 2",
+            (path, folder_id)
+        )
     finally:
         conn.commit()
 

@@ -23,6 +23,7 @@ class BrowseController(BaseController):
         self._fs_changed = False
         from dt_image_search.tools.dts_event_bus import default_bus
         default_bus.subscribe("directory_changed", self._on_notify_folder_changed)
+        self._selected_folder_path = ''
 
     def folder_list_model(self) -> QAbstractItemModel:
         if self.folderListModel is None:
@@ -50,6 +51,7 @@ class BrowseController(BaseController):
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         folder_path = current.data(Qt.UserRole)
+        self._selected_folder_path = folder_path
         log("info", message=f"on_folder_selected: {folder_path}")
         self.image_list_model().load_images_from_folder(folder_path)
 
@@ -88,10 +90,10 @@ class BrowseController(BaseController):
         model = FolderTreeModel()
         return model
     
-    def _on_notify_folder_changed(self, folder_path: str):
-        log("info", message=f"Folder changed notification received for: {folder_path}")
+    def _on_notify_folder_changed(self, path: str):
+        log("info", message=f"Folder changed notification received for: {path}")
         if self.is_active:
-            self._folder_change_impl()
+            self._folder_change_impl(updated_path=path)
         else:
             self._fs_changed = True
     
@@ -99,9 +101,11 @@ class BrowseController(BaseController):
         if new_value and self._fs_changed:
             self._folder_change_impl()
             self._fs_changed = False
-    
-    def _folder_change_impl(self):
-        current_index = self.folder_list_model().currentIndex()
-        if current_index.isValid():
-            folder_path = current_index.data(Qt.UserRole)
-            self.image_list_model().load_images_from_folder(folder_path)
+
+    def _folder_change_impl(self, updated_path: str):
+        if not self._selected_folder_path:
+            return
+        # if updated_path is not None but updated_path is not under folder_path, ignore
+        if updated_path and not Path(updated_path).resolve().is_relative_to(Path(self._selected_folder_path).resolve()):
+            return
+        self.image_list_model().load_images_from_folder(self._selected_folder_path)
