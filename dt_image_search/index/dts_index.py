@@ -140,8 +140,7 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     file_batches = []
     for i in range(0, len(image_files), batch_size):
         batch_files = image_files[i:i + batch_size]
-        file_paths = [f.path for f in batch_files]
-        file_batches.append(file_paths)
+        file_batches.append(batch_files)
     
     all_features = []
     valid_files = []
@@ -159,7 +158,7 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
             
             if batch_tensor is not None:
                 # Move to GPU and process with model (this stays in main process)
-                log("info", message=f"Getting features from batch {i} {file_batches[i]}")
+                log("info", message=f"Getting features from batch {i}")
                 batch_tensor = batch_tensor.to(_device)
                 with torch.no_grad():
                     features = model.encode_image(batch_tensor)
@@ -168,7 +167,7 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
                 features_np = features.cpu().numpy()
                 all_features.append(features_np)
                 
-                log("info", message=f"Got features from batch {i} {file_batches[i]}")
+                log("info", message=f"Got features from batch {i}")
                 # Map back to File objects
                 batch_start = i * batch_size
                 batch_files = image_files[batch_start:batch_start + len(batch_valid_files)]

@@ -1,5 +1,5 @@
 class File:
-    def __init__(self, id: int, path: str, folder_id: int, clip_index: int = None, status: str = "normal"):
+    def __init__(self, id: int, path: str, folder_id: int, clip_index: int = None, status: int = 0):
         self.id = id
         self.path = path
         self.folder_id = folder_id
