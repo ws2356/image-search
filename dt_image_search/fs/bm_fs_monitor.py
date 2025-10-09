@@ -57,4 +57,4 @@ def on_directory_changed(path):
         child_path = os.path.join(path, child)
         if os.path.isfile(child_path):
             child_files.append(child_path)
-    add_incremental_index_worker(child_files)
+    add_incremental_index_worker(path, child_files)

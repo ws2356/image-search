@@ -104,12 +104,6 @@ def delete_folders(conn, folder_paths: list):
     conn.execute(f"DELETE FROM folders WHERE path IN ({placeholders})", folder_paths)
     conn.commit()
 
-def match_child_folders(conn, path: str) -> list:
-    # Replace '\' with '/' for consistency
-    path = path.replace('\\', '/')
-    cursor = conn.execute("SELECT path FROM folders WHERE ? LIKE '%' || path", (path,))
-    return [row[0] for row in cursor.fetchall()]
-
 @perffunc
 def insert_file(conn, path: str, folder_id: int):
     # Replace '\' with '/' for consistency
@@ -135,6 +129,16 @@ def get_file_by_path(conn, path: str) -> File:
     if row:
         return File(id=row[0], path=row[1], folder_id=row[2], clip_index=row[3], status=row[4])
     return None
+
+@perffunc
+def get_direct_child_files(conn, subtree: str) -> list[File]:
+    # Replace '\' with '/' for consistency
+    subtree = subtree.replace('\\', '/')
+    if not subtree.endswith('/'):
+        subtree += '/'
+    cursor = conn.execute("SELECT id, path, folder_id, clip_index, status FROM files WHERE path LIKE ? AND path NOT LIKE ?",
+                          (subtree + '%', subtree + '%/%'))
+    return [File(id=row[0], path=row[1], folder_id=row[2], clip_index=row[3], status=row[4]) for row in cursor.fetchall()]
 
 @perffunc
 def update_file(conn, file_id: int, path: str = None, folder_id: int = None, clip_index=None, status=None):

@@ -7,7 +7,7 @@ from dt_image_search.index.dts_index import (
     build_index,
     supported_image_types,
     append_to_index)
-from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_all_folders, get_folder_by_path, match_parent_folder
+from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_direct_child_files, mark_files_deleted, match_parent_folder
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
@@ -18,7 +18,8 @@ _index_workers = []  # List to keep track of active indexing workers
 _workers_lock = threading.Lock()  # Protect _index_workers from concurrent access
 
 class IncrementalIndexWorker:
-    def __init__(self, files: list[str]):
+    def __init__(self, folder_path: str, files: list[str]):
+        self.folder_path = folder_path
         self.files = [f for f in files if os.path.isfile(f) and f.lower().endswith(supported_image_types)]
         self._thread = None
         self._is_stopped = False
@@ -49,6 +50,13 @@ class IncrementalIndexWorker:
                     if parent_folder:
                         folderId2FilePaths.setdefault(parent_folder.id, []).append(file_path)
                         folderId2Folders.setdefault(parent_folder.id, parent_folder)
+                # Mark non-existing subtree files as deleted
+                _subtree_files = get_direct_child_files(conn, self.folder_path)
+                _current_files_set = set(self.files)
+                deleted_files = [f for f in _subtree_files if f.path not in _current_files_set]
+                if deleted_files:
+                    log("info", message=f"Marking {len(deleted_files)} files as deleted in subtree: {self.folder_path}")
+                    mark_files_deleted(conn, [file.id for file in deleted_files])
 
                 if not folderId2FilePaths:
                     log("info", message="No files to incrementally index.")
@@ -85,13 +93,13 @@ class IncrementalIndexWorker:
                     _index_workers.remove(self)
             try_activate_workers()
 
-def add_incremental_index_worker(files: list[str]):
+def add_incremental_index_worker(path: str,files: list[str]):
     """
     Add a new indexing worker for the specified folder.
     """
     with _workers_lock:
         log("info", message=f"Creating new incremental index worker for files: {len(files)}")
-        worker = IncrementalIndexWorker(files)
+        worker = IncrementalIndexWorker(folder_path=path, files=files)
         _index_workers.append(worker)
     try_activate_workers()
 
