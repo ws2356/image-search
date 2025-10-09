@@ -20,6 +20,9 @@ class BrowseController(BaseController):
         self.folderListModel = None
         self.imageListModel = None
         self._init_folders()
+        self._fs_changed = False
+        from dt_image_search.tools.dts_event_bus import default_bus
+        default_bus.subscribe("directory_changed", self._on_notify_folder_changed)
 
     def folder_list_model(self) -> QAbstractItemModel:
         if self.folderListModel is None:
@@ -84,3 +87,21 @@ class BrowseController(BaseController):
     def _create_model_for_folder(self) -> QAbstractItemModel:
         model = FolderTreeModel()
         return model
+    
+    def _on_notify_folder_changed(self, folder_path: str):
+        log("info", message=f"Folder changed notification received for: {folder_path}")
+        if self.is_active:
+            self._folder_change_impl()
+        else:
+            self._fs_changed = True
+    
+    def on_active_change(self, old_value: bool, new_value: bool):
+        if new_value and self._fs_changed:
+            self._folder_change_impl()
+            self._fs_changed = False
+    
+    def _folder_change_impl(self):
+        current_index = self.folder_list_model().currentIndex()
+        if current_index.isValid():
+            folder_path = current_index.data(Qt.UserRole)
+            self.image_list_model().load_images_from_folder(folder_path)

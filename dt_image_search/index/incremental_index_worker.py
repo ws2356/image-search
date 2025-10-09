@@ -12,6 +12,7 @@ from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
+from dt_image_search.tools.dts_event_bus import default_bus
 
 _max_activate = 4  # Maximum number of workers to activate at once
 _index_workers = []  # List to keep track of active indexing workers
@@ -93,7 +94,7 @@ class IncrementalIndexWorker:
                     _index_workers.remove(self)
             try_activate_workers()
 
-def add_incremental_index_worker(path: str,files: list[str]):
+def _add_incremental_index_worker(path: str,files: list[str]):
     """
     Add a new indexing worker for the specified folder.
     """
@@ -113,3 +114,17 @@ def try_activate_workers():
         log("debug", message=f"Active workers: {len(active_workers)}, Idle workers: {len(idle_workers)}")
         for worker in idle_workers[:_max_activate - len(active_workers)]:
             worker.run()
+
+def init_incremental_index_workers():
+    default_bus.subscribe("directory_changed", _on_directory_changed)
+
+def _on_directory_changed(path):
+    if not os.path.isdir(path):
+        log("warning", message=f"Path does not exist: {path}")
+        return
+    child_files = []
+    for child in os.listdir(path):
+        child_path = os.path.join(path, child)
+        if os.path.isfile(child_path):
+            child_files.append(child_path)
+    _add_incremental_index_worker(path, child_files)

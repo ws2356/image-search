@@ -11,7 +11,9 @@ class BaseController:
 
     @is_active.setter
     def is_active(self, value: bool):
+        _old_value = self._is_active
         self._is_active = value
+        self.on_active_change(_old_value, value)
 
     def folder_list_model(self) -> QAbstractItemModel:
         pass
@@ -33,3 +35,6 @@ class BaseController:
         if image_path:
             viewer = ImageViewerDialog(image_path)
             viewer.exec()
+    
+    def on_active_change(self, old_value: bool, new_value: bool):
+        pass

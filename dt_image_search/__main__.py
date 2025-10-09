@@ -26,6 +26,7 @@ from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
 from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch
+from dt_image_search.index.incremental_index_worker import init_incremental_index_workers
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -261,6 +262,7 @@ if __name__ == '__main__':
     startup_counter.add(1)
 
     index_init()  # Initialize the index system
+    init_incremental_index_workers()  # Initialize incremental index workers
     resume_index_workers()  # Resume workers to continue indexing after app start
     start_watch()  # Start watching file system changes
     

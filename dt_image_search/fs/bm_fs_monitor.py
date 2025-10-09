@@ -6,6 +6,7 @@ from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.model.dts_db import get_all_folders
 from dt_image_search.index.incremental_index_worker import add_incremental_index_worker
 from dt_image_search.model.dts_db import create_db_conn
+from dt_image_search.tools.dts_event_bus import default_bus
 
 _watcher: QFileSystemWatcher | None = None
 
@@ -49,12 +50,4 @@ def add_path(path: str):
 
 def on_directory_changed(path):
     log("debug", message=f"Directory changed: {path}")
-    if not os.path.isdir(path):
-        log("warning", message=f"Path does not exist: {path}")
-        return
-    child_files = []
-    for child in os.listdir(path):
-        child_path = os.path.join(path, child)
-        if os.path.isfile(child_path):
-            child_files.append(child_path)
-    add_incremental_index_worker(path, child_files)
+    default_bus.publish("directory_changed", path=path)
