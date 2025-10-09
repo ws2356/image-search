@@ -32,6 +32,9 @@ supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 @profile
 def query_index(folder_id: int, index_path: str, query_text: str) -> list:
     index_score_pairs = _query_internal(index_path, query_text)
+    # Dedupe by item[0] which is the file id
+    seen_ids = set()
+    index_score_pairs = [item for item in index_score_pairs if not (item[0] in seen_ids or seen_ids.add(item[0]))]
     with create_db_conn() as conn:
         # Fetch file paths from the database using the indices
         file_paths = get_files_by_clip_indices(conn, folder_id, [item[0] for item in index_score_pairs])

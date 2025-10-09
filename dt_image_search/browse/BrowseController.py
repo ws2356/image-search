@@ -102,7 +102,7 @@ class BrowseController(BaseController):
             self._folder_change_impl()
             self._fs_changed = False
 
-    def _folder_change_impl(self, updated_path: str):
+    def _folder_change_impl(self, updated_path: str = None):
         if not self._selected_folder_path:
             return
         # if updated_path is not None but updated_path is not under folder_path, ignore
