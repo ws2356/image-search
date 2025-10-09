@@ -256,9 +256,9 @@ if __name__ == '__main__':
     if hasattr(threading, 'excepthook'):
         threading.excepthook = handle_threading_exception
 
-    startup_counter.add(1)
-
     app = QApplication(sys.argv)
+
+    startup_counter.add(1)
 
     index_init()  # Initialize the index system
     resume_index_workers()  # Resume workers to continue indexing after app start
