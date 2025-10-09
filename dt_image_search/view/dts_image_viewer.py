@@ -26,7 +26,18 @@ class ImageViewerWidget(QGraphicsView):
         self.setBackgroundBrush(Qt.black)
 
     def set_image(self, image_path):
-        pixmap = QPixmap(image_path)
+        from PIL import Image, ImageFile
+        from PySide6.QtGui import QImage, QPixmap
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        pixmap = QPixmap()
+        try:
+            pil_image = Image.open(image_path).convert("RGBA")
+            data = pil_image.tobytes("raw", "RGBA")
+            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
+            pixmap = QPixmap.fromImage(qimage)
+        except Exception as e:
+            # Fallback to QPixmap loading (may fail for truncated images)
+            pixmap = QPixmap(image_path)
         if pixmap.isNull():
             self.pixmap_item.setPixmap(QPixmap())
             self._empty = True
