@@ -42,13 +42,13 @@ def query_index(folder_id: int, index_path: str, query_text: str) -> list:
 
 @profile
 def _query_internal(index_path: str, query_text: str) -> list:
+    torch.set_grad_enabled(False)
     index = _get_index(index_path)
     _model, _, _tokenizer = _get_model()
     # --- Encode text query ---
     text_tokens = _tokenizer([query_text]).to(_device)
-    with torch.no_grad():
-        text_features = _model.encode_text(text_tokens)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+    text_features = _model.encode_text(text_tokens)
+    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
     text_vector = text_features.cpu().numpy()
     # --- Search ---
     scores, indices = index.search(text_vector, TOP_K)
@@ -159,12 +159,12 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
         try:
             batch_tensor, batch_valid_files, deleted_files, _ = future.result(timeout=600)
             if batch_tensor is not None:
+                torch.set_grad_enabled(False)
                 # Move to GPU and process with model (this stays in main process)
                 log("info", message=f"Getting features from batch {i}")
                 batch_tensor = batch_tensor.to(_device)
-                with torch.no_grad():
-                    features = model.encode_image(batch_tensor)
-                    features = features / features.norm(dim=-1, keepdim=True)
+                features = model.encode_image(batch_tensor)
+                features = features / features.norm(dim=-1, keepdim=True)
                 
                 log("info", message=f"Got features from batch {i}")
                 features_np = features.cpu().numpy()
@@ -353,6 +353,7 @@ def _preload_model():
     _MAX_ATTEMPTS = 3
     for _attempt in range(_MAX_ATTEMPTS):
         try:
+            torch.set_grad_enabled(False)
             log("info", message=f"Attempt {_attempt + 1} before loading model")
             model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained)
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
