@@ -354,6 +354,7 @@ def _preload_model():
     _MAX_ATTEMPTS = 3
     for _attempt in range(_MAX_ATTEMPTS):
         try:
+            status_bar_messenger.show_status_message.emit("Model init...")
             torch.set_grad_enabled(False)
             log("info", message=f"Attempt {_attempt + 1} before loading model")
             model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained)
