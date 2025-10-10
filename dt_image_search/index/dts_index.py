@@ -20,7 +20,7 @@ from dt_image_search.base.status_bar_messenger import status_bar_messenger
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit
-from PIL import Image
+from dt_image_search.index.bm_model_spec import model_name
 from dt_image_search.index.image_processor import _initialize_worker, process_image_batch_persistent
 
 # TODO: refactor multiprocessing code: move all model/preprocess loading to worker processes
@@ -354,12 +354,12 @@ def _preload_model():
     for _attempt in range(_MAX_ATTEMPTS):
         try:
             log("info", message=f"Attempt {_attempt + 1} before loading model")
-            model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=pretrained)
+            model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained)
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
             status_bar_messenger.show_status_message.emit("Model downloaded")
 
             _preprocess = preprocess
-            _tokenizer = open_clip.get_tokenizer('ViT-B-32')
+            _tokenizer = open_clip.get_tokenizer(model_name)
             log("info", message=f"Attempt {_attempt + 1} tokenizer init")
 
             _model = model.to(_device).eval()

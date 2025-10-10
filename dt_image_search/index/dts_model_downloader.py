@@ -21,7 +21,8 @@ def get_pretrained_model() -> str:
         return override_model_path
     if _is_cn() and os.path.exists(_get_local_pretrained_model_path()):
         return _get_local_pretrained_model_path()
-    return "laion2b_s34b_b79k"
+    from dt_image_search.index.bm_model_spec import pretrained_model
+    return pretrained_model
 
 def _is_cn() -> bool:
     region = _get_system_region()
