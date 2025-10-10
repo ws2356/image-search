@@ -43,20 +43,20 @@ def query_index(folder_id: int, index_path: str, query_text: str) -> list:
 @profile
 def _query_internal(index_path: str, query_text: str) -> list:
     torch.set_grad_enabled(False)
-    index = _get_index(index_path)
-    _model, _, _tokenizer = _get_model()
-    # --- Encode text query ---
-    text_tokens = _tokenizer([query_text]).to(_device)
-    text_features = _model.encode_text(text_tokens)
-    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-    text_vector = text_features.cpu().numpy()
-    # --- Search ---
-    scores, indices = index.search(text_vector, TOP_K)
+    with torch.inference_mode():
+        index = _get_index(index_path)
+        _model, _, _tokenizer = _get_model()
+        # --- Encode text query ---
+        text_tokens = _tokenizer([query_text]).to(_device)
+        text_features = _model.encode_text(text_tokens)
+        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        text_vector = text_features.cpu().numpy()
+        # --- Search ---
+        scores, indices = index.search(text_vector, TOP_K)
 
-    result = []
-    index_score_pairs = zip(indices[0], scores[0])
-    index_score_pairs = sorted(index_score_pairs, key=lambda x: x[1], reverse=True)
-    return [[int(item[0]), item[1]] for item in index_score_pairs if item[1] >= 0.2]  # Convert to int for consistency
+        index_score_pairs = zip(indices[0], scores[0])
+        index_score_pairs = sorted(index_score_pairs, key=lambda x: x[1], reverse=True)
+        return [[int(item[0]), item[1]] for item in index_score_pairs if item[1] >= 0.2]  # Convert to int for consistency
 
 @profile
 def create_index_if_needed(index_path: str):
@@ -160,16 +160,17 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
             batch_tensor, batch_valid_files, deleted_files, _ = future.result(timeout=600)
             if batch_tensor is not None:
                 torch.set_grad_enabled(False)
-                # Move to GPU and process with model (this stays in main process)
-                log("info", message=f"Getting features from batch {i}")
-                batch_tensor = batch_tensor.to(_device)
-                features = model.encode_image(batch_tensor)
-                features = features / features.norm(dim=-1, keepdim=True)
-                
-                log("info", message=f"Got features from batch {i}")
-                features_np = features.cpu().numpy()
-                all_features.append(features_np)
-                valid_files.extend(batch_valid_files)
+                with torch.inference_mode():
+                    # Move to GPU and process with model (this stays in main process)
+                    log("info", message=f"Getting features from batch {i}")
+                    batch_tensor = batch_tensor.to(_device)
+                    features = model.encode_image(batch_tensor)
+                    features = features / features.norm(dim=-1, keepdim=True)
+                    
+                    log("info", message=f"Got features from batch {i}")
+                    features_np = features.cpu().numpy()
+                    all_features.append(features_np)
+                    valid_files.extend(batch_valid_files)
             
             with create_db_conn() as conn:
                 mark_files_deleted(conn, [file.id for file in deleted_files])
