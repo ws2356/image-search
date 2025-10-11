@@ -5,7 +5,7 @@ import torch
 import open_clip
 from PIL import Image, ImageFile
 from dt_image_search.index.dts_model_downloader import get_pretrained_model
-from dt_image_search.index.incremental_index_worker import BMContext
+from dt_image_search.bm_context import BMContext
 from dt_image_search.telemetry.telemetry_client import log
 
 # Allow loading of truncated images

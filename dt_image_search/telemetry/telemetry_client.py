@@ -92,10 +92,6 @@ class OtelLogFilter(logging.Filter):
             if arg == self.telemetry_host:
                 return False
         return True
-logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
-logging_handler.addFilter(OtelLogFilter())
-logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
-_logger = logging.getLogger(_image_search_client)
 
 
 # Open the system’s null device for writing:
@@ -139,3 +135,8 @@ def flush_telemetry():
     # Flush metrics
     for reader in metric_readers:
         reader.force_flush()
+
+logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
+logging_handler.addFilter(OtelLogFilter())
+logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
+_logger = logging.getLogger(_image_search_client)

@@ -45,7 +45,7 @@ class MainWindow(QMainWindow):
         self._alternativeController = None
         self._mode = _BrowseMode
 
-        self.controller = BrowseController()
+        self.controller = BrowseController(ctx=self.ctx)
         self.controller.is_active = True  # Set the controller to active state
 
         self.ui.addFolderButton.clicked.connect(self.on_add_folder_button_click)
@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
                 self._mode = _SearchMode
 
                 self._alternativeController = self.controller
-                self.controller = tmp_controller or SearchController()
+                self.controller = tmp_controller or SearchController(ctx=self.ctx)
                 self._alternativeController.is_active = False  # Deactivate the alternative controller
                 self.controller.is_active = True
                 self.image_list_view.setModel(self.controller.image_list_model())
@@ -143,7 +143,7 @@ class MainWindow(QMainWindow):
 
                 self._mode = _BrowseMode
                 self._alternativeController = self.controller
-                self.controller = tmp_controller or BrowseController()
+                self.controller = tmp_controller or BrowseController(ctx=self.ctx)
                 self._alternativeController.is_active = False  # Deactivate the alternative controller
                 self.controller.is_active = True
                 self.image_list_view.setModel(self.controller.image_list_model())

@@ -3,7 +3,6 @@ import os
 import threading
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.dts_index import (
-    BMContext,
     index_path_for_folder,
     build_index,
     supported_image_types)
@@ -11,6 +10,7 @@ from dt_image_search.model.dts_db import create_db_conn, insert_file, update_fol
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.bm_context import BMContext
 
 _max_workers = 4  # Maximum number of concurrent indexing workers
 _index_workers = []  # List to keep track of active indexing workers

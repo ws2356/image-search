@@ -33,14 +33,12 @@ def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
         if not db_path.exists():
             conn = sqlite3.connect(db_path)
             schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
-            log("info", message=f"Db path: {db_path}")
             conn.executescript(schema_sql)
     if conn is None:
         conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     if is_debug():
         conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
-        print(f"db path: {db_path}")
     return conn
 
 def insert_folder(conn, folder_path: str) -> Folder:

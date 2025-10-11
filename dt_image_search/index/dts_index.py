@@ -352,7 +352,7 @@ def _preload_model(ctx: BMContext):
     global _model, _preprocess, _tokenizer
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
-    pretrained = get_pretrained_model()
+    pretrained = get_pretrained_model(ctx)
     _MAX_ATTEMPTS = 3
     for _attempt in range(_MAX_ATTEMPTS):
         try:

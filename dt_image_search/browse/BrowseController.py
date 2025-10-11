@@ -76,7 +76,7 @@ class BrowseController(BaseController):
         self._init_folders()
 
     def _load_folders(self) -> list[str]:
-        with create_db_conn() as conn:
+        with create_db_conn(ctx=self.ctx) as conn:
             folders = get_all_folders(conn)
             # sort folders asc
             folders.sort(key=lambda f: f.path)
