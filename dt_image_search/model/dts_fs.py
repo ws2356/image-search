@@ -15,6 +15,3 @@ def get_app_data_path() -> Path:
             _data_path.mkdir(parents=True, exist_ok=True)
             os.environ["BM_DATA_PATH"] = str(_data_path)
     return Path(os.getenv("BM_DATA_PATH"))
-
-def get_pretrained_model_cache_path() -> Path:
-    return get_app_data_path() / "hf_cache"

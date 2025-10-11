@@ -9,7 +9,7 @@ import numpy as np
 import faiss
 import hf_xet
 from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path
-from dt_image_search.model.dts_fs import get_app_data_path, get_pretrained_model_cache_path
+from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import get_pretrained_model, model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
