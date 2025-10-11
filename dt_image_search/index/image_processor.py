@@ -6,6 +6,7 @@ import open_clip
 from PIL import Image, ImageFile
 from dt_image_search.index.dts_model_downloader import get_pretrained_model
 from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.index.bm_model_spec import model_name
 
 # Allow loading of truncated images
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -18,7 +19,7 @@ def _initialize_worker():
     global _worker_preprocess
     
     # Load model once per worker process
-    _, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=get_pretrained_model())
+    _, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=get_pretrained_model())
     _worker_preprocess = preprocess
 
 def process_image_batch_persistent(files):
