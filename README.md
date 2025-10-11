@@ -86,3 +86,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
 32. Rate limit on AFD side
 33. When file deletion detected, refresh image list view
 34. Maintain file hash in each file record so that a: we can support file updating in place (P2) b: when file delete and restored, we can skip indexing reliably
+35. Fork open_clip, passing model loading/downloading related args via open_cip to transformer util so that local cached xlm... text pretrained model can be used
