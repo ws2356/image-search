@@ -1,7 +1,5 @@
-import ctypes
 import hashlib
 import os
-import platform
 import requests
 import threading
 import datetime
@@ -10,6 +8,7 @@ from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.model.dts_config import get_override_model_path
 from dt_image_search.telemetry.telemetry_client import with_trace
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools.bm_sys import is_cn
 
 # When model_downloaded_event is set, the `_get_local_pretrained_model_path()` either exists because download success or skipped due to previous download,
 # or not exists because download fails. In latter case, fallback to pretrained model name, so that open_clip would download the model from huggingface
@@ -19,27 +18,10 @@ def get_pretrained_model() -> str:
     override_model_path = get_override_model_path()
     if override_model_path:
         return override_model_path
-    if _is_cn() and os.path.exists(_get_local_pretrained_model_path()):
+    if is_cn() and os.path.exists(_get_local_pretrained_model_path()):
         return _get_local_pretrained_model_path()
     from dt_image_search.index.bm_model_spec import pretrained_model
     return pretrained_model
-
-def _is_cn() -> bool:
-    region = _get_system_region()
-    if region.lower() == "cn":
-        return True
-    return False
-
-def _get_system_region():
-    system = platform.system()
-    if system == "Windows":
-        buf = ctypes.create_unicode_buffer(85)
-        if ctypes.windll.kernel32.GetUserDefaultGeoName(buf, len(buf)):
-            return buf.value
-    if system == "Darwin":
-        raise NotImplementedError("macOS region detection is not implemented")
-    # Fallback if needed
-    return None
 
 
 def _get_local_pretrained_model_path():
@@ -122,7 +104,7 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
                 status_bar_messenger.show_status_message.emit(f"Downloading model... {percent:.1f}%")
                 log("debug", message=f"Download progress: {percent:.1f}%")
 
-if _is_cn():
+if is_cn():
     threading.Thread(target=_download_pretrained_model).start()
 else:
     log("debug", message="Not in CN region, skipping model download")
