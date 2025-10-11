@@ -22,20 +22,21 @@ from concurrent.futures import ProcessPoolExecutor
 import atexit
 from dt_image_search.index.bm_model_spec import model_name
 from dt_image_search.index.image_processor import _initialize_worker, process_image_batch_persistent
+from dt_image_search.bm_context import BMContext
 
 # TODO: refactor multiprocessing code: move all model/preprocess loading to worker processes
-def index_path_for_folder(folder: Folder):
-    return f"{get_app_data_path()}/{folder.id}.faiss"
+def index_path_for_folder(ctx: BMContext, folder: Folder):
+    return f"{get_app_data_path(ctx)}/{folder.id}.faiss"
 
 supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 
 @profile
-def query_index(folder_id: int, index_path: str, query_text: str) -> list:
+def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str) -> list:
     index_score_pairs = _query_internal(index_path, query_text)
     # Dedupe by item[0] which is the file id
     seen_ids = set()
     index_score_pairs = [item for item in index_score_pairs if not (item[0] in seen_ids or seen_ids.add(item[0]))]
-    with create_db_conn() as conn:
+    with create_db_conn(ctx=ctx) as conn:
         # Fetch file paths from the database using the indices
         file_paths = get_files_by_clip_indices(conn, folder_id, [item[0] for item in index_score_pairs])
         return [(file, pair[1]) for file, pair in zip(file_paths, index_score_pairs) if file is not None]
@@ -102,7 +103,7 @@ def _calculate_worker_count():
         log("warning", message=f"psutil not available, using conservative worker count: {worker_count}")
         return worker_count
 
-def _get_process_pool():
+def _get_process_pool(ctx: BMContext) -> ProcessPoolExecutor:
     """Get or create the persistent process pool"""
     global _process_pool
     
@@ -112,7 +113,8 @@ def _get_process_pool():
             worker_count = _calculate_worker_count()
             _process_pool = ProcessPoolExecutor(
                 max_workers=worker_count,
-                initializer=_initialize_worker
+                initializer=_initialize_worker,
+                initargs=(ctx,),
             )
             # Register cleanup function
             atexit.register(_cleanup_process_pool)
@@ -127,7 +129,7 @@ def _cleanup_process_pool():
         _process_pool = None
 
 @profile
-def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
+def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File]) -> bool:
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
     result = True
@@ -135,7 +137,7 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     model, _, _ = _get_model()
     
     # Use persistent process pool
-    pool = _get_process_pool()
+    pool = _get_process_pool(ctx)
     
     # Split files into batches for multiprocessing
     batch_size = 16
@@ -172,7 +174,7 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
                     all_features.append(features_np)
                     valid_files.extend(batch_valid_files)
             
-            with create_db_conn() as conn:
+            with create_db_conn(ctx=ctx) as conn:
                 mark_files_deleted(conn, [file.id for file in deleted_files])
                 
         except Exception as e:
@@ -192,14 +194,14 @@ def _add_to_index(index_path: str, image_files: typing.List[File]) -> bool:
     index.add_with_ids(features_np, ids)
     faiss.write_index(index, index_path)
     
-    with create_db_conn() as conn:
+    with create_db_conn(ctx=ctx) as conn:
         for file in valid_files:
             update_file(conn, file.id, clip_index=file.id, status=1)
     return result
 
 
 @profile
-def build_index(index_path: str, folder_id: int):
+def build_index(ctx: BMContext, index_path: str, folder_id: int):
     """
     Build a FAISS index from images in the given folder path.
     This function will create a new index if it does not exist,
@@ -214,7 +216,7 @@ def build_index(index_path: str, folder_id: int):
     _model_loaded_event.wait()  # Ensure model is preloaded before starting indexing
 
     create_index_if_needed(index_path)
-    with create_db_conn() as conn:
+    with create_db_conn(ctx=ctx) as conn:
         files = get_pending_files_for_folder(conn, folder_id)
     
     if not files:
@@ -237,7 +239,7 @@ def build_index(index_path: str, folder_id: int):
         
         batch_result = False
         if files_to_index:
-            batch_result = _add_to_index(index_path, files_to_index)
+            batch_result = _add_to_index(ctx, index_path, files_to_index)
             files_processed += len(files_to_index)
         else:
             log("info", message=f"No new files to index in slice {batch_start} to {batch_end}.")
@@ -257,7 +259,7 @@ def build_index(index_path: str, folder_id: int):
 
 # TODO: implement append_to_index
 @profile
-def append_to_index(index_path: str, folder_id: int, file_paths: list[str] = None):
+def append_to_index(ctx: BMContext, index_path: str, folder_id: int, file_paths: list[str] = None):
     _model_loaded_event.wait()  # Wait for the model to be downloaded
     if not file_paths:
         return
@@ -270,7 +272,7 @@ def append_to_index(index_path: str, folder_id: int, file_paths: list[str] = Non
         batch_files = file_paths[i_slice:i_slice + step]
         log("debug", message=f"Processing batch {i_slice} to {i_slice + step} for appending.")
         batch_file_objs = []
-        with create_db_conn() as conn:
+        with create_db_conn(ctx=ctx) as conn:
             for file_path in batch_files:
                 file_obj = get_file_by_path(conn, file_path)
                 if file_obj and file_obj.status == 0:
@@ -279,7 +281,7 @@ def append_to_index(index_path: str, folder_id: int, file_paths: list[str] = Non
             log("debug", message=f"No new files to index in batch {i_slice} to {i_slice + step}.")
             batch_result = True
         else:
-            batch_result = _add_to_index(index_path, batch_file_objs)
+            batch_result = _add_to_index(ctx, index_path, batch_file_objs)
         files_processed += len(batch_files) if batch_result else 0
         yield {
             'batch_start': i_slice,
@@ -304,8 +306,8 @@ def _load_index(index_path: str):
     return faiss.read_index(index_path)
 
 
-def delete_folder(folder_path: str = None):
-    with create_db_conn() as conn:
+def delete_folder(ctx: BMContext, folder_path: str = None):
+    with create_db_conn(ctx=ctx) as conn:
         if not folder_path:
             log("warning", "delete", message="No folder path provided for deletion.")
             return
@@ -314,7 +316,7 @@ def delete_folder(folder_path: str = None):
             if not folder:
                 log("warning", "delete", message=f"Folder {folder_path} does not exist in the database.")
                 return
-            index_path = index_path_for_folder(folder)
+            index_path = index_path_for_folder(ctx=ctx, folder=folder)
             if os.path.exists(index_path):
                 os.remove(index_path)
                 log("info", message=f"Removed index file for folder {folder.path} at {index_path}")
@@ -345,7 +347,7 @@ def _get_model():
     return _model, _preprocess, _tokenizer
 
 @profile
-def _preload_model():
+def _preload_model(ctx: BMContext):
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
     model_downloaded_event.wait()  # Wait for the model to be downloaded
@@ -381,5 +383,5 @@ def _preload_model():
                 time.sleep(3)
     _model_loaded_event.set()
 
-def init():
-    threading.Thread(target=_preload_model, daemon=True).start()
+def init(ctx: BMContext):
+    threading.Thread(target=_preload_model, args=(ctx,), daemon=True).start()

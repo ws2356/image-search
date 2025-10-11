@@ -6,23 +6,24 @@ from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.model.dts_db import get_all_folders
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.tools.dts_event_bus import default_bus
+from dt_image_search.bm_context import BMContext
 
 _watcher: QFileSystemWatcher | None = None
 
-def start_watch():
+def start_watch(ctx: BMContext):
     global _watcher
     if _watcher is None:
         _watcher = QFileSystemWatcher()
-        _watcher.directoryChanged.connect(on_directory_changed)
+        _watcher.directoryChanged.connect(_on_directory_changed)
         log("debug", message="File system watcher started.")
-    with create_db_conn() as conn:
+    with create_db_conn(ctx=ctx) as conn:
         for folder in get_all_folders(conn):
             add_path(folder.path)
 
 def stop_watch():
     global _watcher
     if _watcher is not None:
-        _watcher.directoryChanged.disconnect(on_directory_changed)
+        _watcher.directoryChanged.disconnect(_on_directory_changed)
         _watcher.removePaths(_watcher.directories())
         _watcher = None
         log("debug", message="File system watcher stopped.")
@@ -47,6 +48,6 @@ def add_path(path: str):
         if os.path.isdir(child_path):
             add_path(child_path)
 
-def on_directory_changed(path):
+def _on_directory_changed(path):
     log("debug", message=f"Directory changed: {path}")
     default_bus.publish("directory_changed", path=path)

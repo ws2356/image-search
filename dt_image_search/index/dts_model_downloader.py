@@ -9,23 +9,24 @@ from dt_image_search.model.dts_config import get_override_model_path
 from dt_image_search.telemetry.telemetry_client import with_trace
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.tools.bm_sys import is_cn
+from dt_image_search.bm_context import BMContext, get_context
 
 # When model_downloaded_event is set, the `_get_local_pretrained_model_path()` either exists because download success or skipped due to previous download,
 # or not exists because download fails. In latter case, fallback to pretrained model name, so that open_clip would download the model from huggingface
 model_downloaded_event = threading.Event()
 
-def get_pretrained_model() -> str:
+def get_pretrained_model(ctx: BMContext) -> str:
     override_model_path = get_override_model_path()
     if override_model_path:
         return override_model_path
-    if is_cn() and os.path.exists(_get_local_pretrained_model_path()):
-        return _get_local_pretrained_model_path()
+    if is_cn() and os.path.exists(_get_local_pretrained_model_path(ctx=ctx)):
+        return _get_local_pretrained_model_path(ctx=ctx)
     from dt_image_search.index.bm_model_spec import pretrained_model
     return pretrained_model
 
 
-def _get_local_pretrained_model_path():
-    return os.path.join(get_app_data_path(), "open_clip_pytorch_model.bin")
+def _get_local_pretrained_model_path(ctx: BMContext):
+    return os.path.join(get_app_data_path(ctx=ctx), "open_clip_pytorch_model.bin")
 
 _md5_hash = '2fc036aea9cd7306f5ce7ce6abb8d0bf'
 # _pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_model.bin"
@@ -33,22 +34,23 @@ _md5_hash = '2fc036aea9cd7306f5ce7ce6abb8d0bf'
 _pretrained_model_url = "https://imagesearch.boldman.net/open_clip_pytorch_model.bin"
 @with_trace("Model.Download")
 def _download_pretrained_model():
+    ctx = get_context()
     # Download from `_pretrained_model_url` to file location `_get_local_pretrained_model_path`
     try:
         # file exists and md5 matches, skip download
-        if os.path.exists(_get_local_pretrained_model_path()) and _check_md5(_get_local_pretrained_model_path(), _md5_hash):
-            log("debug", message=f"Model already exists at: {_get_local_pretrained_model_path()}")
+        if os.path.exists(_get_local_pretrained_model_path(ctx=ctx)) and _check_md5(_get_local_pretrained_model_path(ctx=ctx), _md5_hash):
+            log("debug", message=f"Model already exists at: {_get_local_pretrained_model_path(ctx=ctx)}")
             return
 
         log("info", message="Start downloading pretrained model")
-        tmp_path = f"{_get_local_pretrained_model_path()}.tmp"
+        tmp_path = f"{_get_local_pretrained_model_path(ctx=ctx)}.tmp"
 
         try:
             os.remove(tmp_path)
         except:
             pass
         try:
-            os.remove(_get_local_pretrained_model_path())
+            os.remove(_get_local_pretrained_model_path(ctx=ctx))
         except:
             pass
 
@@ -64,7 +66,7 @@ def _download_pretrained_model():
             except Exception as e:
                 log("error", message=f"Pretrained model download failed: {e}")
 
-        os.rename(tmp_path, _get_local_pretrained_model_path())
+        os.rename(tmp_path, _get_local_pretrained_model_path(ctx=ctx))
         log("info", message="Succeeded downloading pretrained model")
         status_bar_messenger.show_status_message.emit("Model downloaded")
     except Exception as e:

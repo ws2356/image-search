@@ -16,11 +16,13 @@ from dt_image_search.tools.dts_debounce import debounce
 from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.tools.dts_dispatcher import dispatcher
 from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.bm_context import BMContext
 
 class SearchController(BaseController):
-    def __init__(self):
+    def __init__(self, ctx: BMContext):
         super().__init__()
         self.imageListModel = None
+        self.ctx = ctx
 
     def folder_list_model(self) -> QAbstractItemModel:
         raise NotImplementedError("SearchController does not implement folder_list_model")
@@ -48,7 +50,7 @@ class SearchController(BaseController):
         dispatcher.post(lambda: self.imageListModel.load_images_from_paths([]))
 
         results = []
-        with create_db_conn() as conn:
+        with create_db_conn(ctx=self.ctx) as conn:
             folders = get_all_folders(conn)
             for folder in folders:
                 results_in_folder = self._search_in_folder(folder, query)
@@ -67,8 +69,8 @@ class SearchController(BaseController):
         log("info", message=f"Searching in folder: {folder.path} with query: {query}")
         # Implement the search logic here
         # This could involve querying a database or filtering files in the folder
-        index_path = index_path_for_folder(folder)
+        index_path = index_path_for_folder(ctx=self.ctx, folder=folder)
         if not Path(index_path).exists():
             log("warning", "search", message=f"Index file does not exist for folder: {folder.path}")
             return []
-        return query_index(folder.id, index_path, query)
+        return query_index(ctx=self.ctx, folder_id=folder.id, index_path=index_path, query=query)

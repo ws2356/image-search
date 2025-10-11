@@ -13,13 +13,15 @@ from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus
+from dt_image_search.bm_context import BMContext 
 
 _max_activate = 4  # Maximum number of workers to activate at once
 _index_workers = []  # List to keep track of active indexing workers
 _workers_lock = threading.Lock()  # Protect _index_workers from concurrent access
 
 class IncrementalIndexWorker:
-    def __init__(self, folder_path: str, files: list[str]):
+    def __init__(self, ctx: BMContext, folder_path: str, files: list[str]):
+        self.ctx = ctx
         self.folder_path = folder_path
         self.files = [f for f in files if os.path.isfile(f) and f.lower().endswith(supported_image_types)]
         self._thread = None
@@ -43,7 +45,7 @@ class IncrementalIndexWorker:
     def _run_impl(self):
         try:
             # Check if the worker is stopped regularly to avoid unnecessary processing
-            with create_db_conn() as conn:
+            with create_db_conn(ctx=self.ctx) as conn:
                 folderId2FilePaths = {}
                 folderId2Folders = {}
                 for file_path in self.files:
@@ -73,7 +75,7 @@ class IncrementalIndexWorker:
                         insert_file(conn, file, folder_id)
 
                     all_success = True
-                    for progress in append_to_index(index_path_for_folder(folder), folder_id, files):
+                    for progress in append_to_index(self.ctx, index_path_for_folder(self.ctx, folder), folder_id, files):
                         log("debug", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
                         if self._is_stopped:
                             log("info", message="Incremental indexing stopped by user.")
@@ -85,26 +87,26 @@ class IncrementalIndexWorker:
                         update_folder_status(conn, folder_id, 2)  # Set status to fully indexed
                     else:
                         update_folder_status(conn, folder_id, 1)  # For failing case, set status to indexing so that it can be picked up by index_worker
-                        resume_index_workers()
+                        resume_index_workers(ctx=self.ctx)
                 status_bar_messenger.show_status_message.emit(f"Incremental updating index completed.")
         finally:
             # Always remove worker from list when done, even if an exception occurred
             with _workers_lock:
                 if self in _index_workers:
                     _index_workers.remove(self)
-            try_activate_workers()
+            _try_activate_workers()
 
-def _add_incremental_index_worker(path: str,files: list[str]):
+def _add_incremental_index_worker(ctx: BMContext, path: str, files: list[str]):
     """
     Add a new indexing worker for the specified folder.
     """
     with _workers_lock:
         log("info", message=f"Creating new incremental index worker for files: {len(files)}")
-        worker = IncrementalIndexWorker(folder_path=path, files=files)
+        worker = IncrementalIndexWorker(ctx=ctx, folder_path=path, files=files)
         _index_workers.append(worker)
-    try_activate_workers()
+    _try_activate_workers()
 
-def try_activate_workers():
+def _try_activate_workers():
     # Activate at most _max_activate workers if they are idle
     with _workers_lock:
         active_workers = [w for w in _index_workers if w.active]
@@ -115,16 +117,15 @@ def try_activate_workers():
         for worker in idle_workers[:_max_activate - len(active_workers)]:
             worker.run()
 
-def init_incremental_index_workers():
+def init_incremental_index_workers(ctx: BMContext):
+    def _on_directory_changed(path):
+        if not os.path.isdir(path):
+            log("warning", message=f"Path does not exist: {path}")
+            return
+        child_files = []
+        for child in os.listdir(path):
+            child_path = os.path.join(path, child)
+            if os.path.isfile(child_path):
+                child_files.append(child_path)
+        _add_incremental_index_worker(ctx, path, child_files)
     default_bus.subscribe("directory_changed", _on_directory_changed)
-
-def _on_directory_changed(path):
-    if not os.path.isdir(path):
-        log("warning", message=f"Path does not exist: {path}")
-        return
-    child_files = []
-    for child in os.listdir(path):
-        child_path = os.path.join(path, child)
-        if os.path.isfile(child_path):
-            child_files.append(child_path)
-    _add_incremental_index_worker(path, child_files)

@@ -3,6 +3,7 @@ import os
 import threading
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.dts_index import (
+    BMContext,
     index_path_for_folder,
     build_index,
     supported_image_types)
@@ -16,7 +17,8 @@ _index_workers = []  # List to keep track of active indexing workers
 _workers_lock = threading.Lock()  # Protect _index_workers from concurrent access
 
 class IndexWorker:
-    def __init__(self, folder: Folder):
+    def __init__(self, ctx: BMContext, folder: Folder):
+        self.ctx = ctx
         self.folder = folder
         self._thread = None
         self._is_stopped = False
@@ -35,7 +37,7 @@ class IndexWorker:
     def _run_impl(self):
         try:
             # Check if the worker is stopped regularly to avoid unnecessary processing
-            with create_db_conn() as conn:
+            with create_db_conn(ctx=self.ctx) as conn:
                 status_bar_messenger.show_status_message.emit(f"Indexing folder: {self.folder.path}")
 
                 folder_id = self.folder.id
@@ -64,11 +66,11 @@ class IndexWorker:
                     return
 
                 update_folder_status(conn, folder_id, 1)
-                index_path = index_path_for_folder(self.folder)
+                index_path = index_path_for_folder(self.ctx, self.folder)
                 
                 all_success = True
                 # Iterate over the build_index generator and check for stop condition
-                for progress in build_index(index_path, folder_id):
+                for progress in build_index(ctx=self.ctx, index_path=index_path, folder_id=folder_id):
                     if self._is_stopped:
                         log("info", message="Indexing stopped by user during build_index.")
                         status_bar_messenger.show_status_message.emit(f"Indexing canceled: {self.folder.path}")
@@ -90,13 +92,13 @@ class IndexWorker:
                 if self in _index_workers:
                     _index_workers.remove(self)
                     # Try to activate other workers if any are idle
-                    with create_db_conn() as conn:
+                    with create_db_conn(ctx=self.ctx) as conn:
                         folder = get_folder_by_path(conn, self.folder.path)
                         # Only recur if the previous folder was completed to avoid infinite loops
                         if folder.status == 2:
-                            resume_index_workers()
+                            resume_index_workers(self.ctx)
 
-def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWorker:
+def add_index_worker(ctx: BMContext, folder: Folder, replace_existing: bool = False) -> IndexWorker:
     """
     Add a new indexing worker for the specified folder.
     """
@@ -115,7 +117,7 @@ def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWor
             worker.stop()
 
         log("info", message=f"Index worker not already exists for this folder: {folder.id}, creating one")
-        worker = IndexWorker(folder)
+        worker = IndexWorker(ctx, folder)
         _index_workers.append(worker)
         _index_workers.sort(key=lambda w: datetime.datetime.fromisoformat(w.folder.added_at))
     
@@ -123,15 +125,15 @@ def add_index_worker(folder: Folder, replace_existing: bool = False) -> IndexWor
     worker.run()  
     return worker
 
-def resume_index_workers():
+def resume_index_workers(ctx: BMContext):
     log("info", message=f"Resuming index workers for incomplete folders.")
     def resume_logic():
-        with create_db_conn() as conn:
+        with create_db_conn(ctx=ctx) as conn:
             log("info", message="Resuming index workers for incomplete folders - db connected")
             all_folders = get_all_folders(conn)
             folders = [folder for folder in all_folders if folder.status in (0, 1)]
             for folder in folders:
-                if not add_index_worker(folder):
+                if not add_index_worker(ctx, folder):
                     return
                 log("info", message=f"Resuming indexing for folder: {folder.path}")
     _resume_thread = threading.Thread(target=resume_logic, daemon=True)

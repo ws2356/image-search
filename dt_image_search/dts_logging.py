@@ -2,6 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import sys
 from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.bm_context import get_context
 
 def get_other_handlers():
     # # Choose a platform-appropriate app data folder
@@ -11,7 +12,7 @@ def get_other_handlers():
     #     log_dir = Path.home() / "Library/Logs/DTImageSearch"
     # else:  # Linux or other
     #     log_dir = Path.home() / ".local/share/DTImageSearch"
-    log_dir = get_app_data_path() / "logs"
+    log_dir = get_app_data_path(get_context()) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "app.log"
 

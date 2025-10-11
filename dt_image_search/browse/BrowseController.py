@@ -13,11 +13,13 @@ from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.fs.bm_fs_monitor import add_path
+from dt_image_search.bm_context import BMContext
 
 class BrowseController(BaseController):
-    def __init__(self):
+    def __init__(self, ctx: BMContext):
         super().__init__()
         self.folderListModel = None
+        self.ctx = ctx
         self.imageListModel = None
         self._init_folders()
         self._fs_changed = False
@@ -36,7 +38,7 @@ class BrowseController(BaseController):
         return self.imageListModel
 
     def on_folder_added(self, folder_path: str):
-        with create_db_conn() as conn:
+        with create_db_conn(ctx=self.ctx) as conn:
             parent_folder = match_parent_folder(conn, folder_path)
             if parent_folder:
                 # TODO: Select folder_path in the UI
@@ -45,7 +47,7 @@ class BrowseController(BaseController):
             if not folder:
                 return
             log("info", message=f"Inserted folder with ID: {folder.id}")
-            add_index_worker(folder, replace_existing=True)
+            add_index_worker(ctx=self.ctx, folder=folder, replace_existing=True)
             add_path(folder.path)
         self._reload_folders()
 
@@ -62,7 +64,7 @@ class BrowseController(BaseController):
         log("info", message=f"Removing folder: {data}")
         index = self.folder_list_model().indexFromItem(item)
         self.folder_list_model().deleteFolder(index)
-        delete_folder(data)
+        delete_folder(ctx=self.ctx, folder_path=data)
 
     def _init_folders(self):
         _root_folders = self._load_folders()

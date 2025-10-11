@@ -27,6 +27,7 @@ from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
 from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers
+from dt_image_search.bm_context import get_context, BMContext
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -35,8 +36,9 @@ _SearchMode = 2
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, ctx: BMContext):
         super().__init__()
+        self.ctx = ctx
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
@@ -260,17 +262,18 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     startup_counter.add(1)
+    ctx = get_context()
 
-    index_init()  # Initialize the index system
-    init_incremental_index_workers()  # Initialize incremental index workers
-    resume_index_workers()  # Resume workers to continue indexing after app start
-    start_watch()  # Start watching file system changes
+    index_init(ctx)  # Initialize the index system
+    init_incremental_index_workers(ctx)  # Initialize incremental index workers
+    resume_index_workers(ctx)  # Resume workers to continue indexing after app start
+    start_watch(ctx)  # Start watching file system changes
     
     # Install Qt message handler
     from PySide6.QtCore import qInstallMessageHandler
     qInstallMessageHandler(qt_message_handler)
-    
-    window = MainWindow()
+
+    window = MainWindow(ctx=ctx)
     QCoreApplication.instance().aboutToQuit.connect(flush_telemetry)
     window.show()
     sys.exit(app.exec())

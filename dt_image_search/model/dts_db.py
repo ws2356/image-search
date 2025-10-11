@@ -20,13 +20,14 @@ from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.tools.dts_perf import perffunc
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dt_is_debug import is_debug
+from dt_image_search.bm_context import BMContext
 
 def _sql_logger(statement):
     print("SQL:", statement)
 
 db_init_lock = threading.Lock()
-def create_db_conn():
-    db_path = get_app_data_path() / "app_data.sqlite"
+def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
+    db_path = get_app_data_path(ctx) / "app_data.sqlite"
     conn = None
     with db_init_lock:
         if not db_path.exists():
@@ -57,6 +58,10 @@ def insert_folder(conn, folder_path: str) -> Folder:
     cursor.execute("SELECT id, path, status, added_at FROM folders WHERE path = ?", (folder_path,))
     row = cursor.fetchone()
     return Folder(id=row[0], path=row[1], status=row[2], added_at=row[3]) if row else None
+
+def has_any_folder(conn) -> bool:
+    cursor = conn.execute("SELECT 1 FROM folders LIMIT 1")
+    return cursor.fetchone() is not None
 
 def get_all_folders(conn):
     cursor = conn.execute("SELECT id, path, status, added_at FROM folders")

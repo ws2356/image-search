@@ -1,9 +1,10 @@
 import json
 import logging
 from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.bm_context import get_context
 
 def get_config() -> dict:
-    config_path = get_app_data_path() / "config.json"
+    config_path = get_app_data_path(get_context()) / "config.json"
     if config_path.exists():
         with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)

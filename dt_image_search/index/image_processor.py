@@ -5,8 +5,8 @@ import torch
 import open_clip
 from PIL import Image, ImageFile
 from dt_image_search.index.dts_model_downloader import get_pretrained_model
+from dt_image_search.index.incremental_index_worker import BMContext
 from dt_image_search.telemetry.telemetry_client import log
-from dt_image_search.index.bm_model_spec import model_name
 
 # Allow loading of truncated images
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -14,12 +14,12 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 # Global worker state (loaded once per worker process)
 _worker_preprocess = None
 
-def _initialize_worker():
+def _initialize_worker(ctx: BMContext):
     """Initialize worker process with preloaded model"""
     global _worker_preprocess
     
     # Load model once per worker process
-    _, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=get_pretrained_model())
+    _, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=get_pretrained_model(ctx))
     _worker_preprocess = preprocess
 
 def process_image_batch_persistent(files):

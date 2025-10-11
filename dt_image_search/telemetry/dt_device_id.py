@@ -1,6 +1,7 @@
 import uuid
 import threading
 from dt_image_search.model.dts_fs import get_app_data_path
+from dt_image_search.bm_context import get_context
 
 _cached_device_id = None
 _device_id_lock = threading.Lock()
@@ -18,7 +19,7 @@ def get_device_id():
         if _cached_device_id is not None:
             return _cached_device_id
 
-        device_id_file = get_app_data_path() / "device_id.txt"
+        device_id_file = get_app_data_path(get_context()) / "device_id.txt"
         
         if not device_id_file.exists():
             # Generate a new UUID and save it
