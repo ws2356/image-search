@@ -19,8 +19,12 @@ def _initialize_worker(ctx: BMContext):
     global _worker_preprocess
     
     # Load model once per worker process
-    _, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=get_pretrained_model(ctx))
-    _worker_preprocess = preprocess
+    try:
+        _, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=get_pretrained_model(ctx))
+        _worker_preprocess = preprocess
+    except Exception as e:
+        log("error", message=f"Error initializing model in worker: {e}")
+        _worker_preprocess = None
 
 def process_image_batch_persistent(files):
     """Process a batch of images using the persistent worker's preloaded components"""

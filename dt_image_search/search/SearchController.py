@@ -69,7 +69,7 @@ class SearchController(BaseController):
     
     @profile
     def _search_in_folder(self, folder: Folder, query: str):
-        log("info", message=f"Searching in folder: {folder.path} with query: {query}")
+        log("info", message=f"Searching in folder: {folder.path}")
         # Implement the search logic here
         # This could involve querying a database or filtering files in the folder
         index_path = index_path_for_folder(ctx=self.ctx, folder=folder)
