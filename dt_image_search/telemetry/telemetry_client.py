@@ -2,6 +2,7 @@ from functools import wraps
 import logging
 import os
 import sys
+import threading
 from urllib.parse import urlparse
 
 # Ensure nuitka include this module which would otherwise be loaded dynamically
@@ -101,7 +102,19 @@ devnull = open(os.devnull, 'w')
 sys.stdout = devnull
 sys.stderr = devnull
 
+_logger = None
+_lock = threading.Lock()
 def log(severity: str, error_type: str = "", message: str = "", where: str = ""):
+    # Lazy init logger to prevent circular import issues
+    global _logger
+    with _lock:
+        if _logger is None:
+            # Setup logger only once
+            logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
+            logging_handler.addFilter(OtelLogFilter())
+            logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
+            _logger = logging.getLogger(_image_search_client)
+
     if severity not in ["debug", "info", "warning", "error"]:
         raise ValueError(f"Invalid log severity: {severity}")
     log_function = getattr(_logger, severity, _logger.info)
@@ -135,8 +148,3 @@ def flush_telemetry():
     # Flush metrics
     for reader in metric_readers:
         reader.force_flush()
-
-logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
-logging_handler.addFilter(OtelLogFilter())
-logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
-_logger = logging.getLogger(_image_search_client)

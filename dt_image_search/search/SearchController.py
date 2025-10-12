@@ -73,4 +73,4 @@ class SearchController(BaseController):
         if not Path(index_path).exists():
             log("warning", "search", message=f"Index file does not exist for folder: {folder.path}")
             return []
-        return query_index(ctx=self.ctx, folder_id=folder.id, index_path=index_path, query=query)
+        return query_index(ctx=self.ctx, folder_id=folder.id, index_path=index_path, query_text=query)

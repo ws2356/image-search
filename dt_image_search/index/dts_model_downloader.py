@@ -3,10 +3,9 @@ import os
 import requests
 import threading
 import datetime
-from dt_image_search.model.dts_db import log
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.model.dts_config import get_override_model_path
-from dt_image_search.telemetry.telemetry_client import with_trace
+from dt_image_search.telemetry.telemetry_client import with_trace, log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.tools.bm_sys import is_cn
 from dt_image_search.bm_context import BMContext, get_context
@@ -109,7 +108,6 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
 if is_cn():
     threading.Thread(target=_download_pretrained_model).start()
 else:
-    log("debug", message="Not in CN region, skipping model download")
     model_downloaded_event.set()  # Skip download in non-CN regions
 
 def _check_md5(file_path, expected_md5):

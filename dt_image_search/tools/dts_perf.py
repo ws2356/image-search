@@ -1,9 +1,8 @@
 import time
-from dt_image_search.dts_logging import logging
-from dt_image_search.telemetry.telemetry_client import log
 
 def perffunc(func):
     def wrapper(*args, **kwargs):
+        from dt_image_search.telemetry.telemetry_client import log
         start = time.perf_counter()
         result = func(*args, **kwargs)
         duration = time.perf_counter() - start
