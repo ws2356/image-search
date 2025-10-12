@@ -40,7 +40,7 @@ class SearchController(BaseController):
         if not value:
             self.imageListModel.on_detach()
 
-    @debounce(3)  # Debounce search queries to avoid excessive calls
+    @debounce(1)  # Debounce search queries to avoid excessive calls
     @profile
     def on_search_query(self, query: str):
         if not self.is_active:
