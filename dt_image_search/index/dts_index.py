@@ -20,7 +20,6 @@ from dt_image_search.base.status_bar_messenger import status_bar_messenger
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit
-from dt_image_search.index.bm_model_spec import model_name
 from dt_image_search.index.image_processor import _initialize_worker, process_image_batch_persistent
 from dt_image_search.bm_context import BMContext
 
@@ -359,12 +358,24 @@ def _preload_model(ctx: BMContext):
             status_bar_messenger.show_status_message.emit("Model init...")
             torch.set_grad_enabled(False)
             log("info", message=f"Attempt {_attempt + 1} before loading model")
-            model, _, preprocess = open_clip.create_model_and_transforms(model_name, pretrained=pretrained)
+
+            model_cfg = open_clip.get_model_config(ctx.model_name)
+            text_cfg = model_cfg.get("text_cfg", {})
+            text_model_location = r'C:\Users\wanso\.cache\huggingface\hub\models--xlm-roberta-base\snapshots\e73636d4f797dec63c3081bb6ed5c7b0bb3f2089'
+            _cache_dir = r'C:\Users\wanso\.cache\huggingface\hub'
+            text_cfg['hf_model_name'] = text_model_location
+
+            model, _, preprocess = open_clip.create_model_and_transforms(
+                ctx.model_name,
+                pretrained=ctx.pretrained_model,
+                # text_cfg=text_cfg,
+                # cache_dir=_cache_dir
+                )
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
             status_bar_messenger.show_status_message.emit("Model downloaded")
 
             _preprocess = preprocess
-            _tokenizer = open_clip.get_tokenizer(model_name)
+            _tokenizer = open_clip.get_tokenizer(ctx.model_name)
             log("info", message=f"Attempt {_attempt + 1} tokenizer init")
 
             _model = model.to(_device).eval()

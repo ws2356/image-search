@@ -20,8 +20,7 @@ def get_pretrained_model(ctx: BMContext) -> str:
         return override_model_path
     if is_cn() and os.path.exists(_get_local_pretrained_model_path(ctx=ctx)):
         return _get_local_pretrained_model_path(ctx=ctx)
-    from dt_image_search.index.bm_model_spec import pretrained_model
-    return pretrained_model
+    return ctx.pretrained_model
 
 
 def _get_local_pretrained_model_path(ctx: BMContext):
@@ -33,6 +32,8 @@ _md5_hash = '2fc036aea9cd7306f5ce7ce6abb8d0bf'
 _pretrained_model_url = "https://imagesearch.boldman.net/open_clip_pytorch_model.bin"
 @with_trace("Model.Download")
 def _download_pretrained_model():
+    model_downloaded_event.set()
+    return
     ctx = get_context()
     # Download from `_pretrained_model_url` to file location `_get_local_pretrained_model_path`
     try:

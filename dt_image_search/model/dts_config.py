@@ -1,7 +1,7 @@
 import json
 import logging
 from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.bm_context import get_context
+from dt_image_search.bm_context import get_context, BMContext
 
 def get_config() -> dict:
     config_path = get_app_data_path(get_context()) / "config.json"
@@ -22,3 +22,6 @@ def get_override_model_path() -> str:
 def get_debugpy_port() -> int:
     config = get_config()
     return config.get("debugpy_port", 0)
+
+def get_model_cache_dir(ctx: BMContext) -> str:
+    return str(get_app_data_path(ctx=ctx) / "model_cache")

@@ -20,7 +20,7 @@ def _initialize_worker(ctx: BMContext):
     
     # Load model once per worker process
     try:
-        _, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=get_pretrained_model(ctx))
+        _model, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=get_pretrained_model(ctx))
         _worker_preprocess = preprocess
     except Exception as e:
         log("error", message=f"Error initializing model in worker: {e}")

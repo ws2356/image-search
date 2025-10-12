@@ -2,6 +2,7 @@ import os
 import sys
 import threading
 
+
 # Add the parent directory of this file (i.e. the one that contains dt_image_search/)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
@@ -13,13 +14,19 @@ from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize, QUrl
 QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
 
+from dt_image_search.bm_context import get_context, BMContext
+ctx = get_context()
+os.environ['HF_HUB_OFFLINE'] = '1'
+
+from dt_image_search.model.dts_config import get_model_cache_dir
+os.environ['HUGGINGFACE_HUB_CACHE'] = get_model_cache_dir(ctx=ctx)
+
 from PySide6.QtGui import QDesktopServices
 import subprocess
 
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
-from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
 from dt_image_search.tools.dts_util import normalized_folder_path
@@ -27,7 +34,7 @@ from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
 from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers
-from dt_image_search.bm_context import get_context, BMContext
+from dt_image_search.index.dts_index import init as index_init
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -262,7 +269,6 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     startup_counter.add(1)
-    ctx = get_context()
 
     index_init(ctx)  # Initialize the index system
     init_incremental_index_workers(ctx)  # Initialize incremental index workers
