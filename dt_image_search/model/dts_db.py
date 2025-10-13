@@ -8,17 +8,14 @@ def set_config(conn, key: str, value: str):
     """Write a config value to app_config table. Overwrites if exists."""
     conn.execute("INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
     conn.commit()
-import logging
+
 import sqlite3
 import threading
-from PySide6.QtCore import QStandardPaths, QDir
-from pathlib import Path
 from importlib.resources import files
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.tools.dts_perf import perffunc
-from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dt_is_debug import is_debug
 from dt_image_search.bm_context import BMContext
 

@@ -25,10 +25,8 @@ class BMContext:
         self.cache_file_md5 = cache_file_md5
 
     def get_pretrained_model_name_or_path(self) -> str:
-        from dt_image_search.model.dts_fs import get_app_data_path
-        _ret = os.path.join(get_app_data_path(ctx=self), "open_clip_pytorch_model.bin")
-        if self.version == 1 and is_cn() and os.path.exists(_ret):
-            return _ret
+        if self.version == 1 and self.is_local_cache_valid():
+            return self.get_model_cache_path()
         else:
             return self.pretrained_model
 
@@ -109,8 +107,13 @@ def get_context():
         with _lock:
             if _bm_context is None:
                 from dt_image_search.model.dts_db import create_db_conn, has_any_folder
+                _existing_model_version = _get_existing_model_version()
+                if _existing_model_version == 1:
+                    _bm_context = _v1
+                elif _existing_model_version == 2:
+                    _bm_context = _v2
+                elif not is_cn():
                 # For non-cn users, always use v1 context for better model performance, until later we support model switching.
-                if not is_cn():
                     _bm_context = _v1
                 else:
                     with create_db_conn(_v1) as conn:
@@ -119,4 +122,23 @@ def get_context():
                             _bm_context = _v1
                         else:
                             _bm_context = _v2
+                if _get_existing_model_version() is None:
+                    _set_existing_model_version(_bm_context.version)
     return _bm_context
+
+def _get_existing_model_version() -> int | None:
+    from dt_image_search.model.dts_db import create_db_conn, get_config
+    with create_db_conn(_v1) as conn:
+        version_str = get_config(conn, "model_version")
+        if version_str is not None:
+            try:
+                return int(version_str)
+            except:
+                return None
+        else:
+            return None
+
+def _set_existing_model_version(version: int):
+    from dt_image_search.model.dts_db import create_db_conn, set_config
+    with create_db_conn(_v1) as conn:
+        set_config(conn, "model_version", str(version))
