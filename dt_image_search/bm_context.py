@@ -3,11 +3,18 @@ import dt_image_search.index.bm_model_spec as bm_model_spec
 from dt_image_search.tools.bm_sys import is_cn
 
 class BMContext:
-    def __init__(self, subfolder: str, model_name: str, pretrained_model: str, model_download_url: str):
+    def __init__(self,
+                 subfolder: str,
+                 model_name: str,
+                 pretrained_model: str,
+                 model_download_url: str,
+                 offline_mode: bool
+                 ):
         self.subfolder = subfolder
         self.model_name = model_name
         self.pretrained_model = pretrained_model
         self.model_download_url = model_download_url
+        self.offline_mode = offline_mode
 
 _lock = threading.Lock()
 _bm_context = None
@@ -16,12 +23,14 @@ _v1 = BMContext(
     subfolder="",
     model_name=bm_model_spec.model_name,
     pretrained_model=bm_model_spec.pretrained_model,
-    model_download_url="https://imagesearch.boldman.net/open_clip_pytorch_model.bin")
+    model_download_url="https://imagesearch.boldman.net/open_clip_pytorch_model.bin",
+    offline_mode=False)
 _v2 = BMContext(
     subfolder="v2",
     model_name=bm_model_spec.model_name2,
     pretrained_model=bm_model_spec.pretrained_model2,
-    model_download_url="https://imagesearch.boldman.net/model/v2")
+    model_download_url="https://imagesearch.boldman.net/model/v2",
+    offline_mode=True)
 
 def get_context():
     global _bm_context

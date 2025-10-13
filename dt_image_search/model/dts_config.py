@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.bm_context import get_context, BMContext
 
@@ -23,5 +24,13 @@ def get_debugpy_port() -> int:
     config = get_config()
     return config.get("debugpy_port", 0)
 
-def get_model_cache_dir(ctx: BMContext) -> str:
-    return str(get_app_data_path(ctx=ctx) / "model_cache")
+def _get_model_cache_dir(ctx: BMContext) -> str:
+    if ctx.offline_mode:
+        return str(get_app_data_path(ctx=ctx) / "model_cache")
+    else:
+        return ""
+
+def setup_model_cache(ctx: BMContext):
+    if ctx.offline_mode:
+        os.environ['HF_HUB_OFFLINE'] = '1'
+        os.environ['HUGGINGFACE_HUB_CACHE'] = _get_model_cache_dir(ctx=ctx)

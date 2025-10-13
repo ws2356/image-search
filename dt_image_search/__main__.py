@@ -16,10 +16,9 @@ QCoreApplication.setApplicationName("imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
 ctx = get_context()
-os.environ['HF_HUB_OFFLINE'] = '1'
 
-from dt_image_search.model.dts_config import get_model_cache_dir
-os.environ['HUGGINGFACE_HUB_CACHE'] = get_model_cache_dir(ctx=ctx)
+from dt_image_search.model.dts_config import setup_model_cache
+setup_model_cache(ctx=ctx)
 
 from PySide6.QtGui import QDesktopServices
 import subprocess
