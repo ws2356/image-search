@@ -3,7 +3,6 @@ from pathlib import Path
 import requests
 import threading
 import datetime
-from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.telemetry.telemetry_client import with_trace, log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.tools.bm_sys import is_cn
@@ -28,18 +27,9 @@ def _download_pretrained_model(ctx: BMContext):
         except:
             log("error", message=f"Failed to remove tmp file: {tmp_path}")
 
-        final_path_ = Path(ctx.get_model_cache_path())
-        try:
-            if final_path_.is_dir():
-                import shutil
-                shutil.rmtree(str(final_path_))
-            else:
-                final_path_.unlink(missing_ok=True)
-        except:
-            log("error", message=f"Failed to remove final cache path: {final_path_}")
+        _cleanup_partial_download(ctx)
 
         status_bar_messenger.show_status_message.emit("Downloading model...")
-
         for _ in range(3):
             try:
                 _download_with_progress(ctx.model_download_url, tmp_path)
@@ -56,8 +46,20 @@ def _download_pretrained_model(ctx: BMContext):
     except Exception as e:
         log("error", message=f"Failed to download pretrained model: {e}")
         status_bar_messenger.show_status_message.emit("Model download failed")
+        _cleanup_partial_download(ctx)
     finally:
         model_downloaded_event.set()
+
+def _cleanup_partial_download(ctx: BMContext):
+    final_path_ = Path(ctx.get_model_cache_path())
+    try:
+        if final_path_.is_dir():
+            import shutil
+            shutil.rmtree(str(final_path_))
+        else:
+            final_path_.unlink(missing_ok=True)
+    except:
+        log("error", message=f"Failed to remove final cache path: {final_path_}")
 
 def _download_with_progress(url, dest_path, chunk_size=4096):
     downloaded = 0
