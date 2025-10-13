@@ -15,9 +15,8 @@ QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
-ctx = get_context()
-
 from dt_image_search.model.dts_config import setup_model_cache
+ctx = get_context()
 setup_model_cache(ctx=ctx)
 
 from PySide6.QtGui import QDesktopServices
@@ -34,6 +33,7 @@ from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilt
 from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers
 from dt_image_search.index.dts_index import init as index_init
+from dt_image_search.index.dts_model_downloader import init as model_downloader_init
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
 
@@ -269,6 +269,7 @@ if __name__ == '__main__':
 
     startup_counter.add(1)
 
+    model_downloader_init(ctx)  # Start model downloader if needed
     index_init(ctx)  # Initialize the index system
     init_incremental_index_workers(ctx)  # Initialize incremental index workers
     resume_index_workers(ctx)  # Resume workers to continue indexing after app start

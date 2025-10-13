@@ -106,10 +106,11 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
                 status_bar_messenger.show_status_message.emit(f"Downloading model... {percent:.1f}%")
                 log("debug", message=f"Download progress: {percent:.1f}%")
 
-if is_cn():
-    threading.Thread(target=_download_pretrained_model).start()
-else:
-    model_downloaded_event.set()  # Skip download in non-CN regions
+def init(ctx: BMContext):
+    if is_cn():
+        threading.Thread(target=_download_pretrained_model).start()
+    else:
+        model_downloaded_event.set()  # Skip download in non-CN regions
 
 def _check_md5(file_path, expected_md5):
     """Return True if file's md5 matches expected_md5, else False."""
