@@ -1,36 +1,107 @@
+import hashlib
+import os
+from pathlib import Path
 import threading
+import zipfile
 import dt_image_search.index.bm_model_spec as bm_model_spec
 from dt_image_search.tools.bm_sys import is_cn
 
 class BMContext:
     def __init__(self,
+                 version: int,
                  subfolder: str,
                  model_name: str,
                  pretrained_model: str,
                  model_download_url: str,
-                 offline_mode: bool
+                 offline_mode: bool,
+                 cache_file_md5: str
                  ):
+        self.version = version
         self.subfolder = subfolder
         self.model_name = model_name
         self.pretrained_model = pretrained_model
         self.model_download_url = model_download_url
         self.offline_mode = offline_mode
+        self.cache_file_md5 = cache_file_md5
+
+    def get_pretrained_model_name_or_path(self) -> str:
+        from dt_image_search.model.dts_fs import get_app_data_path
+        _ret = os.path.join(get_app_data_path(ctx=self), "open_clip_pytorch_model.bin")
+        if self.version == 1 and is_cn() and os.path.exists(_ret):
+            return _ret
+        else:
+            return self.pretrained_model
+
+    def get_model_cache_path(self) -> str:
+        from dt_image_search.model.dts_fs import get_app_data_path
+        if self.version == 2:
+            return str(get_app_data_path(ctx=self) / "model_cache")
+        elif self.version == 1:
+            return os.path.join(get_app_data_path(ctx=self), "open_clip_pytorch_model.bin")
+        else:
+            raise ValueError("Unknown BMContext")
+
+    def is_local_cache_valid(self) -> bool:
+        if self.version == 1:
+            return os.path.exists(self.get_model_cache_path()) and _check_md5(self.get_model_cache_path(), self.cache_file_md5)
+        elif self.version == 2:
+            return os.path.exists(self.get_model_cache_path()) and os.path.isdir(self.get_model_cache_path())
+        else:
+            raise ValueError("Unknown BMContext")
+
+    def is_downloaded_file_valid(self, file_path) -> bool:
+        return _check_md5(file_path, self.cache_file_md5)
+
+    def process_downloaded_file(self, tmp_file_path):
+        if self.version == 1:
+            final_path = self.get_model_cache_path()
+            os.rename(tmp_file_path, final_path)
+        elif self.version == 2:
+            final_path = self.get_model_cache_path()
+            Path(final_path).mkdir(parents=True, exist_ok=True)
+            # unzip tmp_file_path to final_path
+            import zipfile
+            with zipfile.ZipFile(tmp_file_path, 'r') as zip_ref:
+                zip_ref.extractall(final_path)
+            os.remove(tmp_file_path)
+        else:
+            raise ValueError("Unknown BMContext")
+
+def _check_md5(file_path, expected_md5):
+    """Return True if file's md5 matches expected_md5, else False."""
+    if not os.path.exists(file_path):
+        return False
+    hash_md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest() == expected_md5
+    except Exception as e:
+        from dt_image_search.telemetry.telemetry_client import log
+        log("error", message=f"MD5 check failed for {file_path}: {e}")
+        return False
 
 _lock = threading.Lock()
 _bm_context = None
 
 _v1 = BMContext(
+    version=1,
     subfolder="",
     model_name=bm_model_spec.model_name,
     pretrained_model=bm_model_spec.pretrained_model,
     model_download_url="https://imagesearch.boldman.net/open_clip_pytorch_model.bin",
-    offline_mode=False)
+    offline_mode=False,
+    cache_file_md5='2fc036aea9cd7306f5ce7ce6abb8d0bf')
+
 _v2 = BMContext(
+    version=2,
     subfolder="v2",
     model_name=bm_model_spec.model_name2,
     pretrained_model=bm_model_spec.pretrained_model2,
-    model_download_url="https://imagesearch.boldman.net/model/v2",
-    offline_mode=True)
+    model_download_url="https://imagesearch.boldman.net/models/v2.zip",
+    offline_mode=True,
+    cache_file_md5='92fb01a4fd9ce5e2fb82644aadc81b34')
 
 def get_context():
     global _bm_context

@@ -16,21 +16,11 @@ def get_log_level() -> int:
     level_str = config.get("log_level", "INFO")
     return getattr(logging, level_str.upper(), logging.INFO)
 
-def get_override_model_path() -> str:
-    config = get_config()
-    return config.get("override_model_path", "")
-
 def get_debugpy_port() -> int:
     config = get_config()
     return config.get("debugpy_port", 0)
 
-def _get_model_cache_dir(ctx: BMContext) -> str:
-    if ctx.offline_mode:
-        return str(get_app_data_path(ctx=ctx) / "model_cache")
-    else:
-        return ""
-
 def setup_model_cache(ctx: BMContext):
     if ctx.offline_mode:
         os.environ['HF_HUB_OFFLINE'] = '1'
-        os.environ['HUGGINGFACE_HUB_CACHE'] = _get_model_cache_dir(ctx=ctx)
+        os.environ['HUGGINGFACE_HUB_CACHE'] = ctx.get_model_cache_path()

@@ -4,7 +4,6 @@ Separate module for image processing workers to avoid GUI import issues.
 import torch
 import open_clip
 from PIL import Image, ImageFile
-from dt_image_search.index.dts_model_downloader import get_pretrained_model
 from dt_image_search.bm_context import BMContext
 from dt_image_search.telemetry.telemetry_client import log
 
@@ -20,7 +19,7 @@ def _initialize_worker(ctx: BMContext):
     
     # Load model once per worker process
     try:
-        _model, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=get_pretrained_model(ctx))
+        _model, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=ctx.get_pretrained_model_name_or_path())
         _worker_preprocess = preprocess
     except Exception as e:
         log("error", message=f"Error initializing model in worker: {e}")

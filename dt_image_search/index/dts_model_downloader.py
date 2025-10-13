@@ -1,72 +1,56 @@
-import hashlib
 import os
+from pathlib import Path
 import requests
 import threading
 import datetime
 from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.model.dts_config import get_override_model_path
 from dt_image_search.telemetry.telemetry_client import with_trace, log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.tools.bm_sys import is_cn
-from dt_image_search.bm_context import BMContext, get_context
+from dt_image_search.bm_context import BMContext
 
-# When model_downloaded_event is set, the `_get_local_pretrained_model_path()` either exists because download success or skipped due to previous download,
-# or not exists because download fails. In latter case, fallback to pretrained model name, so that open_clip would download the model from huggingface
 model_downloaded_event = threading.Event()
 
-def get_pretrained_model(ctx: BMContext) -> str:
-    override_model_path = get_override_model_path()
-    if override_model_path:
-        return override_model_path
-    if is_cn() and os.path.exists(_get_local_pretrained_model_path(ctx=ctx)):
-        return _get_local_pretrained_model_path(ctx=ctx)
-    return ctx.pretrained_model
-
-
-def _get_local_pretrained_model_path(ctx: BMContext):
-    return os.path.join(get_app_data_path(ctx=ctx), "open_clip_pytorch_model.bin")
-
-_md5_hash = '2fc036aea9cd7306f5ce7ce6abb8d0bf'
-# _pretrained_model_url = "https://imagesearch.wansong.vip/open_clip_pytorch_model.bin"
-# _pretrained_model_url = "http://192.168.50.10/open_clip_pytorch_model.bin"
-_pretrained_model_url = "https://imagesearch.boldman.net/open_clip_pytorch_model.bin"
 @with_trace("Model.Download")
-def _download_pretrained_model():
-    model_downloaded_event.set()
-    return
-    ctx = get_context()
-    # Download from `_pretrained_model_url` to file location `_get_local_pretrained_model_path`
+def _download_pretrained_model(ctx: BMContext):
     try:
         # file exists and md5 matches, skip download
-        if os.path.exists(_get_local_pretrained_model_path(ctx=ctx)) and _check_md5(_get_local_pretrained_model_path(ctx=ctx), _md5_hash):
-            log("debug", message=f"Model already exists at: {_get_local_pretrained_model_path(ctx=ctx)}")
+        if ctx.is_local_cache_valid():
+            log("debug", message=f"Model already exists at: {ctx.get_model_cache_path()}")
             return
 
         log("info", message="Start downloading pretrained model")
-        tmp_path = f"{_get_local_pretrained_model_path(ctx=ctx)}.tmp"
+        tmp_path = f"{ctx.get_model_cache_path()}.tmp"
 
         try:
-            os.remove(tmp_path)
+            tmp_path_ = Path(tmp_path)
+            tmp_path_.unlink(missing_ok=True)
         except:
-            pass
+            log("error", message=f"Failed to remove tmp file: {tmp_path}")
+
+        final_path_ = Path(ctx.get_model_cache_path())
         try:
-            os.remove(_get_local_pretrained_model_path(ctx=ctx))
+            if final_path_.is_dir():
+                import shutil
+                shutil.rmtree(str(final_path_))
+            else:
+                final_path_.unlink(missing_ok=True)
         except:
-            pass
+            log("error", message=f"Failed to remove final cache path: {final_path_}")
 
         status_bar_messenger.show_status_message.emit("Downloading model...")
 
         for _ in range(3):
             try:
-                _download_with_progress(_pretrained_model_url, tmp_path)
-                if _check_md5(tmp_path, _md5_hash):
+                _download_with_progress(ctx.model_download_url, tmp_path)
+                if ctx.is_downloaded_file_valid(tmp_path):
                     break
                 os.remove(tmp_path)
                 log("error", message=f"Pretrained model checksum failed")
             except Exception as e:
                 log("error", message=f"Pretrained model download failed: {e}")
 
-        os.rename(tmp_path, _get_local_pretrained_model_path(ctx=ctx))
+        ctx.process_downloaded_file(tmp_path)
         log("info", message="Succeeded downloading pretrained model")
         status_bar_messenger.show_status_message.emit("Model downloaded")
     except Exception as e:
@@ -108,20 +92,6 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
 
 def init(ctx: BMContext):
     if is_cn():
-        threading.Thread(target=_download_pretrained_model).start()
+        threading.Thread(target=_download_pretrained_model, args=(ctx,)).start()
     else:
         model_downloaded_event.set()  # Skip download in non-CN regions
-
-def _check_md5(file_path, expected_md5):
-    """Return True if file's md5 matches expected_md5, else False."""
-    if not os.path.exists(file_path):
-        return False
-    hash_md5 = hashlib.md5()
-    try:
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                hash_md5.update(chunk)
-        return hash_md5.hexdigest() == expected_md5
-    except Exception as e:
-        log("error", message=f"MD5 check failed for {file_path}: {e}")
-        return False
