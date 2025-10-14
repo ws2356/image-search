@@ -163,7 +163,7 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
                 torch.set_grad_enabled(False)
                 with torch.inference_mode():
                     # Move to GPU and process with model (this stays in main process)
-                    log("info", message=f"Getting features from batch {i}")
+                    # log("info", message=f"Getting features from batch {i}")
                     batch_tensor = batch_tensor.to(_device)
                     features = model.encode_image(batch_tensor)
                     features = features / features.norm(dim=-1, keepdim=True)

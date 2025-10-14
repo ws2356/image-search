@@ -30,7 +30,7 @@ from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
-from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch
+from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch, remove_folder
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init

@@ -18,7 +18,7 @@ def start_watch(ctx: BMContext):
         log("debug", message="File system watcher started.")
     with create_db_conn(ctx=ctx) as conn:
         for folder in get_all_folders(conn):
-            add_path(folder.path)
+            _add_path(folder.path)
 
 def stop_watch():
     global _watcher
@@ -28,7 +28,7 @@ def stop_watch():
         _watcher = None
         log("debug", message="File system watcher stopped.")
 
-def add_path(path: str):
+def _add_path(path: str):
     global _watcher
     if _watcher is None:
         log("warning", message="File system watcher is not started.")
@@ -46,7 +46,30 @@ def add_path(path: str):
     for child in os.listdir(path):
         child_path = os.path.join(path, child)
         if os.path.isdir(child_path):
-            add_path(child_path)
+            _add_path(child_path)
+
+def add_folder(path: str):
+    _add_path(path)
+
+def remove_folder(path: str):
+    _remove_path_recursively(path)
+
+def _remove_path_recursively(path: str):
+    global _watcher
+    if _watcher is None:
+        log("warning", message="File system watcher is not started.")
+        return
+
+    try:
+        _watcher.removePath(path)
+        log("debug", message=f"Stopped watching directory: {path}")
+    except Exception as e:
+        log("error", message=f"Failed to remove path from watcher: {e}")
+    # enumerate directory contents in path and recursively remove subdirectories
+    for child in os.listdir(path):
+        child_path = os.path.join(path, child)
+        if os.path.isdir(child_path):
+            _remove_path_recursively(child_path)
 
 def _on_directory_changed(path):
     log("debug", message=f"Directory changed: {path}")

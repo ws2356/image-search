@@ -9,10 +9,9 @@ from dt_image_search.browse.folder_list_model import FolderListModel
 from dt_image_search.model.dts_db import create_db_conn, insert_folder, match_parent_folder, get_all_folders, get_subfolders
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
-from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
-from dt_image_search.fs.bm_fs_monitor import add_path
+from dt_image_search.fs.bm_fs_monitor import add_folder, remove_folder
 from dt_image_search.bm_context import BMContext
 
 class BrowseController(BaseController):
@@ -48,7 +47,7 @@ class BrowseController(BaseController):
                 return
             log("info", message=f"Inserted folder with ID: {folder.id}")
             add_index_worker(ctx=self.ctx, folder=folder, replace_existing=True)
-            add_path(folder.path)
+            add_folder(folder.path)
         self._reload_folders()
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
@@ -65,6 +64,7 @@ class BrowseController(BaseController):
         index = self.folder_list_model().indexFromItem(item)
         self.folder_list_model().deleteFolder(index)
         delete_folder(ctx=self.ctx, folder_path=data)
+        remove_folder(data)
 
     def _init_folders(self):
         _root_folders = self._load_folders()
