@@ -95,7 +95,7 @@ class IndexWorker:
                     with create_db_conn(ctx=self.ctx) as conn:
                         folder = get_folder_by_path(conn, self.folder.path)
                         # Only recur if the previous folder was completed to avoid infinite loops
-                        if folder.status == 2:
+                        if folder is None or folder.status == 2:
                             resume_index_workers(self.ctx)
 
 def add_index_worker(ctx: BMContext, folder: Folder, replace_existing: bool = False) -> IndexWorker:

@@ -9,7 +9,6 @@ from dt_image_search.index.dts_index import (
     append_to_index)
 from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_direct_child_files, mark_files_deleted, match_parent_folder
 from dt_image_search.telemetry.telemetry_client import log
-from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus

@@ -7,6 +7,7 @@ from dt_image_search.model.dts_db import get_all_folders
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.tools.dts_event_bus import default_bus
 from dt_image_search.bm_context import BMContext
+from dt_image_search.tools.dts_util import normalized_folder_path
 
 _watcher: QFileSystemWatcher | None = None
 
@@ -37,7 +38,7 @@ def _add_path(path: str):
         log("warning", message=f"Path does not exist: {path}")
         return
     try:
-      _watcher.addPath(path)
+      _watcher.addPath(_normalized_folder_path(path))
       log("debug", message=f"Watching directory: {path}")
     except Exception as e:
         log("error", message=f"Failed to add path to watcher: {e}")
@@ -61,7 +62,7 @@ def _remove_path_recursively(path: str):
         return
 
     try:
-        _watcher.removePath(path)
+        _watcher.removePath(_normalized_folder_path(path))
         log("debug", message=f"Stopped watching directory: {path}")
     except Exception as e:
         log("error", message=f"Failed to remove path from watcher: {e}")
@@ -74,3 +75,6 @@ def _remove_path_recursively(path: str):
 def _on_directory_changed(path):
     log("debug", message=f"Directory changed: {path}")
     default_bus.publish("directory_changed", path=path)
+
+def _normalized_folder_path(path: str) -> str:
+    return normalized_folder_path(path.replace("\\", "/"))
