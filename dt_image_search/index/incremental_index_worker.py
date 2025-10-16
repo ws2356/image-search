@@ -116,15 +116,31 @@ def _try_activate_workers():
         for worker in idle_workers[:_max_activate - len(active_workers)]:
             worker.run()
 
+def _on_created(ctx: BMContext, event):
+    if event.is_directory:
+        return
+    parent_folder = match_parent_folder(create_db_conn(ctx=ctx), event.src_path)
+    if not parent_folder:
+        return
+    _add_incremental_index_worker(ctx, parent_folder.path, [event.src_path])
+
+def _handle_file_created(ctx: BMContext, parent_directory: str, files: list[str]):
+    if not files:
+        return
+    parent_folder = match_parent_folder(create_db_conn(ctx=ctx), parent_directory)
+    if not parent_folder:
+        return
+    _add_incremental_index_worker(ctx, parent_folder.path, files)
+
 def init_incremental_index_workers(ctx: BMContext):
-    def _on_directory_changed(path):
-        if not os.path.isdir(path):
-            log("warning", message=f"Path does not exist: {path}")
-            return
-        child_files = []
-        for child in os.listdir(path):
-            child_path = os.path.join(path, child)
-            if os.path.isfile(child_path):
-                child_files.append(child_path)
+    def _on_directory_changed(event):
+        # if not os.path.isdir(path):
+        #     log("warning", message=f"Path does not exist: {path}")
+        #     return
+        # child_files = []
+        # for child in os.listdir(path):
+        #     child_path = os.path.join(path, child)
+        #     if os.path.isfile(child_path):
+        #         child_files.append(child_path)
         _add_incremental_index_worker(ctx, path, child_files)
-    default_bus.subscribe("directory_changed", _on_directory_changed)
+    default_bus.subscribe("fs_changed", _on_directory_changed)

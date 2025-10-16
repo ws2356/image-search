@@ -1,7 +1,7 @@
-import os
+import watchdog
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
-from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, Signal
 from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
@@ -9,6 +9,7 @@ from dt_image_search.browse.folder_list_model import FolderListModel
 from dt_image_search.model.dts_db import create_db_conn, insert_folder, match_parent_folder, get_all_folders, get_subfolders
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
+from dt_image_search.tools.dts_debounce import debounce
 from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.fs.bm_fs_monitor import add_folder, remove_folder
@@ -22,8 +23,10 @@ class BrowseController(BaseController):
         self.imageListModel = None
         self._init_folders()
         self._fs_changed = False
+        self._fs_changed_signal = Signal(watchdog.events.FileSystemEvent)
+        self._fs_changed_signal.connect(self._on_notify_folder_changed_main_thread)
         from dt_image_search.tools.dts_event_bus import default_bus
-        default_bus.subscribe("directory_changed", self._on_notify_folder_changed)
+        default_bus.subscribe("fs_changed", self._on_notify_folder_changed)
         self._selected_folder_path = ''
 
     def folder_list_model(self) -> QAbstractItemModel:
@@ -92,10 +95,16 @@ class BrowseController(BaseController):
         model = FolderTreeModel()
         return model
     
-    def _on_notify_folder_changed(self, path: str):
-        log("info", message=f"Folder changed notification received for: {path}")
+    @debounce(3)  # Debounce search queries to avoid excessive calls
+    def _on_notify_folder_changed(self, event):
+        self._fs_changed_signal.emit(event)
+
+    def _on_notify_folder_changed_main_thread(self, event):
+        log("info", message=f"Folder changed notification received")
         if self.is_active:
-            self._folder_change_impl(updated_path=path)
+            self._folder_change_impl(updated_path=event.src_path)
+            if event.event_type == 'moved':
+                self._folder_change_impl(updated_path=event.dest_path)
         else:
             self._fs_changed = True
     
