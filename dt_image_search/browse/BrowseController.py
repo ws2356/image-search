@@ -1,7 +1,7 @@
 import watchdog
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
-from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, Signal
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, Signal, QObject
 from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
@@ -16,6 +16,9 @@ from dt_image_search.fs.bm_fs_monitor import add_folder, remove_folder
 from dt_image_search.bm_context import BMContext
 
 class BrowseController(BaseController):
+    class FSChangedSignal(QObject):
+        signal = Signal(watchdog.events.FileSystemEvent)
+
     def __init__(self, ctx: BMContext):
         super().__init__()
         self.folderListModel = None
@@ -23,8 +26,8 @@ class BrowseController(BaseController):
         self.imageListModel = None
         self._init_folders()
         self._fs_changed = False
-        self._fs_changed_signal = Signal(watchdog.events.FileSystemEvent)
-        self._fs_changed_signal.connect(self._on_notify_folder_changed_main_thread)
+        self._fs_changed_signal = self.FSChangedSignal()
+        self._fs_changed_signal.signal.connect(self._on_notify_folder_changed_main_thread)
         from dt_image_search.tools.dts_event_bus import default_bus
         default_bus.subscribe("fs_changed", self._on_notify_folder_changed)
         self._selected_folder_path = ''
@@ -97,7 +100,7 @@ class BrowseController(BaseController):
     
     @debounce(3)  # Debounce search queries to avoid excessive calls
     def _on_notify_folder_changed(self, event):
-        self._fs_changed_signal.emit(event)
+        self._fs_changed_signal.signal.emit(event)
 
     def _on_notify_folder_changed_main_thread(self, event):
         log("info", message=f"Folder changed notification received")

@@ -43,7 +43,7 @@ def process_image_batch_persistent(files):
             batch_images.append(image_tensor)
             valid_files.append(file)
         except Exception as e:
-            log("debug", message=f"Error processing {file_path}: {e}")
+            log("error", message=f"Error processing {file_path}: {e}")
             if isinstance(e, FileNotFoundError):
                 deleted_files.append(file)
             else:

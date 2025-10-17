@@ -1,4 +1,4 @@
-from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QObject
 from dt_image_search.view.dts_image_viewer import ImageViewerDialog
 
 class BaseController:

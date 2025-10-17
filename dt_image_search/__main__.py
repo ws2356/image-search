@@ -31,7 +31,7 @@ from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
 from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch, remove_folder
-from dt_image_search.index.incremental_index_worker import init_incremental_index_workers
+from dt_image_search.index.incremental_index_worker import init_incremental_index_workers, deinit_incremental_index_workers
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
 
@@ -253,6 +253,11 @@ def qt_message_handler(mode, context, message):
         log("error", "qt_fatal", message=f"Qt Fatal: {message}")
         print(f"Qt FATAL: {message}")
 
+def cleanup():
+    stop_watch()
+    flush_telemetry()
+    deinit_incremental_index_workers()
+
 if __name__ == '__main__':
     # Protect against multiprocessing import issues on Windows
     import multiprocessing
@@ -266,6 +271,7 @@ if __name__ == '__main__':
         threading.excepthook = handle_threading_exception
 
     app = QApplication(sys.argv)
+    app.aboutToQuit.connect(cleanup)
 
     startup_counter.add(1)
 

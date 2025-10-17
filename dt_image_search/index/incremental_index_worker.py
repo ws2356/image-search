@@ -1,6 +1,7 @@
 import datetime
 import os
 import threading
+import watchdog
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.dts_index import (
     index_path_for_folder,
@@ -14,15 +15,16 @@ from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus
 from dt_image_search.bm_context import BMContext 
 
-_max_activate = 4  # Maximum number of workers to activate at once
 _index_workers = []  # List to keep track of active indexing workers
 _workers_lock = threading.Lock()  # Protect _index_workers from concurrent access
 
-class IncrementalIndexWorker:
-    def __init__(self, ctx: BMContext, folder_path: str, files: list[str]):
+class BaseIncrementalIndexWorker:
+    def stop(self):
+        raise NotImplementedError()
+class FileCreationIndexWorker(BaseIncrementalIndexWorker):
+    def __init__(self, ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
         self.ctx = ctx
-        self.folder_path = folder_path
-        self.files = [f for f in files if os.path.isfile(f) and f.lower().endswith(supported_image_types)]
+        self.events = events
         self._thread = None
         self._is_stopped = False
         self.active = False
@@ -31,7 +33,7 @@ class IncrementalIndexWorker:
         # start the indexing process in a separate thread
         self._is_stopped = False
         self.active = True
-        self._thread = threading.Thread(target=self._run_impl, daemon=True)
+        self._thread = threading.Thread(target=self._run_impl, daemon=False)
         self._thread.start()
         
     def stop(self):
@@ -43,32 +45,38 @@ class IncrementalIndexWorker:
 
     def _run_impl(self):
         try:
+            all_files = []
+            for event in self.events:
+                if not event.is_directory and os.path.isfile(event.src_path) and event.src_path.lower().endswith(supported_image_types):
+                    all_files.append(event.src_path)
+                elif event.is_directory:
+                    for root, _, filenames in os.walk(event.src_path):
+                        for filename in filenames:
+                            if filename.lower().endswith(supported_image_types):
+                                all_files.append(os.path.join(root, filename))
+            if not all_files:
+                log("debug", message="No files to incrementally index.")
+                return
+
             # Check if the worker is stopped regularly to avoid unnecessary processing
             with create_db_conn(ctx=self.ctx) as conn:
                 folderId2FilePaths = {}
                 folderId2Folders = {}
-                for file_path in self.files:
+                for file_path in all_files:
                     parent_folder = match_parent_folder(conn, file_path)
                     if parent_folder:
                         folderId2FilePaths.setdefault(parent_folder.id, []).append(file_path)
                         folderId2Folders.setdefault(parent_folder.id, parent_folder)
-                # Mark non-existing subtree files as deleted
-                _subtree_files = get_direct_child_files(conn, self.folder_path)
-                _current_files_set = set(self.files)
-                deleted_files = [f for f in _subtree_files if f.path not in _current_files_set]
-                if deleted_files:
-                    log("info", message=f"Marking {len(deleted_files)} files as deleted in subtree: {self.folder_path}")
-                    mark_files_deleted(conn, [file.id for file in deleted_files])
 
                 if not folderId2FilePaths:
                     log("info", message="No files to incrementally index.")
                     return
 
-                status_bar_messenger.show_status_message.emit(f"Incremental updating index...")
+                status_bar_messenger.show_status_message.emit(f"Indexing new files...")
 
                 for folder_id, files in folderId2FilePaths.items():
                     folder = folderId2Folders.get(folder_id)
-                    log("info", message=f"Incremental indexing for folder: {folder_id} with {len(files)} new files")
+                    log("info", message=f"Indexing new files for folder: {folder_id} with {len(files)} new files")
                     update_folder_status(conn, folder_id, 3)  # Set status to partially indexed
                     for file in files:
                         insert_file(conn, file, folder_id)
@@ -93,54 +101,67 @@ class IncrementalIndexWorker:
             with _workers_lock:
                 if self in _index_workers:
                     _index_workers.remove(self)
-            _try_activate_workers()
+            if not self._is_stopped:
+                _try_schedule_next_batch(self.ctx)
 
-def _add_incremental_index_worker(ctx: BMContext, path: str, files: list[str]):
-    """
-    Add a new indexing worker for the specified folder.
-    """
-    with _workers_lock:
-        log("info", message=f"Creating new incremental index worker for files: {len(files)}")
-        worker = IncrementalIndexWorker(ctx=ctx, folder_path=path, files=files)
-        _index_workers.append(worker)
-    _try_activate_workers()
+def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
+    # Spawn one worker for every 100 events
+    batch_size = 100
+    for i in range(0, len(events), batch_size):
+        worker = FileCreationIndexWorker(ctx=ctx, events=events[i:i+batch_size])
+        with _workers_lock:
+            _index_workers.append(worker)
+        worker.run()
 
-def _try_activate_workers():
-    # Activate at most _max_activate workers if they are idle
-    with _workers_lock:
-        active_workers = [w for w in _index_workers if w.active]
-        idle_workers = [w for w in _index_workers if not w.active]
-        if len(active_workers) >= _max_activate:
+
+_event_buffer = []
+_event_buffer_lock = threading.Lock()
+_fs_changed_subscription = None
+
+def _try_schedule_next_batch(ctx: BMContext):
+    global _event_buffer
+    to_be_handled = []
+    with _event_buffer_lock:
+        if not _event_buffer or _index_workers:
             return
-        log("debug", message=f"Active workers: {len(active_workers)}, Idle workers: {len(idle_workers)}")
-        for worker in idle_workers[:_max_activate - len(active_workers)]:
-            worker.run()
-
-def _on_created(ctx: BMContext, event):
-    if event.is_directory:
-        return
-    parent_folder = match_parent_folder(create_db_conn(ctx=ctx), event.src_path)
-    if not parent_folder:
-        return
-    _add_incremental_index_worker(ctx, parent_folder.path, [event.src_path])
-
-def _handle_file_created(ctx: BMContext, parent_directory: str, files: list[str]):
-    if not files:
-        return
-    parent_folder = match_parent_folder(create_db_conn(ctx=ctx), parent_directory)
-    if not parent_folder:
-        return
-    _add_incremental_index_worker(ctx, parent_folder.path, files)
+        event_type = _event_buffer[0].event_type
+        for event in _event_buffer:
+            if event.event_type == event_type:
+                to_be_handled.append(event)
+            else:
+                break
+        _event_buffer = _event_buffer[len(to_be_handled):]
+    if to_be_handled:
+        if event_type == 'created':
+            _on_created(ctx, to_be_handled)
+        # elif event_type == 'deleted':
+        #     _on_deleted(ctx, to_be_handled)
+        # elif event_type == 'moved':
+        #     _on_moved(ctx, to_be_handled)
 
 def init_incremental_index_workers(ctx: BMContext):
+    global _fs_changed_subscription
     def _on_directory_changed(event):
-        # if not os.path.isdir(path):
-        #     log("warning", message=f"Path does not exist: {path}")
-        #     return
-        # child_files = []
-        # for child in os.listdir(path):
-        #     child_path = os.path.join(path, child)
-        #     if os.path.isfile(child_path):
-        #         child_files.append(child_path)
-        _add_incremental_index_worker(ctx, path, child_files)
-    default_bus.subscribe("fs_changed", _on_directory_changed)
+        with _event_buffer_lock:
+            _event_buffer.append(event)
+        # delay for 1s before processing to batch events. Otherwise may hit 13 permission errors on Windows
+        import time
+        time.sleep(1)
+        _try_schedule_next_batch(ctx=ctx)
+    _fs_changed_subscription = default_bus.subscribe("fs_changed", _on_directory_changed)
+
+def deinit_incremental_index_workers():
+    global _event_buffer, _fs_changed_subscription
+    if _fs_changed_subscription:
+        _fs_changed_subscription.dispose()
+        _fs_changed_subscription = None
+    to_be_handled = []
+    with _event_buffer_lock:
+        to_be_handled = _event_buffer[:]
+        _event_buffer = []
+    if to_be_handled:
+        # TODO: mark the affected folders as needing reindexing
+        pass
+    with _workers_lock:
+        for worker in _index_workers:
+            worker.stop()
