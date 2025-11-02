@@ -8,7 +8,7 @@ from dt_image_search.index.dts_index import (
     build_index,
     supported_image_types,
     append_to_index)
-from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_direct_child_files, mark_files_deleted, match_parent_folder
+from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, delete_files_by_paths, match_parent_folder
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
@@ -114,6 +114,25 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
         worker.run()
 
 
+# TODO: what if root folder is moved?
+def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
+    status_bar_messenger.show_status_message.emit(f"Handling file deletions...")
+    with create_db_conn(ctx=ctx) as conn:
+        file_path_set = set()
+        for event in events:
+            if not event.is_directory:
+                file_path_set.add(event.src_path)
+            else:
+                for root, _, filenames in os.walk(event.src_path):
+                    for filename in filenames:
+                        file_path_set.add(os.path.join(root, filename))
+        if not file_path_set:
+            return
+        log("info", message=f"Marking {len(file_path_set)} files as deleted in the database.")
+        delete_files_by_paths(conn, list(file_path_set))
+    status_bar_messenger.show_status_message.emit(f"File deletion completed.")
+
+
 _event_buffer = []
 _event_buffer_lock = threading.Lock()
 _fs_changed_subscription = None
@@ -134,8 +153,8 @@ def _try_schedule_next_batch(ctx: BMContext):
     if to_be_handled:
         if event_type == 'created':
             _on_created(ctx, to_be_handled)
-        # elif event_type == 'deleted':
-        #     _on_deleted(ctx, to_be_handled)
+        elif event_type == 'deleted':
+            _on_deleted(ctx, to_be_handled)
         # elif event_type == 'moved':
         #     _on_moved(ctx, to_be_handled)
 

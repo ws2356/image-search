@@ -222,3 +222,14 @@ def get_pending_files_for_folder(conn, folder_id: int):
 def delete_files_by_folder_id(conn, folder_id: int):
     conn.execute("DELETE FROM files WHERE folder_id = ?", (folder_id,))
     conn.commit()
+
+def delete_files_by_paths(conn, paths: list[str]):
+    if not paths:
+        return
+    # Replace '\' with '/' for consistency
+    paths = [path.replace('\\', '/') for path in paths]
+    for i in range(0, len(paths), 20):  # Batch delete to avoid SQLite limits
+        batch = paths[i:i+20]
+        placeholders = ', '.join('?' for _ in batch)
+        conn.execute(f"DELETE FROM files WHERE path IN ({placeholders})", batch)
+        conn.commit()
