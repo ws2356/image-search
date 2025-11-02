@@ -7,7 +7,7 @@ from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.dts_db import create_db_conn, get_all_folders, delete_folders, get_folder_by_path
+from dt_image_search.model.dts_db import create_db_conn, get_all_folders
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
@@ -25,10 +25,10 @@ class SearchController(BaseController):
         self.imageListModel = None
         self.ctx = ctx
 
-    def folder_list_model(self) -> QAbstractItemModel:
+    def folder_list_model(self) -> FolderTreeModel:
         raise NotImplementedError("SearchController does not implement folder_list_model")
 
-    def image_list_model(self) -> QAbstractListModel:
+    def image_list_model(self) -> ImageListModel:
         if self.imageListModel is None:
           self.imageListModel = ImageListModel()
         return self.imageListModel

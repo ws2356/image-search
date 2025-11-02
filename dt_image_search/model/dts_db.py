@@ -18,6 +18,7 @@ from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.tools.dts_perf import perffunc
 from dt_image_search.tools.dt_is_debug import is_debug
 from dt_image_search.bm_context import BMContext
+from dt_image_search.tools.dts_util import normalized_folder_path
 
 def _sql_logger(statement):
     print("SQL:", statement)
@@ -68,6 +69,7 @@ def get_subfolders(conn, folder_path: str) -> list[Folder]:
     return [Folder(id = row[0], path = row[1], status = row[2], added_at= row[3]) for row in cursor.fetchall()]  # Ensure the query is executed
 
 def get_folder_by_path(conn, folder_path: str) -> Folder:
+    folder_path = normalized_folder_path(folder_path)
     # Replace '\' with '/' for consistency
     folder_path = folder_path.replace('\\', '/')
     cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE path = ?", (folder_path,))
@@ -223,13 +225,19 @@ def delete_files_by_folder_id(conn, folder_id: int):
     conn.execute("DELETE FROM files WHERE folder_id = ?", (folder_id,))
     conn.commit()
 
-def delete_files_by_paths(conn, paths: list[str]):
-    if not paths:
+def delete_files_by_ids(conn, ids: list[int]):
+    if not ids:
         return
-    # Replace '\' with '/' for consistency
-    paths = [path.replace('\\', '/') for path in paths]
-    for i in range(0, len(paths), 20):  # Batch delete to avoid SQLite limits
-        batch = paths[i:i+20]
+    for i in range(0, len(ids), 20):  # Batch delete to avoid SQLite limits
+        batch = ids[i:i+20]
         placeholders = ', '.join('?' for _ in batch)
-        conn.execute(f"DELETE FROM files WHERE path IN ({placeholders})", batch)
+        conn.execute(f"DELETE FROM files WHERE id IN ({placeholders})", batch)
         conn.commit()
+
+def match_child_files(conn, folder_path: str) -> list[File]:
+    # Replace '\' with '/' for consistency
+    folder_path = folder_path.replace('\\', '/')
+    if not folder_path.endswith('/'):
+        folder_path += '/'
+    cursor = conn.execute("SELECT id, path, folder_id, clip_index, status FROM files WHERE path LIKE ?", (folder_path + '%',))
+    return [File(id=row[0], path=row[1], folder_id=row[2], clip_index=row[3], status=row[4]) for row in cursor.fetchall()]  # Ensure the query is executed

@@ -7,8 +7,9 @@ from dt_image_search.index.dts_index import (
     index_path_for_folder,
     build_index,
     supported_image_types,
-    append_to_index)
-from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, delete_files_by_paths, match_parent_folder
+    append_to_index,
+    delete_folder)
+from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, delete_files_by_ids, match_parent_folder, get_folder_by_path, get_file_by_path, match_child_files
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
@@ -47,13 +48,8 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
         try:
             all_files = []
             for event in self.events:
-                if not event.is_directory and os.path.isfile(event.src_path) and event.src_path.lower().endswith(supported_image_types):
+                if os.path.isfile(event.src_path) and event.src_path.lower().endswith(supported_image_types):
                     all_files.append(event.src_path)
-                elif event.is_directory:
-                    for root, _, filenames in os.walk(event.src_path):
-                        for filename in filenames:
-                            if filename.lower().endswith(supported_image_types):
-                                all_files.append(os.path.join(root, filename))
             if not all_files:
                 log("debug", message="No files to incrementally index.")
                 return
@@ -113,23 +109,35 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
             _index_workers.append(worker)
         worker.run()
 
-
-# TODO: what if root folder is moved?
 def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     status_bar_messenger.show_status_message.emit(f"Handling file deletions...")
     with create_db_conn(ctx=ctx) as conn:
-        file_path_set = set()
+        file_id_set = set()
+        folder_id_folder_map = {}
         for event in events:
-            if not event.is_directory:
-                file_path_set.add(event.src_path)
+            direct_matched_file = get_file_by_path(conn, event.src_path)
+            # deleted file is file
+            if direct_matched_file:
+                file_id_set.add(direct_matched_file.id)
             else:
-                for root, _, filenames in os.walk(event.src_path):
-                    for filename in filenames:
-                        file_path_set.add(os.path.join(root, filename))
-        if not file_path_set:
+                # deleted file is folder
+                child_files = match_child_files(conn, event.src_path)
+                for child_file in child_files:
+                    file_id_set.add(child_file.id)
+                
+                # deleted file is root folder
+                folder = get_folder_by_path(conn, event.src_path)
+                if folder:
+                    folder_id_folder_map[folder.id] = folder
+
+        if not file_id_set and not folder_id_folder_map:
             return
-        log("info", message=f"Marking {len(file_path_set)} files as deleted in the database.")
-        delete_files_by_paths(conn, list(file_path_set))
+        log("info", message=f"Marking {len(file_id_set)} files as deleted in the database.")
+        delete_files_by_ids(conn, list(file_id_set))
+
+        for folder in folder_id_folder_map.values():
+            log("info", message=f"Deleting folder index for deleted folder: {folder}")
+            delete_folder(ctx, folder.path)
     status_bar_messenger.show_status_message.emit(f"File deletion completed.")
 
 

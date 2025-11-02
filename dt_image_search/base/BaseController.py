@@ -1,5 +1,7 @@
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QObject
 from dt_image_search.view.dts_image_viewer import ImageViewerDialog
+from dt_image_search.base.image_list_model import ImageListModel
+from dt_image_search.base.FolderTreeModel import FolderTreeModel
 
 class BaseController:
     def __init__(self):
@@ -15,10 +17,10 @@ class BaseController:
         self._is_active = value
         self.on_active_change(_old_value, value)
 
-    def folder_list_model(self) -> QAbstractItemModel:
+    def folder_list_model(self) -> FolderTreeModel:
         pass
 
-    def image_list_model(self) -> QAbstractListModel:
+    def image_list_model(self) -> ImageListModel:
         pass
 
     def on_folder_added(self, folder_path: str):

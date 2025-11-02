@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QModelIndex
 from pathlib import Path
 from .DefaultFolderPredicate import DefaultFolderPredicate
 from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.tools.dts_util import normalized_folder_path
 
 
 class FolderTreeModel(QStandardItemModel):
@@ -49,6 +50,29 @@ class FolderTreeModel(QStandardItemModel):
             if child_item and child_item.rowCount() == 0:
                 self._populate_subfolders(child_item, Path(child_item.data(Qt.UserRole)))
 
+    def fold_root_folder(self, child_path: str):
+        item = self.get_containing_root_folder(child_path)
+        if not item:
+            return
+        # Clean item children and repopulate
+        item.removeRows(0, item.rowCount())
+        self._populate_subfolders(item, Path(item.data(Qt.UserRole)))
+        self.refresh_item(item=item)
+        
+        # Alternative: If you want to force a complete refresh of this subtree,
+        # you can emit layoutChanged signal
+        # self.layoutChanged.emit()
+
+    def get_containing_root_folder(self, child_path: str) -> QStandardItem | None:
+        child_path = normalized_folder_path(child_path).replace('\\', '/')
+        root_count = self.rowCount()
+        for row in range(root_count):
+            item = self.item(row, 0)
+            item_path = normalized_folder_path(item.data(Qt.UserRole)).replace('\\', '/')
+            if item and child_path.startswith(item_path):
+                return item
+        return None
+
     def _populate_subfolders(self, parent_item: QStandardItem, parent_path: Path):
         try:
             for child in sorted(parent_path.iterdir()):
@@ -59,3 +83,11 @@ class FolderTreeModel(QStandardItemModel):
                     parent_item.appendRow(child_item)
         except Exception as e:
             log("error", message=f"Could not read subfolders of {parent_path}: {e}")
+
+    def refresh_item(self, item: QStandardItem):
+        """Force refresh of a specific item and its children."""
+        if not item:
+            return
+        index = self.indexFromItem(item)
+        if index.isValid():
+            self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.DecorationRole])

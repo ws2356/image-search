@@ -22,6 +22,7 @@ from concurrent.futures import ProcessPoolExecutor
 import atexit
 from dt_image_search.index.image_processor import _initialize_worker, process_image_batch_persistent
 from dt_image_search.bm_context import BMContext
+from dt_image_search.tools.dts_util import normalized_folder_path
 
 # TODO: refactor multiprocessing code: move all model/preprocess loading to worker processes
 def index_path_for_folder(ctx: BMContext, folder: Folder):
@@ -31,17 +32,19 @@ supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
 
 @profile
 def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str) -> list:
-    index_score_pairs = _query_internal(index_path, query_text)
+    index_score_pairs = _query_internal(index_path, query_text, TOP_K * 5)  # Fetch more to account for deduplication
     # Dedupe by item[0] which is the file id
     seen_ids = set()
     index_score_pairs = [item for item in index_score_pairs if not (item[0] in seen_ids or seen_ids.add(item[0]))]
     with create_db_conn(ctx=ctx) as conn:
         # Fetch file paths from the database using the indices
         file_paths = get_files_by_clip_indices(conn, folder_id, [item[0] for item in index_score_pairs])
-        return [(file, pair[1]) for file, pair in zip(file_paths, index_score_pairs) if file is not None]
+        ret = [(file, pair[1]) for file, pair in zip(file_paths, index_score_pairs) if file is not None]
+        # top_k results
+        return ret[:TOP_K]
 
 @profile
-def _query_internal(index_path: str, query_text: str) -> list:
+def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
     torch.set_grad_enabled(False)
     with torch.inference_mode():
         index = _get_index(index_path)
@@ -52,11 +55,11 @@ def _query_internal(index_path: str, query_text: str) -> list:
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
         text_vector = text_features.cpu().numpy()
         # --- Search ---
-        scores, indices = index.search(text_vector, TOP_K)
+        scores, indices = index.search(text_vector, top_k)
 
         index_score_pairs = zip(indices[0], scores[0])
         index_score_pairs = sorted(index_score_pairs, key=lambda x: x[1], reverse=True)
-        return [[int(item[0]), item[1]] for item in index_score_pairs if item[1] >= 0.2]  # Convert to int for consistency
+        return [[int(item[0]), item[1]] for item in index_score_pairs]  # Convert to int for consistency
 
 @profile
 def create_index_if_needed(index_path: str):
@@ -305,12 +308,12 @@ def _load_index(index_path: str):
     return faiss.read_index(index_path)
 
 
-def delete_folder(ctx: BMContext, folder_path: str = None):
+def delete_folder(ctx: BMContext, folder_path: str):
     with create_db_conn(ctx=ctx) as conn:
         if not folder_path:
             log("warning", "delete", message="No folder path provided for deletion.")
             return
-        folders = get_subfolders(conn, folder_path)
+        folders = get_subfolders(conn, normalized_folder_path(folder_path))
         for folder in folders:
             if not folder:
                 log("warning", "delete", message=f"Folder {folder_path} does not exist in the database.")
