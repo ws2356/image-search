@@ -21,6 +21,9 @@ class BrowseController(BaseController):
     class FSChangedSignal(QObject):
         signal = Signal(watchdog.events.FileSystemEvent)
 
+    class FolderSelectionSignal(QObject):
+        select_folder = Signal(QStandardItem)  # Signal to request folder selection in UI
+
     def __init__(self, ctx: BMContext):
         super().__init__()
         self.folderListModel = None
@@ -30,6 +33,7 @@ class BrowseController(BaseController):
         self._fs_changed = False
         self._fs_changed_signal = self.FSChangedSignal()
         self._fs_changed_signal.signal.connect(self._on_notify_folder_changed_main_thread)
+        self._folder_selection_signal = self.FolderSelectionSignal()
         from dt_image_search.tools.dts_event_bus import default_bus
         default_bus.subscribe("fs_changed", self._on_notify_folder_changed)
         self._selected_folder_path = ''
@@ -44,12 +48,21 @@ class BrowseController(BaseController):
           self.imageListModel = FSImageListModel()
         return self.imageListModel
 
+    @property
+    def folder_selection_signal(self):
+        """Access to the folder selection signal for connecting to UI."""
+        return self._folder_selection_signal
+
     def on_folder_added(self, folder_path: str):
         with create_db_conn(ctx=self.ctx) as conn:
             parent_folder = match_parent_folder(conn, folder_path)
             if parent_folder:
-                # TODO: Select folder_path in the UI
+                # Auto-select the newly added folder in the UI
+                folder_item = self.folder_list_model().get_containing_root_folder(parent_folder.path)
+                if folder_item:
+                    self._folder_selection_signal.select_folder.emit(folder_item)
                 return
+
             folder = insert_folder(conn, folder_path)
             if not folder:
                 return
@@ -57,6 +70,10 @@ class BrowseController(BaseController):
             add_index_worker(ctx=self.ctx, folder=folder, replace_existing=True)
             add_folder(folder.path)
         self._reload_folders()
+        # Auto-select the newly added root folder
+        folder_item = self.folder_list_model().get_containing_root_folder(folder_path)
+        if folder_item:
+            self._folder_selection_signal.select_folder.emit(folder_item)
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         folder_path = current.data(Qt.UserRole)

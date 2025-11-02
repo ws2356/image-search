@@ -9,7 +9,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
-from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize, QUrl
+from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize, QUrl, QItemSelectionModel
 
 QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
@@ -19,7 +19,7 @@ from dt_image_search.model.dts_config import setup_model_cache
 ctx = get_context()
 setup_model_cache(ctx=ctx)
 
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QStandardItem
 import subprocess
 
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
@@ -60,6 +60,9 @@ class MainWindow(QMainWindow):
         self.ui.folderTreeView.expanded.connect(self.controller.on_item_expanded)
         self.ui.folderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
         self.ui.folderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
+        
+        # Connect folder selection signal to auto-select folders in the tree view
+        self.controller.folder_selection_signal.select_folder.connect(self.select_folder_in_tree)
 
         self.image_list_view.setModel(self.controller.image_list_model())
 
@@ -173,6 +176,27 @@ class MainWindow(QMainWindow):
         remove_action = menu.addAction("Remove Folder")
         if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
             self.controller.on_delete_folder(item, normalized_folder_path(folder_path))
+
+    def select_folder_in_tree(self, folder_item: QStandardItem):
+        """Select and expand to show the specified folder in the tree view."""
+        model = self.controller.folder_list_model()
+        
+        # Get the model index for the item
+        folder_index = model.indexFromItem(folder_item)
+        if not folder_index.isValid():
+            return
+        
+        self.ui.folderTreeView.expand(folder_index)
+        
+        # Select the folder
+        selection_model = self.ui.folderTreeView.selectionModel()
+        selection_model.setCurrentIndex(folder_index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        
+        # Scroll to make the selected item visible
+        self.ui.folderTreeView.scrollTo(folder_index)
+        
+        from dt_image_search.telemetry.telemetry_client import log
+        log("debug", message=f"Auto-selected folder in tree: {folder_item.data(Qt.UserRole)}")
 
     def on_image_list_context_menu(self, pos):
         index = self.image_list_view.indexAt(pos)
