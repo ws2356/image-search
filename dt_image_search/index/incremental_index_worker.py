@@ -110,7 +110,7 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
         worker.run()
 
 def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
-    status_bar_messenger.show_status_message.emit(f"Handling file deletions...")
+    status_bar_messenger.show_status_message.emit(f"File deletion started...")
     with create_db_conn(ctx=ctx) as conn:
         file_id_set = set()
         folder_id_folder_map = {}
