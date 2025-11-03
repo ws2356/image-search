@@ -59,7 +59,7 @@ def stop_watch():
         _parent_folder_watch_map.clear()
 
 def add_folder(path: str):
-    path = normalized_folder_path(path)
+    path = normalized_folder_path(path).replace('\\', '/')
     with _lock:
         # if _fs_observer is not None:
         #     _fs_observer.schedule(_fs_handler, path=path, recursive=True)
@@ -73,12 +73,12 @@ def add_folder(path: str):
         except Exception as e:
             log("error", message=f"Error watching folder {path}: {e}")
 
-        root_folder_parent = Path(path).parent
+        root_folder_parent = normalized_folder_path(str(Path(path).parent)).replace('\\', '/')
         if root_folder_parent not in _parent_folder_watch_map:
-            _parent_folder_watch_map[root_folder_parent] = _fs_observer.schedule(_fs_handler, path=str(root_folder_parent), recursive=False)
+            _parent_folder_watch_map[root_folder_parent] = _fs_observer.schedule(_fs_handler, path=root_folder_parent, recursive=False)
 
 def remove_folder(path: str):
-    path = normalized_folder_path(path)
+    path = normalized_folder_path(path).replace('\\', '/')
     with _lock:
         try:
             if not _fs_observer:
