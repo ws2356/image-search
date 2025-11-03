@@ -49,6 +49,7 @@ def start_watch(ctx: BMContext):
     _fs_handler_thread.start()
 
 def stop_watch():
+    global _fs_observer, _folder_watch_map, _parent_folder_watch_map
     if _fs_observer is not None:
         _fs_observer.stop()
         _fs_observer.join()
