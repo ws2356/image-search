@@ -84,7 +84,7 @@ def update_folder_status(conn, folder_id: int, status: int):
 
 def is_folder_exists(conn, folder_path: str) -> bool:
     # Replace '\' with '/' for consistency
-    folder_path = folder_path.replace('\\', '/')
+    folder_path = normalized_folder_path(folder_path).replace('\\', '/')
     cursor = conn.execute("SELECT 1 FROM folders WHERE path = ?", (folder_path,))
     return cursor.fetchone() is not None
 

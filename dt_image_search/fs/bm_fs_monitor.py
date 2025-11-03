@@ -45,7 +45,7 @@ def start_watch(ctx: BMContext):
         if _fs_observer is None:
             _fs_observer = Observer()
             _fs_handler = FSHandler()
-            _fs_handler_thread = threading.Thread(target=_observer_thread, daemon=True)
+            _fs_handler_thread = threading.Thread(target=_observer_thread, daemon=True, name="bm_fs_monitor_thread")
     _fs_handler_thread.start()
 
 def stop_watch():
@@ -60,25 +60,30 @@ def stop_watch():
 
 def add_folder(path: str):
     path = normalized_folder_path(path).replace('\\', '/')
+
+    # if _fs_observer is not None:
+    #     _fs_observer.schedule(_fs_handler, path=path, recursive=True)
+    if not Path(path).exists():
+        log("warning", message=f"Folder does not exist, cannot watch: {path}")
+        return
+
+    try:
+        _watch = _fs_observer.schedule(_fs_handler, path=path, recursive=True)
+    except Exception as e:
+        log("error", message=f"Error watching folder {path}: {e}")
+
+    _need_schedule_parent = False
+    root_folder_parent = normalized_folder_path(str(Path(path).parent)).replace('\\', '/')
     with _lock:
-        # if _fs_observer is not None:
-        #     _fs_observer.schedule(_fs_handler, path=path, recursive=True)
-        if not Path(path).exists():
-            log("warning", message=f"Folder does not exist, cannot watch: {path}")
-            return
-
-        try:
-            _watch = _fs_observer.schedule(_fs_handler, path=path, recursive=True)
-            _folder_watch_map[path] = _watch
-        except Exception as e:
-            log("error", message=f"Error watching folder {path}: {e}")
-
-        root_folder_parent = normalized_folder_path(str(Path(path).parent)).replace('\\', '/')
+        _folder_watch_map[path] = _watch
         if root_folder_parent not in _parent_folder_watch_map:
-            _parent_folder_watch_map[root_folder_parent] = _fs_observer.schedule(_fs_handler, path=root_folder_parent, recursive=False)
+            _need_schedule_parent = True
+    _parent_folder_watch_map[root_folder_parent] = _fs_observer.schedule(_fs_handler, path=root_folder_parent, recursive=False)
 
 def remove_folder(path: str):
     path = normalized_folder_path(path).replace('\\', '/')
+    _watch = None
+    _parent_watch = None
     with _lock:
         try:
             if not _fs_observer:
@@ -87,8 +92,7 @@ def remove_folder(path: str):
             if not path in _folder_watch_map:
                 return
 
-            watch = _folder_watch_map.pop(path)
-            _fs_observer.unschedule(watch)
+            _watch = _folder_watch_map.pop(path)
 
             root_folder_parent = Path(path).parent
             if root_folder_parent in _parent_folder_watch_map:
@@ -99,11 +103,14 @@ def remove_folder(path: str):
                         still_watched = True
                         break
                 if not still_watched:
-                    watch = _parent_folder_watch_map.pop(root_folder_parent)
-                    _fs_observer.unschedule(watch)
-
+                    _parent_watch = _parent_folder_watch_map.pop(root_folder_parent)
         except Exception as e:
             log("error", message=f"Error unwatching folder {path}: {e}")
+
+    if _fs_observer:
+        _fs_observer.unschedule(_watch)
+    if _parent_watch:
+        _fs_observer.unschedule(_parent_watch)
 
 def _on_fs_changed(event):
     event = WrappedWatchdogEvent(event)

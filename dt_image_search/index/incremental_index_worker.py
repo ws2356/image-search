@@ -9,11 +9,12 @@ from dt_image_search.index.dts_index import (
     supported_image_types,
     append_to_index,
     delete_folder)
-from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, delete_files_by_ids, match_parent_folder, get_folder_by_path, get_file_by_path, match_child_files
+from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, delete_files_by_ids, match_parent_folder, get_folder_by_path, get_file_by_path, match_child_files, is_folder_exists
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus
+from dt_image_search.tools.dts_util import normalized_folder_path, back_slash_to_forward_slash
 from dt_image_search.bm_context import BMContext 
 
 _index_workers = []  # List to keep track of active indexing workers
@@ -83,6 +84,14 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
                         if self._is_stopped:
                             log("info", message="Incremental indexing stopped by user.")
                             return
+
+                        if not is_folder_exists(conn, folder.path):
+                            log("info", message=f"Folder {folder.path} has been deleted during incremental indexing. Aborting indexing for this folder.")
+                            break
+
+                    if not is_folder_exists(conn, folder.path):
+                        continue
+
                     if not progress['batch_result']:
                         all_success = False
 
