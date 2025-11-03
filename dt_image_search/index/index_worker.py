@@ -11,6 +11,7 @@ from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.bm_context import BMContext
+from dt_image_search.tools.dts_event_bus import default_bus
 
 _max_workers = 4  # Maximum number of concurrent indexing workers
 _index_workers = []  # List to keep track of active indexing workers
@@ -138,3 +139,28 @@ def resume_index_workers(ctx: BMContext):
                 log("info", message=f"Resuming indexing for folder: {folder.path}")
     _resume_thread = threading.Thread(target=resume_logic, daemon=True)
     _resume_thread.start()
+
+_subscription = None
+
+def init_index_workers(ctx: BMContext):
+    global _subscription
+    resume_index_workers(ctx)
+    def _stop_deleted_worker_for_folder(folder_path: str):
+        normalized_path = normalized_folder_path(folder_path).replace('\\', '/')
+        with _workers_lock:
+            worker = next((w for w in _index_workers if w.folder.path == normalized_path), None)
+            if worker:
+                log("info", message=f"Stopping index worker for deleted folder: {normalized_path}")
+                worker.stop()
+                _index_workers.remove(worker)
+    _subscription = default_bus.subscribe("folder_deleted", _stop_deleted_worker_for_folder)
+
+def deinit_index_workers():
+    global _subscription
+    if _subscription:
+        _subscription.dispose()
+        _subscription = None
+    with _workers_lock:
+        for worker in _index_workers:
+            worker.stop()
+        _index_workers.clear()

@@ -16,6 +16,7 @@ from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.fs.bm_fs_monitor import add_folder, remove_folder
 from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_util import normalized_folder_path
+from dt_image_search.tools.dts_event_bus import default_bus
 
 class BrowseController(BaseController):
     class FSChangedSignal(QObject):
@@ -34,7 +35,6 @@ class BrowseController(BaseController):
         self._fs_changed_signal = self.FSChangedSignal()
         self._fs_changed_signal.signal.connect(self._on_notify_folder_changed_main_thread)
         self._folder_selection_signal = self.FolderSelectionSignal()
-        from dt_image_search.tools.dts_event_bus import default_bus
         default_bus.subscribe("fs_changed", self._on_notify_folder_changed)
         self._selected_folder_path = ''
 
@@ -87,6 +87,7 @@ class BrowseController(BaseController):
 
     def on_delete_folder(self, item: QStandardItem, data: str = None):
         log("info", message=f"Removing folder: {data}")
+        default_bus.publish("folder_deleted", folder_path=data)
         index = self.folder_list_model().indexFromItem(item)
         self.folder_list_model().deleteFolder(index)
         delete_folder(ctx=self.ctx, folder_path=data)

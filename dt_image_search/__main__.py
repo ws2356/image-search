@@ -25,7 +25,7 @@ import subprocess
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
-from dt_image_search.index.index_worker import resume_index_workers
+from dt_image_search.index.index_worker import init_index_workers, deinit_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
@@ -281,6 +281,7 @@ def cleanup():
     stop_watch()
     flush_telemetry()
     deinit_incremental_index_workers()
+    deinit_index_workers()
 
 if __name__ == '__main__':
     # Protect against multiprocessing import issues on Windows
@@ -302,7 +303,7 @@ if __name__ == '__main__':
     model_downloader_init(ctx)  # Start model downloader if needed
     index_init(ctx)  # Initialize the index system
     init_incremental_index_workers(ctx)  # Initialize incremental index workers
-    resume_index_workers(ctx)  # Resume workers to continue indexing after app start
+    init_index_workers(ctx)  # Initialize index workers
     start_watch(ctx)  # Start watching file system changes
     
     # Install Qt message handler
