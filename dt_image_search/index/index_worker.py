@@ -126,13 +126,17 @@ def add_index_worker(ctx: BMContext, folder: Folder, replace_existing: bool = Fa
     worker.run()  
     return worker
 
-def resume_index_workers(ctx: BMContext):
+def resume_index_workers(ctx: BMContext, is_init: bool = False):
+    folder_statuses_to_resume = [0, 1]  # Not indexed or partially indexed
+    if is_init:
+        folder_statuses_to_resume.append(3)  # Also include partially updated on init
+
     log("info", message=f"Resuming index workers for incomplete folders.")
     def resume_logic():
         with create_db_conn(ctx=ctx) as conn:
             log("info", message="Resuming index workers for incomplete folders - db connected")
             all_folders = get_all_folders(conn)
-            folders = [folder for folder in all_folders if folder.status in (0, 1)]
+            folders = [folder for folder in all_folders if folder.status in folder_statuses_to_resume]
             for folder in folders:
                 if not add_index_worker(ctx, folder):
                     return
@@ -144,7 +148,7 @@ _subscription = None
 
 def init_index_workers(ctx: BMContext):
     global _subscription
-    resume_index_workers(ctx)
+    resume_index_workers(ctx, is_init=True)
     def _stop_deleted_worker_for_folder(folder_path: str):
         normalized_path = normalized_folder_path(folder_path).replace('\\', '/')
         with _workers_lock:
@@ -153,7 +157,7 @@ def init_index_workers(ctx: BMContext):
                 log("info", message=f"Stopping index worker for deleted folder: {normalized_path}")
                 worker.stop()
                 _index_workers.remove(worker)
-    _subscription = default_bus.subscribe("folder_deleted", _stop_deleted_worker_for_folder)
+    _subscription = default_bus.subscribe("folder_deleted_from_ui", _stop_deleted_worker_for_folder)
 
 def deinit_index_workers():
     global _subscription

@@ -89,7 +89,7 @@ class BrowseController(BaseController):
 
     def on_delete_folder(self, item: QStandardItem, data: str = None):
         log("info", message=f"Removing folder: {data}")
-        default_bus.publish("folder_deleted", folder_path=data)
+        default_bus.publish("folder_deleted_from_ui", folder_path=data)
         index = self.folder_list_model().indexFromItem(item)
         self.folder_list_model().deleteFolder(index)
         delete_folder(ctx=self.ctx, folder_path=data)
