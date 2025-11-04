@@ -66,6 +66,7 @@ class BrowseController(BaseController):
             folder = insert_folder(conn, folder_path)
             if not folder:
                 return
+            # TODO: Optimize to just add the new root folder instead of reloading all. This may be causing UI slow.
             self._reload_folders()
 
             log("info", message=f"Inserted folder with ID: {folder.id}")
@@ -78,6 +79,8 @@ class BrowseController(BaseController):
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         folder_path = current.data(Qt.UserRole)
+        if not folder_path:
+            return
         self._selected_folder_path = folder_path
         log("info", message=f"on_folder_selected: {folder_path}")
         self.image_list_model().load_images_from_folder(folder_path)
