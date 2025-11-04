@@ -123,9 +123,9 @@ class BrowseController(BaseController):
     def _on_notify_folder_changed_main_thread(self, event):
         # Assert main thread
         assert QThread.isMainThread()
-        deleted_item = self._try_delete_root_folder(event)
+        deleted_item = self._try_delete_root_folder(event) if event.event_type == 'deleted' else None
         if not deleted_item:
-            self._fold_affected_root_folder(event.src_path)
+            self._repopulate_folder_item(event.src_path)
 
         # reload image list if active
         log("info", message=f"Folder changed notification received")
@@ -150,13 +150,10 @@ class BrowseController(BaseController):
                     self._selected_folder_path = ''
                 return item
 
-    def _fold_affected_root_folder(self, src_path: str):
-        # Try to fold the root folder if event affects descendants of a root folder
+    def _repopulate_folder_item(self, src_path: str):
         affected_root_item = self.folder_list_model().get_containing_root_folder(src_path)
-        affected_root_item_path = normalized_folder_path(affected_root_item.data(Qt.UserRole)).replace('\\', '/') if affected_root_item else ''
-        if affected_root_item and normalized_folder_path(self._selected_folder_path).replace('\\', '/').startswith(affected_root_item_path):
-            self.folder_list_model().fold_root_folder(src_path)
-            self._selected_folder_path = affected_root_item.data(Qt.UserRole)
+        self.folder_list_model().repopulate_folder_item(src_path)
+        self._selected_folder_path = affected_root_item.data(Qt.UserRole)
 
     def on_active_change(self, old_value: bool, new_value: bool):
         if new_value and self._fs_changed:

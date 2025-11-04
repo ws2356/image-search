@@ -15,7 +15,9 @@ from dt_image_search.model.dts_db import (
     get_folder_by_path,
     get_file_by_path,
     match_child_files,
-    is_folder_exists
+    is_folder_exists,
+    rename_file,
+    rename_files_in_folder
 )
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
@@ -155,6 +157,11 @@ def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
             delete_folder(ctx, folder.path)
     status_bar_messenger.show_status_message.emit(f"File deletion completed.")
 
+def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
+    with create_db_conn(ctx=ctx) as conn:
+        for event in events:
+            if not rename_file(conn, event.src_path, event.dest_path):
+                rename_files_in_folder(conn, event.src_path, event.dest_path)
 
 _event_buffer = []
 _event_buffer_lock = threading.Lock()
@@ -178,8 +185,8 @@ def _try_schedule_next_batch(ctx: BMContext):
             _on_created(ctx, to_be_handled)
         elif event_type == 'deleted':
             _on_deleted(ctx, to_be_handled)
-        # elif event_type == 'moved':
-        #     _on_moved(ctx, to_be_handled)
+        elif event_type == 'moved':
+            _on_moved(ctx, to_be_handled)
 
 def init_incremental_index_workers(ctx: BMContext):
     global _fs_changed_subscription

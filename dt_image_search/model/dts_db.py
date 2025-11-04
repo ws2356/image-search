@@ -190,6 +190,41 @@ def update_files(conn, ids: list, clip_indices: list, statuses: list):
     conn.commit()
 
 @perffunc
+def rename_file(conn, old_path: str, new_path: str) -> int:
+    # Replace '\' with '/' for consistency
+    old_path = old_path.replace('\\', '/')
+    new_path = new_path.replace('\\', '/')
+    conn.execute(
+        "UPDATE files SET path = ? WHERE path = ?",
+        (new_path, old_path)
+    )
+    conn.commit()
+    # return number of rows updated
+    return conn.total_changes
+
+@perffunc
+def rename_files_in_folder(conn, folder_path: str, new_folder_path: str) -> int:
+    # Replace '\' with '/' for consistency
+    folder_path = folder_path.replace('\\', '/')
+    new_folder_path = new_folder_path.replace('\\', '/')
+    if not folder_path.endswith('/'):
+        folder_path += '/'
+    if not new_folder_path.endswith('/'):
+        new_folder_path += '/'
+    cursor = conn.execute("SELECT id, path FROM files WHERE path LIKE ?", (folder_path + '%',))
+    rows = cursor.fetchall()
+    for row in rows:
+        file_id = row[0]
+        old_file_path = row[1]
+        new_file_path = new_folder_path + old_file_path[len(folder_path):]
+        conn.execute(
+            "UPDATE files SET path = ? WHERE id = ?",
+            (new_file_path, file_id)
+        )
+    conn.commit()
+    return len(rows)
+
+@perffunc
 def mark_files_deleted(conn, ids: list):
     if not ids:
         return

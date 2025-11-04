@@ -298,6 +298,9 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(cleanup)
 
+    window = MainWindow(ctx=ctx)
+    QCoreApplication.instance().aboutToQuit.connect(flush_telemetry)
+
     startup_counter.add(1)
 
     model_downloader_init(ctx)  # Start model downloader if needed
@@ -310,7 +313,5 @@ if __name__ == '__main__':
     from PySide6.QtCore import qInstallMessageHandler
     qInstallMessageHandler(qt_message_handler)
 
-    window = MainWindow(ctx=ctx)
-    QCoreApplication.instance().aboutToQuit.connect(flush_telemetry)
     window.show()
     sys.exit(app.exec())

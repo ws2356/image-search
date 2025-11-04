@@ -113,6 +113,8 @@ def remove_folder(path: str):
         _fs_observer.unschedule(_parent_watch)
 
 def _on_fs_changed(event):
+    if event.event_type == 'moved' and event.is_synthetic:
+        return  # Ignore synthetic moved events
     event = WrappedWatchdogEvent(event)
 
     log("debug", message=f"Directory changed: {event.event_type}")

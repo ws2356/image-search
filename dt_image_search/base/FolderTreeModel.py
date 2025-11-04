@@ -50,14 +50,14 @@ class FolderTreeModel(QStandardItemModel):
             if child_item and child_item.rowCount() == 0:
                 self._populate_subfolders(child_item, Path(child_item.data(Qt.UserRole)))
 
-    def fold_root_folder(self, child_path: str):
+    def repopulate_folder_item(self, child_path: str):
         item = self.get_containing_root_folder(child_path)
         if not item:
             return
         # Clean item children and repopulate
         item.removeRows(0, item.rowCount())
         self._populate_subfolders(item, Path(item.data(Qt.UserRole)))
-        self.refresh_item(item=item)
+        self._refresh_item(item=item)
         
         # Alternative: If you want to force a complete refresh of this subtree,
         # you can emit layoutChanged signal
@@ -84,7 +84,7 @@ class FolderTreeModel(QStandardItemModel):
         except Exception as e:
             log("error", message=f"Could not read subfolders of {parent_path}: {e}")
 
-    def refresh_item(self, item: QStandardItem):
+    def _refresh_item(self, item: QStandardItem):
         """Force refresh of a specific item and its children."""
         if not item:
             return
