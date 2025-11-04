@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap, QWheelEvent, QMouseEvent
 from PySide6.QtCore import Qt, QPointF
-import math
 
 class ImageViewerWidget(QGraphicsView):
     def __init__(self, parent=None):
@@ -18,7 +17,6 @@ class ImageViewerWidget(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
 
         self._zoom = 0
-        self._angle = 0
         self._dragging = False
         self._last_pos = None
         self._empty = True
@@ -44,14 +42,11 @@ class ImageViewerWidget(QGraphicsView):
         else:
             self._empty = False
             self.pixmap_item.setPixmap(pixmap)
-            self.pixmap_item.setTransformOriginPoint(pixmap.rect().center())
             self.scene().setSceneRect(pixmap.rect())
             self.reset_view()
 
     def reset_view(self):
         self._zoom = 0
-        self._angle = 0
-        self.pixmap_item.setRotation(0)
         self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
 
     def mousePressEvent(self, event):
@@ -62,28 +57,17 @@ class ImageViewerWidget(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         if self._dragging and self._last_pos:
-            # Get scene position of image center and mouse points
-            center = self.pixmap_item.boundingRect().center()
-            center_in_scene = self.pixmap_item.mapToScene(center)
-            prev_scene_pos = self.mapToScene(self._last_pos)
-            curr_scene_pos = self.mapToScene(event.pos())
-
-            # Compute vectors from center to previous and current mouse positions
-            v1 = prev_scene_pos - center_in_scene
-            v2 = curr_scene_pos - center_in_scene
-
-            # Compute angle between v1 and v2
-            angle1 = math.atan2(v1.y(), v1.x())
-            angle2 = math.atan2(v2.y(), v2.x())
-            raw_angle_delta = math.degrees(angle2 - angle1)
-
-            # Normalize to [-180, 180] range
-            angle_delta = (raw_angle_delta + 180) % 360 - 180
-
-            # Sensitivity multiplier
-            sensitivity = 1.0  # You can tweak this
-            self._angle += angle_delta * sensitivity
-            self.pixmap_item.setRotation(self._angle)
+            # Calculate the movement delta in view coordinates
+            delta = event.pos() - self._last_pos
+            
+            # Convert to scene coordinates to move the view
+            # Invert the delta because we want to move the view in the opposite direction
+            # of the mouse movement to simulate dragging the image
+            h_scroll = self.horizontalScrollBar()
+            v_scroll = self.verticalScrollBar()
+            
+            h_scroll.setValue(h_scroll.value() - delta.x())
+            v_scroll.setValue(v_scroll.value() - delta.y())
 
             self._last_pos = event.pos()
 
