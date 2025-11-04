@@ -6,7 +6,7 @@ from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSi
 from PySide6.QtGui import QPixmap, QIcon, QImage
 from dt_image_search.browse.thumbnail_job import ThumbnailJob, ThumbnailJobSignals
 from dt_image_search.base.image_list_model import ImageListModel
-from dt_image_search.index.dts_index import supported_image_types
+from dt_image_search.index.dts_index import is_image_file
 from dt_image_search.telemetry.telemetry_client import log
 
 class FSImageListModel(ImageListModel):
@@ -15,6 +15,6 @@ class FSImageListModel(ImageListModel):
 
     def load_images_from_folder(self, folder):
         log("info", message=f"Loading images from folder: {folder}")
-        files = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith(supported_image_types)]
+        files = [os.path.join(folder, f) for f in os.listdir(folder) if is_image_file(f)]
         self.load_images_from_paths(files)
     

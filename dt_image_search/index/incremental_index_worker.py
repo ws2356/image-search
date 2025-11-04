@@ -1,20 +1,26 @@
-import datetime
 import os
 import threading
 import watchdog
-from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.dts_index import (
     index_path_for_folder,
-    build_index,
-    supported_image_types,
+    is_image_file,
     append_to_index,
     delete_folder)
-from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, delete_files_by_ids, match_parent_folder, get_folder_by_path, get_file_by_path, match_child_files, is_folder_exists
+from dt_image_search.model.dts_db import (
+    create_db_conn,
+    insert_file,
+    update_folder_status,
+    delete_files_by_ids,
+    match_parent_folder,
+    get_folder_by_path,
+    get_file_by_path,
+    match_child_files,
+    is_folder_exists
+)
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus
-from dt_image_search.tools.dts_util import normalized_folder_path, back_slash_to_forward_slash
 from dt_image_search.bm_context import BMContext 
 
 _index_workers = []  # List to keep track of active indexing workers
@@ -49,7 +55,7 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
         try:
             all_files = []
             for event in self.events:
-                if os.path.isfile(event.src_path) and event.src_path.lower().endswith(supported_image_types):
+                if os.path.isfile(event.src_path) and is_image_file(event.src_path):
                     all_files.append(event.src_path)
             if not all_files:
                 log("debug", message="No files to incrementally index.")

@@ -5,7 +5,7 @@ from dt_image_search.model.dts_folder import Folder
 from dt_image_search.index.dts_index import (
     index_path_for_folder,
     build_index,
-    supported_image_types)
+    is_image_file)
 from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_all_folders, get_folder_by_path
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import normalized_folder_path
@@ -57,7 +57,7 @@ class IndexWorker:
                                 continue
                             else:
                                 _traverse_dir(_filepath)
-                        elif entry.is_file() and entry.name.lower().endswith(supported_image_types):
+                        elif entry.is_file() and is_image_file(_filepath):
                             insert_file(conn, _filepath, folder_id)
 
                 _traverse_dir(folder_path=folder_path)

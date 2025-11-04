@@ -28,7 +28,14 @@ from dt_image_search.tools.dts_util import normalized_folder_path
 def index_path_for_folder(ctx: BMContext, folder: Folder):
     return f"{get_app_data_path(ctx)}/{folder.id}.faiss"
 
-supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
+_supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
+
+def is_image_file(file_path: str) -> bool:
+    file_path = file_path.lower() if file_path else ""
+    file_name = os.path.basename(file_path)
+    if not file_name or file_name.startswith('.'):
+        return False
+    return file_name.endswith(_supported_image_types)
 
 @profile
 def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str) -> list:
@@ -185,6 +192,8 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
             continue
 
     if not all_features:
+        if all(not is_image_file(file.path) for file in image_files):
+            return True
         log("warning", "embedding", message="No valid images to add to index")
         return False
 
@@ -239,7 +248,7 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
         # Filter files that need to be indexed
         files_to_index = [file for file in files_slice if file.clip_index is None and file.status == 0]
         
-        batch_result = False
+        batch_result = True
         if files_to_index:
             batch_result = _add_to_index(ctx, index_path, files_to_index)
             files_processed += len(files_to_index)
