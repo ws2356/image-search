@@ -1,9 +1,18 @@
 from PySide6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-    QDialog, QVBoxLayout, QSizePolicy
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, QLabel
 )
-from PySide6.QtGui import QPixmap, QWheelEvent, QMouseEvent
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtGui import QPixmap, QWheelEvent, QMouseEvent, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, QPointF, Signal
+import os
+from pathlib import Path
+from typing import Optional
+
+try:
+    from .image_navigator import ImageNavigator, FolderBasedNavigator
+except ImportError:
+    # Fallback for relative import issues
+    from dt_image_search.view.image_navigator import ImageNavigator, FolderBasedNavigator
 
 class ImageViewerWidget(QGraphicsView):
     def __init__(self, parent=None):
@@ -97,14 +106,93 @@ class ImageViewerWidget(QGraphicsView):
             self.reset_view()
 
 class ImageViewerDialog(QDialog):
-    def __init__(self, image_path, parent=None):
+    def __init__(self, image_path: str, parent=None, navigator: Optional[ImageNavigator] = None):
         super().__init__(parent)
         self.setWindowTitle("Image Viewer")
         self.viewer = ImageViewerWidget()
-        self.viewer.set_image(image_path)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.viewer)
-
+        
+        # Use provided navigator or create a folder-based navigator as fallback
+        self.navigator = navigator if navigator else FolderBasedNavigator(image_path)
+        
+        # Create main layout
+        main_layout = QVBoxLayout(self)
+        
+        # Create navigation bar
+        nav_layout = QHBoxLayout()
+        
+        self.prev_button = QPushButton("◀ Previous")
+        self.prev_button.clicked.connect(self.go_to_previous)
+        self.prev_button.setMinimumHeight(32)
+        
+        self.image_info_label = QLabel()
+        self.image_info_label.setAlignment(Qt.AlignCenter)
+        self.image_info_label.setStyleSheet("font-weight: bold; padding: 5px;")
+        
+        self.next_button = QPushButton("Next ▶")
+        self.next_button.clicked.connect(self.go_to_next)
+        self.next_button.setMinimumHeight(32)
+        
+        nav_layout.addWidget(self.prev_button)
+        nav_layout.addWidget(self.image_info_label, 1)  # Stretch factor of 1
+        nav_layout.addWidget(self.next_button)
+        
+        # Add widgets to main layout
+        main_layout.addLayout(nav_layout)
+        main_layout.addWidget(self.viewer, 1)  # Stretch factor of 1
+        
+        # Set up keyboard shortcuts
+        self.prev_shortcut = QShortcut(QKeySequence(Qt.Key_Left), self)
+        self.prev_shortcut.activated.connect(self.go_to_previous)
+        
+        self.next_shortcut = QShortcut(QKeySequence(Qt.Key_Right), self)
+        self.next_shortcut.activated.connect(self.go_to_next)
+        
+        self.close_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        self.close_shortcut.activated.connect(self.close)
+        
+        # Load the initial image
+        self.load_current_image()
+        
         self.resize(1000, 700)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    
+    def load_current_image(self):
+        """Load the current image and update the info label."""
+        current_path = self.navigator.get_current_image()
+        if current_path:
+            self.viewer.set_image(current_path)
+            
+            # Update window title and info label
+            filename = os.path.basename(current_path)
+            self.setWindowTitle(f"Image Viewer - {filename}")
+            
+            current_index, total_count = self.navigator.get_navigation_info()
+            if self.navigator.has_navigation():
+                self.image_info_label.setText(f"{current_index + 1} of {total_count} - {filename}")
+            else:
+                self.image_info_label.setText(filename)
+            
+            # Update button states
+            self.prev_button.setEnabled(self.navigator.get_previous_image() is not None)
+            self.next_button.setEnabled(self.navigator.get_next_image() is not None)
+            
+            # Show/hide navigation buttons if no navigation is available
+            nav_enabled = self.navigator.has_navigation()
+            self.prev_button.setVisible(nav_enabled)
+            self.next_button.setVisible(nav_enabled)
+    
+    def go_to_previous(self):
+        """Navigate to the previous image."""
+        if self.navigator.move_to_previous():
+            self.load_current_image()
+    
+    def go_to_next(self):
+        """Navigate to the next image."""
+        if self.navigator.move_to_next():
+            self.load_current_image()
+
+    @staticmethod
+    def create_from_folder(image_path, parent=None):
+        """Create an ImageViewerDialog with folder-based navigation."""
+        navigator = FolderBasedNavigator(image_path)
+        return ImageViewerDialog(image_path, parent, navigator)

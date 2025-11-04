@@ -1,5 +1,6 @@
 from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QObject
 from dt_image_search.view.dts_image_viewer import ImageViewerDialog
+from dt_image_search.view.image_navigator import ModelBasedNavigator
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 
@@ -35,8 +36,17 @@ class BaseController:
     def on_image_double_clicked(self, index):
         image_path = index.data(Qt.UserRole)  # or your role
         if image_path:
-            viewer = ImageViewerDialog(image_path)
+            # Create a navigator based on the current image list model
+            navigator = self.create_image_navigator(index.row())
+            viewer = ImageViewerDialog(image_path, navigator=navigator)
             viewer.exec()
+    
+    def create_image_navigator(self, initial_index: int):
+        """Create an appropriate navigator for the given initial index.
+        
+        Subclasses can override this to provide different navigation strategies.
+        """
+        return ModelBasedNavigator(self.image_list_model(), initial_index)
     
     def on_active_change(self, old_value: bool, new_value: bool):
         pass
