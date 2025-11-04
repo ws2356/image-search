@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSizePolicy, QLabel
 )
 from PySide6.QtGui import QPixmap, QWheelEvent, QMouseEvent, QKeySequence, QShortcut
-from PySide6.QtCore import Qt, QPointF, Signal
+from PySide6.QtCore import Qt, QPointF, Signal, QTimer
 import os
 from pathlib import Path
 from typing import Optional
@@ -80,6 +80,10 @@ class ImageViewerWidget(QGraphicsView):
 
             self._last_pos = event.pos()
 
+        # Forward mouse move event to parent to show overlays
+        if self.parent():
+            self.parent().mouseMoveEvent(event)
+        
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -109,36 +113,95 @@ class ImageViewerDialog(QDialog):
     def __init__(self, image_path: str, parent=None, navigator: Optional[ImageNavigator] = None):
         super().__init__(parent)
         self.setWindowTitle("Image Viewer")
-        self.viewer = ImageViewerWidget()
         
         # Use provided navigator or create a folder-based navigator as fallback
         self.navigator = navigator if navigator else FolderBasedNavigator(image_path)
         
-        # Create main layout
+        # Create main layout with just the viewer
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create navigation bar
-        nav_layout = QHBoxLayout()
+        # Create viewer
+        self.viewer = ImageViewerWidget()
+        main_layout.addWidget(self.viewer)
         
-        self.prev_button = QPushButton("◀ Previous")
+        # Create overlay navigation buttons
+        self.prev_button = QPushButton("◀", self)
         self.prev_button.clicked.connect(self.go_to_previous)
-        self.prev_button.setMinimumHeight(32)
+        self.prev_button.setFixedSize(60, 80)
+        self.prev_button.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(0, 0, 0, 100);
+                color: white;
+                border: 2px solid rgba(255, 255, 255, 100);
+                border-radius: 8px;
+                font-size: 20px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(0, 0, 0, 150);
+                border: 2px solid rgba(255, 255, 255, 200);
+                font-size: 22px;
+            }
+            QPushButton:pressed {
+                background-color: rgba(0, 0, 0, 200);
+            }
+            QPushButton:disabled {
+                background-color: rgba(0, 0, 0, 50);
+                color: rgba(255, 255, 255, 100);
+                border: 2px solid rgba(255, 255, 255, 50);
+            }
+        """)
         
-        self.image_info_label = QLabel()
-        self.image_info_label.setAlignment(Qt.AlignCenter)
-        self.image_info_label.setStyleSheet("font-weight: bold; padding: 5px;")
-        
-        self.next_button = QPushButton("Next ▶")
+        self.next_button = QPushButton("▶", self)
         self.next_button.clicked.connect(self.go_to_next)
-        self.next_button.setMinimumHeight(32)
+        self.next_button.setFixedSize(60, 80)
+        self.next_button.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(0, 0, 0, 100);
+                color: white;
+                border: 2px solid rgba(255, 255, 255, 100);
+                border-radius: 8px;
+                font-size: 20px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(0, 0, 0, 150);
+                border: 2px solid rgba(255, 255, 255, 200);
+                font-size: 22px;
+            }
+            QPushButton:pressed {
+                background-color: rgba(0, 0, 0, 200);
+            }
+            QPushButton:disabled {
+                background-color: rgba(0, 0, 0, 50);
+                color: rgba(255, 255, 255, 100);
+                border: 2px solid rgba(255, 255, 255, 50);
+            }
+        """)
         
-        nav_layout.addWidget(self.prev_button)
-        nav_layout.addWidget(self.image_info_label, 1)  # Stretch factor of 1
-        nav_layout.addWidget(self.next_button)
+        # Create info label overlay (top center)
+        self.image_info_label = QLabel(self)
+        self.image_info_label.setAlignment(Qt.AlignCenter)
+        self.image_info_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0, 0, 0, 120);
+                color: white;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+        """)
         
-        # Add widgets to main layout
-        main_layout.addLayout(nav_layout)
-        main_layout.addWidget(self.viewer, 1)  # Stretch factor of 1
+        # Auto-hide timer for buttons and info label
+        self.hide_timer = QTimer()
+        self.hide_timer.timeout.connect(self.hide_overlays)
+        self.hide_timer.setSingleShot(True)
+        
+        # Track mouse movement to show/hide overlays
+        self.setMouseTracking(True)
+        self.viewer.setMouseTracking(True)
         
         # Set up keyboard shortcuts
         self.prev_shortcut = QShortcut(QKeySequence(Qt.Key_Left), self)
@@ -155,6 +218,13 @@ class ImageViewerDialog(QDialog):
         
         self.resize(1000, 700)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        # Position overlays after initial setup
+        QTimer.singleShot(50, self.position_overlays)
+        
+        # Initially hide navigation buttons (they'll show on mouse movement)
+        self.prev_button.hide()
+        self.next_button.hide()
     
     def load_current_image(self):
         """Load the current image and update the info label."""
@@ -180,16 +250,71 @@ class ImageViewerDialog(QDialog):
             nav_enabled = self.navigator.has_navigation()
             self.prev_button.setVisible(nav_enabled)
             self.next_button.setVisible(nav_enabled)
+            
+            # Adjust info label size to content
+            self.image_info_label.adjustSize()
+            self.position_overlays()
+    
+    def position_overlays(self):
+        """Position the overlay buttons and info label."""
+        # Get dialog dimensions
+        dialog_width = self.width()
+        dialog_height = self.height()
+        
+        # Position previous button (left center)
+        prev_x = 20
+        prev_y = (dialog_height - self.prev_button.height()) // 2
+        self.prev_button.move(prev_x, prev_y)
+        
+        # Position next button (right center)
+        next_x = dialog_width - self.next_button.width() - 20
+        next_y = (dialog_height - self.next_button.height()) // 2
+        self.next_button.move(next_x, next_y)
+        
+        # Position info label (top center)
+        info_x = (dialog_width - self.image_info_label.width()) // 2
+        info_y = 20
+        self.image_info_label.move(info_x, info_y)
+    
+    def resizeEvent(self, event):
+        """Handle window resize to reposition overlays."""
+        super().resizeEvent(event)
+        self.position_overlays()
+    
+    def mouseMoveEvent(self, event):
+        """Show overlays when mouse moves."""
+        super().mouseMoveEvent(event)
+        self.show_overlays()
+    
+    def show_overlays(self):
+        """Show overlay buttons and info label."""
+        if self.navigator.has_navigation():
+            self.prev_button.show()
+            self.next_button.show()
+        self.image_info_label.show()
+        
+        # Reset the hide timer
+        self.hide_timer.stop()
+        self.hide_timer.start(3000)  # Hide after 3 seconds of no mouse movement
+    
+    def hide_overlays(self):
+        """Hide overlay buttons and info label."""
+        if self.navigator.has_navigation():
+            self.prev_button.hide()
+            self.next_button.hide()
+        # Keep info label visible, just hide buttons
     
     def go_to_previous(self):
         """Navigate to the previous image."""
         if self.navigator.move_to_previous():
             self.load_current_image()
+            self.show_overlays()  # Show overlays when navigating
     
     def go_to_next(self):
         """Navigate to the next image."""
         if self.navigator.move_to_next():
             self.load_current_image()
+            self.show_overlays()  # Show overlays when navigating
 
     @staticmethod
     def create_from_folder(image_path, parent=None):
