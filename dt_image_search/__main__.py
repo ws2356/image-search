@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _on_show_status_message(self, message):
-        self.statusBar().showMessage(message, 60000)
+        self.statusBar().showMessage(message)
 
     def on_add_folder_button_click(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
