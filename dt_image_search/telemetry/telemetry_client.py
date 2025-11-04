@@ -97,7 +97,7 @@ class OtelLogFilter(logging.Filter):
 
 # Open the system’s null device for writing:
 # ── '/dev/null' on Unix, 'nul' on Windows
-devnull = open(os.devnull, 'w')
+devnull = open(os.devnull, 'w', encoding='utf-8')
 # Redirect both Python stdout and stderr so that naive dependencies that write to stdout/stderr won't break the app
 sys.stdout = devnull
 sys.stderr = devnull

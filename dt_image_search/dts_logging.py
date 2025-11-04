@@ -14,12 +14,13 @@ def get_other_handlers():
     #     log_dir = Path.home() / ".local/share/DTImageSearch"
     log_dir = get_app_data_path(get_context()) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "app.log"
+    log_file = log_dir / "app-utf8.log"
 
     file_handler = RotatingFileHandler(
         log_file,
         maxBytes=10_000_000,
-        backupCount=5
+        backupCount=5,
+        encoding="utf-8"
     )
     formatter = logging.Formatter(
         '%(asctime)s [pid:%(process)d] %(levelname)s %(name)s %(message)s'
