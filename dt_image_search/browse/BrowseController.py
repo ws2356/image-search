@@ -66,8 +66,7 @@ class BrowseController(BaseController):
             folder = insert_folder(conn, folder_path)
             if not folder:
                 return
-            # TODO: Optimize to just add the new root folder instead of reloading all. This may be causing UI slow.
-            self._reload_folders()
+            self.folder_list_model().add_root_folder([folder.path])
 
             log("info", message=f"Inserted folder with ID: {folder.id}")
             add_index_worker(ctx=self.ctx, folder=folder, replace_existing=True)
@@ -99,11 +98,6 @@ class BrowseController(BaseController):
     def _init_folders(self):
         _root_folders = self._load_folders()
         self.folder_list_model().add_root_folder(_root_folders)
-
-    def _reload_folders(self):
-        self.folder_list_model().clear()
-        self.folder_list_model().setHorizontalHeaderLabels(["Folders"])
-        self._init_folders()
 
     def _load_folders(self) -> list[str]:
         with create_db_conn(ctx=self.ctx) as conn:
