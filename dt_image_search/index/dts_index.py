@@ -363,20 +363,12 @@ def _preload_model(ctx: BMContext):
     global _model, _preprocess, _tokenizer
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
-    pretrained = ctx.get_pretrained_model_name_or_path()
     _MAX_ATTEMPTS = 3
     for _attempt in range(_MAX_ATTEMPTS):
         try:
             status_bar_messenger.show_status_message.emit("Model init...")
             torch.set_grad_enabled(False)
             log("info", message=f"Attempt {_attempt + 1} before loading model")
-
-            model_cfg = open_clip.get_model_config(ctx.model_name)
-            text_cfg = model_cfg.get("text_cfg", {})
-            text_model_location = r'C:\Users\wanso\.cache\huggingface\hub\models--xlm-roberta-base\snapshots\e73636d4f797dec63c3081bb6ed5c7b0bb3f2089'
-            _cache_dir = r'C:\Users\wanso\.cache\huggingface\hub'
-            text_cfg['hf_model_name'] = text_model_location
-
             model, _, preprocess = open_clip.create_model_and_transforms(
                 ctx.model_name,
                 pretrained=ctx.pretrained_model,
@@ -398,7 +390,7 @@ def _preload_model(ctx: BMContext):
             #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
             break
         except Exception as e:
-            log("error", "model", message=f"Attempt {_attempt + 1}. Preloading model failed: {e}")
+            log("error", "model", message=f"Attempt {_attempt + 1}. Pretrained: {ctx.pretrained_model}. offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. model version: {ctx.version}. offline mode: {ctx.offline_mode}. Preloading model failed: {e}")
             if _attempt == _MAX_ATTEMPTS - 1:
                 status_bar_messenger.show_status_message.emit("Model load failed")
             else:
