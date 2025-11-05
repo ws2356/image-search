@@ -22,7 +22,7 @@ services:
     ports:
       - "9009:9009"
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.9.0
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./otel/tempo/tempo.yml:/etc/tempo.yaml

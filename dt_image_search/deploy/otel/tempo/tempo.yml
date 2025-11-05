@@ -9,11 +9,18 @@ distributor:
       protocols:
         grpc:
           endpoint: 0.0.0.0:4317
+  ring:
+      kvstore:
+        store: memberlist
 
 ingester:
   trace_idle_period: 60s
   max_block_bytes: 1_000_000
   max_block_duration: 5m
+  lifecycler:
+      ring:
+        kvstore:
+          store: memberlist
 
 compactor:
   compaction:
@@ -26,7 +33,22 @@ storage:
       path: /tmp/tempo
 
 metrics_generator:
-  processors: [span_metrics, service_graphs]  # Enable desired processors
-  remote_write:
-    - url: http://mimir:9009/api/v1/push  # Your Prometheus/Mimir endpoint
-      send_exemplars: true  # Optional: links metrics to traces
+  processor:
+    span_metrics:
+      # Optional: Customize dimensions for span metrics
+      dimensions: [http.method, http.status_code]
+    service_graphs:
+      # Optional: Customize dimensions for service graphs
+      dimensions: [http.method, http.status_code]
+  ring:  # Critical: Enables ring registration
+      kvstore:
+        store: memberlist  # In-memory for single-node; use 'consul' or 'etcd' for multi-node
+      heartbeat_period: 5s
+      heartbeat_timeout: 1m
+      instance_addr: 0.0.0.0  # Or your container IP, e.g., 172.17.0.2 (check with `ip addr show`)
+      instance_port: 7946  # Default memberlist port; ensure it's exposed if needed
+
+overrides:  # Enable processors globally/single-tenant
+  defaults:
+    metrics_generator:
+      processors: [span_metrics, service_graphs]
