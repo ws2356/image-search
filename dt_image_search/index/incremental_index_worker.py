@@ -127,41 +127,51 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
         worker.run()
 
 def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
-    status_bar_messenger.show_status_message.emit(f"File deletion started...")
-    with create_db_conn(ctx=ctx) as conn:
-        file_id_set = set()
-        folder_id_folder_map = {}
-        for event in events:
-            direct_matched_file = get_file_by_path(conn, event.src_path)
-            # deleted file is file
-            if direct_matched_file:
-                file_id_set.add(direct_matched_file.id)
-            else:
-                # deleted file is folder
-                child_files = match_child_files(conn, event.src_path)
-                for child_file in child_files:
-                    file_id_set.add(child_file.id)
-                
-                # deleted file is root folder
-                folder = get_folder_by_path(conn, event.src_path)
-                if folder:
-                    folder_id_folder_map[folder.id] = folder
+    try:
+        status_bar_messenger.show_status_message.emit(f"File deletion started...")
+        with create_db_conn(ctx=ctx) as conn:
+            file_id_set = set()
+            folder_id_folder_map = {}
+            for event in events:
+                direct_matched_file = get_file_by_path(conn, event.src_path)
+                # deleted file is file
+                if direct_matched_file:
+                    file_id_set.add(direct_matched_file.id)
+                else:
+                    # deleted file is folder
+                    child_files = match_child_files(conn, event.src_path)
+                    for child_file in child_files:
+                        file_id_set.add(child_file.id)
+                    
+                    # deleted file is root folder
+                    folder = get_folder_by_path(conn, event.src_path)
+                    if folder:
+                        folder_id_folder_map[folder.id] = folder
 
-        if not file_id_set and not folder_id_folder_map:
-            return
-        log("info", message=f"Marking {len(file_id_set)} files as deleted in the database.")
-        delete_files_by_ids(conn, list(file_id_set))
+            if not file_id_set and not folder_id_folder_map:
+                return
+            log("info", message=f"Marking {len(file_id_set)} files as deleted in the database.")
+            delete_files_by_ids(conn, list(file_id_set))
 
-        for folder in folder_id_folder_map.values():
-            log("info", message=f"Deleting folder index for deleted folder: {folder}")
-            delete_folder(ctx, folder.path)
-    status_bar_messenger.show_status_message.emit(f"File deletion completed.")
+            for folder in folder_id_folder_map.values():
+                log("info", message=f"Deleting folder index for deleted folder: {folder}")
+                delete_folder(ctx, folder.path)
+    except Exception as e:
+        log("error", message=f"Error during file deletion handling: {e}")
+    finally:
+        status_bar_messenger.show_status_message.emit(f"File deletion completed.")
 
 def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
-    with create_db_conn(ctx=ctx) as conn:
-        for event in events:
-            if not rename_file(conn, event.src_path, event.dest_path):
-                rename_files_in_folder(conn, event.src_path, event.dest_path)
+    try:
+        status_bar_messenger.show_status_message.emit(f"File/folder renaming started...")
+        with create_db_conn(ctx=ctx) as conn:
+            for event in events:
+                if not rename_file(conn, event.src_path, event.dest_path):
+                    rename_files_in_folder(conn, event.src_path, event.dest_path)
+    except Exception as e:
+        log("error", message=f"Error during file/folder renaming handling: {e}")
+    finally:
+        status_bar_messenger.show_status_message.emit(f"File/folder renaming completed.")
 
 _event_buffer = []
 _event_buffer_lock = threading.Lock()
