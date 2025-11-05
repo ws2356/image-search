@@ -45,8 +45,17 @@ metrics_generator:
         store: memberlist  # In-memory for single-node; use 'consul' or 'etcd' for multi-node
       heartbeat_period: 5s
       heartbeat_timeout: 1m
-      instance_addr: 0.0.0.0  # Or your container IP, e.g., 172.17.0.2 (check with `ip addr show`)
+      instance_id: tempo
+      instance_addr: tempo  # Or your container IP, e.g., 172.17.0.2 (check with `ip addr show`)
       instance_port: 7946  # Default memberlist port; ensure it's exposed if needed
+  storage:
+      path: /var/tempo/generator  # Persistent volume for metrics WAL
+      remote_write:
+        - url: http://mimir:9009/api/v1/push  # Mimir remote write endpoint
+          send_exemplars: true
+  traces_storage:
+      path: /var/tempo/generator/wal
+      v2_encoding: snappy
 
 overrides:  # Enable processors globally/single-tenant
   defaults:

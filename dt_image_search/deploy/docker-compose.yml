@@ -28,6 +28,7 @@ services:
       - ./otel/tempo/tempo.yml:/etc/tempo.yaml
     ports:
       - "4317:4317"
+      - "7946:7946"
 
   loki:
     image: grafana/loki:latest
