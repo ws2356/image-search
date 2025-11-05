@@ -24,3 +24,9 @@ storage:
     backend: local
     local:
       path: /tmp/tempo
+
+metrics_generator:
+  processors: [span_metrics, service_graphs]  # Enable desired processors
+  remote_write:
+    - url: http://mimir:9009/api/v1/push  # Your Prometheus/Mimir endpoint
+      send_exemplars: true  # Optional: links metrics to traces
