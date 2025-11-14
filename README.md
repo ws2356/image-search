@@ -96,3 +96,11 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
     5. Download archive and unzip
 37. Still has corner cases file deletion is unknown to app while app is not running
 38. handle subfolder permission error: need to ignore  them
+39. fix multiple writer conflicts: 方案 1（最重要）：启用 WAL 模式
+
+WAL = Write-Ahead Logging
+解决 90% 并发冲突。
+
+conn.execute("PRAGMA journal_mode=WAL;")
+sqlite3.connect("db.sqlite", timeout=10)
+
