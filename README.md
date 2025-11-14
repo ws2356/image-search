@@ -95,3 +95,4 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
     4. Fork open_clip supporting passing cache dir
     5. Download archive and unzip
 37. Still has corner cases file deletion is unknown to app while app is not running
+38. handle subfolder permission error: need to ignore  them
