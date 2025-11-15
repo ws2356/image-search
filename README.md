@@ -103,4 +103,4 @@ WAL = Write-Ahead Logging
 
 conn.execute("PRAGMA journal_mode=WAL;")
 sqlite3.connect("db.sqlite", timeout=10)
-
+40. Some log has no traceid?
