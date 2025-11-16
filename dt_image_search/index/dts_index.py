@@ -14,13 +14,13 @@ from dt_image_search.index.dts_model_downloader import model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.tools.dts_perf import perffunc as profile
-from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.telemetry.telemetry_client import log, with_trace
 from dt_image_search.dts_constants import IS_MODEL_DOWNLOADED
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit
-from dt_image_search.index.image_processor import _initialize_worker, process_image_batch_persistent
+from dt_image_search.index.image_processor import _initialize_worker, process_image_batch
 from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_util import normalized_folder_path
 
@@ -37,7 +37,7 @@ def is_image_file(file_path: str) -> bool:
         return False
     return file_name.endswith(_supported_image_types)
 
-@profile
+@with_trace("query_index")
 def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str) -> list:
     index_score_pairs = _query_internal(index_path, query_text, TOP_K * 5)  # Fetch more to account for deduplication
     # Dedupe by item[0] which is the file id
@@ -50,7 +50,6 @@ def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str
         # top_k results
         return ret[:TOP_K]
 
-@profile
 def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
     torch.set_grad_enabled(False)
     with torch.inference_mode():
@@ -137,7 +136,7 @@ def _cleanup_process_pool():
         _process_pool.shutdown(wait=True)
         _process_pool = None
 
-@profile
+@with_trace("_add_to_index")
 def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File]) -> bool:
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
@@ -162,7 +161,7 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
     # Submit all batches to the persistent pool
     futures = []
     try:
-        futures = [pool.submit(process_image_batch_persistent, batch) for batch in file_batches]
+        futures = [pool.submit(process_image_batch, batch) for batch in file_batches]
     except Exception as e:
         log("error", message=f"Failed to pool.submit: {e}")
     
@@ -211,7 +210,7 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
     return result
 
 
-@profile
+@with_trace("build_index")
 def build_index(ctx: BMContext, index_path: str, folder_id: int):
     """
     Build a FAISS index from images in the given folder path.
@@ -269,7 +268,7 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
         yield res
 
 # TODO: implement append_to_index
-@profile
+@with_trace("append_to_index")
 def append_to_index(ctx: BMContext, index_path: str, folder_id: int, file_paths: list[str] = None):
     _model_loaded_event.wait()  # Wait for the model to be downloaded
     if not file_paths:
@@ -316,7 +315,7 @@ def _load_index(index_path: str):
         raise FileNotFoundError(f"Index file '{index_path}' does not exist.")
     return faiss.read_index(index_path)
 
-
+@with_trace("delete_folder")
 def delete_folder(ctx: BMContext, folder_path: str):
     with create_db_conn(ctx=ctx) as conn:
         if not folder_path:
@@ -357,7 +356,7 @@ def _get_model():
         raise RuntimeError("Model is not loaded. Please ensure the model is preloaded before querying.")
     return _model, _preprocess, _tokenizer
 
-@profile
+@with_trace("_preload_model")
 def _preload_model(ctx: BMContext):
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer

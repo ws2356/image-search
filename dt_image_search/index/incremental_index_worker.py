@@ -19,7 +19,7 @@ from dt_image_search.model.dts_db import (
     rename_file,
     rename_files_in_folder
 )
-from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.telemetry.telemetry_client import log, with_trace
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus
@@ -53,6 +53,7 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
         self.active = False
         self._is_stopped = True
 
+    @with_trace("FileCreationIndexWorker._run_impl")
     def _run_impl(self):
         try:
             all_files = []
@@ -126,6 +127,7 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
             _index_workers.append(worker)
         worker.run()
 
+@with_trace("incremential_index_worker._on_deleted")
 def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     try:
         status_bar_messenger.show_status_message.emit(f"File deletion started...")
@@ -161,6 +163,7 @@ def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     finally:
         status_bar_messenger.show_status_message.emit(f"File deletion completed.")
 
+@with_trace("incremential_index_worker._on_moved")
 def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
     try:
         status_bar_messenger.show_status_message.emit(f"File/folder renaming started...")

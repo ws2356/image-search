@@ -7,7 +7,7 @@ from dt_image_search.index.dts_index import (
     build_index,
     is_image_file)
 from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_all_folders, get_folder_by_path
-from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.telemetry.telemetry_client import log, with_trace
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.bm_context import BMContext
@@ -35,6 +35,7 @@ class IndexWorker:
         """
         self._is_stopped = True
 
+    @with_trace("IndexWorker._run_impl")
     def _run_impl(self):
         try:
             # Check if the worker is stopped regularly to avoid unnecessary processing

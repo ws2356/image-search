@@ -5,7 +5,7 @@ import torch
 import open_clip
 from PIL import Image, ImageFile
 from dt_image_search.bm_context import BMContext
-from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.telemetry.telemetry_client import log, with_trace
 
 # Allow loading of truncated images
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -25,7 +25,8 @@ def _initialize_worker(ctx: BMContext):
         log("error", message=f"Error initializing model in worker: {e}")
         _worker_preprocess = None
 
-def process_image_batch_persistent(files):
+@with_trace("process_image_batch")
+def process_image_batch(files):
     """Process a batch of images using the persistent worker's preloaded components"""
     global _worker_preprocess
     
