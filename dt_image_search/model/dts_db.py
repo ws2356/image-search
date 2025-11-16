@@ -33,7 +33,7 @@ def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
             schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
             conn.executescript(schema_sql)
     if conn is None:
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     if is_debug():
         conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements

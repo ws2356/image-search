@@ -13,7 +13,7 @@ from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_event_bus import default_bus
 
-_max_workers = 4  # Maximum number of concurrent indexing workers
+_max_workers = 1  # Maximum number of concurrent indexing workers
 _index_workers = []  # List to keep track of active indexing workers
 _workers_lock = threading.Lock()  # Protect _index_workers from concurrent access
 
@@ -99,7 +99,7 @@ class IndexWorker:
                         if folder is None or folder.status == 2:
                             resume_index_workers(self.ctx)
 
-def add_index_worker(ctx: BMContext, folder: Folder, replace_existing: bool = False) -> IndexWorker:
+def add_index_worker(ctx: BMContext, folder: Folder) -> IndexWorker:
     """
     Add a new indexing worker for the specified folder.
     """
@@ -109,7 +109,7 @@ def add_index_worker(ctx: BMContext, folder: Folder, replace_existing: bool = Fa
             log("info", message=f"Index worker already exists for this folder: {folder.id}.")
             return existing_worker  # Return existing worker if already indexing this folder
 
-        if len(_index_workers) >= _max_workers and not replace_existing:
+        if len(_index_workers) >= _max_workers:
             return None  # Cannot add more workers if the limit is reached
         
         if len(_index_workers) >= _max_workers:

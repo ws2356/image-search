@@ -69,7 +69,7 @@ class BrowseController(BaseController):
             self.folder_list_model().add_root_folder([folder.path])
 
             log("info", message=f"Inserted folder with ID: {folder.id}")
-            add_index_worker(ctx=self.ctx, folder=folder, replace_existing=True)
+            add_index_worker(ctx=self.ctx, folder=folder)
             add_folder(folder.path)
         # Auto-select the newly added root folder
         folder_item = self.folder_list_model().get_containing_root_folder(folder_path)
