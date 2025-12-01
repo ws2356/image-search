@@ -534,6 +534,7 @@ def xet_get(
     expected_size: Optional[int] = None,
     displayed_filename: Optional[str] = None,
     _tqdm_bar: Optional[tqdm] = None,
+    download_callback: Optional[callable] = None,
 ) -> None:
     """
     Download a file using Xet storage service.
@@ -551,6 +552,9 @@ def xet_get(
         displayed_filename (`str`, *optional*):
             The filename of the file that is being downloaded. Value is used only to display a nice progress bar. If
             not set, the filename is guessed from the URL or the `Content-Disposition` header.
+        download_callback (`callable`, *optional*):
+            A callback function that will be called with progress information.
+            The callback receives (downloaded_bytes: int, total_bytes: Optional[int], filename: str)
 
     **How it works:**
         The file download system uses Xet storage, which is a content-addressable storage system that breaks files into chunks
@@ -622,6 +626,12 @@ def xet_get(
 
         def progress_updater(progress_bytes: float):
             progress.update(progress_bytes)
+            # Call the user-provided callback if available
+            if download_callback is not None:
+                try:
+                    download_callback(int(progress.n), expected_size, displayed_filename)
+                except Exception as e:
+                    logger.warning(f"Download callback raised an exception: {e}")
 
         download_files(
             xet_download_info,
@@ -828,6 +838,7 @@ def hf_hub_download(
     resume_download: Optional[bool] = None,
     force_filename: Optional[str] = None,
     local_dir_use_symlinks: Union[bool, Literal["auto"]] = "auto",
+    download_callback: Optional[callable] = None,
 ) -> str:
     """Download a given file if it's not already present in the local cache.
 
@@ -906,6 +917,10 @@ def hf_hub_download(
             local cached file if it exists.
         headers (`dict`, *optional*):
             Additional headers to be sent with the request.
+        download_callback (`callable`, *optional*):
+            A callback function that will be called with download progress information.
+            The callback receives three arguments: (downloaded_bytes: int, total_bytes: Optional[int], filename: str)
+            This is particularly useful for long-running downloads like model files.
 
     Returns:
         `str`: Local path of file or if networking is off, last version of file cached on disk.
@@ -1042,6 +1057,7 @@ def _hf_hub_download_to_cache_dir(
     # Additional options
     local_files_only: bool,
     force_download: bool,
+    download_callback: Optional[callable] = None,
 ) -> str:
     """Download a given file to a cache folder, if not already present.
 
@@ -1176,6 +1192,7 @@ def _hf_hub_download_to_cache_dir(
             force_download=force_download,
             etag=etag,
             xet_file_data=xet_file_data,
+            download_callback=download_callback,
         )
         if not os.path.exists(pointer_path):
             _create_symlink(blob_path, pointer_path, new_blob=True)
@@ -1202,6 +1219,7 @@ def _hf_hub_download_to_local_dir(
     cache_dir: str,
     force_download: bool,
     local_files_only: bool,
+    download_callback: Optional[callable] = None,
 ) -> str:
     """Download a given file to a local folder, if not already present.
 
@@ -1305,6 +1323,7 @@ def _hf_hub_download_to_local_dir(
             force_download=force_download,
             etag=etag,
             xet_file_data=xet_file_data,
+            download_callback=download_callback,
         )
 
     write_download_metadata(local_dir=local_dir, filename=filename, commit_hash=commit_hash, etag=etag)
@@ -1673,6 +1692,7 @@ def _download_to_tmp_and_move(
     force_download: bool,
     etag: Optional[str],
     xet_file_data: Optional[XetFileData],
+    download_callback: Optional[callable] = None,
 ) -> None:
     """Download content from a URL to a destination path.
 
@@ -1723,6 +1743,7 @@ def _download_to_tmp_and_move(
                 headers=headers,
                 expected_size=expected_size,
                 displayed_filename=filename,
+                download_callback=download_callback,
             )
         else:
             if xet_file_data is not None and not constants.HF_HUB_DISABLE_XET:
