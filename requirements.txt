@@ -1,4 +1,4 @@
-open_clip_torch == 2.26.1
+-e ./dt_image_search/third-party/open_clip-2.26.1
 faiss-cpu == 1.9.0
 torch == 2.2.2
 torchvision == 0.17.2
@@ -13,7 +13,7 @@ opentelemetry-api == 1.35.0
 opentelemetry-exporter-otlp-proto-http == 1.35.0
 requests >= 2.32.4, < 3.0.0
 psutil >= 7.0.0, < 8.0.0
-huggingface-hub >= 0.35.1, < 1.0.0
+-e ./dt_image_search/third-party/huggingface_hub-0.36.0
 hf-xet == 1.1.10
 watchdog == 6.0.0
 transformers >= 4.57.1, < 5.0.0
