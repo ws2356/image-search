@@ -32,7 +32,7 @@ def _download_pretrained_model(ctx: BMContext):
         status_bar_messenger.show_status_message.emit("Downloading model...")
         for _ in range(3):
             try:
-                _download_with_progress(ctx.model_download_url, tmp_path)
+                _download_with_progress(ctx.get_model_download_url(), tmp_path)
                 if ctx.is_downloaded_file_valid(tmp_path):
                     break
                 os.remove(tmp_path)
@@ -67,7 +67,7 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
     if os.path.exists(dest_path):
         downloaded = os.path.getsize(dest_path)
         headers = {"Range": f"bytes={downloaded}-"}
-    response = requests.get(url, stream=True, headers=headers)
+    response = requests.get(url, stream=True, headers=headers, allow_redirects=True)
     if response.status_code not in (200, 206):
         raise Exception(f"Failed to download file: {response.status_code}")
 
