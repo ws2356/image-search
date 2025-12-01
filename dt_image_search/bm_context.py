@@ -19,7 +19,7 @@ class BMContext:
         self.version = version
         self.subfolder = subfolder
         self.model_name = model_name
-        self.pretrained_model = pretrained_model
+        self._pretrained_model = pretrained_model
         self.model_download_url = model_download_url
         self.offline_mode = offline_mode
         self.cache_file_md5 = cache_file_md5
@@ -28,7 +28,7 @@ class BMContext:
         if self.version == 1 and self.is_local_cache_valid():
             return self.get_model_cache_path()
         else:
-            return self.pretrained_model
+            return self._pretrained_model
 
     def get_model_cache_path(self) -> str:
         from dt_image_search.model.dts_fs import get_app_data_path
