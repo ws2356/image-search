@@ -1017,6 +1017,7 @@ def hf_hub_download(
             cache_dir=cache_dir,
             force_download=force_download,
             local_files_only=local_files_only,
+            download_callback=download_callback,
         )
     else:
         return _hf_hub_download_to_cache_dir(
@@ -1036,6 +1037,7 @@ def hf_hub_download(
             # Additional options
             local_files_only=local_files_only,
             force_download=force_download,
+            download_callback=download_callback,
         )
 
 

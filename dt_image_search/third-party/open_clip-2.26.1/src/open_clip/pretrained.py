@@ -618,9 +618,16 @@ def download_pretrained_from_hf(
         filename: str = 'open_clip_pytorch_model.bin',
         revision=None,
         cache_dir: Union[str, None] = None,
+        download_callback: Union[callable, None] = None,
 ):
     has_hf_hub(True)
-    cached_file = hf_hub_download(model_id, filename, revision=revision, cache_dir=cache_dir)
+    cached_file = hf_hub_download(
+        model_id, 
+        filename, 
+        revision=revision, 
+        cache_dir=cache_dir,
+        download_callback=download_callback
+    )
     return cached_file
 
 
@@ -628,6 +635,7 @@ def download_pretrained(
         cfg: Dict,
         force_hf_hub: bool = False,
         cache_dir: Union[str, None] = None,
+        download_callback: Union[callable, None] = None,
 ):
     target = ''
     if not cfg:
@@ -648,8 +656,17 @@ def download_pretrained(
         # use 'open_clip_pytorch_model.bin' default, there must be a trailing slash 'org/model_name/'.
         model_id, filename = os.path.split(download_hf_hub)
         if filename:
-            target = download_pretrained_from_hf(model_id, filename=filename, cache_dir=cache_dir)
+            target = download_pretrained_from_hf(
+                model_id, 
+                filename=filename, 
+                cache_dir=cache_dir,
+                download_callback=download_callback
+            )
         else:
-            target = download_pretrained_from_hf(model_id, cache_dir=cache_dir)
+            target = download_pretrained_from_hf(
+                model_id, 
+                cache_dir=cache_dir,
+                download_callback=download_callback
+            )
 
     return target
