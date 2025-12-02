@@ -96,7 +96,7 @@ Write-Host "Creating MSIX package..."
 try {
     $process = Start-Process -FilePath $makeappx -ArgumentList @(
         "pack",
-        "/d", "DTImageSearchApp",
+        "/d", "$appDir",
         "/p", "DTImageSearch.msix",
         "/o"
     ) -Wait -PassThru -NoNewWindow
