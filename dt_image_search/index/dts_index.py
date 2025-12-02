@@ -14,6 +14,7 @@ from dt_image_search.index.dts_model_downloader import model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.tools.dts_perf import perffunc as profile
+from dt_image_search.tools.dts_throttle import ThrottledCallback
 from dt_image_search.telemetry.telemetry_client import log, with_trace
 from dt_image_search.dts_constants import IS_MODEL_DOWNLOADED
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
@@ -360,7 +361,15 @@ def _get_model():
 def _preload_model(ctx: BMContext):
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
-    model_downloaded_event.wait()  # Wait for the model to be downloaded
+    model_downloaded_event.wait()  # Wait for the model to be downloaded for cn market
+
+    def progress_callback(downloaded_bytes: int, total_bytes: typing.Optional[int], filename: str):
+        if total_bytes:
+            percent = (downloaded_bytes / total_bytes) * 100
+            status_bar_messenger.show_status_message.emit(
+                f"Downloading model... {percent:.1f}%"
+            )
+    _throttled_progress_callback = ThrottledCallback(progress_callback, throttle_interval=1.0)
 
     _MAX_ATTEMPTS = 3
     for _attempt in range(_MAX_ATTEMPTS):
@@ -371,8 +380,7 @@ def _preload_model(ctx: BMContext):
             model, _, preprocess = open_clip.create_model_and_transforms(
                 ctx.model_name,
                 pretrained=ctx.get_pretrained_model_name_or_path(),
-                # text_cfg=text_cfg,
-                # cache_dir=_cache_dir
+                download_callback=_throttled_progress_callback
                 )
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
             status_bar_messenger.show_status_message.emit("Model downloaded")

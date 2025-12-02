@@ -193,6 +193,7 @@ def create_model(
         cache_dir: Optional[str] = None,
         output_dict: Optional[bool] = None,
         require_pretrained: bool = False,
+        download_callback: Optional[callable] = None,
         **model_kwargs,
 ):
     force_preprocess_cfg = force_preprocess_cfg or {}
@@ -200,7 +201,7 @@ def create_model(
     has_hf_hub_prefix = model_name.startswith(HF_HUB_PREFIX)
     if has_hf_hub_prefix:
         model_id = model_name[len(HF_HUB_PREFIX):]
-        checkpoint_path = download_pretrained_from_hf(model_id, cache_dir=cache_dir)
+        checkpoint_path = download_pretrained_from_hf(model_id, cache_dir=cache_dir, download_callback=download_callback)
         config = _get_hf_config(model_id, cache_dir)
         preprocess_cfg = merge_preprocess_dict(preprocess_cfg, config['preprocess_cfg'])
         model_cfg = config['model_cfg']
@@ -295,7 +296,7 @@ def create_model(
             checkpoint_path = ''
             pretrained_cfg = get_pretrained_cfg(model_name, pretrained)
             if pretrained_cfg:
-                checkpoint_path = download_pretrained(pretrained_cfg, cache_dir=cache_dir)
+                checkpoint_path = download_pretrained(pretrained_cfg, cache_dir=cache_dir, download_callback=download_callback)
                 preprocess_cfg = merge_preprocess_dict(preprocess_cfg, pretrained_cfg)
             elif os.path.exists(pretrained):
                 checkpoint_path = pretrained
@@ -391,6 +392,7 @@ def create_model_and_transforms(
         pretrained_hf: bool = True,
         cache_dir: Optional[str] = None,
         output_dict: Optional[bool] = None,
+        download_callback: Optional[callable] = None,
         **model_kwargs,
 ):
     force_preprocess_cfg = merge_preprocess_kwargs(
@@ -411,6 +413,7 @@ def create_model_and_transforms(
         pretrained_hf=pretrained_hf,
         cache_dir=cache_dir,
         output_dict=output_dict,
+        download_callback=download_callback,
         **model_kwargs,
     )
 
@@ -444,6 +447,7 @@ def create_model_from_pretrained(
         image_resize_mode: Optional[str] = None,  # only effective for inference
         return_transform: bool = True,
         cache_dir: Optional[str] = None,
+        download_callback: Optional[callable] = None,
         **model_kwargs,
 ):
     force_preprocess_cfg = merge_preprocess_kwargs(
@@ -461,6 +465,7 @@ def create_model_from_pretrained(
         force_preprocess_cfg=force_preprocess_cfg,
         cache_dir=cache_dir,
         require_pretrained=True,
+        download_callback=download_callback,
         **model_kwargs,
     )
 
