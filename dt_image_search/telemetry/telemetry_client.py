@@ -97,10 +97,12 @@ class OtelLogFilter(logging.Filter):
 
 # Open the system’s null device for writing:
 # ── '/dev/null' on Unix, 'nul' on Windows
-devnull = open(os.devnull, 'w', encoding='utf-8')
 # Redirect both Python stdout and stderr so that naive dependencies that write to stdout/stderr won't break the app
-sys.stdout = devnull
-sys.stderr = devnull
+from dt_image_search.tools.dt_is_debug import is_debug
+if not is_debug() and "PYTEST_CURRENT_TEST" not in os.environ:
+    devnull = open(os.devnull, 'w', encoding='utf-8')
+    sys.stdout = devnull
+    sys.stderr = devnull
 
 _logger = None
 _lock = threading.Lock()
@@ -110,11 +112,13 @@ def log(severity: str, error_type: str = "", message: str = "", where: str = "")
     with _lock:
         if _logger is None:
             # Setup logger only once
-            logging_handler = LoggingHandler(level=get_log_level(), logger_provider=_logger_provider)
+            level = get_log_level()
+            if "PYTEST_CURRENT_TEST" in os.environ:
+                level = logging.DEBUG
+            logging_handler = LoggingHandler(level=level, logger_provider=_logger_provider)
             logging_handler.addFilter(OtelLogFilter())
-            logging.basicConfig(level=get_log_level(), handlers=[logging_handler] + get_other_handlers())
+            logging.basicConfig(level=level, handlers=[logging_handler] + get_other_handlers())
             _logger = logging.getLogger(_image_search_client)
-
     if severity not in ["debug", "info", "warning", "error"]:
         raise ValueError(f"Invalid log severity: {severity}")
     log_function = getattr(_logger, severity, _logger.info)

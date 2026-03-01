@@ -1,17 +1,12 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import sys
+import os
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.bm_context import get_context
+from dt_image_search.tools.dt_is_debug import is_debug
 
 def get_other_handlers():
-    # # Choose a platform-appropriate app data folder
-    # if os.name == "nt":  # Windows
-    #     log_dir = Path(os.getenv("APPDATA", ".")) / "DTImageSearch"
-    # elif sys.platform == "darwin":  # macOS
-    #     log_dir = Path.home() / "Library/Logs/DTImageSearch"
-    # else:  # Linux or other
-    #     log_dir = Path.home() / ".local/share/DTImageSearch"
     log_dir = get_app_data_path(get_context()) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "app-utf8.log"
@@ -27,4 +22,12 @@ def get_other_handlers():
     )
     file_handler.setFormatter(formatter)
 
-    return [file_handler]
+    handlers = [file_handler]
+    
+    # Add StreamHandler for console output in debug mode or during tests
+    if is_debug() or "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ:
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        handlers.append(stream_handler)
+        
+    return handlers
