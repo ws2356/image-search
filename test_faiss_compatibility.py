@@ -1,11 +1,19 @@
 # This script use the faiss/faiss-cpu package to test the compatibility of the faiss with current environment - including cpu arch, os, and python version.
 # It is not meant to be a comprehensive test of all faiss features, but rather a demo to prove that we can create and query an index using the dependency we have in our codebase in the current environment.
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+
 import sys
+import platform
 import platform
 import faiss
 import numpy as np
 import tempfile
-import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
 
 def main():
     print("Testing faiss-cpu compatibility...\n")

@@ -1,4 +1,14 @@
 import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+
+import sys
+import threading
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+
 import sys
 import threading
 
@@ -35,7 +45,7 @@ from dt_image_search.index.incremental_index_worker import init_incremental_inde
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
 
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'true'
+
 
 _BrowseMode = 1
 _SearchMode = 2

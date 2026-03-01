@@ -1,4 +1,13 @@
 import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+
+import torch
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+
 import torch
 import threading
 import time
@@ -59,10 +68,13 @@ def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
         # --- Encode text query ---
         text_tokens = _tokenizer([query_text]).to(_device)
         text_features = _model.encode_text(text_tokens)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-        text_vector = text_features.cpu().numpy()
+        text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-10)
+        text_vector = text_features.cpu().numpy().astype(np.float32)
+        if not text_vector.flags['C_CONTIGUOUS']:
+            text_vector = np.ascontiguousarray(text_vector)
         # --- Search ---
-        scores, indices = index.search(text_vector, top_k)
+        with _get_index_lock(index_path):
+            scores, indices = index.search(text_vector, top_k)
 
         index_score_pairs = zip(indices[0], scores[0])
         index_score_pairs = sorted(index_score_pairs, key=lambda x: x[1], reverse=True)
@@ -73,10 +85,10 @@ def create_index_if_needed(index_path: str):
     if os.path.exists(index_path):
         return
     # --- Create FAISS index ---
-    index = faiss.IndexFlatIP(512)  # TODO: avoid hardcoding dimension, use model's output dimension
-    index = faiss.IndexIDMap2(index)  # to keep track of image paths
-    # ids = np.arange(len(image_features_np)).astype('int64')
-    # index.add_with_ids(image_features_np, ids)
+    _model, _, _ = _get_model()
+    dim = _model.visual.output_dim
+    index = faiss.IndexFlatIP(dim)
+    index = faiss.IndexIDMap2(index)
     # --- Save index to disk ---
     faiss.write_index(index, index_path)
 
@@ -84,6 +96,15 @@ def create_index_if_needed(index_path: str):
 # Global process pool that stays alive
 _process_pool = None
 _pool_lock = threading.Lock()
+
+_index_locks = {}
+_index_locks_lock = threading.Lock()
+
+def _get_index_lock(index_path: str) -> threading.Lock:
+    with _index_locks_lock:
+        if index_path not in _index_locks:
+            _index_locks[index_path] = threading.Lock()
+        return _index_locks[index_path]
 
 def _calculate_worker_count():
     """Calculate optimal worker count based on available memory"""
@@ -179,7 +200,9 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
                     features = features / features.norm(dim=-1, keepdim=True)
                     
                     log("info", message=f"Got features from batch {i}")
-                    features_np = features.cpu().numpy()
+                    features_np = features.cpu().numpy().astype(np.float32)
+                    if not features_np.flags['C_CONTIGUOUS']:
+                        features_np = np.ascontiguousarray(features_np)
                     all_features.append(features_np)
                     valid_files.extend(batch_valid_files)
             
@@ -202,8 +225,9 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
     ids = np.array([file.id for file in valid_files], dtype='int64')
     
     log("info", message=f"Adding {len(features_np)} images to index with ids: {ids}")
-    index.add_with_ids(features_np, ids)
-    faiss.write_index(index, index_path)
+    with _get_index_lock(index_path):
+        index.add_with_ids(features_np, ids)
+        faiss.write_index(index, index_path)
     
     with create_db_conn(ctx=ctx) as conn:
         for file in valid_files:
@@ -314,7 +338,8 @@ def _get_index(index_path: str):
 def _load_index(index_path: str):
     if not os.path.exists(index_path):
         raise FileNotFoundError(f"Index file '{index_path}' does not exist.")
-    return faiss.read_index(index_path)
+    with _get_index_lock(index_path):
+        return faiss.read_index(index_path)
 
 @with_trace("delete_folder")
 def delete_folder(ctx: BMContext, folder_path: str):
