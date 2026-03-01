@@ -136,7 +136,12 @@ class TestAppFlow(unittest.TestCase):
             cache_file_md5="dummy_md5"
         )
         
-        # Patch get_app_data_path in dts_fs to return our temp directory
+        # Patch get_app_data_path in dts_fs and modules that imported it
+        self.patcher_app_data_db = patch.object(dts_db, 'get_app_data_path', return_value=self.app_data_path)
+        self.mock_get_app_data_path_db = self.patcher_app_data_db.start()
+        
+        self.patcher_app_data_index = patch.object(dts_index, 'get_app_data_path', return_value=self.app_data_path)
+        self.mock_get_app_data_path_index = self.patcher_app_data_index.start()
         self.patcher_app_data = patch.object(dts_fs_mod, 'get_app_data_path', return_value=self.app_data_path)
         self.mock_get_app_data_path = self.patcher_app_data.start()
 
@@ -198,7 +203,8 @@ class TestAppFlow(unittest.TestCase):
         self.mock_faiss_read = self.patcher_faiss_read.start()
 
     def tearDown(self):
-        self.patcher_app_data.stop()
+        self.patcher_app_data_db.stop()
+        self.patcher_app_data_index.stop()
         self.patcher_schema.stop()
         self.patcher_model_downloaded.stop()
         self.patcher_model_loaded.stop()
