@@ -1,1 +1,0 @@
-Note: `import faiss` should be later than `import torch` to avoid conflicts.
