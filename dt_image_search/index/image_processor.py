@@ -1,7 +1,13 @@
 """
 Separate module for image processing workers to avoid GUI import issues.
 """
-import torch
+import typing
+
+if typing.TYPE_CHECKING:
+    import torch
+    import open_clip
+    from PIL import Image, ImageFile
+
 import open_clip
 from PIL import Image, ImageFile
 from dt_image_search.bm_context import BMContext
@@ -15,7 +21,9 @@ _worker_preprocess = None
 
 def _initialize_worker(ctx: BMContext):
     """Initialize worker process with preloaded model"""
+    import open_clip
     global _worker_preprocess
+
     
     # Load model once per worker process
     try:
@@ -28,7 +36,14 @@ def _initialize_worker(ctx: BMContext):
 @with_trace("process_image_batch")
 def process_image_batch(files):
     """Process a batch of images using the persistent worker's preloaded components"""
+    from PIL import Image
+    import torch
     global _worker_preprocess
+    
+    # Allow loading of truncated images
+    from PIL import ImageFile
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
     
     batch_images = []
     valid_files = []
