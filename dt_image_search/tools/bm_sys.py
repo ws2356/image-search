@@ -17,6 +17,6 @@ def _get_system_region():
     if system == "Darwin":
         if "PYTEST_CURRENT_TEST" in os.environ:
             return "US"  # Default for macOS for now in tests
-        raise NotImplementedError("macOS region detection is not implemented")
+        return "US"
     # Fallback if needed
     return None
