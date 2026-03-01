@@ -58,8 +58,6 @@ class SearchController(BaseController):
                 results_in_folder = self._search_in_folder(folder, query)
                 if results_in_folder:
                     dispatcher.post(lambda res=results_in_folder[0]: self.imageListModel.add_image(res))
-                if results_in_folder:
-                    dispatcher.post(lambda: self.imageListModel.add_image(results_in_folder[0]))
                 for item in results_in_folder:
                     log("debug", message=f"Found item: {item[0]} with score: {item[1]}")
                 results.extend(results_in_folder)

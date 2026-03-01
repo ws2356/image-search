@@ -7,13 +7,9 @@ os.environ['MKL_NUM_THREADS'] = '1'
 
 import sys
 import platform
-import platform
 import faiss
 import numpy as np
 import tempfile
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['MKL_NUM_THREADS'] = '1'
 
 def main():
     print("Testing faiss-cpu compatibility...\n")
