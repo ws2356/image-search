@@ -1,5 +1,9 @@
 # Integration tests for dt_image_search
-Integration tests should carry on actual user flows by interacting with the app UI using test frameworks (e.g. Appium).
+Integration tests should carry on actual user flows by interacting with the app UI using test frameworks (e.g. Appium). The UI of this app should be actually launched and interacted with. Do not use headless driver for UI test.
+
+## Environment
+- Use python3.10
+- The app can be launched via `python -m dt_image_searech` command with `<project root>` being the current working directory.
 
 ## Prerequisite code changes for UI testing
 1. For all the UI controls in this app, add Accessibility attributes (if not already there) for ease of locating UI elements during UI testing. The format of the value of accessibility attributes is `<page_id>_<control_id>`. `<page_id>` and `<control_id>` can be transformed from the logic name of page or control, e.g. 'browse_page', 'add_folder_button'. Notice that snake case is used.
