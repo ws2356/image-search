@@ -3,7 +3,7 @@
 Welcome to the `image-search` repository. This document outlines the architectural patterns, coding styles, and commands necessary to operate within this codebase. Please adhere to these guidelines when suggesting or implementing changes.
 
 ## 1. Tech Stack & Environment
-- **Language**: Python 3.10+ with extensive use of type hints.
+- **Language**: Python 3.10.
 - **UI Framework**: PySide6 (Qt for Python). UI layouts are often defined in `.ui` files and compiled.
 - **Core AI**: PyTorch, OpenCLIP, and FAISS for image embeddings and similarity search.
 - **Database**: SQLite (via `sqlite3`) with Write-Ahead Logging (WAL) for concurrency.
