@@ -120,15 +120,15 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(message)
 
     def on_add_folder_button_click(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+        if os.environ.get('UI_TEST') == '1' and 'TEST_FOLDER' in os.environ:
+            folder = os.environ['TEST_FOLDER']
+        else:
+            folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+            
         if not folder:
             return
 
         self.controller.on_folder_added(normalized_folder_path(folder))
-        # index = self.controller.get_index_for_folder(folder)
-        # if index.isValid():
-        #     self.ui.folderList.setCurrentIndex(index)
-        #     self.ui.folderList.scrollTo(index)
     
     def handle_search(self, query):
         query = query.strip()
