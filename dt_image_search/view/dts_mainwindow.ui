@@ -57,16 +57,26 @@
           <layout class="QVBoxLayout" name="verticalLayout">
            <item>
             <widget class="QLineEdit" name="searchInput">
+             <property name="accessibleName">
+              <string>browse_page_search_input</string>
+             </property>
              <property name="placeholderText">
               <string>Search images ...</string>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QTreeView" name="folderTreeView"/>
+            <widget class="QTreeView" name="folderTreeView">
+             <property name="accessibleName">
+              <string>browse_page_folder_tree_view</string>
+             </property>
+            </widget>
            </item>
            <item>
             <widget class="QPushButton" name="addFolderButton">
+             <property name="accessibleName">
+              <string>browse_page_add_folder_button</string>
+             </property>
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -82,14 +92,22 @@
          </widget>
         </item>
         <item>
-         <widget class="QListView" name="browseImageListView"/>
+         <widget class="QListView" name="browseImageListView">
+          <property name="accessibleName">
+           <string>browse_page_image_list_view</string>
+          </property>
+         </widget>
         </item>
        </layout>
       </widget>
       <widget class="QWidget" name="searchPage">
        <layout class="QVBoxLayout" name="verticalLayout_2">
         <item>
-         <widget class="QListView" name="searchImageListView"/>
+         <widget class="QListView" name="searchImageListView">
+          <property name="accessibleName">
+           <string>search_page_image_list_view</string>
+          </property>
+         </widget>
         </item>
        </layout>
       </widget>
