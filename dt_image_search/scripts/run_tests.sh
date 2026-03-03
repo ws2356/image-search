@@ -1,6 +1,25 @@
 #!/bin/bash
 
-level="${1:-INFO}"
+level=INFO
+need_build=false
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --build)
+      need_build=true
+      shift
+      ;;
+    --log-level)
+      level="$2"
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
 
 export PYTHONPATH=$PYTHONPATH:.
 
@@ -9,7 +28,6 @@ python3 -m pytest -s --log-cli-level=$level tests/unit/test_dts_index.py
 python3 -m pytest -s --log-cli-level=$level tests/unit/test_search_controller.py
 python3 -m pytest -s --log-cli-level=$level tests/functional/test_app_flow.py
 
-exit 0
 pyinstaller dt_image_search/DTImageSearch.spec --noconfirm --clean
 
 node_modules/.bin/appium || true
