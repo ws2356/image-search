@@ -54,6 +54,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='DTImageSearch.app',
-    icon='dt_image_search/resources/appicon.icns',
+    icon='resources/appicon.icns',
     bundle_identifier='vip.wansong.dtimagesearch',
 )

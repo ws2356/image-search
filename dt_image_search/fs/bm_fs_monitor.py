@@ -45,15 +45,36 @@ def start_watch(ctx: BMContext):
         if _fs_observer is None:
             _fs_observer = Observer()
             _fs_handler = FSHandler()
-            _fs_handler_thread = threading.Thread(target=_observer_thread, daemon=True, name="bm_fs_monitor_thread")
-    _fs_handler_thread.start()
+            
+        # Ensure thread is ready to start
+        if _fs_handler_thread is None or not _fs_handler_thread.is_alive():
+             # If thread exists but dead, we must recreate it because threads cannot be restarted
+             if _fs_handler_thread is not None:
+                 log("warning", message="Recreating dead fs handler thread")
+             _fs_handler_thread = threading.Thread(target=_observer_thread, daemon=True, name="bm_fs_monitor_thread")
 
+    # Start thread if not alive. We do this outside the lock to avoid potential deadlocks,
+    # though strictly speaking checking is_alive outside lock is race-prone but acceptable here.
+    if _fs_handler_thread and not _fs_handler_thread.is_alive():
+        try:
+            _fs_handler_thread.start()
+            log("debug", message="Started fs handler thread")
+        except RuntimeError as e:
+            # If start() fails, it usually means thread was already started.
+            # But is_alive() said False. This means it FINISHED.
+            # We cannot restart a finished thread.
+            # But we should have recreated it inside the lock if it was not alive!
+            log("error", message=f"Failed to start thread (likely finished and not recreated?): {e}")
 def stop_watch():
     global _fs_observer, _folder_watch_map, _parent_folder_watch_map
     if _fs_observer is not None:
         _fs_observer.stop()
         _fs_observer.join()
     with _lock:
+        _fs_observer = None
+        _fs_handler_thread = None
+        _folder_watch_map.clear()
+        _parent_folder_watch_map.clear()
         _fs_observer = None
         _folder_watch_map.clear()
         _parent_folder_watch_map.clear()

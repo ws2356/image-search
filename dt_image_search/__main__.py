@@ -22,7 +22,7 @@ QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
-from dt_image_search.model.dts_config import setup_model_cache
+from dt_image_search.model.dts_config import setup_model_cache, get_config
 ctx = get_context()
 setup_model_cache(ctx=ctx)
 
@@ -120,6 +120,12 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(message)
 
     def on_add_folder_button_click(self):
+        config = get_config()
+        if (os.environ.get('UI_TEST') == '1' and 'TEST_FOLDER' in os.environ) or \
+           (config.get('UI_TEST') == '1' and 'TEST_FOLDER' in config):
+            folder = os.environ.get('TEST_FOLDER') or config.get('TEST_FOLDER')
+        else:
+            folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if os.environ.get('UI_TEST') == '1' and 'TEST_FOLDER' in os.environ:
             folder = os.environ['TEST_FOLDER']
         else:
