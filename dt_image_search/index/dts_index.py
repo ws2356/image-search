@@ -102,6 +102,7 @@ def _get_index_lock(index_path: str) -> threading.Lock:
         return _index_locks[index_path]
 
 def _calculate_worker_count():
+    return 1
     """Calculate optimal worker count based on available memory"""
     try:
         import psutil

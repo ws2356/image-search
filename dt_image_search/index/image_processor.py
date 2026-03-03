@@ -16,12 +16,17 @@ _worker_preprocess = None
 def _initialize_worker(ctx: BMContext):
     """Initialize worker process with preloaded model"""
     global _worker_preprocess
+    log("debug", message=f"Initializing model in worker [debug]")
+    log("info", message=f"Initializing model in worker [info]")
+    log("error", message=f"Initializing model in worker [error]")
     
     # Load model once per worker process
     try:
         _model, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=ctx.get_pretrained_model_name_or_path())
         _worker_preprocess = preprocess
+        log("info", message=f"Succeeded initializing model in worker")
     except Exception as e:
+        print(f"Error initializing model in worker: {e}")
         log("error", message=f"Error initializing model in worker: {e}")
         _worker_preprocess = None
 
@@ -49,6 +54,7 @@ def process_image_batch(files):
                 deleted_files.append(file)
             else:
                 invalid_files.append(file)
+                print(f"Error processing {file_path}: {e}")
             continue
     
     if batch_images:
@@ -57,4 +63,5 @@ def process_image_batch(files):
             return batch_tensor, valid_files, deleted_files, invalid_files
         except Exception as e:
             log("error", message=f"Error stacking tensors: {e}")
+            print(f"Error stacking tensors: {e}")
     return None, [], [], []
