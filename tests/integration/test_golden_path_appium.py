@@ -6,6 +6,7 @@ import pyperclip # Need to install this or use Appium clipboard
 from appium import webdriver
 from appium.options.mac import Mac2Options
 from appium.webdriver.common.appiumby import AppiumBy
+import selenium
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
@@ -32,18 +33,12 @@ class TestGoldenPathAppium(unittest.TestCase):
         options = Mac2Options()
         options.bundle_id = "vip.wansong.dtimagesearch" # As defined in spec
         options.app = app_path
-        options.system_port = 10101
-        
-        # We use config file for env vars now, so process_arguments might not be needed for env
-        # But keeping it doesn't hurt if we were launching via Appium
-        # options.process_arguments = ...
-        options.process_arguments = {
-            "env": {
-                "UI_TEST": "1",
-                "TEST_FOLDER": self.test_folder,
-                "HF_HUB_OFFLINE": "1" # Use cached model
-            },
-            "args": []
+        options.system_port = 10100
+
+        options.environment = {
+            "UI_TEST": "1",
+            "TEST_FOLDER": self.test_folder,
+            "HF_HUB_OFFLINE": "1" # Use cached model
         }
         
         print("Connecting to Appium...")
@@ -63,37 +58,46 @@ class TestGoldenPathAppium(unittest.TestCase):
                 EC.presence_of_element_located((AppiumBy.ACCESSIBILITY_ID, aid))
             )
 
+        def wait_for_status_message_contains(text, timeout=100):
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                try:
+                    els = driver.find_elements(AppiumBy.IOS_PREDICATE, f"title CONTAINS '{text}'")
+                    if els:
+                        return True
+                except Exception as e:
+                    print(f"Error occurred while waiting for status message: {e}")
+                time.sleep(10)
+            return False
+
+        # find a widge with title 'test-folder' that is a child of a widge with identifier "browse_page_folder_tree_view"
+        folder_tree = find_access_id("browse_page_folder_tree_view")
+        try:
+            test_folder = folder_tree.find_element(AppiumBy.ACCESSIBILITY_ID, "test-folder")
+            if not (not test_folder):
+                # right click it and select "Remove Folder" item in the context menu to ensure it's not there before we add it
+                actions = ActionChains(driver)
+                actions.move_to_element(test_folder)
+                actions.context_click()
+                actions.perform()
+                time.sleep(3)
+                remove_menu = driver.find_element(AppiumBy.ACCESSIBILITY_ID, "Remove Folder")
+                if remove_menu:
+                    # Move to the menu item before clicking to avoid "Element is not interactable" error
+                    actions = ActionChains(driver)
+                    actions.move_to_element(remove_menu).click().perform()
+                    time.sleep(3)
+        except selenium.common.exceptions.NoSuchElementException as e:
+            print("Test folder not found in tree, which is expected if it's not added yet.")
+
         print("Step 1: Add Folder")
         add_btn = find_access_id("browse_page_add_folder_button")
         add_btn.click()
         
         print("Step 2: Wait for Indexing")
-        # Polling status bar text
-        # We need to find the status bar. It might not have ID.
-        # But we can search by xpath or just wait for long enough if we can't read it.
-        # Let's try to find element containing "Indexing completed" text
-        
-        # Wait up to 60s for indexing
-        indexing_complete = False
-        start_time = time.time()
-        while time.time() - start_time < 60:
-            # Try to find static text element with value starting with "Indexing completed"
-            # Predicate string is powerful in Mac2
-            try:
-                # This predicate finds any text element with label containing 'Indexing completed'
-                els = driver.find_elements(AppiumBy.IOS_PREDICATE, "label CONTAINS 'Indexing completed'")
-                if els:
-                    print("Indexing completed detected!")
-                    indexing_complete = True
-                    break
-            except:
-                pass
-            time.sleep(1)
+        if not wait_for_status_message_contains("Indexing completed", timeout=600):
+            raise TimeoutError("Indexing completion message not found in status bar within timeout")
             
-        # If we can't read status bar, we assume it finished if we wait long enough
-        if not indexing_complete:
-            print("Warning: Could not detect indexing completion message. Proceeding anyway after timeout...")
-        
         print("Step 3: Search")
         search_input = find_access_id("browse_page_search_input")
         search_input.send_keys("red")
