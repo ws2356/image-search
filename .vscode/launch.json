@@ -13,11 +13,25 @@
       "logToFile": true
     },
     {
+      "name": "Debug Unit Test: test_dts_index",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tests/unit/test_dts_index.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
       "name": "Debug current file",
       "type": "debugpy",
       "request": "launch",
       "program": "${file}",
-      "justMyCode": false
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
     },
     {
       "name": "Debug DTImageSearch",

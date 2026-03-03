@@ -85,7 +85,13 @@ class TestDTSIndex(unittest.TestCase):
 
     @patch('dt_image_search.index.dts_index.faiss')
     @patch('os.path.exists')
-    def test_create_index_if_needed_new(self, mock_exists, mock_faiss_local):
+    @patch('dt_image_search.index.dts_index._get_model')
+    def test_create_index_if_needed_new(self, mock_get_model, mock_exists, mock_faiss_local):
+        mock_model = MagicMock()
+        mock_tokenizer = MagicMock()
+        mock_model.visual.output_dim = 512
+        mock_get_model.return_value = (mock_model, None, mock_tokenizer)
+
         mock_exists.return_value = False
         index_path = "dummy_path.faiss"
         
