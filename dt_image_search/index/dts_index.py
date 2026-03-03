@@ -3,16 +3,15 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 
-import typing
-if typing.TYPE_CHECKING:
-    import torch
-    import open_clip
-    import faiss
-    import numpy as np
-    from torchvision import transforms
-
+import torch
 import threading
 import time
+import typing
+import open_clip
+from torchvision import transforms
+import numpy as np
+import faiss
+import hf_xet
 from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import model_downloaded_event
@@ -57,18 +56,8 @@ def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str
         return ret[:TOP_K]
 
 def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
-    import torch
-    import numpy as np
-    
     torch.set_grad_enabled(False)
-    
-    global _device
-    if _device is None:
-        _device = "cuda" if torch.cuda.is_available() else "cpu"
-
     with torch.inference_mode():
-
-
         index = _get_index(index_path)
         _model, _, _tokenizer = _get_model()
         # --- Encode text query ---
@@ -88,9 +77,7 @@ def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
 
 @profile
 def create_index_if_needed(index_path: str):
-    import faiss
     if os.path.exists(index_path):
-
         return
     # --- Create FAISS index ---
     _model, _, _ = _get_model()
@@ -168,17 +155,7 @@ def _cleanup_process_pool():
 
 @with_trace("_add_to_index")
 def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File]) -> bool:
-    import torch
-    import numpy as np
-    import faiss
-
     model_downloaded_event.wait()  # Wait for the model to be downloaded
-
-    global _device
-    if _device is None:
-        _device = "cuda" if torch.cuda.is_available() else "cpu"
-
-
 
     result = True
     index = _get_index(index_path)
@@ -211,11 +188,10 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
             if batch_tensor is not None:
                 torch.set_grad_enabled(False)
                 with torch.inference_mode():
+                    # Move to GPU and process with model (this stays in main process)
                     # log("info", message=f"Getting features from batch {i}")
                     batch_tensor = batch_tensor.to(_device)
                     features = model.encode_image(batch_tensor)
-
-
                     features = features / features.norm(dim=-1, keepdim=True)
                     
                     log("info", message=f"Got features from batch {i}")
@@ -355,9 +331,7 @@ def _get_index(index_path: str):
 
 
 def _load_index(index_path: str):
-    import faiss
     if not os.path.exists(index_path):
-
         raise FileNotFoundError(f"Index file '{index_path}' does not exist.")
     with _get_index_lock(index_path):
         return faiss.read_index(index_path)
@@ -384,12 +358,9 @@ def delete_folder(ctx: BMContext, folder_path: str):
             delete_files_by_folder_id(conn, folder.id)
 
 
-_device = None
+_device = "cuda" if torch.cuda.is_available() else "cpu"
 _model = None
 _preprocess = None
-
-_model = None
-
 _tokenizer = None
 TOP_K = 10
 _model_loaded_event = threading.Event()
@@ -410,9 +381,6 @@ def _get_model():
 def _preload_model(ctx: BMContext):
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
-    import torch
-    import open_clip
-
     model_downloaded_event.wait()  # Wait for the model to be downloaded for cn market
 
     def progress_callback(downloaded_bytes: int, total_bytes: typing.Optional[int], filename: str):
@@ -441,12 +409,7 @@ def _preload_model(ctx: BMContext):
             _tokenizer = open_clip.get_tokenizer(ctx.model_name)
             log("info", message=f"Attempt {_attempt + 1} tokenizer init")
 
-            global _device
-            if _device is None:
-                _device = "cuda" if torch.cuda.is_available() else "cpu"
-                
             _model = model.to(_device).eval()
-
             log("info", message=f"Attempt {_attempt + 1} model eval")
 
             status_bar_messenger.show_status_message.emit("Model inited")
