@@ -77,6 +77,8 @@ class BrowseController(BaseController):
             self._folder_selection_signal.select_folder.emit(folder_item)
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
+        if not current.isValid():
+            return
         folder_path = current.data(Qt.UserRole)
         if not folder_path:
             return
@@ -89,11 +91,17 @@ class BrowseController(BaseController):
 
     def on_delete_folder(self, item: QStandardItem, data: str = None):
         log("info", message=f"Removing folder: {data}")
+        
+        remove_folder(data)
+        
+        if self._selected_folder_path and data and normalized_folder_path(self._selected_folder_path) == normalized_folder_path(data):
+            self._selected_folder_path = ''
+            self.image_list_model().load_images_from_paths([])
+            
         default_bus.publish("folder_deleted_from_ui", folder_path=data)
         index = self.folder_list_model().indexFromItem(item)
         self.folder_list_model().deleteFolder(index)
         delete_folder(ctx=self.ctx, folder_path=data)
-        remove_folder(data)
 
     def _init_folders(self):
         _root_folders = self._load_folders()
@@ -140,7 +148,13 @@ class BrowseController(BaseController):
         src_path = normalized_folder_path(event.src_path)
         if event.event_type == 'deleted':
             item = self.folder_list_model().get_containing_root_folder(src_path)
-            item_path = normalized_folder_path(item.data(Qt.UserRole)).replace('\\', '/') if item else ''
+            
+            item_path = ''
+            if item:
+                data = item.data(Qt.UserRole)
+                if data:
+                    item_path = normalized_folder_path(data).replace('\\', '/')
+
             if item_path == src_path:
                 index = self.folder_list_model().indexFromItem(item)
                 self.folder_list_model().deleteFolder(index)

@@ -185,9 +185,15 @@ class MainWindow(QMainWindow):
         if not is_root_folder:
             return
         folder_path = item.data(Qt.UserRole) if item else None
+        if not folder_path:
+            return
         menu = QMenu(self)
         remove_action = menu.addAction("Remove Folder")
         if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
+            if self.ui.folderTreeView.isExpanded(index):
+                self.ui.folderTreeView.collapse(index)
+            self.ui.folderTreeView.clearSelection()
+            self.ui.folderTreeView.clearFocus()
             self.controller.on_delete_folder(item, normalized_folder_path(folder_path))
 
     def select_folder_in_tree(self, folder_item: QStandardItem):

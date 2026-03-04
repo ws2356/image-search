@@ -68,7 +68,12 @@ class FolderTreeModel(QStandardItemModel):
         root_count = self.rowCount()
         for row in range(root_count):
             item = self.item(row, 0)
-            item_path = normalized_folder_path(item.data(Qt.UserRole)).replace('\\', '/')
+            if not item:
+                continue
+            data = item.data(Qt.UserRole)
+            if not data:
+                continue
+            item_path = normalized_folder_path(data).replace('\\', '/')
             if item and child_path.startswith(item_path):
                 return item
         return None
