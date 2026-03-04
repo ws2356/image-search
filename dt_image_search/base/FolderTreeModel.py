@@ -14,6 +14,7 @@ class FolderTreeModel(QStandardItemModel):
         self.folder_predicate = folder_predicate
 
     def add_root_folder(self, path_strs: typing.List[str]):
+        log("debug", message=f"FolderTreeModel/add_root_folder: adding {len(path_strs)} folders")
         for p in path_strs:
             path = Path(p).resolve()
             if not path.is_dir():
@@ -34,8 +35,10 @@ class FolderTreeModel(QStandardItemModel):
     def deleteFolder(self, index: QModelIndex):
         item = self.itemFromIndex(index)
         if not item or item.parent():
+            log("warning", message="FolderTreeModel/deleteFolder: invalid item or item has parent")
             return
         folder_path = item.data(Qt.UserRole)
+        log("debug", message=f"FolderTreeModel/deleteFolder: deleting folder {folder_path}")
         if not folder_path:
             return
         self.removeRow(item.row(), QModelIndex())
@@ -51,6 +54,7 @@ class FolderTreeModel(QStandardItemModel):
                 self._populate_subfolders(child_item, Path(child_item.data(Qt.UserRole)))
 
     def repopulate_folder_item(self, child_path: str):
+        log("debug", message=f"FolderTreeModel/repopulate_folder_item: repopulating {child_path}")
         item = self.get_containing_root_folder(child_path)
         if not item:
             return

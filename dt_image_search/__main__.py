@@ -52,6 +52,8 @@ _SearchMode = 2
 class MainWindow(QMainWindow):
     def __init__(self, ctx: BMContext):
         super().__init__()
+        from dt_image_search.telemetry.telemetry_client import log
+        log("debug", message="MainWindow/__init__: initializing window")
         self.ctx = ctx
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)

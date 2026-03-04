@@ -146,6 +146,7 @@ class BrowseController(BaseController):
     
     def _try_delete_root_folder(self, event: watchdog.events.FileSystemEvent) -> QStandardItem | None:
         src_path = normalized_folder_path(event.src_path)
+        log("debug", message=f"BrowseController/_try_delete_root_folder: checking deletion for {src_path}")
         if event.event_type == 'deleted':
             item = self.folder_list_model().get_containing_root_folder(src_path)
             
@@ -165,6 +166,7 @@ class BrowseController(BaseController):
                 return item
 
     def _repopulate_folder_item(self, src_path: str):
+        log("debug", message=f"BrowseController/_repopulate_folder_item: repopulating {src_path}")
         affected_root_item = self.folder_list_model().get_containing_root_folder(src_path)
         self.folder_list_model().repopulate_folder_item(src_path)
         self._selected_folder_path = affected_root_item.data(Qt.UserRole)

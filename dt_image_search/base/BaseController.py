@@ -3,10 +3,12 @@ from dt_image_search.view.dts_image_viewer import ImageViewerDialog
 from dt_image_search.view.image_navigator import ModelBasedNavigator
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
+from dt_image_search.telemetry.telemetry_client import log
 
 class BaseController:
     def __init__(self):
         self._is_active = False
+        log("debug", message="BaseController/__init__: BaseController initialized")
     # A read-write property that corresponds to whether the controller is in active state.
     @property
     def is_active(self) -> bool:
