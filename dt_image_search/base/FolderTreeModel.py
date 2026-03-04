@@ -41,7 +41,20 @@ class FolderTreeModel(QStandardItemModel):
         log("debug", message=f"FolderTreeModel/deleteFolder: deleting folder {folder_path}")
         if not folder_path:
             return
-        self.removeRow(item.row(), QModelIndex())
+
+        # 1. 显式获取父级 Index
+        parent_idx = index.parent() # 对于顶层节点，这会自动返回一个无效的 QModelIndex()
+
+        # 2. 只有在 Index 有效时才操作
+        if index.isValid():
+            
+            # 4. 执行删除（QStandardItemModel 内部会处理 begin/end）
+            self.removeRow(index.row(), parent_idx)
+            
+            # 5. 针对 macOS 自动化测试的特殊处理：强制处理一次事件循环
+            # 这一步能确保 macOS 的 Autorelease Pool 得到清理
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
 
     def expand_subfolders(self, index: QModelIndex):
         item = self.itemFromIndex(index)
