@@ -198,11 +198,8 @@ class MainWindow(QMainWindow):
     def safe_execute_delete(self, p_index, folder_path):
         if not p_index.isValid():
             return
-        self.ui.addFolderButton.setFocus()
         if self.ui.folderTreeView.isExpanded(p_index):
             self.ui.folderTreeView.collapse(p_index)
-        self.ui.folderTreeView.clearSelection()
-        self.ui.folderTreeView.clearFocus()
         self.controller.on_delete_folder(p_index, normalized_folder_path(folder_path))
 
     def select_folder_in_tree(self, folder_item: QStandardItem):
