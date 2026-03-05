@@ -1,7 +1,7 @@
 import watchdog
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
-from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, Qt, QModelIndex, Signal, QObject, QThread
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, QPersistentModelIndex, Qt, QModelIndex, Signal, QObject, QThread
 from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
@@ -104,7 +104,7 @@ class BrowseController(BaseController):
     def on_item_expanded(self, index: QModelIndex):
         self.folder_list_model().expand_subfolders(index)
 
-    def on_delete_folder(self, item: QStandardItem, data: str = None):
+    def on_delete_folder(self, index: QPersistentModelIndex, data: str = None):
         log("info", message=f"Removing folder: {data}")
         log("debug", message=f"BrowseController/on_delete_folder: removing folder {data} from FS monitor")
         
@@ -116,7 +116,6 @@ class BrowseController(BaseController):
             self.image_list_model().load_images_from_paths([])
             
         default_bus.publish("folder_deleted_from_ui", folder_path=data)
-        index = self.folder_list_model().indexFromItem(item)
         log("debug", message=f"BrowseController/on_delete_folder: deleting folder from model at index row {index.row()}")
         self.folder_list_model().deleteFolder(index)
         log("debug", message=f"BrowseController/on_delete_folder: deleting folder from DB/Index: {data}")

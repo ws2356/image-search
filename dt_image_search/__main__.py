@@ -17,7 +17,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
-from PySide6.QtCore import QCoreApplication, Qt, Slot, QSize, QUrl, QItemSelectionModel
+from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex
 
 QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
@@ -182,6 +182,7 @@ class MainWindow(QMainWindow):
 
     def show_tree_context_menu(self, pos):
         index = self.ui.folderTreeView.indexAt(pos)
+        p_index = QPersistentModelIndex(index)
         item = self.ui.folderTreeView.model().itemFromIndex(index)
         is_root_folder = item and not item.parent()
         if not is_root_folder:
@@ -191,12 +192,18 @@ class MainWindow(QMainWindow):
             return
         menu = QMenu(self)
         remove_action = menu.addAction("Remove Folder")
-        if menu.exec(self.ui.folderTreeView.mapToGlobal(pos)) == remove_action:
-            if self.ui.folderTreeView.isExpanded(index):
-                self.ui.folderTreeView.collapse(index)
-            self.ui.folderTreeView.clearSelection()
-            self.ui.folderTreeView.clearFocus()
-            self.controller.on_delete_folder(item, normalized_folder_path(folder_path))
+        remove_action.triggered.connect(lambda: QTimer.singleShot(200, lambda: self.safe_execute_delete(p_index, folder_path)))
+        menu.exec(self.ui.folderTreeView.mapToGlobal(pos))
+
+    def safe_execute_delete(self, p_index, folder_path):
+        if not p_index.isValid():
+            return
+        self.ui.addFolderButton.setFocus()
+        if self.ui.folderTreeView.isExpanded(p_index):
+            self.ui.folderTreeView.collapse(p_index)
+        self.ui.folderTreeView.clearSelection()
+        self.ui.folderTreeView.clearFocus()
+        self.controller.on_delete_folder(p_index, normalized_folder_path(folder_path))
 
     def select_folder_in_tree(self, folder_item: QStandardItem):
         """Select and expand to show the specified folder in the tree view."""

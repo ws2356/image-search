@@ -1,6 +1,6 @@
 import typing
 from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import Qt, QModelIndex
+from PySide6.QtCore import Qt, QModelIndex, QPersistentModelIndex
 from pathlib import Path
 from .DefaultFolderPredicate import DefaultFolderPredicate
 from dt_image_search.telemetry.telemetry_client import log
@@ -32,29 +32,33 @@ class FolderTreeModel(QStandardItemModel):
 
             self._populate_subfolders(root_item, path)
 
-    def deleteFolder(self, index: QModelIndex):
-        item = self.itemFromIndex(index)
-        if not item or item.parent():
-            log("warning", message="FolderTreeModel/deleteFolder: invalid item or item has parent")
+    def deleteFolder(self, index: QPersistentModelIndex):
+        # 1. 基础合法性校验 (使用 index 检查，不产生 item 对象)
+        if not index.isValid():
             return
-        folder_path = item.data(Qt.UserRole)
-        log("debug", message=f"FolderTreeModel/deleteFolder: deleting folder {folder_path}")
+            
+        # 检查是否有父节点（顶层节点的 parent 是 invalid 的）
+        if index.parent().isValid():
+            log("warning", message="FolderTreeModel/deleteFolder: item has parent, skipping")
+            return
+
+        # 2. 安全读取数据用于日志
+        # 直接用 index.data，不调用 itemFromIndex(index)
+        folder_path = index.data(Qt.UserRole)
+        row_index = index.row()
+        
+        log("debug", message=f"FolderTreeModel/deleteFolder: deleting folder {folder_path} at row {row_index}")
+
         if not folder_path:
             return
 
-        # 1. 显式获取父级 Index
-        parent_idx = index.parent() # 对于顶层节点，这会自动返回一个无效的 QModelIndex()
+        # 3. 执行删除
+        # 注意：此时我们没有持有任何 item 对象的引用，只有 index 
+        self.removeRow(row_index, QModelIndex())
 
-        # 2. 只有在 Index 有效时才操作
-        if index.isValid():
-            
-            # 4. 执行删除（QStandardItemModel 内部会处理 begin/end）
-            self.removeRow(index.row(), parent_idx)
-            
-            # 5. 针对 macOS 自动化测试的特殊处理：强制处理一次事件循环
-            # 这一步能确保 macOS 的 Autorelease Pool 得到清理
-            from PySide6.QtCore import QCoreApplication
-            QCoreApplication.processEvents()
+        # 4. 强制处理事件循环，清理 macOS 原生引用
+        from PySide6.QtCore import QCoreApplication
+        QCoreApplication.processEvents()
 
     def expand_subfolders(self, index: QModelIndex):
         item = self.itemFromIndex(index)
