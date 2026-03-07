@@ -78,15 +78,6 @@ class TestGoldenPathAppiumWindows(unittest.TestCase):
                 EC.presence_of_element_located((AppiumBy.ACCESSIBILITY_ID, aid))
             )
 
-        def right_click(driver, element):
-            driver.execute_script(
-                "windows: click",
-                {
-                    "elementId": element.id,
-                    "button": "right"
-                }
-            )
-
         def wait_for_status_message_contains(text, timeout=100):
             start_time = time.time()
             while time.time() - start_time < timeout:
@@ -107,15 +98,17 @@ class TestGoldenPathAppiumWindows(unittest.TestCase):
         try:
             test_folder = folder_tree.find_element(AppiumBy.NAME, "test-folder")
             if not (not test_folder):
-                driver.switch_to.window(driver.current_window_handle)
                 # right click it and select "Remove Folder" item in the context menu to ensure it's not there before we add it
-                right_click(driver, test_folder)
-
+                actions = ActionChains(driver)
+                actions.move_to_element(test_folder)
+                actions.context_click()
+                actions.perform()
                 time.sleep(3)
                 remove_menu = driver.find_element(AppiumBy.NAME, "Remove Folder")
                 if remove_menu:
                     # Move to the menu item before clicking to avoid "Element is not interactable" error
-                    remove_menu.click()
+                    actions = ActionChains(driver)
+                    actions.move_to_element(remove_menu).click().perform()
                     time.sleep(3)
         except selenium.common.exceptions.NoSuchElementException as e:
             print("Test folder not found in tree, which is expected if it's not added yet.")
