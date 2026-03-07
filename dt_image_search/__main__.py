@@ -11,6 +11,18 @@ import threading
 import sys
 import threading
 
+args = argparse.ArgumentParser()
+args.add_argument("--test-folder", type=str, help="Path to the test folder containing images for UI testing")
+args.add_argument("--ui-test", action="store_true", help="Flag to indicate running in UI test mode")
+args.add_argument("--hf-hub-offline", action="store_true", help="Run in offline mode using cached models from Hugging Face Hub")
+parsed_args, unknown = args.parse_known_args()
+if parsed_args.ui_test:
+    os.environ['UI_TEST'] = '1'
+if parsed_args.test_folder:
+    os.environ['TEST_FOLDER'] = parsed_args.test_folder
+if parsed_args.hf_hub_offline:
+    os.environ['HF_HUB_OFFLINE'] = '1'
+
 
 # Add the parent directory of this file (i.e. the one that contains dt_image_search/)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
