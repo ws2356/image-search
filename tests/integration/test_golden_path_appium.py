@@ -57,9 +57,9 @@ class TestGoldenPathAppiumWindows(unittest.TestCase):
     def test_golden_path(self):
         driver = self.driver
         
-        def find_access_id(aid):
-            return WebDriverWait(driver, 2000).until(
-                EC.presence_of_element_located((AppiumBy.ACCESSIBILITY_ID, aid))
+        def wait_element(name, timeout: float = 10):
+            return WebDriverWait(driver, timeout=timeout).until(
+                EC.presence_of_element_located((AppiumBy.XPATH, f"//*[contains(@Name, '{name}')]"))
             )
 
         # Windows 下没有 IOS_PREDICATE，改用 Name 或 RuntimeId 属性
@@ -78,8 +78,8 @@ class TestGoldenPathAppiumWindows(unittest.TestCase):
             return False
 
         print("Step 1: Check/Remove existing folder")
-        folder_tree = find_access_id("browse_page_folder_tree_view")
-        time.sleep(5000)
+        folder_tree = wait_element("browse_page_folder_tree_view")
+        time.sleep(5)
         try:
             # 在 Windows 中，树节点可能需要先展开
             test_folder = folder_tree.find_element(AppiumBy.NAME, "test-folder")
@@ -91,11 +91,11 @@ class TestGoldenPathAppiumWindows(unittest.TestCase):
                 remove_menu = driver.find_element(AppiumBy.NAME, "Remove Folder")
                 remove_menu.click()
                 time.sleep(2)
-        except Exception:
-            print("Test folder not found, proceeding...")
+        except Exception as e:
+            print(f"Test folder not found, proceeding..., {e}")
 
         print("Step 2: Add Folder")
-        add_btn = find_access_id("browse_page_add_folder_button")
+        add_btn = wait_element("browse_page_add_folder_button")
         add_btn.click()
         
         print("Step 3: Wait for Indexing")
