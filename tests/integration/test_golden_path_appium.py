@@ -39,6 +39,8 @@ class TestGoldenPathAppiumWindows(unittest.TestCase):
             options = WindowsOptions()
             options.app = app_path
             options.app_arguments = "--ui-test=1 --test-folder=\"{}\" --hf-hub-offline=1".format(self.test_folder)
+            options.set_capability("ms:waitForAppLaunch", "100")
+            options.set_capability("appium:newCommandTimeout", 100)
         else:
             os.system("pkill -f DTImageSearch")
             app_path = os.path.abspath("dist/DTImageSearch.app")
