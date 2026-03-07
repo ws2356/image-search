@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
@@ -146,7 +147,6 @@ class MainWindow(QMainWindow):
     def on_add_folder_button_click(self):
         if os.environ.get('UI_TEST') == '1' and 'TEST_FOLDER' in os.environ:
             folder = os.environ['TEST_FOLDER']
-            return
             # This logic path often hit app crash, so adding a small delay to help mitigate
             # Small delay to simulate user interaction and allow UI to update
             time.sleep(5)
