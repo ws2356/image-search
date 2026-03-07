@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using FlaUI.Core;
 using FlaUI.UIA3;
+using Application = FlaUI.Core.Application;
 
 namespace UIAutomationTests.Utilities
 {
@@ -15,14 +16,13 @@ namespace UIAutomationTests.Utilities
         public void Launch()
         {
             var projectRoot = FindProjectRoot();
-            var pythonPath = "python";
+            var program = Path.Combine(projectRoot, "dist", "DTImageSearch", "DTImageSearch.exe");
 
             var startInfo = new ProcessStartInfo
             {
-                FileName = pythonPath,
-                Arguments = "-m dt_image_search",
-                WorkingDirectory = projectRoot,
-                UseShellExecute = false
+                FileName = program,
+                Arguments = "",
+                WorkingDirectory = projectRoot
             };
 
             startInfo.EnvironmentVariables["UI_TEST"] = "1";

@@ -32,7 +32,7 @@ namespace UIAutomationTests
         private void InitializeMainWindow()
         {
             _mainWindow = AppLauncher.App.GetMainWindow(AppLauncher.Automation);
-            Assert.IsNotNull(_mainWindow, "Main Window not found");
+            Assert.That(_mainWindow, Is.Not.Null, "Main Window not found");
             TestLogger.Log("Main window attached.");
         }
 
@@ -71,7 +71,7 @@ namespace UIAutomationTests
         {
             TestLogger.Log("Adding test folder...");
             var addButton = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("browse_page_add_folder_button"))?.AsButton();
-            Assert.IsNotNull(addButton, "Add Folder button not found");
+            Assert.That(addButton, Is.Not.Null, "Add Folder button not found");
             
             addButton.Invoke();
             TestLogger.Log("Clicked Add Folder button.");
@@ -84,9 +84,9 @@ namespace UIAutomationTests
             var statusBar = _mainWindow.FindFirstDescendant(cf => cf.ByControlType(ControlType.StatusBar)) 
                             ?? _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("status_bar"));
             
-            Assert.IsNotNull(statusBar, "Status bar not found");
+            Assert.That(statusBar, Is.Not.Null, "Status bar not found");
 
-            var success = Retry.WhileTrue(() => 
+            var result = Retry.WhileTrue(() => 
             {
                 var text = statusBar.Name;
                 if (string.IsNullOrEmpty(text))
@@ -98,7 +98,7 @@ namespace UIAutomationTests
                 return text.Contains("Indexing completed");
             }, TimeSpan.FromSeconds(60), TimeSpan.FromMilliseconds(500));
 
-            if (!success)
+            if (!result.Success)
             {
                 TestLogger.Log("Timeout waiting for indexing to complete.", false);
                 Assert.Fail("Timeout waiting for indexing");
@@ -112,7 +112,7 @@ namespace UIAutomationTests
             TestLogger.Log("Starting Search Verification Loop...");
             
             var searchInput = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("search_page_search_input"))?.AsTextBox();
-            Assert.IsNotNull(searchInput, "Search input not found");
+            Assert.That(searchInput, Is.Not.Null, "Search input not found");
 
             string testFolderPath = FindTestFolder();
             if (string.IsNullOrEmpty(testFolderPath))
@@ -137,7 +137,7 @@ namespace UIAutomationTests
                     return items != null && items.Length > 0;
                 }, TimeSpan.FromSeconds(5));
 
-                if (!found)
+                if (!found.Success)
                 {
                     TestLogger.Log($"No results found for {filename}", false);
                     continue;
@@ -161,7 +161,7 @@ namespace UIAutomationTests
                     TestLogger.Log("Copy File Path menu item not found", false);
                 }
 
-                Keyboard.Type(VirtualKeyShort.ESCAPE);
+                Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
                 searchInput.Text = "";
             }
         }
