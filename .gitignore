@@ -8,3 +8,4 @@ __pycache__
 MagicMock/
 /DTImageSearchApp
 /*.msix
+node_modules

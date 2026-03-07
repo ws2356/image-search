@@ -60,7 +60,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     pnpm install -g appium-mac2-driver
   fi
 else
-  "$repo_root/node_modules/.bin/appium" driver install windows
+  if ! "$repo_root/node_modules/.bin/appium" driver list --json | jq -e 'has("windows")' ; then
+    "$repo_root/node_modules/.bin/appium" driver install windows
+  fi
 fi
 
 "$repo_root/node_modules/.bin/appium" --use-plugins=inspector --allow-cors  --relaxed-security || true
