@@ -14,6 +14,10 @@ import selenium
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver import ActionChains
+from selenium.webdriver.common.actions.pointer_input import PointerInput
+from selenium.webdriver.common.actions.action_builder import ActionBuilder
+from selenium.webdriver.common.actions import interaction
+from selenium.webdriver.common.actions.mouse_button import MouseButton
 
 class TestGoldenPathAppiumWindows(unittest.TestCase):
     def setUp(self):
@@ -99,10 +103,14 @@ class TestGoldenPathAppiumWindows(unittest.TestCase):
             test_folder = folder_tree.find_element(AppiumBy.NAME, "test-folder")
             if not (not test_folder):
                 # right click it and select "Remove Folder" item in the context menu to ensure it's not there before we add it
-                actions = ActionChains(driver)
-                actions.move_to_element(test_folder)
-                actions.context_click()
+                touch_input = PointerInput(interaction.POINTER_TOUCH, "touch")
+                actions = ActionBuilder(driver, mouse=touch_input)
+                actions.pointer_action.move_to(test_folder)
+                actions.pointer_action.pointer_down(MouseButton.RIGHT)
+                actions.pointer_action.pause(0.1)
                 actions.perform()
+
+
                 time.sleep(3)
                 remove_menu = driver.find_element(AppiumBy.NAME, "Remove Folder")
                 if remove_menu:
