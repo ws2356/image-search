@@ -99,6 +99,25 @@ class MainWindow(QMainWindow):
         self.ui.searchInput.installEventFilter(self.esc_clear_filter)
         self._register_image_list_double_click_handler()
         self._register_image_list_context_menu_handler()
+#if QT_CONFIG(accessibility)
+        self.ui.searchInput.setAccessibleName("browse_page_search_input")
+#endif // QT_CONFIG(accessibility)
+        self.ui.searchInput.setPlaceholderText("Search images ...")
+#if QT_CONFIG(accessibility)
+        self.ui.folderTreeView.setAccessibleName("browse_page_folder_tree_view")
+#endif // QT_CONFIG(accessibility)
+#if QT_CONFIG(accessibility)
+        self.ui.addFolderButton.setAccessibleName("browse_page_add_folder_button")
+#endif // QT_CONFIG(accessibility)
+        self.ui.addFolderButton.setText("Add Folder")
+#if QT_CONFIG(accessibility)
+        self.ui.browseImageListView.setAccessibleName("browse_page_image_list_view")
+#endif // QT_CONFIG(accessibility)
+#if QT_CONFIG(accessibility)
+        self.ui.searchImageListView.setAccessibleName("search_page_image_list_view")
+#endif // QT_CONFIG(accessibility)
+#if QT_CONFIG(accessibility)
+        self.ui.statusbar.setAccessibleName("statusbar")
 
     @property
     def image_list_view(self):
@@ -121,7 +140,8 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _on_show_status_message(self, message):
         self.statusBar().showMessage(message)
-        self.statusBar().setAccessibleName(message)  # Update accessible name for screen readers
+        if sys.platform == "darwin":
+            self.statusBar().setAccessibleName(message)  # Update accessible name for screen readers
 
     def on_add_folder_button_click(self):
         if os.environ.get('UI_TEST') == '1' and 'TEST_FOLDER' in os.environ:

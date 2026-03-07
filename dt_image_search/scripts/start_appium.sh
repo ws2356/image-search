@@ -14,8 +14,43 @@ repo_root=${this_dir}/../..
 cd "$wd"
 
 # list process that are running on ports 4723 and 10100 and kill them (Appium and the appium Mac2 driver)
-lsof -i :4723 -t | xargs -r kill -SIGTERM || true
-lsof -i :10100 -t | xargs -r kill -SIGTERM || true
+release_port() {
+  PORT=$1
+  # 1. Detect OS
+  OS_TYPE="$(uname)"
+
+  case "$OS_TYPE" in
+      Linux*)
+          # Using fuser (standard on most distros)
+          PID=$(lsof -t -i:"$PORT" 2>/dev/null || fuser "$PORT/tcp" 2>/dev/null)
+          if [ -n "$PID" ]; then
+              echo "Killing PID $PID"
+              kill -SIGTERM $PID
+          fi
+          ;;
+      Darwin*)
+          # macOS uses lsof by default
+          PID=$(lsof -t -i:"$PORT")
+          if [ -n "$PID" ]; then
+              echo "Killing PID $PID"
+              kill -SIGTERM $PID
+          fi
+          ;;
+      MINGW*|MSYS*|CYGWIN*)
+          # Windows (Git Bash / MSYS2)
+          # We find the PID using netstat and kill via taskkill
+          PID=$(netstat -ano | grep ":$PORT " | awk '{print $5}' | head -n 1)
+          if [ -n "$PID" ] && [ "$PID" != "0" ]; then
+              echo "Killing PID $PID"
+              taskkill //F //PID "$PID"
+          fi
+          ;;
+      *)
+          ;;
+  esac
+}
+release_port 4723 || true
+release_port 10100 || true
 
 # If macos
 if [[ "$OSTYPE" == "darwin"* ]]; then

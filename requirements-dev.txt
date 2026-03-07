@@ -1,3 +1,4 @@
+Appium-Python-Client
 pipdeptree
 tomlkit
 pyinstaller

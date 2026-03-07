@@ -37,8 +37,8 @@ if [ "$need_build" = true ]; then
     pyinstaller dt_image_search/DTImageSearch.spec --noconfirm --clean
 fi
 
-if type python3 >/dev/null ; then
-  python3 tests/integration/test_golden_path_appium.py
-else
+if type python >/dev/null ; then
   python tests/integration/test_golden_path_appium.py
+else
+  python3 tests/integration/test_golden_path_appium.py
 fi
