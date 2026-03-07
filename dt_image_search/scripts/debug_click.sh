@@ -1,14 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-curl -X POST http://127.0.0.1:4723/session/42ae2585-75f5-44e0-b21a-51f546e89730/execute/sync \
+curl -X POST http://pc.home:4723/session/18ab6e79-527d-4bda-9532-7dea4ebae614/execute/sync \
   -H "Content-Type: application/json" \
-  -d '{
-    "script": "windows: click",
-    "args": [
-      {
-        "elementId": "42.918978.4.-2147483626",
-        "button": "right"
-      }
-    ]
-  }'
+  -d '{"script":"windows: click","args":[{"elementId":"42.198274.4.-2147483626","button":"right"}]}'

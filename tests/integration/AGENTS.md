@@ -1,13 +1,15 @@
 # Integration tests for dt_image_search
-Integration tests should carry on actual user flows by interacting with the app UI using test frameworks (e.g. Appium). The UI of this app should be actually launched and interacted with. Do not use headless driver for UI test.
+Integration tests should carry on actual user flows by interacting with the app UI using test framework - FlaUI.
 
 ## Environment
+- Only need to be able to run on Windows
 - Use python3.10
-- The app can be launched via `python -m dt_image_searech` command with `<project root>` being the current working directory.
+- The latest stable version of FlaUI (@agents, determine this)
+- C#: latest stable version compatible with FlaUI (@agents, determine this)
 
 ## Prerequisite code changes for UI testing
-1. For all the UI controls in this app, add Accessibility attributes (if not already there) for ease of locating UI elements during UI testing. The format of the value of accessibility attributes is `<page_id>_<control_id>`. `<page_id>` and `<control_id>` can be transformed from the logic name of page or control, e.g. 'browse_page', 'add_folder_button'. Notice that snake case is used.
-2. Add custom logic to skip file selecting when `Add Folder` button is clicked - when `UI_TEST=1` and `TEST_FOLDER` are passed in as environments, skip the File selecting dialog when `Add Folder` is clicked, instead use the `TEST_FOLDER` variable directly to continue the flow.
+1. [√] For all the UI controls in this app, add Accessibility attributes (if not already there) for ease of locating UI elements during UI testing. The format of the value of accessibility attributes is `<page_id>_<control_id>`. `<page_id>` and `<control_id>` can be transformed from the logic name of page or control, e.g. 'browse_page', 'add_folder_button'. Notice that snake case is used.
+2. [√] Add custom logic to skip file selecting when `Add Folder` button is clicked - when `UI_TEST=1` and `TEST_FOLDER` are passed in as environments, skip the File selecting dialog when `Add Folder` is clicked, instead use the `TEST_FOLDER` variable directly to continue the flow.
 
 ## For all cases
 1. Pass in an environment variable `UI_TEST=1` for mocking parts of the UI flow that are hard to implement.
