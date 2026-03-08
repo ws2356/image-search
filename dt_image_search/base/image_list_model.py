@@ -42,6 +42,9 @@ class ImageListModel(QAbstractListModel):
         if role == Qt.ToolTipRole:
             return os.path.basename(path)
 
+        if role == Qt.AccessibleTextRole:
+            return os.path.basename(path)
+
         if role == Qt.UserRole:
             return path
 

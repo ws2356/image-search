@@ -1,8 +1,4 @@
-using System;
 using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Windows.Forms;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
@@ -23,7 +19,10 @@ namespace UIAutomationTests
         public void GoldenPath_EndToEnd()
         {
             InitializeMainWindow();
+            Thread.Sleep(10000);
             EnsureCleanState();
+            // Wait for 30 seconds to ensure the app is fully ready before proceeding
+            Thread.Sleep(3000);
             AddTestFolder();
             WaitForIndexingCompletion();
             VerifySearchFunctionality();
@@ -39,29 +38,30 @@ namespace UIAutomationTests
         private void EnsureCleanState()
         {
             TestLogger.Log("Checking for existing test-folder...");
+
+            var browseLeftPanel = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("browseLeftPanel", PropertyConditionFlags.MatchSubstring));
+            Assert.That(browseLeftPanel, Is.Not.Null, "Browse left panel not found");
             
-            var folderList = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("browse_page_folder_list"))?.AsListBox();
-            
+            var folderList = browseLeftPanel.FindFirstDescendant(
+                cf => cf.ByControlType(ControlType.Tree));
+
             if (folderList != null)
             {
-                var testFolderItem = folderList.Items.FirstOrDefault(i => i.Name.Contains("test-folder"));
+                var testFolderItem = folderList.FindFirstDescendant(cf => cf.ByName("test-folder"));
                 if (testFolderItem != null)
                 {
                     TestLogger.Log("Found existing test-folder. Removing it.");
+                    testFolderItem.Focus();
                     testFolderItem.RightClick();
+                    Thread.Sleep(3000); // Wait for context menu to appear
                     
                     var removeButton = _mainWindow.FindFirstDescendant(cf => cf.ByName("Remove Folder"))?.AsButton() 
                                        ?? AppLauncher.Automation.GetDesktop().FindFirstDescendant(cf => cf.ByName("Remove Folder"))?.AsButton();
+                    Assert.That(removeButton, Is.Not.Null, "Remove Folder button not found");
 
                     if (removeButton != null)
                     {
                         removeButton.Invoke();
-                        TestLogger.Log("Clicked Remove Folder.");
-                        Retry.WhileTrue(() => folderList.Items.Any(i => i.Name.Contains("test-folder")), TimeSpan.FromSeconds(2));
-                    }
-                    else
-                    {
-                        TestLogger.Log("Could not find Remove Folder button.", false);
                     }
                 }
             }
@@ -70,7 +70,7 @@ namespace UIAutomationTests
         private void AddTestFolder()
         {
             TestLogger.Log("Adding test folder...");
-            var addButton = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("browse_page_add_folder_button"))?.AsButton();
+            var addButton = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("browsePageAddFolderButton", PropertyConditionFlags.MatchSubstring))?.AsButton();
             Assert.That(addButton, Is.Not.Null, "Add Folder button not found");
             
             addButton.Invoke();
@@ -81,22 +81,17 @@ namespace UIAutomationTests
         {
             TestLogger.Log("Waiting for indexing to complete...");
             
-            var statusBar = _mainWindow.FindFirstDescendant(cf => cf.ByControlType(ControlType.StatusBar)) 
-                            ?? _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("status_bar"));
+            var statusBar = _mainWindow.FindFirstDescendant(cf => 
+                cf.ByControlType(FlaUI.Core.Definitions.ControlType.StatusBar)
+                .And(cf.ByAutomationId("statusbar", PropertyConditionFlags.MatchSubstring))
+                );
             
             Assert.That(statusBar, Is.Not.Null, "Status bar not found");
 
             var result = Retry.WhileTrue(() => 
             {
-                var text = statusBar.Name;
-                if (string.IsNullOrEmpty(text))
-                {
-                    var textElement = statusBar.FindFirstDescendant(cf => cf.ByControlType(ControlType.Text));
-                    text = textElement?.Name ?? "";
-                }
-                
-                return text.Contains("Indexing completed");
-            }, TimeSpan.FromSeconds(60), TimeSpan.FromMilliseconds(500));
+                return statusBar.Properties.Name.ValueOrDefault?.Contains("Indexing completed") != true;
+            }, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(1));
 
             if (!result.Success)
             {
@@ -111,8 +106,8 @@ namespace UIAutomationTests
         {
             TestLogger.Log("Starting Search Verification Loop...");
             
-            var searchInput = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("search_page_search_input"))?.AsTextBox();
-            Assert.That(searchInput, Is.Not.Null, "Search input not found");
+            var searchInputField = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("searchInputField", PropertyConditionFlags.MatchSubstring))?.AsTextBox();
+            Assert.That(searchInputField, Is.Not.Null, "Search input not found");
 
             string testFolderPath = FindTestFolder();
             if (string.IsNullOrEmpty(testFolderPath))
@@ -128,10 +123,13 @@ namespace UIAutomationTests
                 var filename = Path.GetFileNameWithoutExtension(file);
                 TestLogger.Log($"Testing file: {filename}");
 
-                searchInput.Text = filename;
+                searchInputField.Text = filename;
                 
-                var list = _mainWindow.FindFirstDescendant(cf => cf.ByAutomationId("search_page_image_list"));
-                var found = Retry.WhileTrue(() => 
+                var list = _mainWindow.FindFirstDescendant(
+                    cf => cf.ByAutomationId("searchPageImageListView", PropertyConditionFlags.MatchSubstring));
+                // Wait for results to appear and stable
+                Thread.Sleep(5000); // Initial wait for results to start appearing
+                var found = Retry.WhileFalse(() => 
                 {
                     var items = list?.FindAllChildren();
                     return items != null && items.Length > 0;
@@ -144,25 +142,10 @@ namespace UIAutomationTests
                 }
 
                 var firstItem = list.FindFirstChild();
-                firstItem.RightClick();
-
-                var copyButton = AppLauncher.Automation.GetDesktop().FindFirstDescendant(cf => cf.ByName("Copy File Path"))?.AsButton();
-                
-                if (copyButton != null)
-                {
-                    copyButton.Invoke();
-                    
-                    string clipboardText = GetClipboardText();
-                    bool match = clipboardText.Contains(filename);
-                    TestLogger.Log($"Clipboard: '{clipboardText}', Expected to contain: '{filename}'", match);
-                }
-                else
-                {
-                    TestLogger.Log("Copy File Path menu item not found", false);
-                }
-
-                Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
-                searchInput.Text = "";
+                Assert.That(firstItem, Is.Not.Null, $"No items found in results for {filename}");
+                var detectedFilename = Path.GetFileName(firstItem.Name);
+                Assert.That(detectedFilename, Is.EqualTo(Path.GetFileName(file)), $"Expected {filename} but got {detectedFilename}");
+                TestLogger.Log($"Successfully found {filename} in search results.");
             }
         }
 

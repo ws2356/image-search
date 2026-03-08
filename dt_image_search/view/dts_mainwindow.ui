@@ -56,7 +56,7 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout">
            <item>
-            <widget class="QLineEdit" name="searchInput">
+            <widget class="QLineEdit" name="searchInputField">
              <property name="accessibleName">
               <string>browse_page_search_input</string>
              </property>
@@ -66,14 +66,14 @@
             </widget>
            </item>
            <item>
-            <widget class="QTreeView" name="folderTreeView">
+            <widget class="QTreeView" name="browsePageFolderTreeView">
              <property name="accessibleName">
               <string>browse_page_folder_tree_view</string>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="addFolderButton">
+            <widget class="QPushButton" name="browsePageAddFolderButton">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -92,7 +92,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QListView" name="browseImageListView">
+         <widget class="QListView" name="browsePageImageListView">
           <property name="accessibleName">
            <string>browse_page_image_list_view</string>
           </property>
@@ -103,11 +103,7 @@
       <widget class="QWidget" name="searchPage">
        <layout class="QVBoxLayout" name="verticalLayout_2">
         <item>
-         <widget class="QListView" name="searchImageListView">
-          <property name="accessibleName">
-           <string>search_page_image_list_view</string>
-          </property>
-         </widget>
+         <widget class="QListView" name="searchPageImageListView"/>
         </item>
        </layout>
       </widget>
@@ -121,15 +117,11 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>24</height>
+     <height>33</height>
     </rect>
    </property>
   </widget>
-  <widget class="QStatusBar" name="statusbar">
-   <property name="accessibleName">
-    <string>statusbar</string>
-   </property>
-  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>
  <connections/>

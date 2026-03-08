@@ -22,7 +22,11 @@ namespace UIAutomationTests.Utilities
             {
                 FileName = program,
                 Arguments = "",
-                WorkingDirectory = projectRoot
+                WorkingDirectory = projectRoot,
+                // 关键点：对于自动化测试，通常建议设为 false，除非你的程序必须依赖 Shell 启动
+                UseShellExecute = false, 
+                RedirectStandardError = true, // 开启重定向以便捕获崩溃原因
+                RedirectStandardOutput = true
             };
 
             startInfo.EnvironmentVariables["UI_TEST"] = "1";
@@ -64,10 +68,23 @@ namespace UIAutomationTests.Utilities
             Automation?.Dispose();
             App?.Close();
             
-            if (_process != null && !_process.HasExited)
+            if (_process != null)
             {
-                _process.Kill();
-                _process.Dispose();
+                try
+                {
+                    if (!_process.HasExited)
+                    {
+                        _process.Kill();
+                    }
+                }
+                catch (Exception)
+                {
+                    // Ignore errors during process cleanup (e.g. process already exited or not associated)
+                }
+                finally
+                {
+                    _process.Dispose();
+                }
             }
         }
     }

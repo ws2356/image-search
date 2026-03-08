@@ -11,6 +11,7 @@ import threading
 import sys
 import threading
 
+# TODO: may not need this
 args = argparse.ArgumentParser()
 args.add_argument("--test-folder", type=str, help="Path to the test folder containing images for UI testing")
 args.add_argument("--ui-test", type=int, help="Flag to indicate running in UI test mode")
@@ -76,22 +77,22 @@ class MainWindow(QMainWindow):
         self.controller = BrowseController(ctx=self.ctx)
         self.controller.is_active = True  # Set the controller to active state
 
-        self.ui.addFolderButton.clicked.connect(self.on_add_folder_button_click)
-        self.ui.folderTreeView.setModel(self.controller.folder_list_model())
-        self.ui.folderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
-        self.ui.folderTreeView.expanded.connect(self.controller.on_item_expanded)
-        self.ui.folderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.ui.folderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
+        self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
+        self.ui.browsePageFolderTreeView.setModel(self.controller.folder_list_model())
+        self.ui.browsePageFolderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
+        self.ui.browsePageFolderTreeView.expanded.connect(self.controller.on_item_expanded)
+        self.ui.browsePageFolderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.ui.browsePageFolderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
         
         # Connect folder selection signal to auto-select folders in the tree view
         self.controller.folder_selection_signal.select_folder.connect(self.select_folder_in_tree)
 
         self.image_list_view.setModel(self.controller.image_list_model())
 
-        self.ui.searchInput.textChanged.connect(self.handle_search)
-        self.ui.searchInput.setClearButtonEnabled(True)
+        self.ui.searchInputField.textChanged.connect(self.handle_search)
+        self.ui.searchInputField.setClearButtonEnabled(True)
 
-        for view in [self.ui.searchImageListView, self.ui.browseImageListView]:
+        for view in [self.ui.searchPageImageListView, self.ui.browsePageImageListView]:
             view.setEditTriggers(QAbstractItemView.NoEditTriggers)
             view.setDragEnabled(False)
             view.setAcceptDrops(False)
@@ -108,35 +109,16 @@ class MainWindow(QMainWindow):
         status_bar_messenger.show_status_message.connect(self._on_show_status_message)
 
         self.esc_clear_filter = DTSEscClearEventFilter(self)
-        self.ui.searchInput.installEventFilter(self.esc_clear_filter)
+        self.ui.searchInputField.installEventFilter(self.esc_clear_filter)
         self._register_image_list_double_click_handler()
         self._register_image_list_context_menu_handler()
-#if QT_CONFIG(accessibility)
-        self.ui.searchInput.setAccessibleName("browse_page_search_input")
-#endif // QT_CONFIG(accessibility)
-        self.ui.searchInput.setPlaceholderText("Search images ...")
-#if QT_CONFIG(accessibility)
-        self.ui.folderTreeView.setAccessibleName("browse_page_folder_tree_view")
-#endif // QT_CONFIG(accessibility)
-#if QT_CONFIG(accessibility)
-        self.ui.addFolderButton.setAccessibleName("browse_page_add_folder_button")
-#endif // QT_CONFIG(accessibility)
-        self.ui.addFolderButton.setText("Add Folder")
-#if QT_CONFIG(accessibility)
-        self.ui.browseImageListView.setAccessibleName("browse_page_image_list_view")
-#endif // QT_CONFIG(accessibility)
-#if QT_CONFIG(accessibility)
-        self.ui.searchImageListView.setAccessibleName("search_page_image_list_view")
-#endif // QT_CONFIG(accessibility)
-#if QT_CONFIG(accessibility)
-        self.ui.statusbar.setAccessibleName("statusbar")
 
     @property
     def image_list_view(self):
         if self._mode == _SearchMode:
-            return self.ui.searchImageListView
+            return self.ui.searchPageImageListView
         elif self._mode == _BrowseMode:
-            return self.ui.browseImageListView
+            return self.ui.browsePageImageListView
 
     def _register_image_list_context_menu_handler(self):
         self.image_list_view.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -185,9 +167,9 @@ class MainWindow(QMainWindow):
                 self.image_list_view.setModel(self.controller.image_list_model())
                 self.ui.mainStack.setCurrentWidget(self.ui.searchPage)
                 # Update layout
-                self.ui.browsePage.layout().removeWidget(self.ui.searchInput)
-                self.ui.searchPage.layout().insertWidget(0, self.ui.searchInput)
-                self.ui.searchInput.setFocus()
+                self.ui.browsePage.layout().removeWidget(self.ui.searchInputField)
+                self.ui.searchPage.layout().insertWidget(0, self.ui.searchInputField)
+                self.ui.searchInputField.setFocus()
 
                 self._register_image_list_double_click_handler()
                 self._register_image_list_context_menu_handler()
@@ -204,17 +186,17 @@ class MainWindow(QMainWindow):
                 self.image_list_view.setModel(self.controller.image_list_model())
                 self.ui.mainStack.setCurrentWidget(self.ui.browsePage)
                 # Update layout
-                self.ui.searchPage.layout().removeWidget(self.ui.searchInput)
-                self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInput)
-                self.ui.searchInput.setFocus()
+                self.ui.searchPage.layout().removeWidget(self.ui.searchInputField)
+                self.ui.browseLeftPanel.layout().insertWidget(0, self.ui.searchInputField)
+                self.ui.searchInputField.setFocus()
                 self._register_image_list_double_click_handler()
                 self._register_image_list_context_menu_handler()
         
 
     def show_tree_context_menu(self, pos):
-        index = self.ui.folderTreeView.indexAt(pos)
+        index = self.ui.browsePageFolderTreeView.indexAt(pos)
         p_index = QPersistentModelIndex(index)
-        item = self.ui.folderTreeView.model().itemFromIndex(index)
+        item = self.ui.browsePageFolderTreeView.model().itemFromIndex(index)
         is_root_folder = item and not item.parent()
         if not is_root_folder:
             return
@@ -224,13 +206,13 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         remove_action = menu.addAction("Remove Folder")
         remove_action.triggered.connect(lambda: QTimer.singleShot(200, lambda: self.safe_execute_delete(p_index, folder_path)))
-        menu.exec(self.ui.folderTreeView.mapToGlobal(pos))
+        menu.exec(self.ui.browsePageFolderTreeView.mapToGlobal(pos))
 
     def safe_execute_delete(self, p_index, folder_path):
         if not p_index.isValid():
             return
-        if self.ui.folderTreeView.isExpanded(p_index):
-            self.ui.folderTreeView.collapse(p_index)
+        if self.ui.browsePageFolderTreeView.isExpanded(p_index):
+            self.ui.browsePageFolderTreeView.collapse(p_index)
         self.controller.on_delete_folder(p_index, normalized_folder_path(folder_path))
 
     def select_folder_in_tree(self, folder_item: QStandardItem):
@@ -242,14 +224,14 @@ class MainWindow(QMainWindow):
         if not folder_index.isValid():
             return
         
-        self.ui.folderTreeView.expand(folder_index)
+        self.ui.browsePageFolderTreeView.expand(folder_index)
         
         # Select the folder
-        selection_model = self.ui.folderTreeView.selectionModel()
+        selection_model = self.ui.browsePageFolderTreeView.selectionModel()
         selection_model.setCurrentIndex(folder_index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
         
         # Scroll to make the selected item visible
-        self.ui.folderTreeView.scrollTo(folder_index)
+        self.ui.browsePageFolderTreeView.scrollTo(folder_index)
         
         from dt_image_search.telemetry.telemetry_client import log
         log("debug", message=f"Auto-selected folder in tree: {folder_item.data(Qt.UserRole)}")
