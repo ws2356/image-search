@@ -23,6 +23,7 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from dt_image_search.dts_logging import get_other_handlers
 from dt_image_search.telemetry.dt_device_id import get_device_id
 from dt_image_search.telemetry.dt_session_id import session_id
+from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
 from dt_image_search.model.dts_config import get_log_level
 
 
@@ -35,6 +36,7 @@ _image_search_client = "imagesearch_client"
 
 _resource = Resource.create(attributes={
     "service.name": _image_search_client,
+    **RESOURCE_ATTRIBUTES,
 })
 _BATCH_SIZE = 128 * 1024
 _QUEUE_SIZE = 1024 * 1024
