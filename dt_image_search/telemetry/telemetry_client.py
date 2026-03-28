@@ -48,7 +48,7 @@ temporality = {
                 ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
                 ObservableGauge: AggregationTemporality.CUMULATIVE,
             }
-_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality)
+_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality, timeout=60)
 metric_readers = [PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)]
 if sys.stdout is not None and sys.stderr is not None:
     _metric_exporter2 = ConsoleMetricExporter(preferred_temporality=temporality)
@@ -64,7 +64,7 @@ error_counter = _meter.create_counter("errors")
 
 # === TRACING SETUP ===
 trace.set_tracer_provider(TracerProvider(resource=_resource))
-_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint)
+_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, timeout=60)
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 if sys.stdout is not None and sys.stderr is not None:
     trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
@@ -72,7 +72,7 @@ tracer = trace.get_tracer(_image_search_client)
 
 # === LOGGING SETUP ===
 _logger_provider = LoggerProvider(resource=_resource)
-_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint)
+_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, timeout=60)
 _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
