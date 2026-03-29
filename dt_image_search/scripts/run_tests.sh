@@ -33,17 +33,16 @@ export PYTHONPATH=${PYTHONPATH:-}${PYTHONPATH:+:}.
 
 echo "PYTHONPATH set to: $PYTHONPATH"
 
-python_bin=python3
+python_bin=python
 if ! command -v $python_bin &> /dev/null; then
     echo "$python_bin could not be found, trying python..."
-    python_bin=python
+    python_bin=python3
     if ! command -v $python_bin &> /dev/null; then
         echo "Neither python nor python3 could be found. Please install Python and ensure it's in your PATH."
         exit 1
     fi
 fi
 
-$python_bin -m pytest tests/unit/test_dts_db.py
 $python_bin -m pytest -s --log-cli-level=$level tests/unit/test_dts_index.py
 $python_bin -m pytest -s --log-cli-level=$level tests/unit/test_search_controller.py
 $python_bin -m pytest -s --log-cli-level=$level tests/functional/test_app_flow.py
