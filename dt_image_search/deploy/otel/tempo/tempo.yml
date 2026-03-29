@@ -2,6 +2,12 @@ auth_enabled: false
 
 server:
   http_listen_port: 3200
+  grpc_listen_port: 9095
+
+memberlist:
+  bind_addr:
+    - 0.0.0.0
+  bind_port: 7946
 
 distributor:
   receivers:
@@ -34,6 +40,9 @@ storage:
 
 metrics_generator:
   processor:
+    local_blocks:
+      filter_server_spans: false
+      flush_to_storage: true
     span_metrics:
       # Optional: Customize dimensions for span metrics
       dimensions: [http.method, http.status_code]
@@ -47,7 +56,7 @@ metrics_generator:
       heartbeat_timeout: 1m
       instance_id: tempo
       instance_addr: tempo  # Or your container IP, e.g., 172.17.0.2 (check with `ip addr show`)
-      instance_port: 7946  # Default memberlist port; ensure it's exposed if needed
+      instance_port: 9095  # Tempo gRPC port for generator ring communication
   storage:
       path: /var/tempo/generator  # Persistent volume for metrics WAL
       remote_write:
@@ -60,4 +69,4 @@ metrics_generator:
 overrides:  # Enable processors globally/single-tenant
   defaults:
     metrics_generator:
-      processors: [span_metrics, service_graphs]
+      processors: [local_blocks, span_metrics, service_graphs]
