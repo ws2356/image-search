@@ -32,11 +32,14 @@ _telemetry_upload_host = TELEMETRY_UPLOAD_HOST
 _metrics_upload_endpoint = METRICS_UPLOAD_ENDPOINT
 _traces_upload_endpoint = TRACES_UPLOAD_ENDPOINT
 _logs_upload_endpoint = LOGS_UPLOAD_ENDPOINT
+_session_id_attribute = "app.session.id"
+_device_id_attribute = "app.device.id"
 
 _image_search_client = "imagesearch_client"
 
 _resource = Resource.create(attributes={
     "service.name": _image_search_client,
+    _device_id_attribute: get_device_id(),
     **RESOURCE_ATTRIBUTES,
 })
 _BATCH_SIZE = EXPORT_BATCH_SIZE
@@ -98,6 +101,12 @@ class OtelLogFilter(logging.Filter):
         return True
 
 
+class OtelContextFilter(logging.Filter):
+    def filter(self, record):
+        setattr(record, _session_id_attribute, session_id)
+        return True
+
+
 # Open the system’s null device for writing:
 # ── '/dev/null' on Unix, 'nul' on Windows
 # Redirect both Python stdout and stderr so that naive dependencies that write to stdout/stderr won't break the app
@@ -120,6 +129,7 @@ def log(severity: str, error_type: str = "", message: str = "", where: str = "")
                 level = logging.DEBUG
             logging_handler = LoggingHandler(level=level, logger_provider=_logger_provider)
             logging_handler.addFilter(OtelLogFilter())
+            logging_handler.addFilter(OtelContextFilter())
             logging.basicConfig(level=level, handlers=[logging_handler] + get_other_handlers())
             _logger = logging.getLogger(_image_search_client)
     if severity not in ["debug", "info", "warning", "error"]:
@@ -140,8 +150,7 @@ def with_trace(name=None):
         def wrapper(*args, **kwargs):
             span_name = name or func.__name__
             with tracer.start_as_current_span(span_name) as span:
-                span.set_attribute("session_id", session_id)
-                span.set_attribute("device_id", get_device_id())
+                span.set_attribute(_session_id_attribute, session_id)
                 return func(*args, **kwargs)
         return wrapper
     return decorator
