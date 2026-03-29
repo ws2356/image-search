@@ -23,14 +23,15 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from dt_image_search.dts_logging import get_other_handlers
 from dt_image_search.telemetry.dt_device_id import get_device_id
 from dt_image_search.telemetry.dt_session_id import session_id
+from dt_image_search.telemetry.otlp_settings import EXPORT_BATCH_SIZE, EXPORT_QUEUE_SIZE, EXPORT_TIMEOUT_SECONDS, LOGS_UPLOAD_ENDPOINT, METRICS_UPLOAD_ENDPOINT, TELEMETRY_UPLOAD_HOST, TRACES_UPLOAD_ENDPOINT
 from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
 from dt_image_search.model.dts_config import get_log_level
 
 
-_telemetry_upload_host = "https://otel.boldman.net"
-_metrics_upload_endpoint = f"{_telemetry_upload_host}/v1/metrics"
-_traces_upload_endpoint = f"{_telemetry_upload_host}/v1/traces"
-_logs_upload_endpoint = f"{_telemetry_upload_host}/v1/logs"
+_telemetry_upload_host = TELEMETRY_UPLOAD_HOST
+_metrics_upload_endpoint = METRICS_UPLOAD_ENDPOINT
+_traces_upload_endpoint = TRACES_UPLOAD_ENDPOINT
+_logs_upload_endpoint = LOGS_UPLOAD_ENDPOINT
 
 _image_search_client = "imagesearch_client"
 
@@ -38,8 +39,8 @@ _resource = Resource.create(attributes={
     "service.name": _image_search_client,
     **RESOURCE_ATTRIBUTES,
 })
-_BATCH_SIZE = 128 * 1024
-_QUEUE_SIZE = 1024 * 1024
+_BATCH_SIZE = EXPORT_BATCH_SIZE
+_QUEUE_SIZE = EXPORT_QUEUE_SIZE
 
 # === METRICS SETUP ===
 temporality = {
@@ -50,7 +51,7 @@ temporality = {
                 ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
                 ObservableGauge: AggregationTemporality.CUMULATIVE,
             }
-_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality, timeout=60)
+_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality, timeout=EXPORT_TIMEOUT_SECONDS)
 metric_readers = [PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)]
 if sys.stdout is not None and sys.stderr is not None:
     _metric_exporter2 = ConsoleMetricExporter(preferred_temporality=temporality)
@@ -66,7 +67,7 @@ error_counter = _meter.create_counter("errors")
 
 # === TRACING SETUP ===
 trace.set_tracer_provider(TracerProvider(resource=_resource))
-_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, timeout=60)
+_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 if sys.stdout is not None and sys.stderr is not None:
     trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
@@ -74,7 +75,7 @@ tracer = trace.get_tracer(_image_search_client)
 
 # === LOGGING SETUP ===
 _logger_provider = LoggerProvider(resource=_resource)
-_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, timeout=60)
+_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
 _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 # otel_logger = _logger_provider.get_logger(_image_search_client)
 
