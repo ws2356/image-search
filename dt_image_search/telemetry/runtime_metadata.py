@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 import xml.etree.ElementTree as ET
@@ -9,6 +10,7 @@ from pathlib import Path
 PACKAGE_TYPE_DEBUG = "debug"
 PACKAGE_TYPE_MSIX = "msix"
 PACKAGE_TYPE_ATTRIBUTE = "app.package.type"
+PACKAGE_LAUNCH_TYPE_ATTRIBUTE = "app.launch.type"
 MANIFEST_NAMESPACE = {"appx": "http://schemas.microsoft.com/appx/manifest/foundation/windows10"}
 
 
@@ -77,7 +79,11 @@ def resolve_service_version() -> str:
 
 PACKAGE_TYPE = resolve_package_type()
 SERVICE_VERSION = resolve_service_version()
+
+_launch_type = os.getenv("UI_TEST", "") == '1' and "test" or "default"
+
 RESOURCE_ATTRIBUTES = {
     "service.version": SERVICE_VERSION,
     PACKAGE_TYPE_ATTRIBUTE: PACKAGE_TYPE,
+    PACKAGE_LAUNCH_TYPE_ATTRIBUTE: _launch_type,
 }

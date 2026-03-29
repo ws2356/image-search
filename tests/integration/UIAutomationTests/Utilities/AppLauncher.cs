@@ -16,7 +16,7 @@ namespace UIAutomationTests.Utilities
         public void Launch()
         {
             var projectRoot = FindProjectRoot();
-            var program = Path.Combine(projectRoot, "dist", "DTImageSearch", "DTImageSearch.exe");
+            var program = Path.Combine(projectRoot, "DTImageSearchApp", "DTImageSearch", "DTImageSearch.exe");
 
             var startInfo = new ProcessStartInfo
             {
