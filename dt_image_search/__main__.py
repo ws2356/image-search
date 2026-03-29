@@ -30,13 +30,15 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
-from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex
+from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QLockFile
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache
+from dt_image_search.model.dts_fs import get_app_data_path
 ctx = get_context()
 setup_model_cache(ctx=ctx)
 
@@ -60,6 +62,88 @@ from dt_image_search.index.dts_model_downloader import init as model_downloader_
 
 _BrowseMode = 1
 _SearchMode = 2
+_app_lock = None
+_activation_server = None
+
+
+def _activation_server_name(ctx: BMContext) -> str:
+    suffix = ctx.subfolder or "default"
+    return f"net.boldman.imagesearch.{suffix}"
+
+
+def acquire_single_instance_lock(ctx: BMContext) -> bool:
+    global _app_lock
+
+    lock_path = str(get_app_data_path(ctx) / "app_instance.lock")
+    _app_lock = QLockFile(lock_path)
+    # Keep stale detection tied to process lifetime for this long-running GUI app.
+    _app_lock.setStaleLockTime(0)
+    return _app_lock.tryLock(0)
+
+
+def release_single_instance_lock() -> None:
+    global _app_lock
+
+    if _app_lock is None:
+        return
+
+    _app_lock.unlock()
+    _app_lock = None
+
+
+def send_activation_request(ctx: BMContext) -> bool:
+    socket = QLocalSocket()
+    socket.connectToServer(_activation_server_name(ctx))
+    if not socket.waitForConnected(1000):
+        return False
+    socket.write(b"activate")
+    socket.flush()
+    socket.waitForBytesWritten(1000)
+    socket.disconnectFromServer()
+    return True
+
+
+def close_activation_server() -> None:
+    global _activation_server
+
+    if _activation_server is None:
+        return
+
+    server_name = _activation_server.serverName()
+    _activation_server.close()
+    QLocalServer.removeServer(server_name)
+    _activation_server = None
+
+
+def setup_activation_server(ctx: BMContext, window: QMainWindow) -> None:
+    global _activation_server
+
+    server_name = _activation_server_name(ctx)
+    QLocalServer.removeServer(server_name)
+
+    _activation_server = QLocalServer()
+
+    def handle_activation_request() -> None:
+        while _activation_server.hasPendingConnections():
+            connection = _activation_server.nextPendingConnection()
+            if connection is None:
+                continue
+            connection.waitForReadyRead(250)
+            connection.readAll()
+            connection.disconnectFromServer()
+            if window.isMinimized():
+                window.showNormal()
+            if not window.isVisible():
+                window.show()
+            window.raise_()
+            window.activateWindow()
+            if hasattr(window, "ui") and getattr(window.ui, "searchInputField", None) is not None:
+                QTimer.singleShot(0, lambda: window.ui.searchInputField.setFocus(Qt.ActiveWindowFocusReason))
+
+    _activation_server.newConnection.connect(handle_activation_request)
+    if not _activation_server.listen(server_name):
+        QLocalServer.removeServer(server_name)
+        _activation_server.listen(server_name)
 
 
 class MainWindow(QMainWindow):
@@ -320,6 +404,8 @@ def cleanup():
     flush_telemetry()
     deinit_incremental_index_workers()
     deinit_index_workers()
+    close_activation_server()
+    release_single_instance_lock()
 
 if __name__ == '__main__':
     # Protect against multiprocessing import issues on Windows
@@ -334,9 +420,15 @@ if __name__ == '__main__':
         threading.excepthook = handle_threading_exception
 
     app = QApplication(sys.argv)
+
+    if not acquire_single_instance_lock(ctx):
+        send_activation_request(ctx)
+        sys.exit(0)
+
     app.aboutToQuit.connect(cleanup)
 
     window = MainWindow(ctx=ctx)
+    setup_activation_server(ctx, window)
     QCoreApplication.instance().aboutToQuit.connect(flush_telemetry)
 
     startup_counter.add(1)
