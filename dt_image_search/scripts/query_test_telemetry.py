@@ -9,7 +9,7 @@ import urllib.parse
 
 DEFAULT_SSH_TARGET = "ubuntu@tc.boldman.net"
 DEFAULT_SERVICE_NAME = "imagesearch_telemetry_test"
-DEFAULT_METRIC_NAME = "test_counter"
+DEFAULT_METRIC_NAME = "test_counter_total"
 
 
 def parse_args() -> argparse.Namespace:

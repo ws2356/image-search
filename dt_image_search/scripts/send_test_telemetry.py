@@ -52,10 +52,10 @@ def build_resource(service_name: str) -> Resource:
 
 def create_meter_provider(resource: Resource) -> tuple[MeterProvider, Meter]:
     temporality = {
-        Counter: AggregationTemporality.DELTA,
+        Counter: AggregationTemporality.CUMULATIVE,
         UpDownCounter: AggregationTemporality.CUMULATIVE,
-        Histogram: AggregationTemporality.DELTA,
-        ObservableCounter: AggregationTemporality.DELTA,
+        Histogram: AggregationTemporality.CUMULATIVE,
+        ObservableCounter: AggregationTemporality.CUMULATIVE,
         ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
         ObservableGauge: AggregationTemporality.CUMULATIVE,
     }
@@ -123,6 +123,12 @@ def flush_all(logger_provider: LoggerProvider, tracer_provider: TracerProvider, 
     meter_provider.force_flush()
 
 
+def shutdown_all(logger_provider: LoggerProvider, tracer_provider: TracerProvider, meter_provider: MeterProvider) -> None:
+    logger_provider.shutdown()
+    tracer_provider.shutdown()
+    meter_provider.shutdown()
+
+
 from opentelemetry.sdk.metrics import Counter, Histogram, ObservableCounter, ObservableGauge, ObservableUpDownCounter, UpDownCounter
 
 
@@ -146,11 +152,14 @@ def main() -> int:
             timestamp,
         )
 
-    flush_all(logger_provider, tracer_provider, meter_provider)
-    print(
-        "Sent test telemetry "
-        f"(service_name={args.service_name}, timestamp={timestamp})"
-    )
+    try:
+        flush_all(logger_provider, tracer_provider, meter_provider)
+        print(
+            "Sent test telemetry "
+            f"(service_name={args.service_name}, timestamp={timestamp})"
+        )
+    finally:
+        shutdown_all(logger_provider, tracer_provider, meter_provider)
     return 0
 
 

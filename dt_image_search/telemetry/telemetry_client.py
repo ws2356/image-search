@@ -44,10 +44,10 @@ _QUEUE_SIZE = EXPORT_QUEUE_SIZE
 
 # === METRICS SETUP ===
 temporality = {
-                Counter: AggregationTemporality.DELTA,
+                Counter: AggregationTemporality.CUMULATIVE,
                 UpDownCounter: AggregationTemporality.CUMULATIVE,
-                Histogram: AggregationTemporality.DELTA,
-                ObservableCounter: AggregationTemporality.DELTA,
+                Histogram: AggregationTemporality.CUMULATIVE,
+                ObservableCounter: AggregationTemporality.CUMULATIVE,
                 ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
                 ObservableGauge: AggregationTemporality.CUMULATIVE,
             }

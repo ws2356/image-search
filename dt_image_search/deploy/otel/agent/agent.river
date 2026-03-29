@@ -19,8 +19,9 @@ otelcol.processor.batch "default" {
 }
 
 otelcol.exporter.prometheus "default" {
-        forward_to = [prometheus.remote_write.default.receiver]
-    }
+	resource_to_telemetry_conversion = true
+	forward_to = [prometheus.remote_write.default.receiver]
+}
 
 prometheus.remote_write "default" {
     endpoint {
