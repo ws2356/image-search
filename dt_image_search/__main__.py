@@ -357,11 +357,12 @@ def handle_python_exception(exc_type, exc_value, exc_traceback):
         return
     
     import traceback
-    from dt_image_search.telemetry.telemetry_client import log
+    from dt_image_search.telemetry.telemetry_client import log, flush_telemetry_for_fatal
     
     # Log the exception
     error_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
     log("error", "uncaught_exception", message=f"Uncaught Python exception: {error_msg}")
+    flush_telemetry_for_fatal()
     print(f"FATAL ERROR: {exc_type.__name__}: {exc_value}")
     
     # Call the default handler to crash gracefully
@@ -370,17 +371,18 @@ def handle_python_exception(exc_type, exc_value, exc_traceback):
 def handle_threading_exception(args):
     """Handle uncaught exceptions in threads"""
     import traceback
-    from dt_image_search.telemetry.telemetry_client import log
+    from dt_image_search.telemetry.telemetry_client import log, flush_telemetry_for_fatal
     
     exc_type, exc_value, exc_traceback, thread = args
     error_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
     thread_name = thread.name if thread else "Unknown"
     log("error", "thread_exception", message=f"Uncaught exception in thread '{thread_name}': {error_msg}")
+    flush_telemetry_for_fatal()
     print(f"THREAD ERROR in '{thread_name}': {exc_type.__name__}: {exc_value}")
 
 def qt_message_handler(mode, context, message):
     """Handle Qt messages and log them"""
-    from dt_image_search.telemetry.telemetry_client import log
+    from dt_image_search.telemetry.telemetry_client import log, flush_telemetry_for_fatal
     from PySide6.QtCore import QtMsgType
     
     if mode == QtMsgType.QtDebugMsg:
@@ -397,6 +399,7 @@ def qt_message_handler(mode, context, message):
         print(f"Qt CRITICAL: {message}")
     elif mode == QtMsgType.QtFatalMsg:
         log("error", "qt_fatal", message=f"Qt Fatal: {message}")
+        flush_telemetry_for_fatal()
         print(f"Qt FATAL: {message}")
 
 def cleanup():

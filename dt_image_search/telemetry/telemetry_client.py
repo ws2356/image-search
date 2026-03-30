@@ -164,3 +164,35 @@ def flush_telemetry():
     # Flush metrics
     for reader in metric_readers:
         reader.force_flush()
+
+
+def _force_flush_with_timeout(flush_callable, timeout_millis: int) -> bool:
+    """Best-effort force flush wrapper that prefers timeout-aware APIs."""
+    try:
+        try:
+            result = flush_callable(timeout_millis=timeout_millis)
+        except TypeError:
+            result = flush_callable()
+
+        if isinstance(result, bool):
+            return result
+        return True
+    except Exception:
+        return False
+
+
+def flush_telemetry_for_fatal(timeout_millis: int = 5000) -> bool:
+    """Best-effort bounded flush for crash/fatal paths.
+
+    This method is intentionally tolerant: it never raises and returns whether
+    all flush operations reported success.
+    """
+    all_ok = True
+
+    all_ok = _force_flush_with_timeout(_logger_provider.force_flush, timeout_millis) and all_ok
+    all_ok = _force_flush_with_timeout(trace.get_tracer_provider().force_flush, timeout_millis) and all_ok
+
+    for reader in metric_readers:
+        all_ok = _force_flush_with_timeout(reader.force_flush, timeout_millis) and all_ok
+
+    return all_ok
