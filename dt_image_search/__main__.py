@@ -1,9 +1,6 @@
 import argparse
-import faulthandler
 import os
-import signal
 import time
-from pathlib import Path
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -60,6 +57,7 @@ from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch, remove_fol
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers, deinit_incremental_index_workers
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
+from dt_image_search.telemetry.crash_support import CrashRecoveryManager
 
 
 
@@ -67,142 +65,13 @@ _BrowseMode = 1
 _SearchMode = 2
 _app_lock = None
 _activation_server = None
-_CRASH_MARKER_FILENAME = "run.marker"
-_NATIVE_CRASH_DUMP_FILENAME = "native_crash.dump.txt"
-_MAX_NATIVE_CRASH_DUMP_BYTES = 128 * 1024
-_faulthandler_dump_stream = None
-
-
-def _native_crash_signals() -> list:
-    signal_names = ["SIGABRT", "SIGBUS", "SIGFPE", "SIGILL", "SIGSEGV"]
-    available_signals = []
-    for name in signal_names:
-        if hasattr(signal, name):
-            available_signals.append(getattr(signal, name))
-    return available_signals
-
-
-def _get_native_crash_dump_path(ctx: BMContext) -> Path:
-    return get_app_data_path(ctx) / _NATIVE_CRASH_DUMP_FILENAME
-
-
-def ingest_previous_native_crash_dump(ctx: BMContext) -> None:
+def _crash_support_log(severity: str, error_type: str = "", message: str = "", where: str = "") -> None:
     from dt_image_search.telemetry.telemetry_client import log
 
-    dump_path = _get_native_crash_dump_path(ctx)
-    if not dump_path.exists():
-        return
-
-    try:
-        file_size = dump_path.stat().st_size
-        if file_size <= 0:
-            dump_path.unlink(missing_ok=True)
-            return
-
-        with dump_path.open("rb") as f:
-            dump_bytes = f.read(_MAX_NATIVE_CRASH_DUMP_BYTES)
-
-        dump_text = dump_bytes.decode("utf-8", errors="replace")
-        was_truncated = file_size > len(dump_bytes)
-        truncated_note = " (truncated)" if was_truncated else ""
-
-        log(
-            "error",
-            "native_crash_dump",
-            message=f"Recovered native crash dump from previous run. size_bytes={file_size}{truncated_note}\n{dump_text}",
-            where="ingest_previous_native_crash_dump",
-        )
-        dump_path.unlink(missing_ok=True)
-    except OSError as e:
-        log("warning", "native_crash_dump_read_failed", message=str(e), where="ingest_previous_native_crash_dump")
+    log(severity, error_type=error_type, message=message, where=where)
 
 
-def enable_native_crash_dump_capture(ctx: BMContext) -> None:
-    from dt_image_search.telemetry.telemetry_client import log
-
-    global _faulthandler_dump_stream
-
-    dump_path = _get_native_crash_dump_path(ctx)
-    try:
-        _faulthandler_dump_stream = dump_path.open("w", encoding="utf-8")
-        faulthandler.enable(file=_faulthandler_dump_stream, all_threads=True)
-        for sig in _native_crash_signals():
-            try:
-                faulthandler.register(sig, file=_faulthandler_dump_stream, all_threads=True, chain=True)
-            except (ValueError, OSError, RuntimeError):
-                continue
-    except OSError as e:
-        log("warning", "native_crash_dump_open_failed", message=str(e), where="enable_native_crash_dump_capture")
-    except Exception as e:
-        log("warning", "native_crash_dump_enable_failed", message=str(e), where="enable_native_crash_dump_capture")
-
-
-def disable_native_crash_dump_capture(ctx: BMContext) -> None:
-    from dt_image_search.telemetry.telemetry_client import log
-
-    global _faulthandler_dump_stream
-
-    for sig in _native_crash_signals():
-        try:
-            faulthandler.unregister(sig)
-        except RuntimeError:
-            continue
-
-    try:
-        faulthandler.disable()
-    except RuntimeError:
-        pass
-
-    if _faulthandler_dump_stream is not None:
-        try:
-            _faulthandler_dump_stream.flush()
-            _faulthandler_dump_stream.close()
-        except OSError as e:
-            log("warning", "native_crash_dump_close_failed", message=str(e), where="disable_native_crash_dump_capture")
-        finally:
-            _faulthandler_dump_stream = None
-
-    dump_path = _get_native_crash_dump_path(ctx)
-    try:
-        if dump_path.exists() and dump_path.stat().st_size == 0:
-            dump_path.unlink()
-    except OSError as e:
-        log("warning", "native_crash_dump_cleanup_failed", message=str(e), where="disable_native_crash_dump_capture")
-
-
-def _get_crash_marker_path(ctx: BMContext) -> Path:
-    return get_app_data_path(ctx) / _CRASH_MARKER_FILENAME
-
-
-def mark_run_started(ctx: BMContext) -> None:
-    from dt_image_search.telemetry.telemetry_client import log
-
-    marker_path = _get_crash_marker_path(ctx)
-
-    if marker_path.exists():
-        try:
-            stale_timestamp = marker_path.read_text(encoding="utf-8").strip()
-        except Exception:
-            stale_timestamp = "unknown"
-        log(
-            "warning",
-            "previous_run_unclean",
-            message=f"Detected stale run marker. Previous run may have crashed. marker_time={stale_timestamp}",
-            where="mark_run_started",
-        )
-
-    marker_path.write_text(str(int(time.time())), encoding="utf-8")
-
-
-def clear_run_marker(ctx: BMContext) -> None:
-    from dt_image_search.telemetry.telemetry_client import log
-
-    marker_path = _get_crash_marker_path(ctx)
-    try:
-        if marker_path.exists():
-            marker_path.unlink()
-    except Exception as e:
-        log("warning", "run_marker_cleanup_failed", message=str(e), where="clear_run_marker")
+_crash_recovery = CrashRecoveryManager(get_app_data_path(ctx), _crash_support_log)
 
 
 def _activation_server_name(ctx: BMContext) -> str:
@@ -542,10 +411,10 @@ def qt_message_handler(mode, context, message):
         print(f"Qt FATAL: {message}")
 
 def cleanup():
-    disable_native_crash_dump_capture(ctx)
+    _crash_recovery.disable_native_crash_dump_capture()
     stop_watch()
     flush_telemetry()
-    clear_run_marker(ctx)
+    _crash_recovery.clear_run_marker()
     deinit_incremental_index_workers()
     deinit_index_workers()
     close_activation_server()
@@ -569,9 +438,9 @@ if __name__ == '__main__':
         send_activation_request(ctx)
         sys.exit(0)
 
-    ingest_previous_native_crash_dump(ctx)
-    enable_native_crash_dump_capture(ctx)
-    mark_run_started(ctx)
+    _crash_recovery.ingest_previous_native_crash_dump()
+    _crash_recovery.enable_native_crash_dump_capture()
+    _crash_recovery.mark_run_started()
 
     app.aboutToQuit.connect(cleanup)
 
