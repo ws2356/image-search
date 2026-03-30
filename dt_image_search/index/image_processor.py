@@ -9,6 +9,9 @@ from dt_image_search.telemetry.telemetry_client import log, with_trace
 
 # Allow loading of truncated images
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+Image.MAX_IMAGE_PIXELS = None
+
+_MAX_EMBEDDING_IMAGE_DIM = 4096
 
 # Global worker state (loaded once per worker process)
 _worker_preprocess = None
@@ -44,8 +47,18 @@ def process_image_batch(files):
     for file in files:
         file_path = file.path
         try:
-            image = Image.open(file_path).convert("RGB")
-            image_tensor = _worker_preprocess(image)
+            with Image.open(file_path) as image:
+                # Hint decoders (e.g. JPEG) to avoid full-resolution decode when possible.
+                try:
+                    image.draft("RGB", (_MAX_EMBEDDING_IMAGE_DIM, _MAX_EMBEDDING_IMAGE_DIM))
+                except Exception:
+                    pass
+
+                image = image.convert("RGB")
+                if image.width > _MAX_EMBEDDING_IMAGE_DIM or image.height > _MAX_EMBEDDING_IMAGE_DIM:
+                    image.thumbnail((_MAX_EMBEDDING_IMAGE_DIM, _MAX_EMBEDDING_IMAGE_DIM), Image.Resampling.LANCZOS)
+
+                image_tensor = _worker_preprocess(image)
             batch_images.append(image_tensor)
             valid_files.append(file)
         except Exception as e:
