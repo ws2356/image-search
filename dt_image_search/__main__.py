@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+from pathlib import Path
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -64,6 +65,42 @@ _BrowseMode = 1
 _SearchMode = 2
 _app_lock = None
 _activation_server = None
+_CRASH_MARKER_FILENAME = "run.marker"
+
+
+def _get_crash_marker_path(ctx: BMContext) -> Path:
+    return get_app_data_path(ctx) / _CRASH_MARKER_FILENAME
+
+
+def mark_run_started(ctx: BMContext) -> None:
+    from dt_image_search.telemetry.telemetry_client import log
+
+    marker_path = _get_crash_marker_path(ctx)
+
+    if marker_path.exists():
+        try:
+            stale_timestamp = marker_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            stale_timestamp = "unknown"
+        log(
+            "warning",
+            "previous_run_unclean",
+            message=f"Detected stale run marker. Previous run may have crashed. marker_time={stale_timestamp}",
+            where="mark_run_started",
+        )
+
+    marker_path.write_text(str(int(time.time())), encoding="utf-8")
+
+
+def clear_run_marker(ctx: BMContext) -> None:
+    from dt_image_search.telemetry.telemetry_client import log
+
+    marker_path = _get_crash_marker_path(ctx)
+    try:
+        if marker_path.exists():
+            marker_path.unlink()
+    except Exception as e:
+        log("warning", "run_marker_cleanup_failed", message=str(e), where="clear_run_marker")
 
 
 def _activation_server_name(ctx: BMContext) -> str:
@@ -405,6 +442,7 @@ def qt_message_handler(mode, context, message):
 def cleanup():
     stop_watch()
     flush_telemetry()
+    clear_run_marker(ctx)
     deinit_incremental_index_workers()
     deinit_index_workers()
     close_activation_server()
@@ -427,6 +465,8 @@ if __name__ == '__main__':
     if not acquire_single_instance_lock(ctx):
         send_activation_request(ctx)
         sys.exit(0)
+
+    mark_run_started(ctx)
 
     app.aboutToQuit.connect(cleanup)
 
