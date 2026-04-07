@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<!-- saved from url=(0103)file:///Users/ws2356/dev/image-search/dt_image_search/prompt/ui-mobile-folder/02-qr-pairing-dialog.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI Design 02 — QR Code Pairing Dialog</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #a8a8a8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-label {
+    margin-bottom: 14px;
+    font-size: 12px; font-weight: 500; color: #333;
+    background: rgba(255,255,255,0.65);
+    padding: 4px 14px; border-radius: 20px; letter-spacing: 0.02em;
+  }
+
+  /* ── macOS App Window ── */
+  .app-window {
+    width: 960px; height: 660px;
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 0 0 0.5px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.14), 0 22px 60px rgba(0,0,0,0.5);
+    position: relative; display: flex; flex-direction: column; background: #ececec;
+  }
+
+  /* ── Title Bar ── */
+  .title-bar {
+    height: 38px; background: linear-gradient(to bottom, #f0f0f0, #e7e7e7);
+    border-bottom: 1px solid #cacaca; display: flex; align-items: center;
+    padding: 0 14px; flex-shrink: 0; user-select: none; position: relative;
+  }
+  .traffic-lights { display: flex; gap: 8px; }
+  .tl { width: 12px; height: 12px; border-radius: 50%; }
+  .tl-red   { background: #ff5f57; box-shadow: 0 0 0 0.5px #e0443e; }
+  .tl-amber { background: #febc2e; box-shadow: 0 0 0 0.5px #d79b07; }
+  .tl-green { background: #28c840; box-shadow: 0 0 0 0.5px #1aaa2f; }
+  .window-title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: #333; }
+
+  /* ── App Body (background, dimmed) ── */
+  .app-body {
+    flex: 1; display: flex;
+    filter: blur(1.2px) brightness(0.78);
+    pointer-events: none; overflow: hidden;
+  }
+  .left-panel {
+    width: 240px; background: #f2f2f2; border-right: 1px solid #ccc;
+    display: flex; flex-direction: column; padding: 10px 8px; gap: 8px; flex-shrink: 0;
+  }
+  .search-box { padding: 6px 10px; border: 1px solid #bbb; border-radius: 6px; background: white; font-size: 12px; color: #bbb; }
+  .folder-tree-box { flex: 1; border: 1px solid #bbb; border-radius: 5px; background: white; overflow: hidden; }
+  .tree-section-header { padding: 5px 8px; font-size: 10px; font-weight: 700; color: #888; background: #f8f8f8; border-bottom: 1px solid #eee; text-transform: uppercase; letter-spacing: 0.06em; }
+  .tree-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 12px; color: #333; }
+  .tree-item.active { background: #1560cd; color: white; }
+  .add-folder-btn-bg { padding: 7px; border: 1px solid #b0b0b0; border-radius: 5px; background: #e8e8e8; font-size: 12px; color: #333; text-align: center; }
+  .right-panel { flex: 1; background: white; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 14px; align-content: start; overflow: hidden; }
+  .img-thumb { aspect-ratio: 1; border-radius: 3px; }
+
+  /* ── Status Bar ── */
+  .status-bar { height: 22px; background: #e2e2e2; border-top: 1px solid #c4c4c4; display: flex; align-items: center; padding: 0 10px; font-size: 11px; color: #666; flex-shrink: 0; }
+
+  /* ── Modal Overlay ── */
+  .modal-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── Dialog ── */
+  .dialog {
+    background: #f4f4f4;
+    border-radius: 14px;
+    width: 700px;
+    box-shadow: 0 0 0 0.5px rgba(0,0,0,0.2), 0 4px 18px rgba(0,0,0,0.2), 0 28px 70px rgba(0,0,0,0.45);
+    overflow: hidden;
+  }
+
+  /* ── Dialog Header ── */
+  .dialog-header {
+    padding: 20px 20px 0;
+    position: relative;
+    text-align: center;
+  }
+  .dialog-header h2 { font-size: 16px; font-weight: 600; color: #1a1a1a; }
+  .dialog-close {
+    position: absolute; right: 16px; top: 18px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #d4d4d4; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #555;
+  }
+
+  /* ── Destination Row ── */
+  .destination-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 10px 20px 4px; font-size: 12px; color: #555;
+  }
+  .destination-path {
+    display: flex; align-items: center; gap: 5px;
+    background: #e8e8e8; border: 1px solid #d0d0d0;
+    border-radius: 5px; padding: 4px 10px;
+    font-size: 12px; color: #333; font-family: "SF Mono", "Consolas", monospace;
+  }
+  .btn-change {
+    padding: 3px 10px; border: 1px solid #aaa; border-radius: 4px;
+    background: #e0e0e0; font-size: 11px; font-family: inherit;
+    color: #444; cursor: pointer;
+  }
+  .btn-change:hover { background: #d4d4d4; }
+
+  /* ── Instructions text ── */
+  .instructions {
+    text-align: center; padding: 8px 40px 0;
+    font-size: 12.5px; color: #666; line-height: 1.55;
+  }
+
+  /* ── QR Panels ── */
+  .qr-panels {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 14px; padding: 16px 20px;
+  }
+  .qr-panel {
+    background: white;
+    border: 1.5px solid #ddd;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: relative;
+    transition: opacity 0.3s;
+  }
+  .qr-panel.expired { opacity: 0.45; }
+
+  .platform-badge {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 13px; font-weight: 600; color: #1a1a1a;
+  }
+  .platform-badge svg { flex-shrink: 0; }
+
+  .qr-canvas-wrapper {
+    position: relative;
+    width: 180px; height: 180px;
+  }
+  .qr-canvas-wrapper canvas {
+    border-radius: 4px; border: 1px solid #e0e0e0;
+    display: block;
+  }
+  .refresh-overlay {
+    position: absolute; inset: 0;
+    background: rgba(245,245,245,0.9);
+    border-radius: 4px;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px;
+  }
+  .refresh-overlay.visible { display: flex; }
+  .refresh-icon { font-size: 28px; color: #666; }
+  .btn-refresh {
+    padding: 7px 18px;
+    background: #007AFF; border: none; border-radius: 6px;
+    font-size: 13px; font-weight: 500; font-family: inherit;
+    color: white; cursor: pointer;
+  }
+  .btn-refresh:hover { background: #0070ef; }
+  .qr-platform-hint {
+    font-size: 11px; color: #888;
+    text-align: center; line-height: 1.5;
+  }
+
+  /* ── Timer / Expiry Row ── */
+  .timer-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px 14px; font-size: 12px;
+  }
+  .timer-display {
+    display: flex; align-items: center; gap: 6px; color: #555;
+  }
+  .timer-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #34C759; flex-shrink: 0;
+  }
+  .timer-dot.warning { background: #FF9500; }
+  .timer-dot.expired-dot { background: #FF3B30; }
+
+  #timer-text { font-variant-numeric: tabular-nums; font-weight: 500; }
+  #timer-label { color: #888; }
+
+  .demo-btn {
+    padding: 4px 12px; border: 1px solid #bbb; border-radius: 5px;
+    background: #e8e8e8; font-size: 11px; font-family: inherit;
+    color: #555; cursor: pointer;
+  }
+  .demo-btn:hover { background: #ddd; }
+
+  /* ── Security Note ── */
+  .security-note {
+    display: flex; align-items: flex-start; gap: 7px;
+    margin: 0 20px 14px;
+    background: #eef5ff;
+    border: 1px solid #c4dcff;
+    border-radius: 7px;
+    padding: 9px 12px;
+    font-size: 11px; color: #3a5a9c; line-height: 1.5;
+  }
+  .security-note svg { flex-shrink: 0; margin-top: 1px; }
+
+  /* ── Close Confirm Banner ── */
+  .close-confirm {
+    display: none;
+    align-items: center; justify-content: space-between;
+    gap: 12px;
+    background: #fff8ec;
+    border-top: 1px solid #f0d080;
+    padding: 10px 20px;
+    font-size: 12.5px; color: #7a5c00;
+  }
+  .close-confirm.visible { display: flex; }
+  .close-confirm-btns { display: flex; gap: 8px; flex-shrink: 0; }
+  .btn-keep {
+    padding: 5px 14px; border: 1px solid #c0b090; border-radius: 5px;
+    background: #f5e8c0; font-size: 12px; font-family: inherit; color: #5c4200; cursor: pointer;
+  }
+  .btn-close-anyway {
+    padding: 5px 14px; border: 1px solid #cc5500; border-radius: 5px;
+    background: #ff9500; font-size: 12px; font-family: inherit; color: white; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-label">UI Mockup &nbsp;02 / 03 — QR Code Pairing Dialog</div>
+
+<div class="app-window">
+  <!-- Title Bar -->
+  <div class="title-bar">
+    <div class="traffic-lights">
+      <div class="tl tl-red"></div>
+      <div class="tl tl-amber"></div>
+      <div class="tl tl-green"></div>
+    </div>
+    <div class="window-title">DTImageSearch</div>
+  </div>
+
+  <!-- App Body (dimmed) -->
+  <div class="app-body">
+    <div class="left-panel">
+      <div class="search-box">Search images …</div>
+      <div class="folder-tree-box">
+        <div class="tree-section-header">Folders</div>
+        <div class="tree-item">
+          <svg width="14" height="13" viewBox="0 0 14 13" fill="currentColor"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"></path></svg>
+          personal-photos
+        </div>
+        <div class="tree-item">
+          <svg width="14" height="13" viewBox="0 0 14 13" fill="currentColor"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"></path></svg>
+          work-screenshots
+        </div>
+      </div>
+      <div class="add-folder-btn-bg">Add Folder</div>
+    </div>
+    <div class="right-panel">
+      <div class="img-thumb" style="background:linear-gradient(135deg,#e8d5b7,#c9a96e)"></div>
+      <div class="img-thumb" style="background:linear-gradient(135deg,#a8d8ea,#5da3be)"></div>
+      <div class="img-thumb" style="background:linear-gradient(135deg,#d4edda,#7ab88a)"></div>
+      <div class="img-thumb" style="background:linear-gradient(135deg,#f5dbc8,#d4845a)"></div>
+      <div class="img-thumb" style="background:linear-gradient(135deg,#e8eaf6,#9098d4)"></div>
+      <div class="img-thumb" style="background:linear-gradient(135deg,#fce4ec,#e06080)"></div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">Model ready &nbsp;·&nbsp; 2 folders indexed &nbsp;·&nbsp; 847 images</div>
+
+  <!-- Modal overlay -->
+  <div class="modal-overlay">
+    <div class="dialog">
+      <!-- Header -->
+      <div class="dialog-header">
+        <h2>Pair Mobile Device</h2>
+        <button class="dialog-close" onclick="toggleCloseConfirm()">✕</button>
+      </div>
+
+      <!-- Destination row -->
+      <div class="destination-row">
+        <span style="color:#888;">Backup destination:</span>
+        <div class="destination-path">
+          <svg width="13" height="12" viewBox="0 0 14 13" fill="#888"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"></path></svg>
+          ~/Pictures/Mobile Backups
+        </div>
+        <button class="btn-change">Change…</button>
+      </div>
+
+      <!-- Instructions -->
+      <div class="instructions">
+        Scan the QR code for your device to install the companion app and pair it. Each code is valid for <strong>15 minutes</strong>.
+      </div>
+
+      <!-- QR Panels -->
+      <div class="qr-panels">
+        <!-- Android Panel -->
+        <div class="qr-panel" id="qr-android">
+          <div class="platform-badge">
+            <!-- Android robot icon -->
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M5 8.5C5 6.57 6.57 5 8.5 5h3C13.43 5 15 6.57 15 8.5V14H5V8.5z" fill="#3DDC84"></path>
+              <rect x="3" y="9" width="2" height="4" rx="1" fill="#3DDC84"></rect>
+              <rect x="15" y="9" width="2" height="4" rx="1" fill="#3DDC84"></rect>
+              <rect x="7.5" y="14" width="2" height="3" rx="1" fill="#3DDC84"></rect>
+              <rect x="10.5" y="14" width="2" height="3" rx="1" fill="#3DDC84"></rect>
+              <circle cx="8" cy="7.5" r="0.75" fill="white"></circle>
+              <circle cx="12" cy="7.5" r="0.75" fill="white"></circle>
+              <line x1="7" y1="3.5" x2="9" y2="5.5" stroke="#3DDC84" stroke-width="1.2" stroke-linecap="round"></line>
+              <line x1="13" y1="3.5" x2="11" y2="5.5" stroke="#3DDC84" stroke-width="1.2" stroke-linecap="round"></line>
+            </svg>
+            Android
+          </div>
+          <div class="qr-canvas-wrapper">
+            <canvas id="qr-canvas-android" width="180" height="180"></canvas>
+            <div class="refresh-overlay" id="refresh-android">
+              <div class="refresh-icon">⟳</div>
+              <div style="font-size:11px;color:#666;text-align:center;">Code expired</div>
+              <button class="btn-refresh" onclick="refreshQR(&#39;android&#39;)">Refresh Code</button>
+            </div>
+          </div>
+          <div class="qr-platform-hint">Open DTImageSearch app on Android<br>or scan to install from Google Play</div>
+        </div>
+
+        <!-- iOS Panel -->
+        <div class="qr-panel" id="qr-ios">
+          <div class="platform-badge">
+            <!-- Apple icon -->
+            <svg width="18" height="20" viewBox="0 0 18 20" fill="#1a1a1a">
+              <path d="M14.9 10.6c0-2.8 2.3-4.2 2.4-4.2-1.3-1.9-3.3-2.1-4-2.2-1.7-.2-3.4 1-4.3 1-.9 0-2.2-1-3.6-1-1.9 0-3.6 1.1-4.6 2.7-2 3.4-.5 8.4 1.4 11.1 1 1.4 2.1 2.9 3.5 2.8 1.4-.1 2-1 3.6-1 1.7 0 2.2 1 3.6 1 1.5 0 2.5-1.4 3.4-2.8.7-1 1.3-2.2 1.7-3.4-3.6-1.5-3.1-4.8-3.1-5z"></path>
+              <path d="M12.9 2.5c.7-1 1.3-2.3 1.1-3.5-1.1.1-2.4.7-3.1 1.7-.7.9-1.3 2.2-1.1 3.4 1.2.1 2.4-.6 3.1-1.6z"></path>
+            </svg>
+            iPhone &amp; iPad
+          </div>
+          <div class="qr-canvas-wrapper">
+            <canvas id="qr-canvas-ios" width="180" height="180"></canvas>
+            <div class="refresh-overlay" id="refresh-ios">
+              <div class="refresh-icon">⟳</div>
+              <div style="font-size:11px;color:#666;text-align:center;">Code expired</div>
+              <button class="btn-refresh" onclick="refreshQR(&#39;ios&#39;)">Refresh Code</button>
+            </div>
+          </div>
+          <div class="qr-platform-hint">Open DTImageSearch app on iPhone/iPad<br>or scan to install from the App Store</div>
+        </div>
+      </div>
+
+      <!-- Timer Row -->
+      
+
+      <!-- Security Note -->
+      <div class="security-note">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 1L1.5 3.5V7c0 3.3 2.3 5.8 5.5 6.5C10.2 12.8 12.5 10.3 12.5 7V3.5L7 1z" fill="#4A80D4" opacity="0.2"></path>
+          <path d="M7 1L1.5 3.5V7c0 3.3 2.3 5.8 5.5 6.5C10.2 12.8 12.5 10.3 12.5 7V3.5L7 1z" stroke="#4A80D4" stroke-width="1.1" fill="none"></path>
+          <line x1="7" y1="5" x2="7" y2="8" stroke="#4A80D4" stroke-width="1.3" stroke-linecap="round"></line>
+          <circle cx="7" cy="9.5" r="0.6" fill="#4A80D4"></circle>
+        </svg>
+        QR codes carry single-use pairing secrets used to derive encrypted transport keys. Keys expire after 8 hours and can be rotated at any time. Transfer stays entirely on your local network.
+      </div>
+
+      <!-- Close Confirmation Banner -->
+      <div class="close-confirm" id="close-confirm">
+        <span>Close this dialog? The pairing attempt will be cancelled and the codes will be invalidated.</span>
+        <div class="close-confirm-btns">
+          <button class="btn-keep" onclick="toggleCloseConfirm()">Keep Pairing</button>
+          <button class="btn-close-anyway">Close Anyway</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ── Seeded PRNG ── */
+  function makePRNG(seed) {
+    let s = seed >>> 0;
+    return function() {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+  }
+
+  /* ── Draw pseudo-QR code ── */
+  function drawQR(canvas, seed, color) {
+    const ctx = canvas.getContext('2d');
+    const rng = makePRNG(seed);
+    const n = 25;
+    const margin = 10;
+    const cell = (canvas.width - margin * 2) / n;
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Build data grid
+    const g = Array.from({length: n}, () => Array(n).fill(0));
+
+    // Random data
+    for (let r = 0; r < n; r++)
+      for (let c = 0; c < n; c++)
+        g[r][c] = rng() > 0.5 ? 1 : 0;
+
+    // Finder pattern helper
+    function finder(sr, sc) {
+      for (let r = 0; r < 7; r++)
+        for (let c = 0; c < 7; c++) {
+          const border = (r === 0 || r === 6 || c === 0 || c === 6);
+          const center = (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+          g[sr+r][sc+c] = (border || center) ? 1 : 0;
+        }
+      // separator
+      for (let i = 0; i < 8; i++) {
+        if (sr+7 < n) g[sr+7][sc+i] = 0;
+        if (sc+7 < n) g[sr+i][sc+7] = 0;
+      }
+    }
+
+    finder(0, 0);         // top-left
+    finder(0, n-7);       // top-right
+    finder(n-7, 0);       // bottom-left
+
+    // Timing strips
+    for (let i = 8; i < n-8; i++) {
+      g[6][i] = i % 2 === 0 ? 1 : 0;
+      g[i][6] = i % 2 === 0 ? 1 : 0;
+    }
+
+    // Alignment pattern (typical v2 position near bottom-right)
+    const ap = n - 9;
+    for (let r = ap; r < ap+5; r++)
+      for (let c = ap; c < ap+5; c++) {
+        const border = (r===ap || r===ap+4 || c===ap || c===ap+4);
+        const center = (r===ap+2 && c===ap+2);
+        g[r][c] = (border || center) ? 1 : 0;
+      }
+
+    // Dark module
+    g[8][n-8] = 1;
+
+    // Render
+    ctx.fillStyle = color || '#1a1a1a';
+    for (let r = 0; r < n; r++)
+      for (let c = 0; c < n; c++)
+        if (g[r][c])
+          ctx.fillRect(margin + c*cell, margin + r*cell, cell, cell);
+  }
+
+  /* ── Initial draw ── */
+  let androidSeed = 0x4A2F1;
+  let iosSeed     = 0xB3E92;
+
+  drawQR(document.getElementById('qr-canvas-android'), androidSeed);
+  drawQR(document.getElementById('qr-canvas-ios'), iosSeed, '#1a1a1a');
+
+  /* ── Timer ── */
+  let totalSeconds = 14 * 60 + 47;
+  let expired = false;
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function updateTimer() {
+    if (expired) return;
+    if (totalSeconds > 0) {
+      totalSeconds--;
+      const m = Math.floor(totalSeconds / 60);
+      const s = totalSeconds % 60;
+      document.getElementById('timer-text').textContent = `${pad(m)}:${pad(s)}`;
+      const dot = document.getElementById('timer-dot');
+      if (totalSeconds < 120) { dot.className = 'timer-dot warning'; }
+      else { dot.className = 'timer-dot'; }
+    } else {
+      setExpired();
+    }
+  }
+
+  function setExpired() {
+    expired = true;
+    document.getElementById('timer-text').textContent = 'Expired';
+    document.getElementById('timer-label').textContent = '';
+    document.getElementById('timer-dot').className = 'timer-dot expired-dot';
+    document.getElementById('qr-android').classList.add('expired');
+    document.getElementById('qr-ios').classList.add('expired');
+    document.getElementById('refresh-android').classList.add('visible');
+    document.getElementById('refresh-ios').classList.add('visible');
+  }
+
+  const timerInterval = setInterval(updateTimer, 1000);
+
+  /* ── Demo: simulate expiry ── */
+  function demoExpire() {
+    totalSeconds = 0;
+    setExpired();
+    clearInterval(timerInterval);
+    document.querySelector('.demo-btn').style.display = 'none';
+  }
+
+  /* ── Refresh QR code ── */
+  function refreshQR(platform) {
+    const isAndroid = (platform === 'android');
+    const panel    = document.getElementById(`qr-${platform}`);
+    const overlay  = document.getElementById(`refresh-${platform}`);
+    const canvas   = document.getElementById(`qr-canvas-${platform}`);
+
+    // Generate new seed
+    if (isAndroid) { androidSeed = (androidSeed * 6364136223846793005 + 1442695040888963407) >>> 0 || 0xDEAD + Math.random() * 0xBEEF; }
+    else { iosSeed = (iosSeed * 6364136223846793005 + 1442695040888963407) >>> 0 || 0xFACE + Math.random() * 0xACE; }
+
+    drawQR(canvas, isAndroid ? androidSeed : iosSeed);
+    panel.classList.remove('expired');
+    overlay.classList.remove('visible');
+
+    // Reset if both are refreshed
+    if (!document.getElementById('refresh-android').classList.contains('visible') &&
+        !document.getElementById('refresh-ios').classList.contains('visible')) {
+      expired = false;
+      totalSeconds = 14 * 60 + 59;
+      document.getElementById('timer-label').textContent = 'Codes expire in';
+      document.getElementById('timer-dot').className = 'timer-dot';
+    }
+  }
+
+  /* ── Close Confirm ── */
+  function toggleCloseConfirm() {
+    const el = document.getElementById('close-confirm');
+    el.classList.toggle('visible');
+  }
+</script>
+
+
+
+</body></html>

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<!-- saved from url=(0108)file:///Users/ws2356/dev/image-search/dt_image_search/prompt/ui-mobile-folder/03-folder-transfer-states.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI Design 03 — Folder Transfer States</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #a8a8a8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-label {
+    margin-bottom: 14px; font-size: 12px; font-weight: 500; color: #333;
+    background: rgba(255,255,255,0.65); padding: 4px 14px; border-radius: 20px; letter-spacing: 0.02em;
+  }
+
+  /* ── macOS App Window ── */
+  .app-window {
+    width: 960px; height: 660px;
+    border-radius: 10px; overflow: hidden; position: relative;
+    box-shadow: 0 0 0 0.5px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.14), 0 22px 60px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column; background: #ececec;
+  }
+
+  /* ── Title Bar ── */
+  .title-bar {
+    height: 38px; background: linear-gradient(to bottom, #f0f0f0, #e7e7e7);
+    border-bottom: 1px solid #cacaca; display: flex; align-items: center;
+    padding: 0 14px; flex-shrink: 0; user-select: none; position: relative;
+  }
+  .traffic-lights { display: flex; gap: 8px; }
+  .tl { width: 12px; height: 12px; border-radius: 50%; }
+  .tl-red   { background: #ff5f57; box-shadow: 0 0 0 0.5px #e0443e; }
+  .tl-amber { background: #febc2e; box-shadow: 0 0 0 0.5px #d79b07; }
+  .tl-green { background: #28c840; box-shadow: 0 0 0 0.5px #1aaa2f; }
+  .window-title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: #333; }
+
+  /* ── App Body ── */
+  .app-body { flex: 1; display: flex; overflow: hidden; }
+
+  /* ── Left Panel ── */
+  .left-panel {
+    width: 280px; background: #f2f2f2; border-right: 1px solid #ccc;
+    display: flex; flex-direction: column; padding: 10px 8px; gap: 8px;
+    flex-shrink: 0; position: relative;
+  }
+  .search-box {
+    padding: 6px 10px 6px 28px; border: 1px solid #bbb; border-radius: 6px;
+    background: white; font-size: 12px; color: #bbb; position: relative;
+  }
+  .search-box-wrap { position: relative; }
+  .search-box-wrap svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+  .search-box-wrap input {
+    width: 100%; padding: 6px 10px 6px 28px; border: 1px solid #bbb; border-radius: 6px;
+    background: white; font-size: 12px; color: #555; font-family: inherit;
+    outline: none;
+  }
+  .search-box-wrap input:focus { border-color: #99c0ff; box-shadow: 0 0 0 2px rgba(0,122,255,0.18); }
+
+  /* ── Folder Tree ── */
+  .folder-tree-box {
+    flex: 1; border: 1px solid #bbb; border-radius: 5px; background: white;
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .tree-section-header {
+    padding: 6px 8px 4px; font-size: 10px; font-weight: 700; color: #888;
+    background: #f8f8f8; border-bottom: 1px solid #eee;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    position: sticky; top: 0; z-index: 1;
+  }
+
+  /* ── Tree Item (regular folder) ── */
+  .tree-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px; font-size: 12px; color: #333; cursor: default;
+    border-bottom: 1px solid #f0f0f0; user-select: none;
+    min-height: 30px;
+  }
+  .tree-item:hover:not(.active) { background: #f5f5f5; }
+  .tree-item.active { background: #1560cd; color: white; }
+  .tree-item .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Mobile section divider ── */
+  .tree-divider {
+    padding: 8px 8px 4px; font-size: 10px; font-weight: 700; color: #999;
+    background: #f5f5f5; border-top: 1px solid #e8e8e8; border-bottom: 1px solid #e8e8e8;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    display: flex; align-items: center; gap: 5px;
+    user-select: none;
+  }
+
+  /* ── Mobile tree item ── */
+  .tree-item-mobile {
+    display: flex; flex-direction: column;
+    padding: 5px 8px 6px; font-size: 12px; color: #333; cursor: default;
+    border-bottom: 1px solid #f0f0f0; user-select: none;
+    min-height: 42px; position: relative;
+  }
+  .tree-item-mobile:hover { background: #f5f5f5; }
+  .tree-item-mobile.active { background: #e8f0fd; }
+  .tree-item-mobile.ctx-open { background: #eef3fc; }
+
+  .mobile-item-top { display: flex; align-items: center; gap: 6px; }
+  .mobile-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #1a1a1a; }
+  .mobile-item-sub { font-size: 10.5px; color: #888; padding: 1px 0 0 20px; line-height: 1.4; }
+
+  /* ── Transfer State Badge ── */
+  .state-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 7px 2px 5px; border-radius: 20px; font-size: 10px; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0; letter-spacing: 0.01em;
+  }
+  .state-badge.awaiting    { background: #FFF3CD; color: #9A6400; border: 1px solid #FFD97D; }
+  .state-badge.transferring{ background: #DBEAFE; color: #1D4ED8; border: 1px solid #93C5FD; }
+  .state-badge.disconnected{ background: #FFEDD5; color: #9A3412; border: 1px solid #FDBA74; }
+  .state-badge.completed   { background: #DCFCE7; color: #166534; border: 1px solid #86EFAC; }
+  .state-badge.failed      { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
+
+  /* ── Progress bar (transferring) ── */
+  .progress-bar-wrap {
+    margin: 3px 0 0 20px; height: 4px; background: #dbeafe; border-radius: 2px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; background: #3B82F6; border-radius: 2px; width: 27%;
+    animation: progress-anim 2.8s ease-in-out infinite alternate;
+  }
+  @keyframes progress-anim { from { width: 24%; } to { width: 30%; } }
+
+  /* ── Spinner (transferring icon) ── */
+  .spin { animation: spin 1.4s linear infinite; display: inline-block; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+  /* ── Add Folder Button ── */
+  .add-folder-btn {
+    padding: 7px 12px; border: 1px solid #b0b0b0; border-radius: 5px;
+    background: #e8e8e8; font-size: 12px; color: #333; text-align: center; cursor: pointer;
+    font-family: inherit;
+  }
+  .add-folder-btn:hover { background: #e0e0e0; }
+
+  /* ── Right Panel ── */
+  .right-panel {
+    flex: 1; background: white; overflow-y: auto;
+  }
+  .right-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 16px 8px; border-bottom: 1px solid #eee;
+    background: #fafafa;
+  }
+  .right-panel-title { font-size: 13px; font-weight: 600; color: #2c2c2c; }
+  .right-panel-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px 3px 7px; border-radius: 20px;
+    background: #DBEAFE; color: #1D4ED8; border: 1px solid #93C5FD;
+    font-size: 11px; font-weight: 600;
+  }
+  .transfer-info-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 16px; background: #f0f6ff; border-bottom: 1px solid #d8eaff;
+    font-size: 11.5px; color: #1d4ed8;
+  }
+  .transfer-info-bar .progress-wrap { flex: 1; height: 5px; background: #bfdbfe; border-radius: 3px; overflow: hidden; }
+  .transfer-info-bar .progress-fill { height: 100%; background: #3b82f6; width: 27%; animation: progress-anim 2.8s ease-in-out infinite alternate; }
+
+  .image-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 10px; padding: 12px;
+  }
+  .img-cell { position: relative; aspect-ratio: 1; border-radius: 4px; overflow: hidden; }
+  .img-thumb { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
+  .img-new-badge {
+    position: absolute; top: 4px; right: 4px;
+    background: rgba(0,122,255,0.85); color: white;
+    font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Status Bar ── */
+  .status-bar {
+    height: 22px; background: #e2e2e2; border-top: 1px solid #c4c4c4;
+    display: flex; align-items: center; padding: 0 10px;
+    font-size: 11px; color: #666; flex-shrink: 0;
+  }
+
+  /* ── Context Menu ── */
+  .ctx-menu {
+    position: absolute; z-index: 100;
+    width: 188px;
+    background: rgba(245,245,245,0.97);
+    border: 0.5px solid rgba(0,0,0,0.2);
+    border-radius: 8px; padding: 4px 0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25), 0 1px 4px rgba(0,0,0,0.12);
+    backdrop-filter: blur(12px);
+    font-size: 13px;
+    display: none;
+  }
+  .ctx-menu.visible { display: block; }
+  .ctx-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 5px 14px; color: #1a1a1a; cursor: default; user-select: none;
+  }
+  .ctx-item:hover { background: #0063d9; color: white; border-radius: 4px; margin: 0 2px; }
+  .ctx-item:hover svg { color: white; }
+  .ctx-item.danger:hover { background: #ff3b30; }
+  .ctx-item svg { opacity: 0.65; flex-shrink: 0; }
+  .ctx-item:hover svg { opacity: 1; }
+  .ctx-item.highlighted { background: #0063d9; color: white; border-radius: 4px; margin: 0 2px; }
+  .ctx-item.highlighted svg { opacity: 1; color: white; }
+  .ctx-sep { height: 1px; background: rgba(0,0,0,0.1); margin: 3px 0; }
+
+  /* ── Legend ── */
+  .legend {
+    margin-top: 16px;
+    background: rgba(255,255,255,0.65); border-radius: 8px;
+    padding: 12px 16px; display: flex; gap: 12px; flex-wrap: wrap;
+    font-size: 11px; font-weight: 500; color: #444;
+    align-items: center;
+  }
+  .legend-title { font-weight: 700; color: #333; margin-right: 4px; }
+  .legend-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="page-label">UI Mockup &nbsp;03 / 03 — Folder TreeView Transfer States</div>
+
+<div class="app-window">
+  <!-- Title Bar -->
+  <div class="title-bar">
+    <div class="traffic-lights">
+      <div class="tl tl-red"></div>
+      <div class="tl tl-amber"></div>
+      <div class="tl tl-green"></div>
+    </div>
+    <div class="window-title">DTImageSearch</div>
+  </div>
+
+  <!-- App Body -->
+  <div class="app-body">
+
+    <!-- Left Panel -->
+    <div class="left-panel">
+      <!-- Search -->
+      <div class="search-box-wrap">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="opacity:0.45">
+          <circle cx="5.5" cy="5.5" r="4.5" stroke="#555" stroke-width="1.3"></circle>
+          <line x1="9" y1="9" x2="12" y2="12" stroke="#555" stroke-width="1.5" stroke-linecap="round"></line>
+        </svg>
+        <input type="text" placeholder="Search images …">
+      </div>
+
+      <!-- Folder Tree -->
+      <div class="folder-tree-box">
+        <div class="tree-section-header">Folders</div>
+
+        <!-- Regular folders -->
+        <div class="tree-item">
+          <svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"></path></svg>
+          <span class="item-name">personal-photos</span>
+        </div>
+        <div class="tree-item">
+          <svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"></path></svg>
+          <span class="item-name">work-screenshots</span>
+        </div>
+
+        <!-- Mobile section divider -->
+        <div class="tree-divider">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="3" y="0.5" width="6" height="11" rx="1.5" fill="#9CA3AF" stroke="#9CA3AF" stroke-width="0.5"></rect>
+            <rect x="4.5" y="1.5" width="3" height="1" rx="0.5" fill="white" opacity="0.7"></rect>
+            <rect x="4.5" y="9.5" width="3" height="1" rx="0.5" fill="white" opacity="0.7"></rect>
+          </svg>
+          Mobile Backups
+        </div>
+
+        <!-- 1. Transferring -->
+        <div class="tree-item-mobile active" id="item-alex" onclick="selectMobileItem(&#39;alex&#39;)">
+          <div class="mobile-item-top">
+            <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0">
+              <rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"></rect>
+              <rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"></rect>
+              <rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"></rect>
+              <rect x="4" y="10.2" width="4" height="0.8" rx="0.4" fill="#555"></rect>
+            </svg>
+            <span class="mobile-item-name">Alex's iPhone 15 Pro</span>
+            <span class="state-badge transferring">
+              <span class="spin" style="font-size:9px;line-height:1">↻</span> Transferring
+            </span>
+          </div>
+          <div class="mobile-item-sub">342 of 1,247 files transferred</div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill"></div>
+          </div>
+        </div>
+
+        <!-- 2. Completed -->
+        
+
+        <!-- 3. Awaiting Pairing -->
+        
+
+        <!-- 4. Disconnected — context menu target -->
+        <div class="tree-item-mobile ctx-open" id="item-john" onclick="selectMobileItem(&#39;john&#39;)">
+          <div class="mobile-item-top">
+            <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0">
+              <rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"></rect>
+              <rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"></rect>
+              <rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"></rect>
+              <rect x="4" y="10.2" width="4" height="0.8" rx="0.4" fill="#555"></rect>
+            </svg>
+            <span class="mobile-item-name">John's iPhone 13</span>
+            <span class="state-badge disconnected">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 2L8 8" stroke="#9A3412" stroke-width="1.3" stroke-linecap="round"></path>
+                <path d="M1.5 4.5C2-0.2 8-0.2 8.5 4.5" stroke="#9A3412" stroke-width="1.1" fill="none" stroke-linecap="round"></path>
+                <path d="M3 6.5c.4-1.5 3.6-1.5 4 0" stroke="#9A3412" stroke-width="1.1" fill="none" stroke-linecap="round"></path>
+              </svg>
+              Disconnected
+            </span>
+          </div>
+          <div class="mobile-item-sub">Last active 2 hours ago &nbsp;·&nbsp; 1,108 files</div>
+          <!-- Context Menu pinned inside panel for layout purposes -->
+          <div class="ctx-menu visible" id="ctx-john" style="left:6px;top:44px;">
+            <div class="ctx-item">
+              <svg width="14" height="14" viewBox="0 0 14 13" fill="currentColor"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"></path></svg>
+              Open Backup Folder
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item highlighted">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M12 7A5 5 0 1 1 2 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+                <polyline points="9,3.5 12,7 9,10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+              </svg>
+              Reconnect
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <polyline points="1,3.5 13,3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></polyline>
+                <path d="M4.5 3.5V2.5a1 1 0 011-1h3a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path>
+                <rect x="2.5" y="3.5" width="9" height="8.5" rx="1" stroke="currentColor" stroke-width="1.3"></rect>
+              </svg>
+              Remove Folder
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Failed -->
+        <div class="tree-item-mobile" id="item-android" onclick="selectMobileItem(&#39;android&#39;)">
+          <div class="mobile-item-top">
+            <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0">
+              <rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"></rect>
+              <rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"></rect>
+              <rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"></rect>
+              <rect x="4" y="10.2" width="4" height="0.8" rx="0.4" fill="#555"></rect>
+            </svg>
+            <span class="mobile-item-name">Old Android Phone</span>
+            <span class="state-badge failed">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="2.5" y1="2.5" x2="7.5" y2="7.5" stroke="#991B1B" stroke-width="1.4" stroke-linecap="round"></line><line x1="7.5" y1="2.5" x2="2.5" y2="7.5" stroke="#991B1B" stroke-width="1.4" stroke-linecap="round"></line></svg>
+              Failed
+            </span>
+          </div>
+          <div class="mobile-item-sub" style="color:#b91c1c;">USB permission denied — check device</div>
+        </div>
+
+      </div><!-- /folder-tree-box -->
+
+      <button class="add-folder-btn">+ Add Folder</button>
+    </div><!-- /left-panel -->
+
+    <!-- Right Panel -->
+    <div class="right-panel">
+      
+      
+      <div class="image-grid">
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#e8d5b7,#c9a96e)"></div>
+          <div class="img-new-badge">NEW</div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#a8d8ea,#5da3be)"></div>
+          <div class="img-new-badge">NEW</div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#d4edda,#7ab88a)"></div>
+          <div class="img-new-badge">NEW</div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#f5dbc8,#d4845a)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#e8eaf6,#9098d4)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#fce4ec,#e06080)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#fff8e1,#f0b430)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#e0f2f1,#46a99d)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#f3e5f5,#ab47bc)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#e8d5b7,#c0824c)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#cfe8ff,#4a90d9)"></div>
+        </div>
+        <div class="img-cell">
+          <div class="img-thumb" style="background:linear-gradient(135deg,#d9f0d0,#5cad50)"></div>
+        </div>
+      </div>
+    </div><!-- /right-panel -->
+
+  </div><!-- /app-body -->
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    Transferring: Alex's iPhone 15 Pro (USB) &nbsp;·&nbsp; Indexing 342 images &nbsp;·&nbsp; 5 folders &nbsp;·&nbsp; 4,186 images total
+  </div>
+
+</div><!-- /app-window -->
+
+<!-- State Legend -->
+<div class="legend">
+  <span class="legend-title">Transfer States:</span>
+  <span class="state-badge awaiting legend-badge">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="3.8" stroke="#9A6400" stroke-width="1.2"></circle><line x1="5" y1="3" x2="5" y2="5.2" stroke="#9A6400" stroke-width="1.2" stroke-linecap="round"></line><line x1="5" y1="5.2" x2="6.4" y2="6.2" stroke="#9A6400" stroke-width="1.2" stroke-linecap="round"></line></svg>
+    awaiting_pairing
+  </span>
+  <span class="state-badge transferring legend-badge">
+    <span>↻</span> transferring
+  </span>
+  <span class="state-badge disconnected legend-badge">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2L8 8" stroke="#9A3412" stroke-width="1.3" stroke-linecap="round"></path><path d="M1.5 4.5C2-0.2 8-0.2 8.5 4.5" stroke="#9A3412" stroke-width="1.1" fill="none" stroke-linecap="round"></path></svg>
+    disconnected
+  </span>
+  <span class="state-badge completed legend-badge">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5L3.8 7.5L8.5 2.5" stroke="#166534" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    transfer_completed
+  </span>
+  <span class="state-badge failed legend-badge">
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="2.5" y1="2.5" x2="7.5" y2="7.5" stroke="#991B1B" stroke-width="1.4" stroke-linecap="round"></line><line x1="7.5" y1="2.5" x2="2.5" y2="7.5" stroke="#991B1B" stroke-width="1.4" stroke-linecap="round"></line></svg>
+    failed
+  </span>
+</div>
+
+<script>
+  function selectMobileItem(id) {
+    document.querySelectorAll('.tree-item-mobile').forEach(el => el.classList.remove('active'));
+    const item = document.getElementById('item-' + id);
+    if (item) item.classList.add('active');
+
+    // close context menu on other items
+    if (id !== 'john') {
+      const ctx = document.getElementById('ctx-john');
+      if (ctx) ctx.classList.remove('visible');
+      document.getElementById('item-john').classList.remove('ctx-open');
+    }
+  }
+</script>
+
+
+
+</body></html>
