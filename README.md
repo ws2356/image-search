@@ -108,3 +108,4 @@ sqlite3.connect("db.sqlite", timeout=10)
 42. App Update notification
 43. File removal feature
 44. Search history feature
+45. Do not send file path in logs for privacy concern
