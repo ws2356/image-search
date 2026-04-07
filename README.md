@@ -105,3 +105,6 @@ conn.execute("PRAGMA journal_mode=WAL;")
 sqlite3.connect("db.sqlite", timeout=10)
 40. Some log has no traceid?
 41. Investigate other CDN solution: modelscope/ipfs
+42. App Update notification
+43. File removal feature
+44. Search history feature
