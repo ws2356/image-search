@@ -150,3 +150,4 @@ visible with a reconnect path, so the user can continue later without starting o
 8. Corner cases and constraints
  - The same desktop may run multiple mobile backup sessions concurrently.
  - A device may reconnect over a different transport channel than the previous session.
+ - Users can stop the backup process only from the mobile companion app, which will not stop desktop indexing of already transferred items.
