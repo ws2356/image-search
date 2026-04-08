@@ -1,0 +1,19 @@
+- **MVP**
+  - iOS and Android companion app with PC-first onboarding
+  - In-app QR scanning, secure local pairing, full eligible-library backup, progress UI, Stop action, completion dialog
+  - Main-screen pending-item count and **Resume Backup** state after incomplete sessions
+  - Exchange device identity and verify as minimum trust signal for backup authorization 
+- **Phase 2**
+  - Reconnect path that depends on the desktop-driven reconnect workflow
+  - Deep-link onboarding from desktop to mobile app store
+  - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
+  - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
+  - Device mismatch handling during reconnect flows, with user-friendly error messaging and clear recovery paths
+- **Phase 3**
+  - Stronger platform-specific background transfer strategies where policy-compliant
+- **Phase 4**
+  - Service discovery to support backup resume from mobile without needing to scan QR code again
+- **Phase 5**
+  - Encrypted transfer with key exchange and verification on both devices
+- **Phase 6 (GA)**
+  - Auto switch to USB transfer when mobile device is connected to desktop via USB during backup

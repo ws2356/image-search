@@ -60,7 +60,7 @@ PRD: Mobile Folder
 
 3.3 Role-based access
 
- - Desktop user: Can choose the source type, select a parent destination path, initiate pairing, choose or override transport, start reconnect flows, and view transfer state.
+ - Desktop user: Can choose the source type, select a parent destination path, initiate pairing, start reconnect flows, and view transfer state.
  - Paired mobile companion app: Can request device media permissions, scan the QR code, participate in authenticated pairing, enumerate eligible media, and send media only after explicit OS-level and in-app consent.
  - Telemetry service (optional): May receive aggregated operational metrics such as session start, pairing outcome, transport type, time to first transferred item, and failure category, but must never receive media content, thumbnails, filenames, full paths, or raw 
 file hashes.
@@ -85,7 +85,6 @@ file hashes.
    - The system must prefer USB when available.
    - Supported USB channels are Android Open Accessory for Android and usbmuxd or libimobiledevice-based connectivity for iPhone and iPad.
    - Wi-Fi LAN must be supported as a fallback path.
-   - Users must be able to override the automatically chosen channel when more than one valid channel is available.
  - Transfer and indexing orchestration (Priority: P0)
    - After successful pairing and destination resolution, the desktop app must create or reuse the device folder, register it as a root folder item, and trigger the existing incremental indexing pipeline immediately.
    - Transfer must continue non-modally while indexing can discover newly arrived files.
@@ -123,7 +122,7 @@ file hashes.
  - Security and privacy (Priority: P0)
    - The QR code must carry a secure pairing code that both devices use to derive authenticated encrypted transport keys.
    - Unscanned QR codes must expire after 15 minutes.
-   - Derived transport keys must expire after 8 hours and must support rotation on either device.
+   - Derived transport keys must expire after 28 days and must support rotation on either device.
    - Later reconnections may reset trust and derive fresh keys using a new QR code.
    - Telemetry may be sent to the cloud only if it excludes user media and identifying content data.
 

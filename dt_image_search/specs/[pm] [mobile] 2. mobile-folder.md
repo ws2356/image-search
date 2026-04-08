@@ -65,7 +65,7 @@
     - If the pending-item count changes after revalidation, the UI must refresh the value before or during transfer rather than preserving stale numbers.
   - **For Story 5**
     - During transfer, the app must show a spinner or equivalent active state, completed item count, pending new or updated item count, failed item count if any, and a best-effort estimate of time remaining.
-    - The transfer screen must remind users that USB is generally faster and more stable than Wi-Fi LAN.
+    - The transfer screen must remind users that USB is generally faster and more stable than Wi-Fi LAN. There must be a reminder to the user that whenever USB is plugged in, the app will switch to USB transport for the current session if the desktop supports it.
     - If both USB and Wi-Fi are possible, the UI must reflect the currently active transport and any desktop-selected override that affects the session.
     - If ETA cannot be computed reliably, the app must show progress without a misleading static estimate.
   - **For Story 6**
@@ -130,40 +130,17 @@
 - **Security & Privacy**:
   - The app must not require user accounts, cloud storage, or media upload to third-party services.
   - The QR payload must act as a short-lived bootstrap secret and must expire after 15 minutes or on first successful use.
-  - Session transport keys must be derived from the pairing flow and must expire after 8 hours, with reconnect or rekey behavior when the desktop invalidates trust.
+  - Session transport keys must be derived from the pairing flow and must expire after 28 days, with reconnect or rekey behavior when the desktop invalidates trust.
   - Media bytes, filenames, full paths, thumbnails, and album names must remain local and must not be included in telemetry.
   - Camera, media-library, local-notification, battery permissions are requested during the backup flow and just before QR code scanning.
   - The app must clearly disclose when backup is incomplete because of partial permissions, unavailable on-device content, low battery risk, or session interruption.
   - The app must never show a success state unless the desktop confirms transfer completion for the current session scope.
-
-## 6. Risks & Roadmap
-
-- **Phased Rollout**:
-  - **MVP**
-    - iOS and Android companion app with PC-first onboarding
-    - The same core mobile-folder feature set must ship on both iOS and Android at launch
-    - In-app QR scanning, secure local pairing, full eligible-library backup, progress UI, Stop action, completion dialog
-    - Main-screen pending-item count and **Resume Backup** state after incomplete sessions
-    - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
-    - Reconnect path that depends on the desktop-driven reconnect workflow
-    - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
-  - **v1.1**
-    - Sharper error taxonomy and recovery strategies for firewall, local-network permission, cable disconnect, expired trust, and disk-full failures
-    - Improved progress forecasting and clearer transport-state explanation
-    - Better post-install return path after app-store deep link handoff
-  - **v2.0**
-    - Stronger platform-specific background transfer strategies where policy-compliant
 - **Technical Risks**:
-  - OS background-execution limits may prevent consistent transfer continuation after lock or backgrounding, especially on iOS.
-  - USB support and transport negotiation may behave differently across Android vendors, iPhone or iPad models, macOS, and Windows.
-  - Pending-item counts may be expensive or temporarily stale unless the desktop and mobile session models stay tightly coordinated.
-  - Limited or changing permission states can make "complete backup" difficult to communicate without confusing users.
-  - Device identity loss after reinstall can create mismatch flows that feel like duplication unless desktop and mobile messaging stay aligned.
-  - Reliable incremental transfer requires tight coordination between mobile-side cursors and desktop-side confirmation of what was durably received.
-  - Local network conditions, firewall policy, VPNs, or captive network behavior may make Wi-Fi appear available but unusable.
-  - Very large libraries, battery pressure, thermal throttling, or desktop disk failures can lengthen sessions enough to increase key expiry, disconnect, and user abandonment risk.
+  - OS background-execution limits may prevent consistent transfer continuation after lock or backgrounding, especially on iOS. Mitigated by the ability to resume from desktop reconnect without losing already transferred items or retransmitting unchanged items.
+  - Local network conditions, firewall policy, VPNs, or captive network behavior may make Wi-Fi appear available but unusable. For detected error conditions, the app should provide clear guidance to switch to USB or fix the underlying network issue. For undiagnosable failures, show a checklist of common network issues in a dedicated support page.
+  - Very large libraries, battery pressure, thermal throttling, or desktop disk failures can lengthen sessions enough to increase key expiry, disconnect, and user abandonment risk. Key can be auto rotated before expiry (not in the scope of v1 through).
 
-## 5. Telemetry
+## 4. Telemetry
 
 - **Usage Telemetry Requirements**:
   - The mobile app must collect aggregated usage telemetry by default for onboarding, pairing, resume, transfer, and completion flows.
