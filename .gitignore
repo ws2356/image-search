@@ -10,3 +10,4 @@ MagicMock/
 /*.msix
 node_modules
 /dt_image_search/deploy/otel/grafana/.env
+.DS_Store

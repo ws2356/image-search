@@ -1,0 +1,198 @@
+# PRD: Mobile Folder (Mobile Companion App)
+
+## 1. Executive Summary
+
+- **Problem Statement**: The desktop product can already index local folders, but mobile users still face a manual export-and-transfer step before their photos and videos become searchable. That extra step makes first-time setup fragile and makes repeat backups easy to postpone or abandon.
+- **Proposed Solution**: Build a mobile companion app, tentatively named **Album Transporter**, that pairs with the desktop app through QR scanning and performs secure local-only transfer of the phone's eligible media library to the desktop-managed mobile folder. The mobile app should optimize for reliable full-library backup, clear interruption recovery, and transparent communication about permission, battery, or transport limitations.
+- **Success Criteria**:
+  - **Draft KPI**: At least 85% of mobile sessions that complete QR pairing transfer the first eligible item within 2 minutes on USB and within 4 minutes on Wi-Fi LAN.
+  - **Draft KPI**: At least 95% of interrupted sessions that were previously paired can resume through reconnect without requiring a brand-new Add Folder setup.
+  - **Draft KPI**: At least 99% of completed sessions avoid retransferring unchanged media that the desktop already confirmed in a prior successful session.
+  - **Draft KPI**: At least 95% of sessions with limited or partial media permission clearly surface an "incomplete backup" warning before transfer begins.
+  - **Draft KPI**: Crash-free rate during active transfer sessions is at least 99.5%.
+
+## 2. User Experience & Functionality
+
+- **User Personas**:
+  - **Phone-first organizer**: Keeps most photos and videos on a phone and wants a guided path to make them searchable on desktop without manual export.
+  - **Repeat backup user**: Has already paired once and wants later sessions to pick up only new or changed media with minimal friction.
+  - **Reliability-sensitive user**: Cares more about finishing a large backup safely than about advanced organization features or visual polish.
+  - **Multi-device desktop curator**: Uses one desktop with multiple phones over time and expects the mobile app to make device identity and reconnect behavior predictable.
+- **User Stories**:
+  - **Story 1**: As a first-time user, I want the mobile app to explain the PC-first setup paths so that I can connect to the desktop app without guessing the next step.
+  - **Story 2**: As a user starting a backup, I want to scan a desktop QR code and complete secure pairing so that transfer can begin without account creation or manual code entry.
+  - **Story 3**: As a user with a large library, I want the app to back up the entire eligible on-device photo and video library so that I do not have to choose albums manually.
+  - **Story 4**: As a repeat user, I want the app to show how many new or updated items are pending since the last session so that I know whether I should resume now.
+  - **Story 5**: As a user during transfer, I want progress, estimated time remaining, and current transport guidance so that I know whether the backup is still healthy and whether USB would improve performance.
+  - **Story 6**: As a user who gets interrupted, I want the app to explain whether transfer is still running, paused, disconnected, or resumable so that I can recover without starting over.
+  - **Story 7**: As a user with limited media permission, I want the app to tell me that the backup is incomplete so that I understand the result before or during transfer.
+  - **Story 8**: As a user who chooses Stop, I want the mobile app to stop sending additional items without implying that the desktop also stopped indexing already transferred items.
+  - **Story 9**: As a user on low battery, I want the app to warn me before backup starts so that I can connect to a PC or charger and reduce the risk of interruption.
+- **Acceptance Criteria**:
+  - **For Story 1**
+    - The main screen must present the PC-first setup instructions in order: install or open the desktop app, click **Add Folder**, choose **Mobile Device**, display the QR page on desktop, then scan from the mobile app.
+    - The same screen must expose a clear scan action for users who land on the mobile app first and want to start with scanning the desktop QR code.
+    - The main screen must state that v1 supports full eligible-library backup only and does not include album selection.
+    - The main screen must state that stop-and-resume across repeated sessions should avoid retransmitting already transferred unchanged items.
+    - First-launch onboarding must request notification permission and explain that notifications are used for backup completion and interruption or reconnect-needed states.
+    - First-launch onboarding must explicitly disclose that the app collects always-on usage and health telemetry in v1, limited to operational analytics and reliability monitoring rather than media content.
+  - **For Story 2**
+    - The app must support scanning the desktop QR code through either the system camera or the in-app camera.
+    - If the system camera scans the QR and the app is already installed, the deep link must open the app into the pairing flow.
+    - If the user scans after QR expiry, the app must show an actionable error instructing them to refresh the QR on desktop.
+    - If the app is installed from an app-store page launched by the QR flow, the app must try to resume the pairing flow automatically when deferred deep linking is available.
+    - If deferred deep linking is unavailable or fails, the app must fall back to a clear rescan path rather than requiring the user to restart the entire onboarding flow.
+    - The app must not require account sign-in or manual pairing-code entry in v1.
+    - Pairing must fail closed if the secure bootstrap secret is invalid, expired, already consumed, or cryptographically rejected.
+  - **For Story 3**
+    - v1 must treat the backup scope as the entire eligible on-device photo and video library surfaced by the OS media APIs.
+    - The app must exclude hidden items, recently deleted items, and cloud-placeholder assets that are not fully resident on-device.
+    - The app must surface that partial or limited media permission produces an incomplete backup.
+    - The app must permit transfer to begin with partial permission if the user explicitly continues after the warning.
+    - The app must not include album picker, folder picker, desktop-to-mobile sync, delete sync, or selective-subset backup in v1.
+  - **For Story 4**
+    - If a prior session exists, the main screen must show the number of new or updated items detected since the last completed or last acknowledged session.
+    - If the app has only partial media permission, the pending-item count must include only items the app can currently access and must be labeled as incomplete.
+    - If the exact number cannot be computed until the device refreshes metadata or re-establishes a session with desktop, the main screen must show the last-known count first and then update it once the fresh count is available.
+    - If the previous backup session did not complete, the main screen must show a **Resume Backup** button.
+    - If the previous backup session completed successfully and the app detects pending changes, the main screen must show a **Back Up X New Items** button using the latest available combined count of new and updated items.
+    - If the previous backup session completed successfully and the app detects zero pending changes, the main screen must keep the generic scan or connect button rather than showing a no-op backup CTA.
+    - When the app detects zero pending changes, the main screen must also show the last successful backup time as supporting context.
+    - Tapping **Back Up X New Items** must try to start the repeat backup immediately if the last desktop session is still reachable and valid.
+    - If the last desktop session is not reachable, expired, or no longer trusted, tapping **Back Up X New Items** must guide the user into the reconnect or QR-scan flow.
+    - Tapping **Resume Backup** must try to continue the prior backup immediately if the last desktop session is still reachable and valid.
+    - If the last desktop session is not reachable, expired, or no longer trusted, tapping **Resume Backup** must guide the user into the reconnect or QR-scan flow without requiring the user to re-learn setup instructions from scratch.
+    - If the pending-item count changes after revalidation, the UI must refresh the value before or during transfer rather than preserving stale numbers.
+  - **For Story 5**
+    - During transfer, the app must show a spinner or equivalent active state, completed item count, pending new or updated item count, failed item count if any, and a best-effort estimate of time remaining.
+    - The transfer screen must remind users that USB is generally faster and more stable than Wi-Fi LAN.
+    - If both USB and Wi-Fi are possible, the UI must reflect the currently active transport and any desktop-selected override that affects the session.
+    - If ETA cannot be computed reliably, the app must show progress without a misleading static estimate.
+  - **For Story 6**
+    - The app must distinguish at least these mobile-visible states: awaiting desktop QR, pairing, permission required, ready to transfer, transferring, paused by OS or app backgrounding, disconnected, completed, and failed.
+    - The app may attempt to continue in background when the OS allows it, but it must document that transfer can pause when the app backgrounds, the phone locks, battery policy changes, or the OS suspends the app.
+    - If Wi-Fi disconnects, USB is unplugged, the desktop becomes unreachable, the app is force-closed, or trust material expires, the app must move to a resumable or recoverable state rather than implying success.
+    - When the session can be resumed only from desktop reconnect, the mobile app must say so explicitly.
+    - After an incomplete session, the next app launch must preserve enough state to show **Resume Backup** instead of dropping the user back into a blank first-time screen.
+    - If the user has granted notification permission where required by the OS, the app must send a local notification when backup completes and when transfer is interrupted or requires reconnect.
+  - **For Story 7**
+    - If the user granted only partial library access, the app must display a pre-transfer warning and an in-transfer reminder that the backup is incomplete.
+    - If the OS separates photos and videos permissions and one category is missing, the app must name which category is excluded.
+    - If the user changes permissions mid-session, the app must refresh scope messaging and continue only with currently granted items unless the OS requires a restart.
+  - **For Story 8**
+    - Pressing **Stop** must stop sending additional items from the mobile app as soon as safely possible.
+    - The stop confirmation must explain that the desktop may continue indexing items already transferred.
+    - After Stop, the session must remain eligible for later reconnect or repeat backup rather than being treated as a terminal failure.
+    - Completed state must show a confirmation dialog with a path back to the main screen.
+  - **For Story 9**
+    - Before backup starts, the app must check whether the device battery is below 20% unless the device is already connected to external power.
+    - If battery is low and the device is not already charging or attached to a PC that supplies power, the app must show a warning dialog before transfer begins.
+    - The warning dialog must suggest connecting the device to the PC or a charger before continuing.
+    - The low-battery warning must inform the user that long transfers are more likely to pause or fail when battery is low.
+    - The warning must be advisory rather than blocking and must allow the user to continue the backup anyway.
+  - **Cross-cutting corner cases**
+    - Camera permission denied: the app must provide recovery guidance to re-enable camera access or retry scanning.
+    - Media permission denied entirely: the app must block transfer and explain that no eligible content can be backed up until access is granted.
+    - Duplicate scan attempts: the app must prevent two active sessions for the same device identity at the same time.
+    - Device reinstall or local identity loss: the app must behave as a new device until the desktop resolves the mismatch flow.
+    - Very large libraries: the app must stream transfer incrementally and must not require full pre-enumeration before the first item can send if platform APIs allow progressive enumeration.
+    - Low battery or thermal throttling: the app may warn and slow down, but it must not fabricate completion if the OS pauses work.
+    - Desktop destination disk full or write failure: the app must surface the desktop error reason if provided and stop or pause safely.
+    - A stale pending-item count must never be presented as final if desktop or local refresh discovers more new or updated items.
+- **Non-Goals**:
+  - Album selection, selective backup by date or media type, or arbitrary subset backup in v1
+  - Cloud relay, cloud backup, remote pairing outside the local environment, or account-based sync
+  - Desktop-to-mobile transfer, bidirectional sync, or propagating mobile deletions to desktop
+  - Manual pairing-code entry fallback in v1
+  - Guaranteeing uninterrupted background transfer after the app is backgrounded or the device is locked
+  - On-device AI search, on-device embedding generation, or local media analysis beyond OS media enumeration
+
+## 3. Technical Specifications
+
+- **Architecture Overview**:
+  - The desktop app remains the session authority: it starts **Add Folder** or **Reconnect**, generates the QR payload, chooses or negotiates transport, resolves the stable desktop destination folder, and runs indexing as files arrive.
+  - The mobile app owns onboarding, QR scan entry, device identity generation and persistence, OS permission handling, eligible-media enumeration, secure session establishment, incremental transfer streaming, user-visible progress, stop behavior, battery warning flow, and user-facing recovery guidance.
+  - The mobile app should persist enough local state to recover from app restarts or temporary OS suspension, including device UUID, last paired desktop context if allowed, last-known session state, last error category, and transfer cursor or equivalent resumability marker when platform support makes that feasible.
+  - Transfers must be local-only and authenticated end-to-end between the paired mobile app and desktop app.
+  - USB should be preferred when available, with Wi-Fi LAN as fallback.
+  - The mobile app must treat the desktop as the source of truth for whether a session is new, repeat, mismatched, resumable, or complete.
+  - Device discovery. See [service discovery spec](./%5Bdev%5D%20%5Bpc%5D%20%5Bmobile%5D%20service%20discovery.md) for details.
+- **Integration Points**:
+  - OS camera permission and QR scanning APIs
+  - OS photo and video library APIs, including limited-permission variants
+  - OS battery and charging-state APIs
+  - OS local notification APIs
+  - USB transport support for Android and iPhone or iPad flows as enabled by the paired desktop implementation
+  - Wi-Fi LAN transport on the same local network, including local-network permission flows where applicable
+  - Secure pairing bootstrap from desktop QR payload, including expiry and one-time-use behavior
+  - Desktop session-status channel for receiving pairing confirmation, transfer acceptance, pending-item counts, recoverable error reasons, mismatch handling results, stop acknowledgment, and completion state
+  - Telemetry pipeline for aggregated operational metrics only
+- **Security & Privacy**:
+  - The app must not require user accounts, cloud storage, or media upload to third-party services.
+  - The QR payload must act as a short-lived bootstrap secret and must expire after 15 minutes or on first successful use.
+  - Session transport keys must be derived from the pairing flow and must expire after 8 hours, with reconnect or rekey behavior when the desktop invalidates trust.
+  - Media bytes, filenames, full paths, thumbnails, and album names must remain local and must not be included in telemetry.
+  - Camera, media-library, local-notification, battery permissions are requested during the backup flow and just before QR code scanning.
+  - The app must clearly disclose when backup is incomplete because of partial permissions, unavailable on-device content, low battery risk, or session interruption.
+  - The app must never show a success state unless the desktop confirms transfer completion for the current session scope.
+
+## 6. Risks & Roadmap
+
+- **Phased Rollout**:
+  - **MVP**
+    - iOS and Android companion app with PC-first onboarding
+    - The same core mobile-folder feature set must ship on both iOS and Android at launch
+    - In-app QR scanning, secure local pairing, full eligible-library backup, progress UI, Stop action, completion dialog
+    - Main-screen pending-item count and **Resume Backup** state after incomplete sessions
+    - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
+    - Reconnect path that depends on the desktop-driven reconnect workflow
+    - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
+  - **v1.1**
+    - Sharper error taxonomy and recovery strategies for firewall, local-network permission, cable disconnect, expired trust, and disk-full failures
+    - Improved progress forecasting and clearer transport-state explanation
+    - Better post-install return path after app-store deep link handoff
+  - **v2.0**
+    - Stronger platform-specific background transfer strategies where policy-compliant
+- **Technical Risks**:
+  - OS background-execution limits may prevent consistent transfer continuation after lock or backgrounding, especially on iOS.
+  - USB support and transport negotiation may behave differently across Android vendors, iPhone or iPad models, macOS, and Windows.
+  - Pending-item counts may be expensive or temporarily stale unless the desktop and mobile session models stay tightly coordinated.
+  - Limited or changing permission states can make "complete backup" difficult to communicate without confusing users.
+  - Device identity loss after reinstall can create mismatch flows that feel like duplication unless desktop and mobile messaging stay aligned.
+  - Reliable incremental transfer requires tight coordination between mobile-side cursors and desktop-side confirmation of what was durably received.
+  - Local network conditions, firewall policy, VPNs, or captive network behavior may make Wi-Fi appear available but unusable.
+  - Very large libraries, battery pressure, thermal throttling, or desktop disk failures can lengthen sessions enough to increase key expiry, disconnect, and user abandonment risk.
+
+## 5. Telemetry
+
+- **Usage Telemetry Requirements**:
+  - The mobile app must collect aggregated usage telemetry by default for onboarding, pairing, resume, transfer, and completion flows.
+  - Usage telemetry must include at minimum:
+    - QR scan start, scan success, scan failure events, and deep-link open events
+    - Pairing start, pairing success, pairing rejection, and pairing timeout
+    - Backup start, resume-button tap, stop-button tap, completion, and user-abandon events
+    - Transport-type selection and active transport outcome buckets for USB versus Wi-Fi LAN
+    - Permission-state categories such as full access, partial access, photos-only, videos-only, denied, and changed-mid-session
+    - Low-battery warning shown, warning dismissed, and warning-continue actions
+  - Usage telemetry must support funnel measurement for PC-first setup, and resume-from-main flows separately.
+  - Usage telemetry must use anonymous install or app-instance identifiers and short-lived session identifiers rather than account identifiers.
+- **Health Telemetry Requirements**:
+  - The mobile app must collect health telemetry by default for reliability monitoring and incident diagnosis.
+  - Health telemetry must include at minimum:
+    - Crash reports and fatal exception summaries
+    - App-not-responding or hang signals where the platform exposes them
+    - Background suspension, force-close recovery, and unexpected process termination categories
+    - Transfer failure categories such as desktop unreachable, Wi-Fi loss, USB disconnect, QR expiry, key expiry, disk-full reported by desktop, permission revoked, and battery-related interruption
+    - Retry counts, reconnect-attempt counts, and time-to-first-item or time-to-completion metrics
+    - Battery-level bucket and charging-state flag at backup start and at interruption time
+    - App version, OS version bucket, device class bucket, and transport-type bucket
+  - Health telemetry must separate user-cancelled stops from system or transport failures.
+  - Health telemetry must preserve enough event ordering to reconstruct session health without storing media-content details.
+- **Collection Requirements**:
+  - Usage and health telemetry must be always on in v1 and must not depend on a user opt-in or settings-level opt-out.
+  - Telemetry must never include media bytes, thumbnails, filenames, album names, full paths, GPS metadata, raw hashes, contact names, or the human-readable mobile device name.
+  - Telemetry must avoid exact pending-item identifiers and instead use counts, count buckets, error codes, duration buckets, and coarse device or OS categories.
+  - Telemetry events must be queued locally when offline and retried later without blocking transfer or backup UX.
+  - Telemetry collection failures must not break pairing, transfer, resume, or completion flows.
+  - Telemetry upload must respect the product's local-only media-transfer posture by sending only operational analytics and health signals.
+  - The telemetry schema must align mobile-side event names and failure taxonomies with desktop-side metrics where the same session spans both products.
