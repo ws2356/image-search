@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile UI — 10 Color Palette</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1A1A2E; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; -webkit-font-smoothing: antialiased; padding: 40px 32px 60px; display: flex; flex-direction: column; align-items: center; gap: 40px; }
+.page-header { text-align: center; }
+.page-num { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.3); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.page-title { font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.92); letter-spacing: -0.4px; }
+.page-sub { font-size: 13px; color: rgba(255,255,255,0.38); margin-top: 6px; }
+.section { width: 100%; max-width: 960px; }
+.section-label { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px; }
+.swatches { display: flex; gap: 12px; flex-wrap: wrap; }
+.swatch { border-radius: 14px; overflow: hidden; min-width: 140px; flex: 1; box-shadow: 0 2px 12px rgba(0,0,0,0.4); }
+.swatch-block { height: 80px; }
+.swatch-info { background: rgba(255,255,255,0.06); padding: 10px 12px; border-top: 1px solid rgba(255,255,255,0.04); }
+.swatch-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85); margin-bottom: 3px; }
+.swatch-hex { font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.4); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; margin-bottom: 2px; }
+.swatch-use { font-size: 11px; color: rgba(255,255,255,0.3); line-height: 1.4; }
+.divider { width: 100%; max-width: 960px; height: 1px; background: rgba(255,255,255,0.07); }
+/* Usage examples */
+.usage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; width: 100%; max-width: 960px; }
+.usage-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 2px 16px rgba(0,0,0,0.5); }
+.usage-card.dark { background: #1C1C1E; }
+.usage-card-label { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.25); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; }
+.usage-card.dark .usage-card-label { color: rgba(255,255,255,0.25); }
+.usage-card:not(.dark) .usage-card-label { color: rgba(0,0,0,0.25); }
+/* Scale used: primary body bg to show iOS colors in context */
+.type-scale div { margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-num">Album Transporter · Mobile UI · 10 / 10</div>
+  <div class="page-title">Color Palette</div>
+  <div class="page-sub">Semantic color system for the mobile companion app · iOS-native with shared primary from PC design</div>
+</div>
+
+<!-- ── PRIMARY ACTIONS ── -->
+<div class="section">
+  <div class="section-label">Primary · Interactive</div>
+  <div class="swatches">
+    <div class="swatch">
+      <div class="swatch-block" style="background:#007AFF"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Blue (Primary)</div>
+        <div class="swatch-hex">#007AFF · RGB(0, 122, 255)</div>
+        <div class="swatch-use">CTAs, links, selection, active states</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#0055D4"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Blue Dark</div>
+        <div class="swatch-hex">#0055D4 · RGB(0, 85, 212)</div>
+        <div class="swatch-use">Pressed state, deep backgrounds</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#34AADC"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Blue Light</div>
+        <div class="swatch-hex">#34AADC · RGB(52, 170, 220)</div>
+        <div class="swatch-use">Gradient accent, decorative highlights</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#E8F1FF"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Blue Tint</div>
+        <div class="swatch-hex">#E8F1FF · RGB(232, 241, 255)</div>
+        <div class="swatch-use">Info banners, active backgrounds, chips</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SEMANTIC STATES ── -->
+<div class="section">
+  <div class="section-label">Semantic · States</div>
+  <div class="swatches">
+    <div class="swatch">
+      <div class="swatch-block" style="background:#30D158"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Green (Success)</div>
+        <div class="swatch-hex">#30D158 · RGB(48, 209, 88)</div>
+        <div class="swatch-use">Completion, connected, all backed up</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#FF9F0A"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Orange (Warning)</div>
+        <div class="swatch-hex">#FF9F0A · RGB(255, 159, 10)</div>
+        <div class="swatch-use">Paused, weak signal, partial permission</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#FF453A"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Red (Error)</div>
+        <div class="swatch-hex">#FF453A · RGB(255, 69, 58)</div>
+        <div class="swatch-use">Disconnected, failed, destructive actions</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#FF3B30"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Red (Destructive)</div>
+        <div class="swatch-hex">#FF3B30 · RGB(255, 59, 48)</div>
+        <div class="swatch-use">Stop / delete action text &amp; tint</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-label">Semantic · State Tints (backgrounds)</div>
+  <div class="swatches">
+    <div class="swatch">
+      <div class="swatch-block" style="background:#E6F9ED"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Success Tint</div>
+        <div class="swatch-hex">#E6F9ED · RGB(230, 249, 237)</div>
+        <div class="swatch-use">Success banner backgrounds</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#FFF3CD"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Warning Tint</div>
+        <div class="swatch-hex">#FFF3CD · RGB(255, 243, 205)</div>
+        <div class="swatch-use">Warning banner backgrounds</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#FDECEA"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Error Tint</div>
+        <div class="swatch-hex">#FDECEA · RGB(253, 236, 234)</div>
+        <div class="swatch-use">Error banner backgrounds</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#FFF1F0"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Destructive Tint</div>
+        <div class="swatch-hex">#FFF1F0 · RGB(255, 241, 240)</div>
+        <div class="swatch-use">Destructive action button background</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── BACKGROUNDS ── -->
+<div class="section">
+  <div class="section-label">Backgrounds · Surfaces</div>
+  <div class="swatches">
+    <div class="swatch">
+      <div class="swatch-block" style="background:#F2F2F7;border:1px solid rgba(0,0,0,0.08)"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Background (Primary)</div>
+        <div class="swatch-hex">#F2F2F7 · RGB(242, 242, 247)</div>
+        <div class="swatch-use">App background, screen fill</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#FFFFFF;border:1px solid rgba(0,0,0,0.08)"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Background (Card)</div>
+        <div class="swatch-hex">#FFFFFF · RGB(255, 255, 255)</div>
+        <div class="swatch-use">Cards, table views, dialog sheets</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#F8F8FC;border:1px solid rgba(0,0,0,0.06)"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Background (Section header)</div>
+        <div class="swatch-hex">#F8F8FC · RGB(248, 248, 252)</div>
+        <div class="swatch-use">Card section headers, grouped list header</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#E5E5EA;border:1px solid rgba(0,0,0,0.06)"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Separator</div>
+        <div class="swatch-hex">#E5E5EA · RGB(229, 229, 234)</div>
+        <div class="swatch-use">Dividers, input borders, card edges</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TYPOGRAPHY ── -->
+<div class="section">
+  <div class="section-label">Typography · Text Colors</div>
+  <div class="swatches">
+    <div class="swatch">
+      <div class="swatch-block" style="background:#1C1C1E"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Label (Primary)</div>
+        <div class="swatch-hex">#1C1C1E · RGB(28, 28, 30)</div>
+        <div class="swatch-use">Headlines, primary content, card titles</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#3C3C43"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Label (Secondary)</div>
+        <div class="swatch-hex">#3C3C43 · RGB(60, 60, 67)</div>
+        <div class="swatch-use">Body text, descriptive content</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#6E6E73"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Label (Tertiary)</div>
+        <div class="swatch-hex">#6E6E73 · RGB(110, 110, 115)</div>
+        <div class="swatch-use">Captions, subtitles, metadata, hints</div>
+      </div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-block" style="background:#AEAEB2;border:1px solid rgba(0,0,0,0.06)"></div>
+      <div class="swatch-info">
+        <div class="swatch-name">Label (Quaternary)</div>
+        <div class="swatch-hex">#AEAEB2 · RGB(174, 174, 178)</div>
+        <div class="swatch-use">Placeholders, disabled text, chevrons</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── IN-CONTEXT USAGE EXAMPLES ── -->
+<div class="section">
+  <div class="section-label">In-Context Usage Examples</div>
+  <div class="usage-grid">
+
+    <!-- Buttons -->
+    <div class="usage-card">
+      <div class="usage-card-label">Button States</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="height:44px;background:#007AFF;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;color:white">Primary Action</div>
+        <div style="height:44px;background:white;border-radius:12px;border:1.5px solid #E5E5EA;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500;color:#007AFF">Secondary Action</div>
+        <div style="height:44px;background:#FFF1F0;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;color:#FF3B30">Destructive Action</div>
+        <div style="height:44px;background:#F2F2F7;border-radius:12px;border:1px solid #E5E5EA;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:400;color:#AEAEB2">Disabled</div>
+      </div>
+    </div>
+
+    <!-- Status badges -->
+    <div class="usage-card">
+      <div class="usage-card-label">Status Badges</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="padding:5px 12px;background:#E6F9ED;border-radius:20px;font-size:13px;font-weight:600;color:#1D7A3A;border:1px solid #C8F0D4">● Connected</div>
+          <div style="font-size:13px;color:#6E6E73">Success state</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="padding:5px 12px;background:#FFF3CD;border-radius:20px;font-size:13px;font-weight:600;color:#7D4C00;border:1px solid #FFD700">⏸ Paused</div>
+          <div style="font-size:13px;color:#6E6E73">Warning state</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="padding:5px 12px;background:#FDECEA;border-radius:20px;font-size:13px;font-weight:600;color:#7D0E00;border:1px solid #FBB8B4">✕ Disconnected</div>
+          <div style="font-size:13px;color:#6E6E73">Error state</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="padding:5px 12px;background:#E8F1FF;border-radius:20px;font-size:13px;font-weight:600;color:#004EAA;border:1px solid #B8D4FF">↻ Syncing</div>
+          <div style="font-size:13px;color:#6E6E73">Active state</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Typography scale -->
+    <div class="usage-card">
+      <div class="usage-card-label">Type Scale (iOS)</div>
+      <div class="type-scale">
+        <div style="font-size:34px;font-weight:700;color:#1C1C1E;letter-spacing:-0.5px;line-height:1.1">Large Title 34</div>
+        <div style="font-size:28px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px">Title 1  28/700</div>
+        <div style="font-size:22px;font-weight:700;color:#1C1C1E;letter-spacing:-0.2px">Title 2  22/700</div>
+        <div style="font-size:20px;font-weight:600;color:#1C1C1E">Title 3  20/600</div>
+        <div style="font-size:17px;font-weight:600;color:#1C1C1E">Headline  17/600</div>
+        <div style="font-size:17px;color:#1C1C1E">Body  17/400</div>
+        <div style="font-size:15px;color:#1C1C1E">Subheadline  15/400</div>
+        <div style="font-size:13px;color:#6E6E73">Footnote  13/400</div>
+        <div style="font-size:12px;font-weight:600;color:#6E6E73;letter-spacing:0.05em;text-transform:uppercase">CAPTION  12/600</div>
+      </div>
+    </div>
+
+    <!-- Transport transport color coding -->
+    <div class="usage-card">
+      <div class="usage-card-label">Transport Color Coding</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:#E8F4FD;border-radius:10px">
+          <div style="width:36px;height:36px;border-radius:10px;background:#007AFF;display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="14" viewBox="0 0 18 14" fill="white"><path d="M4 7c1.1-1.6 2.9-2.7 5-2.7s3.9 1.1 5 2.7" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M1 4C3 1.5 5.8 0 9 0s6 1.5 8 4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/><circle cx="9" cy="11" r="2" fill="white"/></svg>
+          </div>
+          <div><div style="font-size:14px;font-weight:600;color:#004EAA">Wi-Fi Transfer</div><div style="font-size:12px;color:#0B4F7E">Local network · up to ~50 MB/s</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:#E6F9ED;border-radius:10px">
+          <div style="width:36px;height:36px;border-radius:10px;background:#30D158;display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><rect x="5" y="0" width="6" height="10" rx="3" stroke="white" stroke-width="1.5"/><path d="M2 10c0 3.3 2.7 6 6 6s6-2.7 6-6" stroke="white" stroke-width="1.5" fill="none"/><path d="M8 16v4" stroke="white" stroke-width="1.5" stroke-linecap="round"/><path d="M5 20h6" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div><div style="font-size:14px;font-weight:600;color:#1D7A3A">USB Transfer</div><div style="font-size:12px;color:#0B5E24">Direct cable · up to ~200+ MB/s</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:#FFF3CD;border-radius:10px">
+          <div style="width:36px;height:36px;border-radius:10px;background:#FF9F0A;display:flex;align-items:center;justify-content:center">
+            <svg width="20" height="18" viewBox="0 0 20 18" fill="none"><path d="M10 1L19 17H1L10 1Z" stroke="white" stroke-width="1.5" stroke-linejoin="round" fill="rgba(255,255,255,0.2)"/><path d="M10 7v4" stroke="white" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="13.5" r="1.2" fill="white"/></svg>
+          </div>
+          <div><div style="font-size:14px;font-weight:600;color:#7D4C00">Weak Signal</div><div style="font-size:12px;color:#6B4000">Wi-Fi degraded · recommend USB</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gradient palette (splash gradients) -->
+    <div class="usage-card" style="background:#1C1C1E">
+      <div class="usage-card-label">Splash Screen Gradients</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(145deg,#0055D4,#007AFF,#34AADC);flex-shrink:0"></div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.85)">Blue Gradient (Candidate A)</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4)">#0055D4 → #007AFF → #34AADC</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:48px;border-radius:12px;background:#05070F;border:1px solid rgba(255,255,255,0.12);flex-shrink:0;display:flex;align-items:center;justify-content:center"><div style="width:24px;height:24px;border-radius:8px;background:radial-gradient(circle,rgba(0,122,255,0.6),transparent)"></div></div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.85)">Deep Dark (Candidate B)</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4)">#05070F + glow #007AFF 25% opacity</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(160deg,#F2F8FF,white,#F5FFF8);border:1px solid rgba(0,0,0,0.08);flex-shrink:0"></div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.85)">Clean White (Candidate C)</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4)">#F2F8FF → white → #F5FFF8</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Design Notes -->
+    <div class="usage-card" style="background:#1C1C1E">
+      <div class="usage-card-label">Design Notes</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="padding:10px 12px;background:rgba(0,122,255,0.12);border-radius:8px;border-left:3px solid #007AFF">
+          <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.7);margin-bottom:3px">Shared Primary Color</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.5">#007AFF is the shared primary with the PC desktop app, ensuring visual brand consistency across platforms.</div>
+        </div>
+        <div style="padding:10px 12px;background:rgba(255,255,255,0.06);border-radius:8px;border-left:3px solid rgba(255,255,255,0.15)">
+          <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.7);margin-bottom:3px">iOS Human Interface Guidelines</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.5">All semantic colors (#30D158, #FF9F0A, #FF453A) match iOS system colors for visual consistency and future Dynamic Color support.</div>
+        </div>
+        <div style="padding:10px 12px;background:rgba(255,255,255,0.06);border-radius:8px;border-left:3px solid rgba(255,255,255,0.15)">
+          <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.7);margin-bottom:3px">Accessibility</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);line-height:1.5">Primary text on backgrounds meets WCAG AA (4.5:1+). Semantic colors are never the sole indicator of state — always paired with icons or text.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

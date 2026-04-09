@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile UI — 05 Transfer Active</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1A1A2E; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; align-items: center; padding: 40px 32px 60px; }
+.page-header { margin-bottom: 40px; text-align: center; }
+.page-num { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.3); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.page-title { font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.92); letter-spacing: -0.4px; }
+.page-sub { font-size: 13px; color: rgba(255,255,255,0.38); margin-top: 6px; }
+.phones-row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.phone-label { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.48); text-align: center; max-width: 220px; line-height: 1.5; }
+.phone-label strong { color: rgba(255,255,255,0.72); font-weight: 600; display: block; margin-bottom: 2px; font-size: 13px; }
+.phone { width: 220px; height: 462px; background: #191919; border-radius: 48px; padding: 11px 10px; position: relative; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 0 3px #0D0D0D, 0 0 0 4px rgba(255,255,255,0.04), 0 32px 72px rgba(0,0,0,0.82), 0 12px 28px rgba(0,0,0,0.5); }
+.phone::before { content: ''; position: absolute; left: -3px; top: 80px; width: 3px; height: 28px; background: #2A2A2A; border-radius: 2px 0 0 2px; box-shadow: 0 38px 0 #2A2A2A; }
+.phone::after { content: ''; position: absolute; right: -3px; top: 96px; width: 3px; height: 48px; background: #2A2A2A; border-radius: 0 2px 2px 0; }
+.phone-screen { width: 200px; height: 440px; border-radius: 40px; overflow: hidden; position: relative; }
+.phone-content { position: absolute; top: 0; left: 0; width: 390px; height: 844px; transform: scale(0.5128); transform-origin: top left; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes progress-anim { 0%{opacity:0.9;}100%{opacity:1;} }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-num">Album Transporter · Mobile UI · 05 / 10</div>
+  <div class="page-title">Transfer in Progress</div>
+  <div class="page-sub">Wi-Fi transfer · USB transfer (auto-switched) · weak signal warning with USB suggestion</div>
+</div>
+
+<div class="phones-row">
+
+  <!-- Screen 1: Transferring over Wi-Fi -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="#1C1C1E"><circle cx="8" cy="10.5" r="1.5"/><path d="M5 8c.8-.9 1.8-1.5 3-1.5s2.2.6 3 1.5" stroke="#1C1C1E" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M2.5 5.5C4 3.7 5.9 2.5 8 2.5s4 1.2 5.5 3" stroke="#1C1C1E" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="12" height="8" rx="2" fill="#1C1C1E"/><path d="M23 4.5V7.5c.9-.4 1.5-1.1 1.5-1.5S23.9 4.9 23 4.5Z" fill="#1C1C1E" fill-opacity="0.4"/></svg>
+            </div>
+          </div>
+          <!-- Nav bar -->
+          <div style="height:44px;display:flex;align-items:center;padding:0 16px;position:relative">
+            <div style="position:absolute;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center">
+              <span style="font-size:17px;font-weight:600;color:#1C1C1E">Transferring</span>
+            </div>
+            <span style="margin-left:auto;font-size:15px;color:#FF453A;font-weight:500">Stop</span>
+          </div>
+          <!-- Transport badge -->
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 0 4px">
+            <div style="display:inline-flex;align-items:center;gap:6px;background:#E8F4FD;border-radius:20px;padding:5px 14px">
+              <svg width="14" height="12" viewBox="0 0 16 12" fill="#007AFF"><circle cx="8" cy="10.5" r="1.5"/><path d="M5 8c.8-.9 1.8-1.5 3-1.5s2.2.6 3 1.5" stroke="#007AFF" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M2.5 5.5C4 3.7 5.9 2.5 8 2.5s4 1.2 5.5 3" stroke="#007AFF" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+              <span style="font-size:13px;font-weight:600;color:#007AFF">Wi-Fi LAN</span>
+            </div>
+            <span style="font-size:13px;color:#6E6E73">Tom's MacBook Pro</span>
+          </div>
+          <!-- Donut progress -->
+          <div style="display:flex;justify-content:center;padding:20px 0 12px">
+            <div style="position:relative;width:180px;height:180px">
+              <svg width="180" height="180" viewBox="0 0 180 180">
+                <circle cx="90" cy="90" r="72" stroke="#E5E5EA" stroke-width="12" fill="none"/>
+                <circle cx="90" cy="90" r="72" stroke="#007AFF" stroke-width="12" fill="none" stroke-dasharray="452.4" stroke-dashoffset="330" stroke-linecap="round" transform="rotate(-90 90 90)"/>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+                <!-- Spinner icon -->
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style="animation:spin 1.5s linear infinite"><circle cx="14" cy="14" r="11" stroke="#E5E5EA" stroke-width="2.5" fill="none"/><path d="M14 3a11 11 0 0 1 7.8 3.2" stroke="#007AFF" stroke-width="2.5" stroke-linecap="round"/></svg>
+                <span style="font-size:32px;font-weight:700;color:#1C1C1E;letter-spacing:-0.5px">27%</span>
+                <span style="font-size:13px;color:#6E6E73">342 / 1,247</span>
+              </div>
+            </div>
+          </div>
+          <!-- Stats card -->
+          <div style="margin:0 16px;background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="display:flex">
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)">
+                <div style="font-size:22px;font-weight:700;color:#30D158;letter-spacing:-0.3px">342</div>
+                <div style="font-size:11px;color:#6E6E73;margin-top:2px">Sent</div>
+              </div>
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)">
+                <div style="font-size:22px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px">905</div>
+                <div style="font-size:11px;color:#6E6E73;margin-top:2px">Remaining</div>
+              </div>
+              <div style="flex:1;padding:12px 8px;text-align:center">
+                <div style="font-size:22px;font-weight:700;color:#FF453A;letter-spacing:-0.3px">0</div>
+                <div style="font-size:11px;color:#6E6E73;margin-top:2px">Failed</div>
+              </div>
+            </div>
+          </div>
+          <!-- ETA -->
+          <div style="margin:10px 16px 0;background:white;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <span style="font-size:14px;color:#6E6E73">Estimated time</span>
+            <span style="font-size:15px;font-weight:600;color:#1C1C1E">~18 minutes</span>
+          </div>
+          <!-- USB hint banner -->
+          <div style="margin:10px 16px 0;background:#EEF2FF;border-radius:12px;padding:10px 14px;display:flex;gap:8px;align-items:flex-start">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style="flex-shrink:0;margin-top:1px"><path d="M9 1v9M9 1L6 4M9 1l3 3" stroke="#3B5FC0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="10" width="10" height="6" rx="2" stroke="#3B5FC0" stroke-width="1.5"/></svg>
+            <span style="font-size:13px;color:#3B5FC0;line-height:1.45">Connect USB for faster transfer. The app auto-switches when detected.</span>
+          </div>
+          <!-- Stop -->
+          <div style="padding:16px 16px 0">
+            <div style="background:#FFF1F0;border-radius:14px;height:52px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500;color:#FF453A">Stop Backup</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>Screen 1 — Wi-Fi Transfer</strong>27% progress with ETA and USB upgrade hint</div>
+  </div>
+
+  <!-- Screen 2: USB transfer (fast) -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="#1C1C1E"><circle cx="8" cy="10.5" r="1.5"/><path d="M5 8c.8-.9 1.8-1.5 3-1.5s2.2.6 3 1.5" stroke="#1C1C1E" stroke-width="1.3" fill="none"/><path d="M2.5 5.5C4 3.7 5.9 2.5 8 2.5s4 1.2 5.5 3" stroke="#1C1C1E" stroke-width="1.3" fill="none"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#30D158"/><path d="M23 4.5V7.5c.9-.4 1.5-1.1 1.5-1.5S23.9 4.9 23 4.5Z" fill="#1C1C1E" fill-opacity="0.4"/></svg>
+            </div>
+          </div>
+          <div style="height:44px;display:flex;align-items:center;padding:0 16px;position:relative">
+            <div style="position:absolute;left:50%;transform:translateX(-50%)">
+              <span style="font-size:17px;font-weight:600;color:#1C1C1E">Transferring</span>
+            </div>
+            <span style="margin-left:auto;font-size:15px;color:#FF453A;font-weight:500">Stop</span>
+          </div>
+          <!-- USB transport badge - green highlighted -->
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 0 2px">
+            <div style="display:inline-flex;align-items:center;gap:7px;background:#E6F9ED;border:1.5px solid #30D158;border-radius:20px;padding:5px 16px">
+              <svg width="14" height="16" viewBox="0 0 14 16" fill="none"><path d="M7 1v8M7 1L4.5 4M7 1l2.5 3" stroke="#30D158" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="9" width="10" height="6" rx="1.5" stroke="#30D158" stroke-width="1.5"/></svg>
+              <span style="font-size:13px;font-weight:700;color:#166534">USB Connected · Max Speed</span>
+            </div>
+          </div>
+          <div style="text-align:center;font-size:13px;color:#6E6E73;padding:4px 0">Tom's MacBook Pro</div>
+          <!-- Donut with higher percentage -->
+          <div style="display:flex;justify-content:center;padding:14px 0 8px">
+            <div style="position:relative;width:180px;height:180px">
+              <svg width="180" height="180" viewBox="0 0 180 180">
+                <circle cx="90" cy="90" r="72" stroke="#E5E5EA" stroke-width="12" fill="none"/>
+                <circle cx="90" cy="90" r="72" stroke="#30D158" stroke-width="12" fill="none" stroke-dasharray="452.4" stroke-dashoffset="130" stroke-linecap="round" transform="rotate(-90 90 90)"/>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="animation:spin 1.2s linear infinite"><circle cx="12" cy="12" r="9" stroke="#E5E5EA" stroke-width="2" fill="none"/><path d="M12 3a9 9 0 0 1 6.4 2.6" stroke="#30D158" stroke-width="2" stroke-linecap="round"/></svg>
+                <span style="font-size:32px;font-weight:700;color:#1C1C1E;letter-spacing:-0.5px">71%</span>
+                <span style="font-size:13px;color:#6E6E73">891 / 1,247</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin:0 16px;background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="display:flex">
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)">
+                <div style="font-size:22px;font-weight:700;color:#30D158;letter-spacing:-0.3px">891</div>
+                <div style="font-size:11px;color:#6E6E73;margin-top:2px">Sent</div>
+              </div>
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)">
+                <div style="font-size:22px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px">356</div>
+                <div style="font-size:11px;color:#6E6E73;margin-top:2px">Remaining</div>
+              </div>
+              <div style="flex:1;padding:12px 8px;text-align:center">
+                <div style="font-size:22px;font-weight:700;color:#FF453A;letter-spacing:-0.3px">0</div>
+                <div style="font-size:11px;color:#6E6E73;margin-top:2px">Failed</div>
+              </div>
+            </div>
+          </div>
+          <div style="margin:10px 16px 0;background:white;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <span style="font-size:14px;color:#6E6E73">Estimated time</span>
+            <span style="font-size:15px;font-weight:600;color:#30D158">~4 minutes</span>
+          </div>
+          <!-- USB connected info (no upgrade hint needed) -->
+          <div style="margin:10px 16px 0;background:#E6F9ED;border-radius:12px;padding:10px 14px;display:flex;gap:8px;align-items:center">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-6" stroke="#166534" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span style="font-size:13px;color:#166534;font-weight:500">USB active — Keep connected for max speed</span>
+          </div>
+          <div style="padding:14px 16px 0">
+            <div style="background:#FFF1F0;border-radius:14px;height:52px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500;color:#FF453A">Stop Backup</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>Screen 2 — USB Transfer</strong>Auto-switched to USB, 4× faster ETA</div>
+  </div>
+
+  <!-- Screen 3: Weak Wi-Fi warning -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <!-- Weak Wi-Fi indicators (2 bars) -->
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="#FF9F0A"><circle cx="8" cy="10.5" r="1.5"/><path d="M5 8c.8-.9 1.8-1.5 3-1.5s2.2.6 3 1.5" stroke="#FF9F0A" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M2.5 5.5C4 3.7 5.9 2.5 8 2.5s4 1.2 5.5 3" stroke="#E5E5EA" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="10" height="8" rx="2" fill="#1C1C1E"/><path d="M23 4.5V7.5c.9-.4 1.5-1.1 1.5-1.5S23.9 4.9 23 4.5Z" fill="#1C1C1E" fill-opacity="0.4"/></svg>
+            </div>
+          </div>
+          <div style="height:44px;display:flex;align-items:center;padding:0 16px;position:relative">
+            <div style="position:absolute;left:50%;transform:translateX(-50%)">
+              <span style="font-size:17px;font-weight:600;color:#1C1C1E">Transferring</span>
+            </div>
+            <span style="margin-left:auto;font-size:15px;color:#FF453A;font-weight:500">Stop</span>
+          </div>
+          <!-- Weak Wi-Fi badge -->
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 0 2px">
+            <div style="display:inline-flex;align-items:center;gap:6px;background:#FFF3CD;border-radius:20px;padding:5px 14px;border:1px solid #FFD700">
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="#FF9F0A"><circle cx="8" cy="10.5" r="1.5"/><path d="M5 8c.8-.9 1.8-1.5 3-1.5s2.2.6 3 1.5" stroke="#FF9F0A" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>
+              <span style="font-size:13px;font-weight:600;color:#7D4C00">Wi-Fi Weak</span>
+            </div>
+          </div>
+          <div style="text-align:center;font-size:13px;color:#6E6E73;padding:3px 0">Tom's MacBook Pro</div>
+          <!-- Progress ring at 27% but slower -->
+          <div style="display:flex;justify-content:center;padding:14px 0 8px">
+            <div style="position:relative;width:180px;height:180px">
+              <svg width="180" height="180" viewBox="0 0 180 180">
+                <circle cx="90" cy="90" r="72" stroke="#E5E5EA" stroke-width="12" fill="none"/>
+                <circle cx="90" cy="90" r="72" stroke="#FF9F0A" stroke-width="12" fill="none" stroke-dasharray="452.4" stroke-dashoffset="330" stroke-linecap="round" transform="rotate(-90 90 90)"/>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="animation:spin 2s linear infinite"><circle cx="12" cy="12" r="9" stroke="#E5E5EA" stroke-width="2" fill="none"/><path d="M12 3a9 9 0 0 1 6.4 2.6" stroke="#FF9F0A" stroke-width="2.5" stroke-linecap="round"/></svg>
+                <span style="font-size:32px;font-weight:700;color:#1C1C1E;letter-spacing:-0.5px">27%</span>
+                <span style="font-size:13px;color:#6E6E73">342 / 1,247</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin:0 16px;background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="display:flex">
+              <div style="flex:1;padding:10px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)"><div style="font-size:20px;font-weight:700;color:#30D158">342</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Sent</div></div>
+              <div style="flex:1;padding:10px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)"><div style="font-size:20px;font-weight:700;color:#1C1C1E">905</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Remaining</div></div>
+              <div style="flex:1;padding:10px 8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#FF9F0A">~2h</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">ETA (slow)</div></div>
+            </div>
+          </div>
+          <!-- Prominent Wi-Fi warning -->
+          <div style="margin:10px 16px 0;background:#FFF3CD;border-radius:14px;padding:14px;display:flex;gap:10px;align-items:flex-start;border:1px solid #FFD700">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;margin-top:1px"><path d="M10 3L18 17H2L10 3Z" stroke="#FF9F0A" stroke-width="1.8" stroke-linejoin="round" fill="rgba(255,159,10,0.15)"/><path d="M10 8v4" stroke="#FF9F0A" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="#FF9F0A"/></svg>
+            <div>
+              <div style="font-size:14px;font-weight:600;color:#7D4C00;margin-bottom:3px">Slow Wi-Fi detected</div>
+              <div style="font-size:13px;color:#7D4C00;line-height:1.45">Transfer is slower than usual. Connect USB or move closer to your router for a much faster backup.</div>
+            </div>
+          </div>
+          <div style="padding:12px 16px 0">
+            <div style="background:#FFF1F0;border-radius:14px;height:50px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500;color:#FF453A">Stop Backup</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>Screen 3 — Weak Wi-Fi Warning</strong>Slowed transfer · USB strongly recommended</div>
+  </div>
+
+</div>
+</body>
+</html>

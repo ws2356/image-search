@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile UI — 06 Interrupted States</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1A1A2E; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; align-items: center; padding: 40px 32px 60px; }
+.page-header { margin-bottom: 40px; text-align: center; }
+.page-num { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.3); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.page-title { font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.92); letter-spacing: -0.4px; }
+.page-sub { font-size: 13px; color: rgba(255,255,255,0.38); margin-top: 6px; }
+.phones-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.phone-label { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.48); text-align: center; max-width: 210px; line-height: 1.5; }
+.phone-label strong { color: rgba(255,255,255,0.72); font-weight: 600; display: block; margin-bottom: 2px; font-size: 13px; }
+.phone { width: 220px; height: 462px; background: #191919; border-radius: 48px; padding: 11px 10px; position: relative; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 0 3px #0D0D0D, 0 0 0 4px rgba(255,255,255,0.04), 0 32px 72px rgba(0,0,0,0.82), 0 12px 28px rgba(0,0,0,0.5); }
+.phone::before { content: ''; position: absolute; left: -3px; top: 80px; width: 3px; height: 28px; background: #2A2A2A; border-radius: 2px 0 0 2px; box-shadow: 0 38px 0 #2A2A2A; }
+.phone::after { content: ''; position: absolute; right: -3px; top: 96px; width: 3px; height: 48px; background: #2A2A2A; border-radius: 0 2px 2px 0; }
+.phone-screen { width: 200px; height: 440px; border-radius: 40px; overflow: hidden; position: relative; }
+.phone-content { position: absolute; top: 0; left: 0; width: 390px; height: 844px; transform: scale(0.5128); transform-origin: top left; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-num">Album Transporter · Mobile UI · 06 / 10</div>
+  <div class="page-title">Interrupted States</div>
+  <div class="page-sub">Paused · Wi-Fi lost · Desktop unreachable · Resume from last state (app relaunch)</div>
+</div>
+
+<div class="phones-row">
+
+  <!-- Screen 1: Transfer Paused (app backgrounded) -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="12" height="8" rx="2" fill="#1C1C1E"/></svg>
+          </div>
+          <!-- Paused hero -->
+          <div style="display:flex;flex-direction:column;align-items:center;padding:56px 28px 0;gap:18px;text-align:center">
+            <div style="width:100px;height:100px;border-radius:50%;background:linear-gradient(145deg,#FF9F0A,#E07800);box-shadow:0 6px 28px rgba(255,159,10,0.4);display:flex;align-items:center;justify-content:center">
+              <svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+                <rect x="14" y="13" width="8" height="24" rx="3" fill="white"/>
+                <rect x="28" y="13" width="8" height="24" rx="3" fill="white"/>
+              </svg>
+            </div>
+            <div>
+              <div style="font-size:26px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px">Transfer Paused</div>
+              <div style="font-size:15px;color:#6E6E73;margin-top:8px;line-height:1.5">The app was moved to the background. Return to Album Transporter to continue.</div>
+            </div>
+          </div>
+          <!-- Progress preserved -->
+          <div style="margin:24px 16px 0;background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="padding:10px 14px;background:#FFF8EE;border-bottom:0.5px solid rgba(0,0,0,0.07);font-size:12px;font-weight:600;color:#6E6E73;text-transform:uppercase;letter-spacing:0.06em">Progress (saved)</div>
+            <div style="display:flex">
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)"><div style="font-size:22px;font-weight:700;color:#30D158">342</div><div style="font-size:11px;color:#6E6E73;margin-top:2px">Sent</div></div>
+              <div style="flex:1;padding:12px 8px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1C1C1E">905</div><div style="font-size:11px;color:#6E6E73;margin-top:2px">Remaining</div></div>
+            </div>
+          </div>
+          <!-- Info callout -->
+          <div style="margin:10px 16px 0;background:#FFF3CD;border-radius:12px;padding:12px 14px;font-size:13px;color:#7D4C00;line-height:1.5">
+            Transfer can pause when the app is backgrounded, the screen locks, or the OS suspends the app. Your progress is always preserved.
+          </div>
+          <div style="padding:20px 16px 0">
+            <div style="background:#007AFF;border-radius:14px;height:56px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:white;gap:8px">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><polygon points="7,4 17,10 7,16" fill="white"/></svg>
+              Resume Transfer
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>State 1 — Paused</strong>App backgrounded · progress saved · resume CTA</div>
+  </div>
+
+  <!-- Screen 2: Wi-Fi Disconnected -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <!-- No Wi-Fi icon -->
+            <div style="display:flex;align-items:center;gap:4px">
+              <svg width="16" height="14" viewBox="0 0 16 14" fill="none"><path d="M2 2L14 12" stroke="#FF453A" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.5" r="1.5" fill="#AEAEB2"/><path d="M5 8.5c.8-.9 1.8-1.5 3-1.5" stroke="#AEAEB2" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="8" height="8" rx="2" fill="#1C1C1E"/></svg>
+            </div>
+          </div>
+          <!-- Error hero -->
+          <div style="display:flex;flex-direction:column;align-items:center;padding:50px 28px 0;gap:18px;text-align:center">
+            <div style="width:100px;height:100px;border-radius:50%;background:linear-gradient(145deg,#FF453A,#C02020);box-shadow:0 6px 28px rgba(255,69,58,0.4);display:flex;align-items:center;justify-content:center">
+              <svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+                <path d="M8 10L42 40" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+                <circle cx="25" cy="38" r="2.5" fill="white"/>
+                <path d="M13 24c3.2-3.3 7.2-5.3 12-5.3" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                <path d="M6 16c5-5.3 11.7-8.5 19-8.5s14 3.2 19 8.5" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div>
+              <div style="font-size:26px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px">Connection Lost</div>
+              <div style="font-size:15px;color:#6E6E73;margin-top:8px;line-height:1.5">Wi-Fi disconnected. Your progress is saved — reconnect or plug in USB to continue.</div>
+            </div>
+          </div>
+          <!-- Progress preserved -->
+          <div style="margin:20px 16px 0;background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="display:flex">
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)"><div style="font-size:20px;font-weight:700;color:#30D158">342</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Sent</div></div>
+              <div style="flex:1;padding:12px 8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#1C1C1E">905</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Remaining</div></div>
+            </div>
+          </div>
+          <!-- Tips -->
+          <div style="margin:10px 16px 0;background:#FDECEA;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="padding:10px 14px;background:#FEF0EF;border-bottom:0.5px solid rgba(0,0,0,0.06);font-size:12px;font-weight:600;color:#6E6E73;text-transform:uppercase;letter-spacing:0.06em">Troubleshooting</div>
+            <div style="padding:10px 14px;font-size:14px;color:#7D0E00;line-height:1.4;border-bottom:0.5px solid rgba(0,0,0,0.06)">• Both devices must be on the same Wi-Fi network</div>
+            <div style="padding:10px 14px;font-size:14px;color:#7D0E00;line-height:1.4;border-bottom:0.5px solid rgba(0,0,0,0.06)">• VPNs or isolated network modes can block discovery</div>
+            <div style="padding:10px 14px;font-size:14px;color:#7D0E00;line-height:1.4">• Plug in USB cable to transfer without Wi-Fi</div>
+          </div>
+          <div style="padding:14px 16px 0">
+            <div style="background:#007AFF;border-radius:14px;height:52px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:white">Try Reconnecting</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>State 2 — Wi-Fi Lost</strong>Network dropped · USB fallback tip · reconnect CTA</div>
+  </div>
+
+  <!-- Screen 3: Desktop Unreachable -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#1C1C1E"/></svg>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;padding:44px 28px 0;gap:16px;text-align:center">
+            <div style="width:100px;height:100px;border-radius:50%;background:linear-gradient(145deg,#636366,#3a3a3c);box-shadow:0 6px 28px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center">
+              <svg width="50" height="50" viewBox="0 0 50 50" fill="none">
+                <rect x="8" y="14" width="34" height="22" rx="4" stroke="rgba(255,255,255,0.7)" stroke-width="2" fill="none"/>
+                <rect x="14" y="18" width="22" height="14" rx="2" fill="rgba(255,255,255,0.15)"/>
+                <path d="M20 36l5 5m0 0l5-5m-5 5V36" stroke="rgba(255,255,255,0.5)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- Disconnected cross -->
+                <path d="M38 10L46 18M46 10L38 18" stroke="#FF453A" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div>
+              <div style="font-size:24px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px;line-height:1.2">Desktop Unreachable</div>
+              <div style="font-size:15px;color:#6E6E73;margin-top:8px;line-height:1.5">Tom's MacBook Pro is no longer reachable. The PC may be asleep, off the network, or closed.</div>
+            </div>
+          </div>
+          <div style="margin:20px 16px 0;background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="display:flex">
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)"><div style="font-size:20px;font-weight:700;color:#30D158">342</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Sent so far</div></div>
+              <div style="flex:1;padding:12px 8px;text-align:center"><div style="font-size:20px;font-weight:700;color:#1C1C1E">905</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Remaining</div></div>
+            </div>
+          </div>
+          <div style="margin:10px 16px 0;background:#F2F2F7;border-radius:12px;padding:12px 14px;font-size:14px;color:#6E6E73;line-height:1.5;border:1px solid #E5E5EA">
+            If needed, reopen the desktop app and click <strong style="color:#1C1C1E">Reconnect</strong> on the mobile folder to pick up a new session.
+          </div>
+          <div style="display:flex;gap:10px;padding:16px 16px 0">
+            <div style="flex:1;height:52px;background:#007AFF;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:white">Try Again</div>
+            <div style="flex:1;height:52px;background:white;border-radius:12px;border:1.5px solid #E5E5EA;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;color:#007AFF">Scan New QR</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>State 3 — Desktop Unreachable</strong>PC offline or asleep · try again or rescan</div>
+  </div>
+
+  <!-- Screen 4: App relaunched after interruption -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <div style="display:flex;align-items:center;gap:6px"><svg width="16" height="12" viewBox="0 0 16 12" fill="#1C1C1E"><circle cx="8" cy="10.5" r="1.5"/><path d="M5 8c.8-.9 1.8-1.5 3-1.5s2.2.6 3 1.5" stroke="#1C1C1E" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M2.5 5.5C4 3.7 5.9 2.5 8 2.5s4 1.2 5.5 3" stroke="#1C1C1E" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg><svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="14" height="8" rx="2" fill="#1C1C1E"/></svg></div>
+          </div>
+          <!-- Title area -->
+          <div style="padding:4px 20px;font-size:34px;font-weight:700;color:#1C1C1E;letter-spacing:-0.5px;line-height:1.18">Welcome Back</div>
+          <div style="padding:4px 20px 0;font-size:15px;color:#6E6E73">Tom's MacBook Pro</div>
+          <!-- Interrupted banner -->
+          <div style="margin:14px 16px 0;background:#FFF3CD;border-radius:14px;padding:14px;display:flex;gap:10px;align-items:flex-start;border:1px solid #FFD700">
+            <div style="width:36px;height:36px;border-radius:10px;background:#FF9F0A;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3L18 17H2L10 3Z" stroke="white" stroke-width="1.8" stroke-linejoin="round" fill="rgba(255,255,255,0.2)"/><path d="M10 8v4" stroke="white" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="14" r="1.2" fill="white"/></svg>
+            </div>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:#7D4C00;margin-bottom:3px">Backup stopped 3 days ago</div>
+              <div style="font-size:13px;color:#7D4C00;line-height:1.45">The last session was interrupted. Your progress is saved — tap Resume to continue from where you left off.</div>
+            </div>
+          </div>
+          <!-- Stats card -->
+          <div style="margin:12px 16px 0;background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+            <div style="padding:10px 14px;background:#F8F8FC;border-bottom:0.5px solid rgba(0,0,0,0.07);font-size:12px;font-weight:600;color:#6E6E73;text-transform:uppercase;letter-spacing:0.06em">Saved progress</div>
+            <div style="display:flex">
+              <div style="flex:1;padding:14px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)"><div style="font-size:24px;font-weight:700;color:#30D158;letter-spacing:-0.3px">842</div><div style="font-size:11px;color:#6E6E73;margin-top:2px">Transferred</div></div>
+              <div style="flex:1;padding:14px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.08)"><div style="font-size:24px;font-weight:700;color:#FF9F0A;letter-spacing:-0.3px">405</div><div style="font-size:11px;color:#6E6E73;margin-top:2px">Remaining</div></div>
+              <div style="flex:1;padding:14px 8px;text-align:center"><div style="font-size:24px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px">68%</div><div style="font-size:11px;color:#6E6E73;margin-top:2px">Complete</div></div>
+            </div>
+          </div>
+          <div style="padding:16px 16px 0">
+            <div style="background:#007AFF;border-radius:14px;height:56px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:white;gap:8px">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10a6 6 0 1 0 1-3.3" stroke="white" stroke-width="1.8" stroke-linecap="round"/><polyline points="1,5 4,10 8,6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Resume Backup
+            </div>
+          </div>
+          <div style="padding:10px 16px 0">
+            <div style="background:white;border-radius:14px;height:50px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500;color:#007AFF;border:1.5px solid #E5E5EA">Scan New QR Code</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>State 4 — Relaunch After Interruption</strong>Saved progress shown · Resume or rescan</div>
+  </div>
+
+</div>
+</body>
+</html>

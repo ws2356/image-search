@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile UI — 07 Completion & Dialogs</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1A1A2E; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; align-items: center; padding: 40px 32px 60px; }
+.page-header { margin-bottom: 40px; text-align: center; }
+.page-num { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.3); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.page-title { font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.92); letter-spacing: -0.4px; }
+.page-sub { font-size: 13px; color: rgba(255,255,255,0.38); margin-top: 6px; }
+.phones-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.phone-label { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.48); text-align: center; max-width: 210px; line-height: 1.5; }
+.phone-label strong { color: rgba(255,255,255,0.72); font-weight: 600; display: block; margin-bottom: 2px; font-size: 13px; }
+.phone { width: 220px; height: 462px; background: #191919; border-radius: 48px; padding: 11px 10px; position: relative; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 0 3px #0D0D0D, 0 0 0 4px rgba(255,255,255,0.04), 0 32px 72px rgba(0,0,0,0.82), 0 12px 28px rgba(0,0,0,0.5); }
+.phone::before { content: ''; position: absolute; left: -3px; top: 80px; width: 3px; height: 28px; background: #2A2A2A; border-radius: 2px 0 0 2px; box-shadow: 0 38px 0 #2A2A2A; }
+.phone::after { content: ''; position: absolute; right: -3px; top: 96px; width: 3px; height: 48px; background: #2A2A2A; border-radius: 0 2px 2px 0; }
+.phone-screen { width: 200px; height: 440px; border-radius: 40px; overflow: hidden; position: relative; }
+.phone-content { position: absolute; top: 0; left: 0; width: 390px; height: 844px; transform: scale(0.5128); transform-origin: top left; }
+@keyframes confetti-1 { 0%,100%{transform:rotate(-8deg) translateY(0)} 50%{transform:rotate(5deg) translateY(-6px)}}
+@keyframes confetti-2 { 0%,100%{transform:rotate(6deg) translateY(0)} 50%{transform:rotate(-4deg) translateY(-4px)}}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-num">Album Transporter · Mobile UI · 07 / 10</div>
+  <div class="page-title">Completion & Dialogs</div>
+  <div class="page-sub">Transfer complete · Stop dialog · Low battery warning · Desktop disk full</div>
+</div>
+
+<div class="phones-row">
+
+  <!-- Screen 1: Transfer Complete -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content">
+          <div style="height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="18" height="8" rx="2" fill="#30D158"/></svg>
+          </div>
+          <!-- Confetti decoration -->
+          <div style="position:relative;display:flex;flex-direction:column;align-items:center;padding:30px 28px 0;gap:16px;text-align:center">
+            <!-- Small confetti dots -->
+            <div style="position:absolute;top:20px;left:50px;width:10px;height:10px;background:#FFD700;border-radius:2px;transform:rotate(-20deg);animation:confetti-1 2s ease-in-out infinite"></div>
+            <div style="position:absolute;top:30px;right:60px;width:8px;height:8px;background:#FF9F0A;border-radius:50%;animation:confetti-2 1.8s ease-in-out infinite"></div>
+            <div style="position:absolute;top:60px;left:70px;width:7px;height:7px;background:#30D158;border-radius:2px;transform:rotate(15deg);animation:confetti-1 2.2s ease-in-out infinite"></div>
+            <div style="position:absolute;top:50px;right:70px;width:9px;height:9px;background:#007AFF;transform:rotate(-10deg);animation:confetti-2 2s ease-in-out infinite"></div>
+            <div style="width:110px;height:110px;border-radius:50%;background:linear-gradient(145deg,#34C759,#2A9D47);box-shadow:0 8px 32px rgba(52,199,89,0.45);display:flex;align-items:center;justify-content:center">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><path d="M14 28l10 10 18-20" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div>
+              <div style="font-size:28px;font-weight:700;color:#1C1C1E;letter-spacing:-0.4px">Backup Complete!</div>
+              <div style="font-size:15px;color:#6E6E73;margin-top:8px;line-height:1.5">Tom's MacBook Pro</div>
+            </div>
+          </div>
+          <!-- Stats card -->
+          <div style="margin:18px 16px 0;background:white;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.07)">
+            <div style="padding:10px 14px;background:#F0FFF4;border-bottom:0.5px solid #C8F0D4;font-size:12px;font-weight:600;color:#2A7D47;text-transform:uppercase;letter-spacing:0.06em">Session Summary</div>
+            <div style="display:flex;border-bottom:0.5px solid rgba(0,0,0,0.07)">
+              <div style="flex:1;padding:14px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.07)"><div style="font-size:22px;font-weight:700;color:#30D158;letter-spacing:-0.3px">5,204</div><div style="font-size:11px;color:#6E6E73;margin-top:2px">Items backed up</div></div>
+              <div style="flex:1;padding:14px 8px;text-align:center"><div style="font-size:22px;font-weight:700;color:#1C1C1E;letter-spacing:-0.3px">32.4 GB</div><div style="font-size:11px;color:#6E6E73;margin-top:2px">Total transferred</div></div>
+            </div>
+            <div style="display:flex">
+              <div style="flex:1;padding:12px 8px;text-align:center;border-right:0.5px solid rgba(0,0,0,0.07)"><div style="font-size:13px;font-weight:600;color:#1C1C1E">1h 24m</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Duration</div></div>
+              <div style="flex:1;padding:12px 8px;text-align:center"><div style="font-size:13px;font-weight:600;color:#1C1C1E">Today 2:47 PM</div><div style="font-size:11px;color:#6E6E73;margin-top:1px">Completed at</div></div>
+            </div>
+          </div>
+          <div style="margin:0;background:#E8F9EE;border-radius:10px;margin:10px 16px 0;padding:10px 14px;font-size:13px;color:#2A7D47;line-height:1.4">
+            Your items are now indexing on the desktop — searchable in DTImageSearch within minutes.
+          </div>
+          <div style="padding:14px 16px 0">
+            <div style="background:#007AFF;border-radius:14px;height:56px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:white">Done</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>Completion</strong>Stats summary · indexing note · Done CTA</div>
+  </div>
+
+  <!-- Screen 2: Stop Confirmation Dialog -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content" style="position:relative">
+          <!-- Background: transfer screen (blurred/dimmed) -->
+          <div style="position:absolute;inset:0;background:linear-gradient(160deg,#E8F4FD,#F2F2F7);filter:blur(1px)"></div>
+          <!-- Status bar layer -->
+          <div style="position:absolute;top:0;left:0;right:0;height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#1C1C1E"/></svg>
+          </div>
+          <!-- Dimming overlay -->
+          <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45)"></div>
+          <!-- Sheet dialog -->
+          <div style="position:absolute;bottom:0;left:0;right:0;background:white;border-radius:24px 24px 0 0;padding:0 0 40px;box-shadow:0 -4px 30px rgba(0,0,0,0.2)">
+            <div style="width:36px;height:4px;background:#E5E5EA;border-radius:2px;margin:12px auto 16px"></div>
+            <!-- Icon -->
+            <div style="display:flex;justify-content:center;margin-bottom:14px">
+              <div style="width:56px;height:56px;border-radius:50%;background:#FFF1F0;display:flex;align-items:center;justify-content:center">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="8" y="7" width="5" height="14" rx="2" fill="#FF3B30"/><rect x="15" y="7" width="5" height="14" rx="2" fill="#FF3B30"/></svg>
+              </div>
+            </div>
+            <div style="text-align:center;padding:0 24px">
+              <div style="font-size:20px;font-weight:700;color:#1C1C1E;letter-spacing:-0.2px">Stop Backup?</div>
+              <div style="font-size:15px;color:#6E6E73;margin-top:10px;line-height:1.55">Sending new items will stop. <strong style="color:#1C1C1E">Items already transferred</strong> are safe and will continue indexing on your PC.</div>
+            </div>
+            <div style="margin:22px 20px 0">
+              <!-- Info row -->
+              <div style="background:#F8F8F8;border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-start">
+                <div style="width:20px;height:20px;border-radius:50%;background:#30D158;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                <div style="font-size:13px;color:#6E6E73;line-height:1.45">342 items already safely transferred to Tom's MacBook Pro</div>
+              </div>
+              <div style="height:52px;background:#FFF1F0;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:#FF3B30;margin-bottom:10px">Stop Backup</div>
+              <div style="height:52px;background:#007AFF;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:white">Continue Backup</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>Stop Confirmation Sheet</strong>Explains items already sent are safe · destructive action confirmation</div>
+  </div>
+
+  <!-- Screen 3: Low Battery Warning -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content" style="position:relative">
+          <div style="position:absolute;inset:0;background:linear-gradient(160deg,#F2F2F7,#E8E8EC)"></div>
+          <!-- Status bar -->
+          <div style="position:absolute;top:0;left:0;right:0;height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <!-- Low battery icon red -->
+            <div style="display:flex;align-items:center;gap:5px">
+              <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#FF3B30" stroke-opacity="0.6"/><rect x="2" y="2" width="3" height="8" rx="2" fill="#FF3B30"/><path d="M23 4v4c1-.5 1.5-1.3 1.5-2S24 4.5 23 4z" fill="#FF3B30" fill-opacity="0.4"/></svg>
+              <span style="font-size:14px;font-weight:600;color:#FF3B30">16%</span>
+            </div>
+          </div>
+          <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45)"></div>
+          <!-- Sheet dialog -->
+          <div style="position:absolute;bottom:0;left:0;right:0;background:white;border-radius:24px 24px 0 0;padding:0 0 40px;box-shadow:0 -4px 30px rgba(0,0,0,0.2)">
+            <div style="width:36px;height:4px;background:#E5E5EA;border-radius:2px;margin:12px auto 16px"></div>
+            <div style="display:flex;justify-content:center;margin-bottom:14px">
+              <div style="position:relative">
+                <div style="width:64px;height:64px;border-radius:50%;background:#FFF1F0;display:flex;align-items:center;justify-content:center">
+                  <!-- Battery icon large, red -->
+                  <svg width="38" height="20" viewBox="0 0 38 20" fill="none"><rect x="0.5" y="0.5" width="34" height="19" rx="5" stroke="#FF3B30" stroke-opacity="0.5"/><rect x="2" y="2" width="5" height="16" rx="3" fill="#FF3B30"/><path d="M35.5 7v6c2-.8 2.5-2 2.5-3s-.5-2.2-2.5-3z" fill="#FF3B30" fill-opacity="0.3"/></svg>
+                </div>
+              </div>
+            </div>
+            <div style="text-align:center;padding:0 24px">
+              <div style="font-size:20px;font-weight:700;color:#1C1C1E;letter-spacing:-0.2px">Battery Low</div>
+              <div style="font-size:15px;color:#6E6E73;margin-top:10px;line-height:1.55">Your battery is at <strong style="color:#FF3B30">16%</strong>. Long transfers may be interrupted if battery runs out. Connecting to a charger is recommended.</div>
+            </div>
+            <div style="margin:20px 20px 0">
+              <div style="background:#F8F8F8;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#6E6E73;line-height:1.45">
+                <strong style="color:#1C1C1E">Tip:</strong> Plug into your PC's USB port — it charges your device and enables faster USB transfer at the same time.
+              </div>
+              <div style="height:52px;background:#007AFF;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;color:white;margin-bottom:10px">Continue Anyway</div>
+              <div style="height:52px;background:white;border-radius:14px;border:1.5px solid #E5E5EA;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500;color:#1C1C1E">I'll Charge First</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>Low Battery Warning</strong>Non-blocking advisory · USB charger tip · continue or wait</div>
+  </div>
+
+  <!-- Screen 4: Desktop Disk Full -->
+  <div class="phone-col">
+    <div class="phone">
+      <div class="phone-screen" style="background:#F2F2F7">
+        <div class="phone-content" style="position:relative">
+          <div style="position:absolute;inset:0;background:linear-gradient(160deg,#F2F2F7,#E8E8EC)"></div>
+          <div style="position:absolute;top:0;left:0;right:0;height:52px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 10px;position:relative">
+            <span style="font-size:17px;font-weight:600;color:#1C1C1E">9:41</span>
+            <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:126px;height:37px;background:#000;border-radius:20px;"></div>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#1C1C1E" stroke-opacity="0.35"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#1C1C1E"/></svg>
+          </div>
+          <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45)"></div>
+          <!-- Alert dialog (iOS style centered) -->
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:300px;background:rgba(250,250,250,0.98);backdrop-filter:blur(30px);border-radius:16px;overflow:hidden;box-shadow:0 4px 40px rgba(0,0,0,0.3)">
+            <!-- Icon + Title -->
+            <div style="padding:24px 24px 12px;text-align:center;border-bottom:0.5px solid rgba(0,0,0,0.12)">
+              <div style="margin:0 auto 14px;width:56px;height:56px;border-radius:50%;background:#FFF1F0;display:flex;align-items:center;justify-content:center">
+                <svg width="30" height="28" viewBox="0 0 30 28" fill="none">
+                  <ellipse cx="15" cy="20" rx="13" ry="5" stroke="#FF3B30" stroke-width="2" fill="rgba(255,59,48,0.08)"/>
+                  <path d="M15 4 L15 16" stroke="#FF3B30" stroke-width="2.5" stroke-linecap="round"/>
+                  <path d="M8 8V20" stroke="#FF3B30" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 3"/>
+                  <path d="M22 8V20" stroke="#FF3B30" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 3"/>
+                  <!-- Disk icon top -->
+                  <ellipse cx="15" cy="4" rx="3.5" ry="1.5" fill="#FF3B30" opacity="0.6"/>
+                </svg>
+              </div>
+              <div style="font-size:17px;font-weight:700;color:#1C1C1E;margin-bottom:8px">Backup Paused</div>
+              <div style="font-size:14px;color:#6E6E73;line-height:1.5">The destination drive on <strong style="color:#1C1C1E">Tom's MacBook Pro</strong> is full (0 B free). Free up space and try again.</div>
+            </div>
+            <!-- Error details -->
+            <div style="padding:12px 16px;background:#FEF0EF;border-bottom:0.5px solid rgba(0,0,0,0.08)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;color:#6E6E73">Destination</span><span style="font-size:13px;font-weight:600;color:#1C1C1E">~/Pictures/Backup</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:#6E6E73">Available space</span><span style="font-size:13px;font-weight:600;color:#FF3B30">0 B</span></div>
+            </div>
+            <!-- Buttons -->
+            <div style="display:flex;border-top:0.5px solid rgba(0,0,0,0.12)">
+              <div style="flex:1;height:46px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:400;color:#007AFF;border-right:0.5px solid rgba(0,0,0,0.12)">OK</div>
+              <div style="flex:1;height:46px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#007AFF">Open Folder</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>Disk Full Error</strong>iOS-style alert · destination + available space · OK / Open Folder</div>
+  </div>
+
+</div>
+</body>
+</html>
