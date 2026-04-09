@@ -57,6 +57,7 @@ from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch, remove_fol
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers, deinit_incremental_index_workers
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
+from dt_image_search.mobile import MobileFolderCoordinator, MobileSourceType
 from dt_image_search.telemetry.crash_support import CrashRecoveryManager
 
 
@@ -167,6 +168,7 @@ class MainWindow(QMainWindow):
         self._mode = _BrowseMode
 
         self.controller = BrowseController(ctx=self.ctx)
+        self.mobile_folder_coordinator = MobileFolderCoordinator(ctx=self.ctx)
         self.controller.is_active = True  # Set the controller to active state
 
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
@@ -236,6 +238,14 @@ class MainWindow(QMainWindow):
             # Small delay to simulate user interaction and allow UI to update
             time.sleep(5)
         else:
+            selected_source = self.mobile_folder_coordinator.choose_source(self)
+            if selected_source is None:
+                return
+
+            if selected_source == MobileSourceType.MOBILE_DEVICE:
+                self.mobile_folder_coordinator.start_pairing_flow(self)
+                return
+
             folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
             
         if not folder:
