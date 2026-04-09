@@ -1,0 +1,219 @@
+import Foundation
+import Observation
+
+@Observable
+@MainActor
+final class MobileAppModel {
+    private(set) var route: AppRoute = .home
+    private(set) var homeSummary = HomeSummary.firstLaunch
+    private(set) var permissionSummary = PermissionSummary.demo
+    private(set) var pairingStatus = PairingStatus.idle
+    private(set) var transferSnapshot = TransferSnapshot.demo
+    private(set) var interruptionReason = InterruptionReason.desktopUnreachable
+    private(set) var completionSummary = CompletionSummary.demo
+
+    var isShowingStopConfirmation = false
+    var isShowingLowBatteryWarning = false
+
+    @ObservationIgnored private var hasLoaded = false
+    @ObservationIgnored private let stateStore: AppStateStore
+    @ObservationIgnored private let qrCodePayloadDecoder: QRCodePayloadDecoding
+    @ObservationIgnored private let pairingService: PairingService
+    @ObservationIgnored private let permissionService: PermissionService
+    @ObservationIgnored private let transferService: TransferService
+    @ObservationIgnored private let telemetryClient: TelemetryClient
+
+    init(
+        stateStore: AppStateStore,
+        qrCodePayloadDecoder: QRCodePayloadDecoding,
+        pairingService: PairingService,
+        permissionService: PermissionService,
+        transferService: TransferService,
+        telemetryClient: TelemetryClient
+    ) {
+        self.stateStore = stateStore
+        self.qrCodePayloadDecoder = qrCodePayloadDecoder
+        self.pairingService = pairingService
+        self.permissionService = permissionService
+        self.transferService = transferService
+        self.telemetryClient = telemetryClient
+    }
+
+    var navigationTitle: String {
+        switch route {
+        case .home:
+            return "Album Transporter"
+        case .scanAndPair:
+            return "Scan & Pair"
+        case .permissions:
+            return "Permissions"
+        case .transfer:
+            return "Backup in Progress"
+        case .interrupted:
+            return "Backup Interrupted"
+        case .completed:
+            return "Backup Complete"
+        }
+    }
+
+    func load() async {
+        guard !hasLoaded else {
+            return
+        }
+
+        hasLoaded = true
+        let snapshot = await stateStore.loadLaunchSnapshot()
+        apply(snapshot: snapshot)
+        await telemetryClient.record(event: .appLaunched)
+    }
+
+    func handleHomePrimaryAction() async {
+        switch homeSummary.primaryAction {
+        case .scanDesktopQRCode:
+            await openScanFlow()
+        case .resumeBackup:
+            route = .interrupted
+        case .backupPendingItems:
+            await startTransfer()
+        }
+    }
+
+    func openScanFlow() async {
+        pairingStatus = PairingStatus(
+            phase: .scanning,
+            desktopName: homeSummary.desktopName,
+            message: "Open the live scanner now. Camera permission should be requested only when the scanner is about to be used."
+        )
+        route = .scanAndPair
+        await telemetryClient.record(event: .scanStarted)
+        await persistSnapshot()
+    }
+
+    func beginPairing() async {
+        pairingStatus = PairingStatus(
+            phase: .pairing,
+            desktopName: homeSummary.desktopName,
+            message: "Validating the QR payload and establishing a secure local session with the desktop."
+        )
+        await telemetryClient.record(event: .pairingStarted)
+
+        let payloadResult = qrCodePayloadDecoder.decode(scannedValue: PairingQRCodePayload.demoScanValue)
+
+        guard case .success(let payload) = payloadResult else {
+            if case .failure(let error) = payloadResult {
+                pairingStatus = PairingStatus(
+                    phase: .expired,
+                    desktopName: homeSummary.desktopName,
+                    message: error.message
+                )
+            }
+            return
+        }
+
+        let result = await pairingService.startPairing(using: payload)
+        pairingStatus = result
+        homeSummary.desktopName = result.desktopName
+        permissionSummary = await permissionService.loadPermissionSummary()
+        route = .permissions
+
+        await telemetryClient.record(event: .pairingSucceeded)
+        await persistSnapshot()
+    }
+
+    func showExpiredQRCode() {
+        pairingStatus = PairingStatus(
+            phase: .expired,
+            desktopName: homeSummary.desktopName,
+            message: "This QR code has expired. Refresh it on desktop and scan again to continue."
+        )
+    }
+
+    func startBackup() async {
+        if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
+            isShowingLowBatteryWarning = true
+            return
+        }
+
+        await startTransfer()
+    }
+
+    func continuePastLowBatteryWarning() async {
+        isShowingLowBatteryWarning = false
+        await startTransfer()
+    }
+
+    func requestStopTransfer() {
+        isShowingStopConfirmation = true
+    }
+
+    func confirmStopTransfer() async {
+        isShowingStopConfirmation = false
+        interruptionReason = await transferService.stopTransfer(current: transferSnapshot)
+        homeSummary = .resumable(
+            desktopName: homeSummary.desktopName,
+            remainingItems: max(transferSnapshot.totalCount - transferSnapshot.transferredCount, 0),
+            permissionScope: permissionSummary.mediaScope
+        )
+        route = .interrupted
+
+        await telemetryClient.record(event: .transferStopped)
+        await persistSnapshot()
+    }
+
+    func resumeTransfer() async {
+        transferSnapshot = await transferService.resumeTransfer(from: transferSnapshot)
+        route = .transfer
+
+        await telemetryClient.record(event: .resumeTapped)
+        await persistSnapshot()
+    }
+
+    func completeTransfer() async {
+        transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
+        completionSummary = CompletionSummary(
+            title: "Backup complete",
+            message: "Desktop confirmed \(transferSnapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop."
+        )
+        homeSummary = .completed(
+            desktopName: homeSummary.desktopName,
+            permissionScope: permissionSummary.mediaScope,
+            lastBackupDescription: "Last backup completed just now."
+        )
+        route = .completed
+
+        await telemetryClient.record(event: .transferCompleted)
+        await persistSnapshot()
+    }
+
+    func returnHome() async {
+        route = .home
+        await persistSnapshot()
+    }
+
+    private func startTransfer() async {
+        transferSnapshot = await transferService.startTransfer()
+        route = .transfer
+        await telemetryClient.record(event: .transferStarted)
+        await persistSnapshot()
+    }
+
+    private func apply(snapshot: LaunchSnapshot) {
+        homeSummary = snapshot.homeSummary
+        permissionSummary = snapshot.permissionSummary
+        pairingStatus = snapshot.pairingStatus
+        transferSnapshot = snapshot.transferSnapshot
+        interruptionReason = snapshot.lastInterruptionReason ?? .desktopUnreachable
+        route = .home
+    }
+
+    private func persistSnapshot() async {
+        let snapshot = LaunchSnapshot(
+            homeSummary: homeSummary,
+            permissionSummary: permissionSummary,
+            pairingStatus: pairingStatus,
+            transferSnapshot: transferSnapshot,
+            lastInterruptionReason: homeSummary.primaryAction.isResumeAction ? interruptionReason : nil
+        )
+        await stateStore.saveLaunchSnapshot(snapshot)
+    }
+}
