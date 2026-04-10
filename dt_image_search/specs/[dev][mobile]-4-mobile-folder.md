@@ -397,9 +397,9 @@ The QR value should be a universal-link-style URL in this shape:
 The query string should contain only what the mobile app absolutely needs in MVP:
 
 - `v`: protocol schema version
-- `endpoint`: desktop bootstrap endpoint
-- `pairing_id`: pairing intent ID
-- `secret`: bootstrap secret
+- `ept`: desktop bootstrap endpoint, e.g. `192.168.50.12:12345` for LAN or a custom URL scheme for USB when that arrives
+- `pid`: pairing intent ID
+- `opt`: 6 digit code to bootstrap symmetric session keys on mobile and desktop without a round trip
 
 Notes:
 
