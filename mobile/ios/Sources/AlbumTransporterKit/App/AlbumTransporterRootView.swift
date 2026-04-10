@@ -68,6 +68,10 @@ public struct AlbumTransporterRootView: View {
         case .scanAndPair:
             PairingFlowView(
                 status: model.pairingStatus,
+                scannedQRCodeValue: Binding(
+                    get: { model.scannedQRCodeValue },
+                    set: { model.scannedQRCodeValue = $0 }
+                ),
                 onStartPairing: {
                     Task {
                         await model.beginPairing()

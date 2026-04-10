@@ -2,12 +2,33 @@ import Factory
 
 extension Container {
     var appStateStore: Factory<AppStateStore> {
-        self { InMemoryAppStateStore(snapshot: .firstLaunch) }
+        self { UserDefaultsAppStateStore() }
+            .singleton
+    }
+
+    var localDeviceIdentityProvider: Factory<LocalDeviceIdentityProviding> {
+        self { UserDefaultsLocalDeviceIdentityStore() }
+            .singleton
+    }
+
+    var trustedDesktopStore: Factory<TrustedDesktopStore> {
+        self { UserDefaultsTrustedDesktopStore() }
+            .singleton
+    }
+
+    var pairingBootstrapClient: Factory<PairingBootstrapClient> {
+        self { URLSessionPairingBootstrapClient() }
             .singleton
     }
 
     var pairingService: Factory<PairingService> {
-        self { DemoPairingService() }
+        self {
+            DesktopBootstrapPairingService(
+                bootstrapClient: self.pairingBootstrapClient(),
+                identityProvider: self.localDeviceIdentityProvider(),
+                trustedDesktopStore: self.trustedDesktopStore()
+            )
+        }
             .singleton
     }
 

@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-import json
 from pathlib import Path
 import secrets
+from urllib.parse import urlencode, urlunsplit
 import uuid
 
 PAIRING_TOKEN_TTL = timedelta(minutes=15)
+PAIRING_QR_SCHEMA_VERSION = 1
+PAIRING_QR_HOST = "dl.boldman.net"
 
 
 class MobileSourceType(str, Enum):
@@ -53,6 +55,7 @@ class MobilePairingToken:
     token_id: str
     bootstrap_secret: str
     payload: str
+    endpoint_url: str
     expires_at: datetime
     refresh_generation: int
     deep_link_url: str
@@ -69,21 +72,29 @@ class MobilePairingToken:
 @dataclass
 class MobilePairingSessionDraft:
     destination_parent: str
+    desktop_endpoint_url: str
     session_id: str
     created_at: datetime
     tokens: dict[MobilePlatform, MobilePairingToken] = field(default_factory=dict)
 
     @classmethod
-    def create(cls, destination_parent: str, now: datetime | None = None) -> "MobilePairingSessionDraft":
+    def create(
+        cls,
+        destination_parent: str,
+        desktop_endpoint_url: str,
+        now: datetime | None = None,
+    ) -> "MobilePairingSessionDraft":
         current_time = _utc_now(now)
         session = cls(
             destination_parent=_normalize_directory_path(destination_parent),
+            desktop_endpoint_url=desktop_endpoint_url,
             session_id=uuid.uuid4().hex,
             created_at=current_time,
         )
         for platform in MobilePlatform:
             session.tokens[platform] = _new_pairing_token(
                 session_id=session.session_id,
+                desktop_endpoint_url=session.desktop_endpoint_url,
                 platform=platform,
                 refresh_generation=0,
                 now=current_time,
@@ -97,6 +108,7 @@ class MobilePairingSessionDraft:
         current_token = self.tokens[platform]
         refreshed_token = _new_pairing_token(
             session_id=self.session_id,
+            desktop_endpoint_url=self.desktop_endpoint_url,
             platform=platform,
             refresh_generation=current_token.refresh_generation + 1,
             now=now,
@@ -110,6 +122,7 @@ class MobilePairingSessionDraft:
 
 def _new_pairing_token(
     session_id: str,
+    desktop_endpoint_url: str,
     platform: MobilePlatform,
     refresh_generation: int,
     now: datetime | None = None,
@@ -119,25 +132,23 @@ def _new_pairing_token(
     token_id = uuid.uuid4().hex
     bootstrap_secret = secrets.token_urlsafe(24)
     expires_at = current_time + PAIRING_TOKEN_TTL
-    payload = json.dumps(
+    payload_query = urlencode(
         {
-            "schema": "dtis.mobile-pairing.v1",
-            "platform": platform.value,
-            "session_id": session_id,
+            "v": str(PAIRING_QR_SCHEMA_VERSION),
+            "endpoint": desktop_endpoint_url,
+            "pairing_id": session_id,
             "token_id": token_id,
-            "bootstrap_secret": bootstrap_secret,
+            "secret": bootstrap_secret,
             "expires_at": expires_at.isoformat(),
-            "deep_link_url": metadata["deep_link_url"],
-            "store_url": metadata["store_url"],
-        },
-        separators=(",", ":"),
-        sort_keys=True,
+        }
     )
+    payload = urlunsplit(("https", PAIRING_QR_HOST, "", payload_query, ""))
     return MobilePairingToken(
         platform=platform,
         token_id=token_id,
         bootstrap_secret=bootstrap_secret,
         payload=payload,
+        endpoint_url=desktop_endpoint_url,
         expires_at=expires_at,
         refresh_generation=refresh_generation,
         deep_link_url=metadata["deep_link_url"],

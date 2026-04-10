@@ -35,6 +35,9 @@ def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
     if conn is None:
         conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    from dt_image_search.mobile.mobile_pairing_store import ensure_mobile_pairing_schema
+    ensure_mobile_pairing_schema(conn)
     if is_debug():
         conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
     return conn

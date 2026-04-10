@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PairingFlowView: View {
     let status: PairingStatus
+    @Binding var scannedQRCodeValue: String
     let onStartPairing: () -> Void
     let onShowExpired: () -> Void
     let onBack: () -> Void
@@ -20,11 +21,41 @@ struct PairingFlowView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Label("Use a maintained QR scanning library such as CodeScanner when the live capture surface is implemented.", systemImage: "qrcode.viewfinder")
+                        if let sessionID = status.sessionID {
+                            Label("Session: \(sessionID)", systemImage: "number")
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let transport = status.transport {
+                            Label("Transport: \(transport.title)", systemImage: transport.systemImage)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Label("Paste the desktop pairing link until the live QR camera surface lands.", systemImage: "doc.on.clipboard")
                             .foregroundStyle(.secondary)
+
+                        TextField("Paste the desktop pairing link", text: $scannedQRCodeValue, axis: .vertical)
+                            .lineLimit(3...5)
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Material.thin)
+                            )
+#if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+#endif
+
+                        PasteButton(payloadType: String.self) { strings in
+                            if let firstValue = strings.first {
+                                scannedQRCodeValue = firstValue
+                            }
+                        }
+                        .buttonStyle(.bordered)
 
                         Button(pairingButtonTitle, action: onStartPairing)
                             .buttonStyle(.borderedProminent)
+                            .disabled(isPairingActionDisabled)
 
                         Button("Preview Expired QR", action: onShowExpired)
                             .buttonStyle(.bordered)
@@ -52,6 +83,8 @@ struct PairingFlowView: View {
             return "Pairing complete"
         case .expired:
             return "QR expired"
+        case .failed:
+            return "Pairing failed"
         }
     }
 
@@ -65,11 +98,17 @@ struct PairingFlowView: View {
             return "checkmark.shield.fill"
         case .expired:
             return "xmark.shield.fill"
+        case .failed:
+            return "exclamationmark.shield.fill"
         }
     }
 
     private var pairingButtonTitle: String {
-        status.phase == .paired ? "Pair Again" : "Simulate Pairing Success"
+        status.phase == .paired ? "Pair Again" : "Start Pairing"
+    }
+
+    private var isPairingActionDisabled: Bool {
+        status.phase == .pairing || scannedQRCodeValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

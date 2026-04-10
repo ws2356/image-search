@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Callable
 
 from PIL import Image
 from PySide6.QtCore import QTimer, Qt
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dt_image_search.mobile.mobile_pairing_service import MobilePairingService, PairingResultState
 from dt_image_search.mobile.mobile_pairing_session import (
     MobilePairingSessionDraft,
     MobilePairingToken,
@@ -121,7 +123,7 @@ class PairingQrCard(QFrame):
         self,
         platform: MobilePlatform,
         token: MobilePairingToken,
-        on_refresh: callable,
+        on_refresh: Callable[[MobilePlatform], MobilePairingToken],
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -201,8 +203,14 @@ class PairingQrCard(QFrame):
 
 
 class MobilePairingDialog(QDialog):
-    def __init__(self, pairing_session: MobilePairingSessionDraft, parent: QWidget | None = None):
+    def __init__(
+        self,
+        pairing_service: MobilePairingService,
+        pairing_session: MobilePairingSessionDraft,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
+        self._pairing_service = pairing_service
         self._pairing_session = pairing_session
         self.setWindowTitle("Pair Mobile Device")
         self.setModal(True)
@@ -219,7 +227,7 @@ class MobilePairingDialog(QDialog):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "This slice implements desktop-side source selection, destination selection, QR generation, expiry, and refresh. Device handshake, transport acceptance, and transfer workers land next."
+            "Keep the desktop pairing window open while the mobile app claims the session. The QR payload now points at a live local bootstrap endpoint and the desktop persists accepted trust state for later resume work."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #4b5563;")
@@ -257,15 +265,28 @@ class MobilePairingDialog(QDialog):
         layout.addLayout(qr_row)
 
         helper_text = QLabel(
-            "Use the companion app to scan the platform-specific QR code. Each code carries a distinct pairing token and expires independently after fifteen minutes."
+            "Use the companion app to scan or paste the platform-specific QR link. Each code carries a distinct bootstrap secret and expires independently after fifteen minutes."
         )
         helper_text.setWordWrap(True)
         helper_text.setStyleSheet("color: #4b5563;")
         layout.addWidget(helper_text)
 
-        close_button = QPushButton("Close")
-        close_button.clicked.connect(self.reject)
-        layout.addWidget(close_button, alignment=Qt.AlignRight)
+        self.session_status_label = QLabel("Waiting for a mobile device to claim this pairing session.")
+        self.session_status_label.setWordWrap(True)
+        self.session_status_label.setStyleSheet("font-weight: 600; color: #1f2937;")
+        layout.addWidget(self.session_status_label)
+
+        self.session_details_label = QLabel(
+            f"Desktop endpoint: {pairing_service.endpoint_url}\nDestination folder will be resolved after the mobile device identity is accepted."
+        )
+        self.session_details_label.setWordWrap(True)
+        self.session_details_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.session_details_label.setStyleSheet("color: #4b5563;")
+        layout.addWidget(self.session_details_label)
+
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.reject)
+        layout.addWidget(self.close_button, alignment=Qt.AlignRight)
 
         self._clock_timer = QTimer(self)
         self._clock_timer.setInterval(1000)
@@ -281,9 +302,10 @@ class MobilePairingDialog(QDialog):
         now = datetime.now(self._pairing_session.created_at.tzinfo)
         self.android_card.update_clock(now)
         self.ios_card.update_clock(now)
+        self._update_pairing_result()
 
     def _refresh_platform_token(self, platform: MobilePlatform) -> MobilePairingToken:
-        token = self._pairing_session.refresh_token(platform)
+        token = self._pairing_service.refresh_token(platform)
         log(
             "info",
             message=(
@@ -292,6 +314,44 @@ class MobilePairingDialog(QDialog):
             ),
         )
         return token
+
+    def _update_pairing_result(self) -> None:
+        pairing_result = self._pairing_service.current_result()
+        if pairing_result.state == PairingResultState.ACCEPTED:
+            self.session_status_label.setText(pairing_result.message)
+            details = [
+                f"Device: {pairing_result.device_name or 'Unknown'}",
+                f"Transport: {pairing_result.transport or 'Unknown'}",
+            ]
+            if pairing_result.folder_path:
+                details.append(f"Desktop folder: {pairing_result.folder_path}")
+            self.session_details_label.setText("\n".join(details))
+            self.session_status_label.setStyleSheet("font-weight: 600; color: #065f46;")
+            self.change_button.setEnabled(False)
+            self.close_button.setText("Done")
+            return
+
+        if pairing_result.state == PairingResultState.EXPIRED:
+            self.session_status_label.setText(pairing_result.message)
+            self.session_details_label.setText("Refresh the appropriate QR code on desktop, then retry the mobile pairing flow.")
+            self.session_status_label.setStyleSheet("font-weight: 600; color: #b45309;")
+            self.close_button.setText("Close")
+            return
+
+        if pairing_result.state == PairingResultState.REJECTED:
+            self.session_status_label.setText(pairing_result.message)
+            self.session_details_label.setText("Desktop rejected the request. Generate a fresh QR code and retry pairing.")
+            self.session_status_label.setStyleSheet("font-weight: 600; color: #991b1b;")
+            self.close_button.setText("Close")
+            return
+
+        self.session_status_label.setText(pairing_result.message)
+        self.session_details_label.setText(
+            f"Desktop endpoint: {self._pairing_service.endpoint_url}\nDestination folder will be resolved after the mobile device identity is accepted."
+        )
+        self.session_status_label.setStyleSheet("font-weight: 600; color: #1f2937;")
+        self.change_button.setEnabled(True)
+        self.close_button.setText("Close")
 
     def _change_destination(self) -> None:
         selected_directory = QFileDialog.getExistingDirectory(
@@ -312,6 +372,10 @@ class MobilePairingDialog(QDialog):
         )
 
     def reject(self) -> None:
+        if self._pairing_service.current_result().state == PairingResultState.ACCEPTED:
+            self._clock_timer.stop()
+            super().accept()
+            return
         should_close = QMessageBox.question(
             self,
             "Close Pairing",

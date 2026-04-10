@@ -11,6 +11,7 @@ final class MobileAppModel {
     private(set) var transferSnapshot = TransferSnapshot.demo
     private(set) var interruptionReason = InterruptionReason.desktopUnreachable
     private(set) var completionSummary = CompletionSummary.demo
+    var scannedQRCodeValue = ""
 
     var isShowingStopConfirmation = false
     var isShowingLowBatteryWarning = false
@@ -82,7 +83,9 @@ final class MobileAppModel {
         pairingStatus = PairingStatus(
             phase: .scanning,
             desktopName: homeSummary.desktopName,
-            message: "Open the live scanner now. Camera permission should be requested only when the scanner is about to be used."
+            sessionID: nil,
+            transport: nil,
+            message: "Paste the pairing link now, or open the live scanner once camera capture lands. Camera permission should only be requested when the scanner is about to be used."
         )
         route = .scanAndPair
         await telemetryClient.record(event: .scanStarted)
@@ -93,25 +96,38 @@ final class MobileAppModel {
         pairingStatus = PairingStatus(
             phase: .pairing,
             desktopName: homeSummary.desktopName,
+            sessionID: nil,
+            transport: nil,
             message: "Validating the QR payload and establishing a secure local session with the desktop."
         )
         await telemetryClient.record(event: .pairingStarted)
 
-        let payloadResult = qrCodePayloadDecoder.decode(scannedValue: PairingQRCodePayload.demoScanValue)
+        let payloadResult = qrCodePayloadDecoder.decode(scannedValue: scannedQRCodeValue)
 
         guard case .success(let payload) = payloadResult else {
             if case .failure(let error) = payloadResult {
                 pairingStatus = PairingStatus(
-                    phase: .expired,
+                    phase: .failed,
                     desktopName: homeSummary.desktopName,
+                    sessionID: nil,
+                    transport: nil,
                     message: error.message
                 )
             }
+            await telemetryClient.record(event: .pairingFailed)
+            await persistSnapshot()
             return
         }
 
         let result = await pairingService.startPairing(using: payload)
         pairingStatus = result
+        await persistSnapshot()
+
+        guard result.phase == .paired else {
+            await telemetryClient.record(event: .pairingFailed)
+            return
+        }
+
         homeSummary.desktopName = result.desktopName
         permissionSummary = await permissionService.loadPermissionSummary()
         route = .permissions
@@ -124,6 +140,8 @@ final class MobileAppModel {
         pairingStatus = PairingStatus(
             phase: .expired,
             desktopName: homeSummary.desktopName,
+            sessionID: nil,
+            transport: nil,
             message: "This QR code has expired. Refresh it on desktop and scan again to continue."
         )
     }

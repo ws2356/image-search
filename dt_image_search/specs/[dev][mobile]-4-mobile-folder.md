@@ -28,6 +28,8 @@ The current repository already establishes several important constraints:
 
 This matters because the mobile design should stay aligned with the desktop contract and should not invent a second authority for pairing, folder resolution, or completion state.
 
+The concrete pairing contract now lives in the dedicated [pairing spec](./[dev]%20pairing.md). When this document and the desktop spec previously diverged on QR fields or bootstrap details, the pairing spec is the source of truth.
+
 ## 3. Guiding Design Decisions
 
 ### 3.1 Core decisions
@@ -390,23 +392,15 @@ This surface must:
 
 ### 4.9 Simplified QR payload contract
 
-The QR value should be a universal-link-style URL in this shape:
+The QR contract is now defined in the dedicated [pairing spec](./[dev]%20pairing.md).
 
-`https://dl.boldman.net?<query...>`
+Key update from the earlier draft:
 
-The query string should contain only what the mobile app absolutely needs in MVP:
+- replace the proposed 6-digit `opt` value with a high-entropy one-time `secret`
+- include `token_id` and `expires_at` explicitly in the QR payload
+- keep platform out of the payload because desktop already renders an iOS-specific QR
 
-- `v`: protocol schema version
-- `ept`: desktop bootstrap endpoint, e.g. `192.168.50.12:12345` for LAN or a custom URL scheme for USB when that arrives
-- `pid`: pairing intent ID
-- `opt`: 6 digit code to bootstrap symmetric session keys on mobile and desktop without a round trip
-
-Notes:
-
-- There is **no explicit expiry field** in the QR payload. Desktop should remain authoritative for TTL and one-time-use enforcement, and the mobile app should surface an expired or already-consumed error from the bootstrap response.
-- Platform does not need to be embedded in the MVP payload when desktop already presents a platform-specific iOS QR code.
-- Deep-link continuity and app-store metadata are not essential for the MVP payload and can be layered in later if product continuity work needs them.
-- This keeps the QR model easier to reason about and easier to validate strictly.
+This is the safer MVP contract for a LAN-exposed desktop bootstrap endpoint while still keeping the QR payload strictly scoped to pairing bootstrap only.
 
 ### 4.10 Libraries and SDKs in the production implementation
 

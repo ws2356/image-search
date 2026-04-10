@@ -35,6 +35,8 @@ What is not implemented yet:
 
 This matters because the MVP design should extend the existing slice rather than replace it.
 
+The concrete pairing contract for this feature now lives in the dedicated [pairing spec](./[dev]%20pairing.md). When this document and the earlier mobile spec disagree on QR fields or bootstrap details, the pairing spec is the source of truth.
+
 ## 3. Guiding Design Decisions
 
 ### 3.1 Core decisions
@@ -392,30 +394,15 @@ Context menu behavior in MVP:
 
 ### 5.8 MVP pairing and transfer handshake
 
-The existing QR payload already contains platform, token ID, bootstrap secret, expiry, and deep-link/store metadata.
+The concrete MVP pairing handshake is defined in the dedicated [pairing spec](./[dev]%20pairing.md).
 
-For MVP desktop transfer startup, the payload also needs desktop bootstrap information, at minimum:
+Desktop-specific summary:
 
-- protocol schema version
-- desktop endpoint for bootstrap negotiation
-- session ID
-- token ID
-- bootstrap secret
-- expiry
+- QR payload is now a universal-link-style URL carrying `v`, `endpoint`, `pairing_id`, `token_id`, `secret`, and `expires_at`.
+- Desktop exposes a live local HTTP bootstrap endpoint while the pairing dialog is open.
+- Desktop validates the request, derives trust material, persists device plus folder metadata, and returns the accepted session metadata to mobile.
 
-The desktop bootstrap handshake should produce:
-
-- validated token consumption
-- mobile device UUID
-- mobile device display name
-- mobile platform
-- transfer session acceptance or rejection
-
-Acceptance result should include:
-
-- resolved folder identity on desktop
-- chosen session ID
-- chosen transport type (`lan` in MVP)
+See the pairing spec for the request and response bodies, sequence diagram, and the rationale for using a high-entropy QR secret instead of a 6-digit code.
 
 ### 5.9 MVP repeat-backup behavior
 

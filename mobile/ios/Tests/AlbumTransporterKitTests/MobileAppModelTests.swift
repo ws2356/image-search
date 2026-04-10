@@ -32,6 +32,7 @@ final class MobileAppModelTests: XCTestCase {
 
         await model.load()
         await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
         await model.startBackup()
 
@@ -51,6 +52,7 @@ final class MobileAppModelTests: XCTestCase {
 
         await model.load()
         await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
         await model.startBackup()
         model.requestStopTransfer()
@@ -63,7 +65,8 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_qr_payload_decoder_uses_url_query_format() {
         let decoder = URLQueryQRCodePayloadDecoder()
-        let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=1&endpoint=https%3A%2F%2Fdesktop.local%2Fbootstrap&pairing_id=pairing-demo-123&secret=bootstrap-secret")
+        let expiresAt = PairingDateCodec.string(from: Date(timeIntervalSince1970: 1_776_123_600))
+        let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=1&endpoint=http%3A%2F%2Fdesktop.local%3A38933%2Fapi%2Fmobile%2Fpairing%2Fclaim&pairing_id=pairing-demo-123&token_id=token-demo-123&secret=bootstrap-secret&expires_at=\(expiresAt)")
 
         guard case .success(let decoded) = result else {
             return XCTFail("Expected successful payload decoding")
@@ -71,7 +74,8 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertEqual(decoded.schemaVersion, 1)
         XCTAssertEqual(decoded.pairingID, "pairing-demo-123")
-        XCTAssertEqual(decoded.bootstrapURL.absoluteString, "https://desktop.local/bootstrap")
+        XCTAssertEqual(decoded.tokenID, "token-demo-123")
+        XCTAssertEqual(decoded.bootstrapURL.absoluteString, "http://desktop.local:38933/api/mobile/pairing/claim")
     }
 }
 
@@ -80,6 +84,8 @@ private struct StaticPairingService: PairingService {
         PairingStatus(
             phase: .paired,
             desktopName: "Studio Mac",
+            sessionID: payload.pairingID,
+            transport: .lan,
             message: "Pairing succeeded for \(payload.pairingID)."
         )
     }

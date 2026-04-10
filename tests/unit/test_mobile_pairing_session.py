@@ -3,7 +3,7 @@ import sys
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-import json
+from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
@@ -11,10 +11,14 @@ from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDr
 
 
 class TestMobilePairingSession(unittest.TestCase):
-    def test_create_builds_platform_tokens_with_expected_payload(self):
+    def test_create_builds_platform_tokens_with_expected_qr_payload(self):
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
         with tempfile.TemporaryDirectory() as temp_dir:
-            session = MobilePairingSessionDraft.create(temp_dir, now=now)
+            session = MobilePairingSessionDraft.create(
+                temp_dir,
+                desktop_endpoint_url="http://192.168.50.12:38933/api/mobile/pairing/claim",
+                now=now,
+            )
 
         self.assertEqual(session.destination_parent, os.path.realpath(temp_dir).replace('\\', '/'))
 
@@ -25,15 +29,25 @@ class TestMobilePairingSession(unittest.TestCase):
         self.assertNotEqual(android_token.bootstrap_secret, ios_token.bootstrap_secret)
         self.assertEqual(android_token.expires_at, now + timedelta(minutes=15))
 
-        payload = json.loads(android_token.payload)
-        self.assertEqual(payload["platform"], "android")
-        self.assertEqual(payload["session_id"], session.session_id)
-        self.assertEqual(payload["token_id"], android_token.token_id)
+        payload_components = urlsplit(android_token.payload)
+        payload_query = parse_qs(payload_components.query)
+
+        self.assertEqual(payload_components.scheme, "https")
+        self.assertEqual(payload_components.netloc, "dl.boldman.net")
+        self.assertEqual(payload_query["v"][0], "1")
+        self.assertEqual(payload_query["endpoint"][0], "http://192.168.50.12:38933/api/mobile/pairing/claim")
+        self.assertEqual(payload_query["pairing_id"][0], session.session_id)
+        self.assertEqual(payload_query["token_id"][0], android_token.token_id)
+        self.assertEqual(payload_query["secret"][0], android_token.bootstrap_secret)
 
     def test_refresh_replaces_only_requested_platform_token(self):
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
         with tempfile.TemporaryDirectory() as temp_dir:
-            session = MobilePairingSessionDraft.create(temp_dir, now=now)
+            session = MobilePairingSessionDraft.create(
+                temp_dir,
+                desktop_endpoint_url="http://127.0.0.1:38933/api/mobile/pairing/claim",
+                now=now,
+            )
 
         original_android = session.token_for(MobilePlatform.ANDROID)
         original_ios = session.token_for(MobilePlatform.IOS)
@@ -46,7 +60,7 @@ class TestMobilePairingSession(unittest.TestCase):
 
     def test_update_destination_parent_normalizes_path(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            session = MobilePairingSessionDraft.create(temp_dir)
+            session = MobilePairingSessionDraft.create(temp_dir, desktop_endpoint_url="http://127.0.0.1:38933/api/mobile/pairing/claim")
 
         session.set_destination_parent(".")
 

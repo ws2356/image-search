@@ -9,7 +9,7 @@ enum AppRoute: String, Equatable, Sendable {
     case completed
 }
 
-enum HomePrimaryAction: Equatable, Sendable {
+enum HomePrimaryAction: Equatable, Sendable, Codable {
     case scanDesktopQRCode
     case resumeBackup
     case backupPendingItems(Int)
@@ -53,7 +53,7 @@ enum HomePrimaryAction: Equatable, Sendable {
     }
 }
 
-enum PermissionScope: String, Equatable, Sendable {
+enum PermissionScope: String, Equatable, Sendable, Codable {
     case full
     case limited
     case photosOnly
@@ -95,7 +95,7 @@ enum PermissionScope: String, Equatable, Sendable {
     }
 }
 
-enum TransferTransport: Equatable, Sendable {
+enum TransferTransport: String, Equatable, Sendable, Codable {
     case lan
     case usb
 
@@ -118,23 +118,28 @@ enum TransferTransport: Equatable, Sendable {
     }
 }
 
-enum PairingPhase: String, Equatable, Sendable {
+enum PairingPhase: String, Equatable, Sendable, Codable {
     case instructions
     case scanning
     case pairing
     case paired
     case expired
+    case failed
 }
 
-struct PairingStatus: Equatable, Sendable {
+struct PairingStatus: Equatable, Sendable, Codable {
     var phase: PairingPhase
     var desktopName: String?
+    var sessionID: String?
+    var transport: TransferTransport?
     var message: String
 
     static let idle = PairingStatus(
         phase: .instructions,
         desktopName: nil,
-        message: "Scan the QR code shown by the desktop app to begin secure local pairing. Camera permission should only be requested when the live scanner opens."
+        sessionID: nil,
+        transport: nil,
+        message: "Scan or paste the pairing link shown by the desktop app to begin secure local pairing. Camera permission should only be requested when the live scanner opens."
     )
 }
 
@@ -142,13 +147,17 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
     var schemaVersion: Int
     var bootstrapURL: URL
     var pairingID: String
+    var tokenID: String
     var secret: String
+    var expiresAt: Date
 
     static let demo = PairingQRCodePayload(
         schemaVersion: 1,
-        bootstrapURL: URL(string: "https://desktop.local/bootstrap")!,
+        bootstrapURL: URL(string: "http://127.0.0.1:38933/api/mobile/pairing/claim")!,
         pairingID: "pairing-demo-001",
-        secret: "demo-bootstrap-secret"
+        tokenID: "token-demo-001",
+        secret: "demo-bootstrap-secret-001",
+        expiresAt: Date(timeIntervalSince1970: 1_776_123_600)
     )
 
     static var demoScanValue: String {
@@ -159,13 +168,15 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
             URLQueryItem(name: "v", value: String(demo.schemaVersion)),
             URLQueryItem(name: "endpoint", value: demo.bootstrapURL.absoluteString),
             URLQueryItem(name: "pairing_id", value: demo.pairingID),
+            URLQueryItem(name: "token_id", value: demo.tokenID),
             URLQueryItem(name: "secret", value: demo.secret),
+            URLQueryItem(name: "expires_at", value: PairingDateCodec.string(from: demo.expiresAt)),
         ]
         return components.string ?? "https://dl.boldman.net"
     }
 }
 
-enum InterruptionReason: String, Equatable, Sendable {
+enum InterruptionReason: String, Equatable, Sendable, Codable {
     case stoppedByUser
     case pausedBySystem
     case wifiLost
@@ -218,7 +229,7 @@ enum InterruptionReason: String, Equatable, Sendable {
     }
 }
 
-struct HomeSummary: Equatable, Sendable {
+struct HomeSummary: Equatable, Sendable, Codable {
     var desktopName: String?
     var pendingItemCount: Int?
     var lastBackupDescription: String?
@@ -266,7 +277,7 @@ struct HomeSummary: Equatable, Sendable {
     }
 }
 
-struct PermissionSummary: Equatable, Sendable {
+struct PermissionSummary: Equatable, Sendable, Codable {
     var cameraGranted: Bool
     var notificationsGranted: Bool
     var mediaScope: PermissionScope
@@ -293,7 +304,7 @@ struct PermissionSummary: Equatable, Sendable {
     )
 }
 
-struct TransferSnapshot: Equatable, Sendable {
+struct TransferSnapshot: Equatable, Sendable, Codable {
     var transferredCount: Int
     var totalCount: Int
     var failedCount: Int
@@ -322,7 +333,7 @@ struct TransferSnapshot: Equatable, Sendable {
     )
 }
 
-struct CompletionSummary: Equatable, Sendable {
+struct CompletionSummary: Equatable, Sendable, Codable {
     var title: String
     var message: String
 
@@ -332,7 +343,7 @@ struct CompletionSummary: Equatable, Sendable {
     )
 }
 
-struct LaunchSnapshot: Equatable, Sendable {
+struct LaunchSnapshot: Equatable, Sendable, Codable {
     var homeSummary: HomeSummary
     var permissionSummary: PermissionSummary
     var pairingStatus: PairingStatus

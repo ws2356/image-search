@@ -1,0 +1,33 @@
+{
+  "originHash" : "2833f517a92a314c2fd4603f61569a231005612356b05fb0a7b27455e45f6d43",
+  "pins" : [
+    {
+      "identity" : "factory",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/hmlongco/Factory.git",
+      "state" : {
+        "revision" : "ccc898f21992ebc130bc04cc197460a5ae230bcf",
+        "version" : "2.5.3"
+      }
+    },
+    {
+      "identity" : "opentelemetry-swift-core",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/open-telemetry/opentelemetry-swift-core.git",
+      "state" : {
+        "revision" : "84b9e341cbb7b4dd62cd1b89cd9e008995084132",
+        "version" : "2.4.1"
+      }
+    },
+    {
+      "identity" : "swift-atomics",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-atomics.git",
+      "state" : {
+        "revision" : "b601256eab081c0f92f059e12818ac1d4f178ff7",
+        "version" : "1.3.0"
+      }
+    }
+  ],
+  "version" : 3
+}
