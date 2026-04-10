@@ -180,13 +180,13 @@ class PairingQrCard(QFrame):
         self._token = token
         pixmap = _render_qr_pixmap(token.payload, size=220)
         self.qr_label.setPixmap(pixmap)
-        self.token_label.setText(f"Token {token.token_id[:8]} · secret {token.bootstrap_secret[:10]}…")
+        self.token_label.setText(f"OPT {token.one_time_passcode} · endpoint {token.endpoint_target}")
         self.update_clock(datetime.now(token.expires_at.tzinfo))
 
     def update_clock(self, now: datetime) -> None:
         expired = self._token.is_expired(now)
         if expired:
-            self.status_label.setText("QR expired. Refresh to generate a new pairing token.")
+            self.status_label.setText("QR expired. Refresh to generate a new pairing code.")
             self.refresh_button.show()
             self.qr_label.setStyleSheet("background: #f3f4f6; border: 1px solid #f59e0b; border-radius: 8px;")
         else:
@@ -227,7 +227,7 @@ class MobilePairingDialog(QDialog):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "Keep the desktop pairing window open while the mobile app claims the session. The QR payload now points at a live local bootstrap endpoint and the desktop persists accepted trust state for later resume work."
+            "Keep the desktop pairing window open while the mobile app claims the session. Each QR now carries only the live endpoint target, session ID, and one-time passcode needed for bootstrap."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #4b5563;")
@@ -265,7 +265,7 @@ class MobilePairingDialog(QDialog):
         layout.addLayout(qr_row)
 
         helper_text = QLabel(
-            "Use the companion app to scan or paste the platform-specific QR link. Each code carries a distinct bootstrap secret and expires independently after fifteen minutes."
+            "Use the companion app to scan or paste the platform-specific QR link. Each code carries a distinct 6-digit OPT and expires independently after fifteen minutes."
         )
         helper_text.setWordWrap(True)
         helper_text.setStyleSheet("color: #4b5563;")

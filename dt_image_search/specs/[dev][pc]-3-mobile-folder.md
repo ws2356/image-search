@@ -398,11 +398,11 @@ The concrete MVP pairing handshake is defined in the dedicated [pairing spec](./
 
 Desktop-specific summary:
 
-- QR payload is now a universal-link-style URL carrying `v`, `endpoint`, `pairing_id`, `token_id`, `secret`, and `expires_at`.
+- QR payload is now a universal-link-style URL carrying only `v`, `ept`, `sid`, and `opt`.
 - Desktop exposes a live local HTTP bootstrap endpoint while the pairing dialog is open.
 - Desktop validates the request, derives trust material, persists device plus folder metadata, and returns the accepted session metadata to mobile.
 
-See the pairing spec for the request and response bodies, sequence diagram, and the rationale for using a high-entropy QR secret instead of a 6-digit code.
+See the pairing spec for the request and response bodies, sequence diagram, and the rationale for keeping the QR bootstrap contract to a 6-digit `opt` plus session and endpoint metadata.
 
 ### 5.9 MVP repeat-backup behavior
 

@@ -21,7 +21,7 @@ from dt_image_search.mobile.mobile_pairing_store import (
 )
 from dt_image_search.model.dts_db import create_db_conn
 
-PAIRING_PROTOCOL_SCHEMA = "1"
+PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
 PAIRING_CLAIM_PATH = "/api/mobile/pairing/claim"
 PAIRING_TRANSPORT = "lan"
 
@@ -152,7 +152,7 @@ class MobilePairingService:
             if self._pairing_result.state == PairingResultState.ACCEPTED:
                 return _response(status_code=409, state=PairingResultState.REJECTED, message="This pairing session was already accepted.")
 
-            required_fields = ("schema", "pairing_id", "token_id", "secret", "platform", "device_uuid", "device_name", "client_nonce")
+            required_fields = ("schema", "sid", "opt", "platform", "device_uuid", "device_name", "client_nonce")
             for field_name in required_fields:
                 field_value = request_payload.get(field_name)
                 if not isinstance(field_value, str) or not field_value.strip():
@@ -165,7 +165,7 @@ class MobilePairingService:
             if request_payload["schema"] != PAIRING_PROTOCOL_SCHEMA:
                 return _response(status_code=400, state=PairingResultState.REJECTED, message="The pairing request schema version is unsupported.")
 
-            if request_payload["pairing_id"] != active_session.session_id:
+            if request_payload["sid"] != active_session.session_id:
                 return _response(status_code=404, state=PairingResultState.REJECTED, message="The pairing request does not match the active desktop session.")
 
             try:
@@ -173,23 +173,18 @@ class MobilePairingService:
             except ValueError:
                 return _response(status_code=400, state=PairingResultState.REJECTED, message="The pairing request platform is unsupported.")
 
-            token = _find_token_by_id(active_session, request_payload["token_id"])
-            if token is None:
-                return _response(status_code=404, state=PairingResultState.REJECTED, message="The pairing token is no longer valid on desktop.")
-
-            if token.platform != requested_platform:
-                return _response(status_code=409, state=PairingResultState.REJECTED, message="The pairing token does not match the requested mobile platform.")
+            token = active_session.token_for(requested_platform)
 
             if token.is_expired(current_time):
                 self._pairing_result = MobilePairingResult(
                     state=PairingResultState.EXPIRED,
-                    message="The desktop pairing token expired before the mobile app completed pairing.",
+                    message="The desktop pairing code expired before the mobile app completed pairing.",
                     session_id=active_session.session_id,
                 )
                 return _response(status_code=410, state=PairingResultState.EXPIRED, message="This pairing code expired. Refresh it on desktop and scan again.")
 
-            if request_payload["secret"] != token.bootstrap_secret:
-                return _response(status_code=403, state=PairingResultState.REJECTED, message="The pairing secret was rejected by desktop.")
+            if request_payload["opt"] != token.one_time_passcode:
+                return _response(status_code=403, state=PairingResultState.REJECTED, message="The pairing code was rejected by desktop.")
 
             device_uuid = request_payload["device_uuid"].strip()
             device_name = request_payload["device_name"].strip()
@@ -199,9 +194,8 @@ class MobilePairingService:
             with create_db_conn(ctx=self._ctx) as conn:
                 desktop_device_id = get_or_create_desktop_device_id(conn)
                 trust_key_b64 = derive_pairing_key_b64(
-                    pairing_id=active_session.session_id,
-                    token_id=token.token_id,
-                    bootstrap_secret=token.bootstrap_secret,
+                    session_id=active_session.session_id,
+                    one_time_passcode=token.one_time_passcode,
                     device_uuid=device_uuid,
                     platform=requested_platform.value,
                     client_nonce=client_nonce,
@@ -330,15 +324,6 @@ def _build_handler(service: MobilePairingService) -> type[BaseHTTPRequestHandler
             self.wfile.write(encoded_body)
 
     return PairingHandler
-
-
-def _find_token_by_id(session: MobilePairingSessionDraft, token_id: str) -> MobilePairingToken | None:
-    for token in session.tokens.values():
-        if token.token_id == token_id:
-            return token
-    return None
-
-
 def _response(
     *,
     status_code: int,

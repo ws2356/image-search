@@ -396,11 +396,11 @@ The QR contract is now defined in the dedicated [pairing spec](./[dev]%20pairing
 
 Key update from the earlier draft:
 
-- replace the proposed 6-digit `opt` value with a high-entropy one-time `secret`
-- include `token_id` and `expires_at` explicitly in the QR payload
-- keep platform out of the payload because desktop already renders an iOS-specific QR
+- keep the 6-digit `opt` value for QR bootstrap
+- keep the QR payload to `v`, `ept`, `sid`, and `opt`
+- keep platform out of the payload because mobile still sends platform in the claim request
 
-This is the safer MVP contract for a LAN-exposed desktop bootstrap endpoint while still keeping the QR payload strictly scoped to pairing bootstrap only.
+This keeps the MVP contract small while still scoping the QR payload strictly to pairing bootstrap.
 
 ### 4.10 Libraries and SDKs in the production implementation
 

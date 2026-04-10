@@ -65,16 +65,16 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_qr_payload_decoder_uses_url_query_format() {
         let decoder = URLQueryQRCodePayloadDecoder()
-        let expiresAt = PairingDateCodec.string(from: Date(timeIntervalSince1970: 1_776_123_600))
-        let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=1&endpoint=http%3A%2F%2Fdesktop.local%3A38933%2Fapi%2Fmobile%2Fpairing%2Fclaim&pairing_id=pairing-demo-123&token_id=token-demo-123&secret=bootstrap-secret&expires_at=\(expiresAt)")
+        let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=1&ept=desktop.local:38933&sid=pairing-demo-123&opt=482913")
 
         guard case .success(let decoded) = result else {
             return XCTFail("Expected successful payload decoding")
         }
 
         XCTAssertEqual(decoded.schemaVersion, 1)
-        XCTAssertEqual(decoded.pairingID, "pairing-demo-123")
-        XCTAssertEqual(decoded.tokenID, "token-demo-123")
+        XCTAssertEqual(decoded.endpointTarget, "desktop.local:38933")
+        XCTAssertEqual(decoded.sessionID, "pairing-demo-123")
+        XCTAssertEqual(decoded.oneTimePasscode, "482913")
         XCTAssertEqual(decoded.bootstrapURL.absoluteString, "http://desktop.local:38933/api/mobile/pairing/claim")
     }
 }
@@ -84,9 +84,9 @@ private struct StaticPairingService: PairingService {
         PairingStatus(
             phase: .paired,
             desktopName: "Studio Mac",
-            sessionID: payload.pairingID,
+            sessionID: payload.sessionID,
             transport: .lan,
-            message: "Pairing succeeded for \(payload.pairingID)."
+            message: "Pairing succeeded for \(payload.sessionID)."
         )
     }
 }

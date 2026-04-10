@@ -65,9 +65,8 @@ enum PairingBootstrapResponseStatus: String, Codable, Sendable {
 
 struct PairingClaimRequest: Codable, Sendable {
     var schema = PairingProtocol.schema
-    var pairingID: String
-    var tokenID: String
-    var secret: String
+    var sessionID: String
+    var oneTimePasscode: String
     var platform: String
     var deviceUUID: String
     var deviceName: String
@@ -76,9 +75,8 @@ struct PairingClaimRequest: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case schema
-        case pairingID = "pairing_id"
-        case tokenID = "token_id"
-        case secret
+        case sessionID = "sid"
+        case oneTimePasscode = "opt"
         case platform
         case deviceUUID = "device_uuid"
         case deviceName = "device_name"
@@ -152,7 +150,6 @@ enum PairingDateCodec {
 }
 
 enum PairingServiceError: Error, Sendable {
-    case expiredQRCode
     case invalidHTTPResponse
     case unsupportedResponseSchema
     case invalidAcceptedResponse
@@ -168,7 +165,6 @@ enum QRCodePayloadDecoderError: Error, Equatable, Sendable {
     case invalidHost
     case invalidSchemaVersion
     case invalidEndpoint
-    case invalidExpiry
     case missingField(String)
 
     var message: String {
@@ -182,9 +178,7 @@ enum QRCodePayloadDecoderError: Error, Equatable, Sendable {
         case .invalidSchemaVersion:
             return "The QR payload uses an unsupported schema version."
         case .invalidEndpoint:
-            return "The QR payload contains an invalid desktop endpoint."
-        case .invalidExpiry:
-            return "The QR payload contains an invalid expiry timestamp."
+            return "The QR payload contains an invalid desktop endpoint target."
         case .missingField(let field):
             return "The QR payload is missing the required field '\(field)'."
         }
@@ -224,38 +218,28 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
             return .failure(.invalidSchemaVersion)
         }
 
-        guard let endpointString = item(named: "endpoint"),
-              let bootstrapURL = URL(string: endpointString)
-        else {
+        guard let endpointTarget = item(named: "ept") else {
+            return .failure(.missingField("ept"))
+        }
+
+        guard PairingQRCodePayload.bootstrapURL(for: endpointTarget) != nil else {
             return .failure(.invalidEndpoint)
         }
 
-        guard let pairingID = item(named: "pairing_id") else {
-            return .failure(.missingField("pairing_id"))
+        guard let sessionID = item(named: "sid") else {
+            return .failure(.missingField("sid"))
         }
 
-        guard let tokenID = item(named: "token_id") else {
-            return .failure(.missingField("token_id"))
-        }
-
-        guard let secret = item(named: "secret") else {
-            return .failure(.missingField("secret"))
-        }
-
-        guard let expiresAtString = item(named: "expires_at"),
-              let expiresAt = PairingDateCodec.date(from: expiresAtString)
-        else {
-            return .failure(.invalidExpiry)
+        guard let oneTimePasscode = item(named: "opt") else {
+            return .failure(.missingField("opt"))
         }
 
         return .success(
             PairingQRCodePayload(
                 schemaVersion: schemaVersion,
-                bootstrapURL: bootstrapURL,
-                pairingID: pairingID,
-                tokenID: tokenID,
-                secret: secret,
-                expiresAt: expiresAt
+                endpointTarget: endpointTarget,
+                sessionID: sessionID,
+                oneTimePasscode: oneTimePasscode
             )
         )
     }

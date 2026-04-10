@@ -47,9 +47,8 @@ class TestMobilePairingService(unittest.TestCase):
         status_code, response_payload = self._pairing_service.handle_pairing_request(
             {
                 "schema": "dtis.mobile-pairing.v1",
-                "pairing_id": session.session_id,
-                "token_id": token.token_id,
-                "secret": token.bootstrap_secret,
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
                 "platform": "ios",
                 "device_uuid": "ios-device-001",
                 "device_name": "Alice iPhone",
@@ -83,9 +82,8 @@ class TestMobilePairingService(unittest.TestCase):
             self.assertEqual(device_row["device_name"], "Alice iPhone")
 
             expected_key = derive_pairing_key_b64(
-                pairing_id=session.session_id,
-                token_id=token.token_id,
-                bootstrap_secret=token.bootstrap_secret,
+                session_id=session.session_id,
+                one_time_passcode=token.one_time_passcode,
                 device_uuid="ios-device-001",
                 platform="ios",
                 client_nonce="client-nonce-123",
@@ -121,9 +119,8 @@ class TestMobilePairingService(unittest.TestCase):
         status_code, response_payload = self._pairing_service.handle_pairing_request(
             {
                 "schema": "dtis.mobile-pairing.v1",
-                "pairing_id": session.session_id,
-                "token_id": token.token_id,
-                "secret": token.bootstrap_secret,
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
                 "platform": "ios",
                 "device_uuid": "ios-device-001",
                 "device_name": "Alice iPhone",

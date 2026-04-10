@@ -30,8 +30,7 @@ final class PairingServiceTests: XCTestCase {
                     platform: "ios"
                 )
             ),
-            trustedDesktopStore: trustedDesktopStore,
-            now: { Date(timeIntervalSince1970: 1_776_123_000) }
+            trustedDesktopStore: trustedDesktopStore
         )
 
         let result = await service.startPairing(using: .demo)
@@ -49,17 +48,17 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertFalse(trustedDesktop?.sharedKeyBase64.isEmpty ?? true)
     }
 
-    func test_desktop_bootstrap_pairing_service_marks_expired_payloads_before_network_call() async {
+    func test_desktop_bootstrap_pairing_service_maps_expired_desktop_response() async {
         let service = DesktopBootstrapPairingService(
             bootstrapClient: StaticPairingBootstrapClient(
                 response: PairingClaimResponse(
                     schema: PairingProtocol.schema,
-                    status: .accepted,
-                    message: "should not be used",
-                    sessionID: "unused",
-                    desktopDeviceID: "unused",
-                    desktopName: "unused",
-                    deviceUUID: "unused",
+                    status: .expired,
+                    message: "This QR code expired on desktop. Refresh and scan again.",
+                    sessionID: nil,
+                    desktopDeviceID: nil,
+                    desktopName: nil,
+                    deviceUUID: nil,
                     folderID: nil,
                     folderPath: nil,
                     transport: nil,
@@ -75,13 +74,13 @@ final class PairingServiceTests: XCTestCase {
                     platform: "ios"
                 )
             ),
-            trustedDesktopStore: InMemoryTrustedDesktopStore(),
-            now: { Date(timeIntervalSince1970: 1_776_123_700) }
+            trustedDesktopStore: InMemoryTrustedDesktopStore()
         )
 
         let result = await service.startPairing(using: .demo)
 
         XCTAssertEqual(result.phase, .expired)
+        XCTAssertEqual(result.message, "This QR code expired on desktop. Refresh and scan again.")
     }
 }
 
@@ -90,8 +89,8 @@ private struct StaticPairingBootstrapClient: PairingBootstrapClient {
 
     func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
         XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
-        XCTAssertEqual(request.pairingID, PairingQRCodePayload.demo.pairingID)
-        XCTAssertEqual(request.tokenID, PairingQRCodePayload.demo.tokenID)
+        XCTAssertEqual(request.sessionID, PairingQRCodePayload.demo.sessionID)
+        XCTAssertEqual(request.oneTimePasscode, PairingQRCodePayload.demo.oneTimePasscode)
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
         return response
     }

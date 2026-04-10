@@ -50,37 +50,23 @@ struct DesktopBootstrapPairingService: PairingService {
     let bootstrapClient: PairingBootstrapClient
     let identityProvider: LocalDeviceIdentityProviding
     let trustedDesktopStore: TrustedDesktopStore
-    let now: @Sendable () -> Date
 
     init(
         bootstrapClient: PairingBootstrapClient,
         identityProvider: LocalDeviceIdentityProviding,
-        trustedDesktopStore: TrustedDesktopStore,
-        now: @escaping @Sendable () -> Date = Date.init
+        trustedDesktopStore: TrustedDesktopStore
     ) {
         self.bootstrapClient = bootstrapClient
         self.identityProvider = identityProvider
         self.trustedDesktopStore = trustedDesktopStore
-        self.now = now
     }
 
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
-        guard payload.expiresAt > now() else {
-            return PairingStatus(
-                phase: .expired,
-                desktopName: nil,
-                sessionID: nil,
-                transport: nil,
-                message: "This QR code has already expired. Refresh it on desktop and scan again."
-            )
-        }
-
         let identity = await identityProvider.currentIdentity()
         let clientNonce = UUID().uuidString.lowercased()
         let request = PairingClaimRequest(
-            pairingID: payload.pairingID,
-            tokenID: payload.tokenID,
-            secret: payload.secret,
+            sessionID: payload.sessionID,
+            oneTimePasscode: payload.oneTimePasscode,
             platform: identity.platform,
             deviceUUID: identity.deviceUUID,
             deviceName: identity.deviceName,
@@ -90,8 +76,16 @@ struct DesktopBootstrapPairingService: PairingService {
 
         do {
             let response = try await bootstrapClient.claimPairing(at: payload.bootstrapURL, request: request)
-            guard response.status == .accepted,
-                  let sessionID = response.sessionID,
+            switch response.status {
+            case .accepted:
+                break
+            case .expired:
+                throw PairingServiceError.expired(message: response.message)
+            case .rejected:
+                throw PairingServiceError.rejected(message: response.message)
+            }
+
+            guard let sessionID = response.sessionID,
                   let desktopDeviceID = response.desktopDeviceID,
                   let desktopName = response.desktopName,
                   let serverNonce = response.serverNonce,
@@ -155,9 +149,8 @@ struct DesktopBootstrapPairingService: PairingService {
     ) -> String {
         let material = [
             PairingProtocol.schema,
-            payload.pairingID,
-            payload.tokenID,
-            payload.secret,
+            payload.sessionID,
+            payload.oneTimePasscode,
             identity.deviceUUID,
             identity.platform,
             clientNonce,
@@ -172,7 +165,7 @@ struct DesktopBootstrapPairingService: PairingService {
 private extension PairingServiceError {
     var phase: PairingPhase {
         switch self {
-        case .expiredQRCode, .expired:
+        case .expired:
             return .expired
         default:
             return .failed
@@ -181,8 +174,6 @@ private extension PairingServiceError {
 
     var message: String {
         switch self {
-        case .expiredQRCode:
-            return "This QR code has already expired. Refresh it on desktop and scan again."
         case .invalidHTTPResponse:
             return "Desktop pairing returned an invalid network response."
         case .unsupportedResponseSchema:

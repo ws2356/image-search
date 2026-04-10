@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 import secrets
-from urllib.parse import urlencode, urlunsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 import uuid
 
 PAIRING_TOKEN_TTL = timedelta(minutes=15)
@@ -52,10 +52,9 @@ def _normalize_directory_path(directory_path: str) -> str:
 @dataclass(frozen=True)
 class MobilePairingToken:
     platform: MobilePlatform
-    token_id: str
-    bootstrap_secret: str
+    one_time_passcode: str
     payload: str
-    endpoint_url: str
+    endpoint_target: str
     expires_at: datetime
     refresh_generation: int
     deep_link_url: str
@@ -129,31 +128,39 @@ def _new_pairing_token(
 ) -> MobilePairingToken:
     current_time = _utc_now(now)
     metadata = _PLATFORM_METADATA[platform]
-    token_id = uuid.uuid4().hex
-    bootstrap_secret = secrets.token_urlsafe(24)
+    endpoint_target = _endpoint_target_from_url(desktop_endpoint_url)
+    one_time_passcode = f"{secrets.randbelow(1_000_000):06d}"
     expires_at = current_time + PAIRING_TOKEN_TTL
     payload_query = urlencode(
         {
             "v": str(PAIRING_QR_SCHEMA_VERSION),
-            "endpoint": desktop_endpoint_url,
-            "pairing_id": session_id,
-            "token_id": token_id,
-            "secret": bootstrap_secret,
-            "expires_at": expires_at.isoformat(),
+            "ept": endpoint_target,
+            "sid": session_id,
+            "opt": one_time_passcode,
         }
     )
     payload = urlunsplit(("https", PAIRING_QR_HOST, "", payload_query, ""))
     return MobilePairingToken(
         platform=platform,
-        token_id=token_id,
-        bootstrap_secret=bootstrap_secret,
+        one_time_passcode=one_time_passcode,
         payload=payload,
-        endpoint_url=desktop_endpoint_url,
+        endpoint_target=endpoint_target,
         expires_at=expires_at,
         refresh_generation=refresh_generation,
         deep_link_url=metadata["deep_link_url"],
         store_url=metadata["store_url"],
     )
+
+
+def _endpoint_target_from_url(desktop_endpoint_url: str) -> str:
+    parsed_endpoint = urlsplit(desktop_endpoint_url)
+    if not parsed_endpoint.hostname or parsed_endpoint.port is None:
+        raise ValueError(f"Desktop endpoint URL must include host and port: {desktop_endpoint_url}")
+
+    hostname = parsed_endpoint.hostname
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
+    return f"{hostname}:{parsed_endpoint.port}"
 
 
 def platform_display_name(platform: MobilePlatform) -> str:

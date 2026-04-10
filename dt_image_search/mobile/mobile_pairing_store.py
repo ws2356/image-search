@@ -70,9 +70,8 @@ def get_or_create_desktop_device_id(conn: sqlite3.Connection) -> str:
 
 def derive_pairing_key_b64(
     *,
-    pairing_id: str,
-    token_id: str,
-    bootstrap_secret: str,
+    session_id: str,
+    one_time_passcode: str,
     device_uuid: str,
     platform: str,
     client_nonce: str,
@@ -82,9 +81,8 @@ def derive_pairing_key_b64(
     material = "\n".join(
         [
             "dtis.mobile-pairing.v1",
-            pairing_id,
-            token_id,
-            bootstrap_secret,
+            session_id,
+            one_time_passcode,
             device_uuid,
             platform,
             client_nonce,

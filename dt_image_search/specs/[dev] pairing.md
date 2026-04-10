@@ -39,30 +39,16 @@ Mobile owns:
 - bootstrap request submission
 - local trusted-desktop persistence
 
-### 2.2 Use a high-entropy bootstrap secret, not a 6-digit code
+### 2.2 Just use a 6-digit numeric one-time opt for QR bootstrap
 
-The earlier mobile spec proposed a 6-digit `opt` value in the QR payload. This implementation replaces that with a high-entropy one-time `secret`.
-
-Reason:
-
-- the QR is machine-scanned, not manually typed
-- the bootstrap endpoint is reachable over the local network
-- a 6-digit secret is too weak for LAN-exposed pairing bootstrap
-
-If product later wants a human-verification step, that can be added as a separate confirmation code without weakening the transport bootstrap secret.
 
 ### 2.3 Derive and persist a shared pairing key now
 
 The desktop and mobile app derive the same symmetric key from:
 
-- pairing schema identifier
+- pairing schema version
 - pairing ID
-- token ID
-- QR bootstrap secret
-- mobile device UUID
-- mobile platform
-- desktop server nonce
-- desktop device ID
+- QR bootstrap opt
 
 MVP stores that derived key as trust material for later reconnect work. MVP does **not** yet use the key to encrypt the LAN transfer channel; that remains Phase 5 transport hardening work.
 
@@ -71,10 +57,10 @@ MVP stores that derived key as trust material for later reconnect work. MVP does
 1. Desktop user chooses **Add Folder -> Mobile Device**.
 2. Desktop user chooses the parent destination folder.
 3. Desktop starts a short-lived local HTTP bootstrap endpoint and creates a pairing intent.
-4. Desktop renders separate Android and iOS QR codes. Each QR encodes the same desktop endpoint but a distinct platform token and secret.
+4. Desktop renders a QR code for the active pairing session. The QR encodes the desktop endpoint, session ID, and a short-lived 6-digit opt.
 5. Mobile scans or pastes the QR payload.
 6. Mobile validates the QR payload locally and sends a bootstrap claim request to desktop.
-7. Desktop validates pairing ID, token ID, platform match, secret, and expiry.
+7. Desktop validates sid, opt, platform, and expiry.
 8. Desktop derives trust material, creates or reuses the mobile folder, persists trust/session metadata, and returns an acceptance response.
 9. Mobile derives the same trust key from the desktop response and persists the trusted desktop record.
 10. Mobile advances to the existing preflight / permission flow.
@@ -91,13 +77,13 @@ sequenceDiagram
 
     DesktopUI->>DesktopPair: start_pairing(destination_parent)
     DesktopPair->>DesktopPair: start HTTP bootstrap endpoint
-    DesktopPair->>DesktopUI: session_id + iOS QR payload + Android QR payload
+    DesktopPair->>DesktopUI: session_id + pairing QR payload
     MobileApp->>MobileApp: decode QR payload
     MobileApp->>MobilePrefs: load or create local device identity
-    MobileApp->>MobileApp: Derive shared trust key from QR payload + device identity
-    MobileApp->>DesktopPair: POST /api/mobile/pairing/claim with payload encrypted by shared trust key
+    MobileApp->>MobileApp: prepare pairing claim using QR payload + local device identity
+    MobileApp->>DesktopPair: POST /api/mobile/pairing/claim with JSON claim body
     DesktopPair->>DesktopPair: derive shared trust key
-    DesktopPair->>DesktopPair: validate pairing_id, token_id, platform, secret, expiry
+    DesktopPair->>DesktopPair: validate sid, opt, platform, expiry
     DesktopPair->>DesktopDB: upsert mobile device + folder + backup session
     DesktopPair-->>MobileApp: accepted + desktop identity + session info
     MobileApp->>MobilePrefs: save trusted desktop record
@@ -117,7 +103,9 @@ Query fields:
 - `v`: schema version, currently `1`
 - `ept`: `192.168.50.12:38933` (desktop local server host and port)
 - `sid`: desktop pairing intent / session ID
-- `opt`: high-entropy one-time bootstrap secret
+- `opt`: 6-digit numeric one-time passcode
+
+Desktop remains authoritative for expiry. MVP does not encode an `expires_at` value into the QR; mobile learns about expiry from the desktop claim response.
 
 
 ### 5.2 Mobile -> desktop bootstrap claim
@@ -126,13 +114,14 @@ Query fields:
 
 ```json
 {
-  "schema": 1,
+  "schema": "dtis.mobile-pairing.v1",
   "sid": "pairing-123",
-  "opt": "high-entropy-secret",
+  "opt": "482913",
   "platform": "ios",
   "device_uuid": "ios-device-001",
   "device_name": "Alice iPhone",
-  "install_id": "install-001"
+  "install_id": "install-001",
+  "client_nonce": "client-nonce-001"
 }
 ```
 
@@ -146,13 +135,13 @@ Desktop validates:
 - opt matches
 - no other device already consumed the session
 
-NOTE: payload is encrypted by the derived trust key
+NOTE: MVP sends the claim as JSON over the local bootstrap channel. Desktop and mobile derive shared trust material during acceptance and persist it for later reconnect work.
 
 ### 5.3 Desktop acceptance response
 
 ```json
 {
-  "schema": 1,
+  "schema": "dtis.mobile-pairing.v1",
   "status": "accepted",
   "message": "Pairing accepted for Alice iPhone. Desktop is ready for LAN transfer.",
   "session_id": "pairing-123",
@@ -160,7 +149,8 @@ NOTE: payload is encrypted by the derived trust key
   "desktop_name": "Studio Mac",
   "device_uuid": "ios-device-001",
   "transport": "lan",
-  "paired_at": "2026-04-10T06:00:05+00:00"
+  "paired_at": "2026-04-10T06:00:05+00:00",
+  "server_nonce": "server-nonce-001"
 }
 ```
 
@@ -173,8 +163,8 @@ Recommended HTTP status mapping:
 
 - `200` accepted
 - `400` malformed request
-- `403` bad secret
-- `404` no active session / unknown token
+- `403` bad opt
+- `404` no active session / unknown sid
 - `409` already-consumed or platform mismatch
 - `410` expired
 
@@ -232,7 +222,7 @@ The current iteration also keeps the existing launch snapshot model so the home 
 
 - Expired QR before request: mobile shows **QR expired** immediately.
 - Expired QR at desktop: desktop returns `expired`; mobile shows the desktop-provided retry guidance.
-- Invalid secret or mismatched session: mobile shows **Pairing failed** with retry guidance.
+- Invalid opt or mismatched session: mobile shows **Pairing failed** with retry guidance.
 - Accepted pairing: mobile shows desktop name, transport, and session ID before moving to preflight.
 - Desktop pairing dialog continues polling current pairing result while open and shows the resolved folder on success.
 

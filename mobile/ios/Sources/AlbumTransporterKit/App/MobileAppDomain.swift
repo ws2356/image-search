@@ -145,19 +145,22 @@ struct PairingStatus: Equatable, Sendable, Codable {
 
 struct PairingQRCodePayload: Codable, Equatable, Sendable {
     var schemaVersion: Int
-    var bootstrapURL: URL
-    var pairingID: String
-    var tokenID: String
-    var secret: String
-    var expiresAt: Date
+    var endpointTarget: String
+    var sessionID: String
+    var oneTimePasscode: String
+
+    var bootstrapURL: URL {
+        guard let url = Self.bootstrapURL(for: endpointTarget) else {
+            preconditionFailure("Invalid pairing endpoint target: \(endpointTarget)")
+        }
+        return url
+    }
 
     static let demo = PairingQRCodePayload(
         schemaVersion: 1,
-        bootstrapURL: URL(string: "http://127.0.0.1:38933/api/mobile/pairing/claim")!,
-        pairingID: "pairing-demo-001",
-        tokenID: "token-demo-001",
-        secret: "demo-bootstrap-secret-001",
-        expiresAt: Date(timeIntervalSince1970: 1_776_123_600)
+        endpointTarget: "127.0.0.1:38933",
+        sessionID: "pairing-demo-001",
+        oneTimePasscode: "482913"
     )
 
     static var demoScanValue: String {
@@ -166,13 +169,30 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
         components.host = "dl.boldman.net"
         components.queryItems = [
             URLQueryItem(name: "v", value: String(demo.schemaVersion)),
-            URLQueryItem(name: "endpoint", value: demo.bootstrapURL.absoluteString),
-            URLQueryItem(name: "pairing_id", value: demo.pairingID),
-            URLQueryItem(name: "token_id", value: demo.tokenID),
-            URLQueryItem(name: "secret", value: demo.secret),
-            URLQueryItem(name: "expires_at", value: PairingDateCodec.string(from: demo.expiresAt)),
+            URLQueryItem(name: "ept", value: demo.endpointTarget),
+            URLQueryItem(name: "sid", value: demo.sessionID),
+            URLQueryItem(name: "opt", value: demo.oneTimePasscode),
         ]
         return components.string ?? "https://dl.boldman.net"
+    }
+
+    static func bootstrapURL(for endpointTarget: String) -> URL? {
+        guard !endpointTarget.contains("/"),
+              !endpointTarget.contains("?"),
+              !endpointTarget.contains("#"),
+              var components = URLComponents(string: "http://\(endpointTarget)")
+        else {
+            return nil
+        }
+
+        guard components.host != nil, components.port != nil else {
+            return nil
+        }
+
+        components.path = "/api/mobile/pairing/claim"
+        components.query = nil
+        components.fragment = nil
+        return components.url
     }
 }
 

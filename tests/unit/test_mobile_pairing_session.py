@@ -25,8 +25,8 @@ class TestMobilePairingSession(unittest.TestCase):
         android_token = session.token_for(MobilePlatform.ANDROID)
         ios_token = session.token_for(MobilePlatform.IOS)
 
-        self.assertNotEqual(android_token.token_id, ios_token.token_id)
-        self.assertNotEqual(android_token.bootstrap_secret, ios_token.bootstrap_secret)
+        self.assertNotEqual(android_token.one_time_passcode, ios_token.one_time_passcode)
+        self.assertEqual(android_token.endpoint_target, "192.168.50.12:38933")
         self.assertEqual(android_token.expires_at, now + timedelta(minutes=15))
 
         payload_components = urlsplit(android_token.payload)
@@ -35,10 +35,9 @@ class TestMobilePairingSession(unittest.TestCase):
         self.assertEqual(payload_components.scheme, "https")
         self.assertEqual(payload_components.netloc, "dl.boldman.net")
         self.assertEqual(payload_query["v"][0], "1")
-        self.assertEqual(payload_query["endpoint"][0], "http://192.168.50.12:38933/api/mobile/pairing/claim")
-        self.assertEqual(payload_query["pairing_id"][0], session.session_id)
-        self.assertEqual(payload_query["token_id"][0], android_token.token_id)
-        self.assertEqual(payload_query["secret"][0], android_token.bootstrap_secret)
+        self.assertEqual(payload_query["ept"][0], "192.168.50.12:38933")
+        self.assertEqual(payload_query["sid"][0], session.session_id)
+        self.assertEqual(payload_query["opt"][0], android_token.one_time_passcode)
 
     def test_refresh_replaces_only_requested_platform_token(self):
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
@@ -54,9 +53,9 @@ class TestMobilePairingSession(unittest.TestCase):
 
         refreshed_android = session.refresh_token(MobilePlatform.ANDROID, now=now + timedelta(minutes=16))
 
-        self.assertNotEqual(refreshed_android.token_id, original_android.token_id)
+        self.assertNotEqual(refreshed_android.one_time_passcode, original_android.one_time_passcode)
         self.assertEqual(refreshed_android.refresh_generation, 1)
-        self.assertEqual(session.token_for(MobilePlatform.IOS).token_id, original_ios.token_id)
+        self.assertEqual(session.token_for(MobilePlatform.IOS).one_time_passcode, original_ios.one_time_passcode)
 
     def test_update_destination_parent_normalizes_path(self):
         with tempfile.TemporaryDirectory() as temp_dir:

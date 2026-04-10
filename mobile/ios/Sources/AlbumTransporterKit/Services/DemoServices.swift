@@ -25,9 +25,9 @@ struct DemoPairingService: PairingService {
         return PairingStatus(
             phase: .paired,
             desktopName: desktopName,
-            sessionID: payload.pairingID,
+            sessionID: payload.sessionID,
             transport: .lan,
-            message: "Secure local pairing established using payload \(payload.pairingID). The desktop will validate whether this is a new, repeat, or resumable session."
+            message: "Secure local pairing established using payload \(payload.sessionID). The desktop will validate whether this is a new, repeat, or resumable session."
         )
     }
 }
