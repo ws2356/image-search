@@ -61,7 +61,6 @@ The desktop and mobile app derive the same symmetric key from:
 - QR bootstrap secret
 - mobile device UUID
 - mobile platform
-- mobile client nonce
 - desktop server nonce
 - desktop device ID
 
@@ -95,12 +94,12 @@ sequenceDiagram
     DesktopPair->>DesktopUI: session_id + iOS QR payload + Android QR payload
     MobileApp->>MobileApp: decode QR payload
     MobileApp->>MobilePrefs: load or create local device identity
-    MobileApp->>DesktopPair: POST /api/mobile/pairing/claim
+    MobileApp->>MobileApp: Derive shared trust key from QR payload + device identity
+    MobileApp->>DesktopPair: POST /api/mobile/pairing/claim with payload encrypted by shared trust key
+    DesktopPair->>DesktopPair: derive shared trust key
     DesktopPair->>DesktopPair: validate pairing_id, token_id, platform, secret, expiry
     DesktopPair->>DesktopDB: upsert mobile device + folder + backup session
-    DesktopPair->>DesktopPair: derive shared trust key and generate server nonce
-    DesktopPair-->>MobileApp: accepted + desktop identity + session info + server nonce
-    MobileApp->>MobileApp: derive shared trust key
+    DesktopPair-->>MobileApp: accepted + desktop identity + session info
     MobileApp->>MobilePrefs: save trusted desktop record
     MobileApp-->>DesktopUI: paired / ready for backup preflight
 ```
@@ -116,17 +115,10 @@ The QR value is a universal-link-style URL:
 Query fields:
 
 - `v`: schema version, currently `1`
-- `endpoint`: full desktop bootstrap URL, e.g. `http://192.168.50.12:38933/api/mobile/pairing/claim`
-- `pairing_id`: desktop pairing intent / session ID
-- `token_id`: per-platform token ID
-- `secret`: high-entropy one-time bootstrap secret
-- `expires_at`: desktop-issued ISO-8601 UTC expiry timestamp
+- `ept`: `192.168.50.12:38933` (desktop local server host and port)
+- `sid`: desktop pairing intent / session ID
+- `opt`: high-entropy one-time bootstrap secret
 
-Notes:
-
-- platform is intentionally omitted because desktop already renders platform-specific QR codes
-- store or deep-link continuity metadata is not required by the MVP pairing handshake
-- desktop remains authoritative even though mobile also validates `expires_at` locally
 
 ### 5.2 Mobile -> desktop bootstrap claim
 
@@ -134,15 +126,13 @@ Notes:
 
 ```json
 {
-  "schema": "dtis.mobile-pairing.v1",
-  "pairing_id": "pairing-123",
-  "token_id": "token-123",
-  "secret": "high-entropy-secret",
+  "schema": 1,
+  "sid": "pairing-123",
+  "opt": "high-entropy-secret",
   "platform": "ios",
   "device_uuid": "ios-device-001",
   "device_name": "Alice iPhone",
-  "install_id": "install-001",
-  "client_nonce": "client-nonce-001"
+  "install_id": "install-001"
 }
 ```
 
@@ -150,29 +140,27 @@ Desktop validates:
 
 - schema match
 - active pairing session exists
-- pairing ID matches
-- token ID exists on the active session
-- token platform matches requested platform
-- token secret matches
-- token is not expired
+- sid matches
+- opt exists on the active session
+- platform matches requested platform
+- opt matches
 - no other device already consumed the session
+
+NOTE: payload is encrypted by the derived trust key
 
 ### 5.3 Desktop acceptance response
 
 ```json
 {
-  "schema": "dtis.mobile-pairing.v1",
+  "schema": 1,
   "status": "accepted",
   "message": "Pairing accepted for Alice iPhone. Desktop is ready for LAN transfer.",
   "session_id": "pairing-123",
   "desktop_device_id": "desktop-device-001",
   "desktop_name": "Studio Mac",
   "device_uuid": "ios-device-001",
-  "folder_id": 42,
-  "folder_path": "/Users/alice/Backups/Alice iPhone",
   "transport": "lan",
-  "paired_at": "2026-04-10T06:00:05+00:00",
-  "server_nonce": "server-nonce-001"
+  "paired_at": "2026-04-10T06:00:05+00:00"
 }
 ```
 

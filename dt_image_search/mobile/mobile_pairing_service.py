@@ -21,7 +21,7 @@ from dt_image_search.mobile.mobile_pairing_store import (
 )
 from dt_image_search.model.dts_db import create_db_conn
 
-PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
+PAIRING_PROTOCOL_SCHEMA = "1"
 PAIRING_CLAIM_PATH = "/api/mobile/pairing/claim"
 PAIRING_TRANSPORT = "lan"
 
