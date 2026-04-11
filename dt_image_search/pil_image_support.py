@@ -115,6 +115,15 @@ def _open_heif_with_native_fallback(path: str, original_error: Exception) -> Ite
             raise OSError(error_message) from original_error
 
         log(
+            "warning",
+            "image_decode",
+            (
+                "Using macOS-native HEIC/HEIF fallback because the portable decoder "
+                f"was unavailable or could not read {os.path.basename(path)}."
+            ),
+            __file__,
+        )
+        log(
             "info",
             "image_decode",
             f"Decoded HEIC/HEIF image via macOS native fallback: {os.path.basename(path)}",

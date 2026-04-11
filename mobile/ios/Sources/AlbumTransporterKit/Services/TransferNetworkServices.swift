@@ -186,7 +186,8 @@ private enum TransferDebugLogger {
 
     static func describe(_ error: Error) -> String {
         let nsError = error as NSError
-        return "\(type(of: error)): \(error.localizedDescription) [\(nsError.domain)#\(nsError.code)]"
+        let photosDetail = photosErrorDetail(for: nsError).map { " \($0)" } ?? ""
+        return "\(type(of: error)): \(error.localizedDescription) [\(nsError.domain)#\(nsError.code)\(photosDetail)]"
     }
 
     static func responseBodyPreview(from data: Data) -> String {
@@ -195,6 +196,29 @@ private enum TransferDebugLogger {
         }
         let preview = String(decoding: data.prefix(512), as: UTF8.self)
         return preview.isEmpty ? "<binary \(data.count) bytes>" : preview.replacingOccurrences(of: "\n", with: "\\n")
+    }
+
+    private static func photosErrorDetail(for error: NSError) -> String? {
+        guard error.domain == PHPhotosErrorDomain else {
+            return nil
+        }
+
+        switch error.code {
+        case 3164:
+            return "network_access_required"
+        case 3169:
+            return "network_error"
+        case 3301:
+            return "operation_interrupted"
+        case 3303:
+            return "missing_resource"
+        case 3305:
+            return "not_enough_space"
+        case 3306:
+            return "request_not_supported_for_asset"
+        default:
+            return nil
+        }
     }
 }
 
@@ -429,7 +453,18 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
             "Exporting asset \(TransferDebugLogger.assetSummary(for: descriptor)) resource_type=\(resource.type.rawValue) uti=\(resource.uniformTypeIdentifier)"
         )
         let requestOptions = PHAssetResourceRequestOptions()
-        requestOptions.isNetworkAccessAllowed = false
+        requestOptions.isNetworkAccessAllowed = true
+        var lastProgressBucket = -1
+        requestOptions.progressHandler = { progress in
+            let progressBucket = min(Int(progress * 10), 10)
+            guard progressBucket != lastProgressBucket else {
+                return
+            }
+            lastProgressBucket = progressBucket
+            TransferDebugLogger.debug(
+                "PhotoKit export progress \(TransferDebugLogger.assetSummary(for: descriptor)) progress=\(progressBucket * 10)%"
+            )
+        }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             PHAssetResourceManager.default().writeData(
                 for: resource,
@@ -474,15 +509,18 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
 
     private static func preferredResource(for asset: PHAsset) -> PHAssetResource? {
         let resources = PHAssetResource.assetResources(for: asset)
-        // Are we only returning the first resource that match .photo/.fullSizePhoto/.video/.fullSizeVideo? That may picking an ordinary photo or video and miss the fullSize variant?
-        return resources.first { resource in
-            switch resource.type {
-            case .photo, .fullSizePhoto, .video, .fullSizeVideo:
-                return true
-            default:
-                return false
+        let preferredTypes: [PHAssetResourceType] = [
+            .fullSizePhoto,
+            .photo,
+            .fullSizeVideo,
+            .video,
+        ]
+        for preferredType in preferredTypes {
+            if let resource = resources.first(where: { $0.type == preferredType }) {
+                return resource
             }
-        } ?? resources.first
+        }
+        return resources.first
     }
 
     private static func assetVersion(for asset: PHAsset) -> String {
