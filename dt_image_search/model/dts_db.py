@@ -208,20 +208,27 @@ def update_files(conn, ids: list, clip_indices: list, statuses: list):
     conn.commit()
 
 @perffunc
-def rename_file(conn, old_path: str, new_path: str) -> int:
+def rename_file(conn, old_path: str, src_file: File, new_path: str, dest_folder: Folder) -> int:
     # Replace '\' with '/' for consistency
     old_path = old_path.replace('\\', '/')
     new_path = new_path.replace('\\', '/')
+
+    # Remove the file with path = new_path because it's replaced on fs
     conn.execute(
-        "UPDATE files SET path = ? WHERE path = ?",
-        (new_path, old_path)
+        "DELETE FROM files WHERE path = ?",
+        (new_path,)
+    )
+    # old_path may not exist. If so, we need to create a new file with new_path and dest_folder.id. If old_path exists, we need to update its path to new_path and folder_id to dest_folder.id
+    conn.execute(
+        "UPDATE files SET path = ?, folder_id = ? WHERE path = ?",
+        (new_path, dest_folder.id, old_path)
     )
     conn.commit()
     # return number of rows updated
     return conn.total_changes
 
 @perffunc
-def rename_files_in_folder(conn, folder_path: str, new_folder_path: str) -> int:
+def rename_files_in_folder(conn, folder_path: str, src_file: File, new_folder_path: str, dest_folder: Folder) -> int:
     # Replace '\' with '/' for consistency
     folder_path = folder_path.replace('\\', '/')
     new_folder_path = new_folder_path.replace('\\', '/')
@@ -236,8 +243,12 @@ def rename_files_in_folder(conn, folder_path: str, new_folder_path: str) -> int:
         old_file_path = row[1]
         new_file_path = new_folder_path + old_file_path[len(folder_path):]
         conn.execute(
-            "UPDATE files SET path = ? WHERE id = ?",
-            (new_file_path, file_id)
+            "DELETE FROM files WHERE path = ?",
+            (new_file_path,)
+        )
+        conn.execute(
+            "UPDATE files SET path = ?, folder_id = ? WHERE id = ?",
+            (new_file_path, dest_folder.id, file_id)
         )
     conn.commit()
     return len(rows)

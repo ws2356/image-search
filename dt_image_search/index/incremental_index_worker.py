@@ -119,6 +119,9 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
                 _try_schedule_next_batch(self.ctx)
 
 def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
+    events = [event for event in events if os.path.isfile(event.src_path) and is_image_file(event.src_path)]
+    if not events:
+        return
     # Spawn one worker for every 100 events
     batch_size = 100
     for i in range(0, len(events), batch_size):
@@ -127,7 +130,7 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
             _index_workers.append(worker)
         worker.run()
 
-@with_trace("incremential_index_worker._on_deleted")
+@with_trace("incremental_index_worker._on_deleted")
 def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     try:
         status_bar_messenger.show_status_message.emit(f"File deletion started...")
@@ -163,30 +166,34 @@ def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     finally:
         status_bar_messenger.show_status_message.emit(f"File deletion completed.")
 
-@with_trace("incremential_index_worker._on_moved")
+@with_trace("incremental_index_worker._on_moved")
 def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
     try:
-        status_bar_messenger.show_status_message.emit(f"File/folder renaming started...")
+        # status_bar_messenger.show_status_message.emit(f"File/folder renaming started...")
         created_events = []
         deleted_events = []
         internal_rename_events = []
 
         with create_db_conn(ctx=ctx) as conn:
             for event in events:
-                src_folder = match_parent_folder(conn, event.src_path)
+                src_file = get_file_by_path(conn, event.src_path)
                 dest_folder = match_parent_folder(conn, event.dest_path)
-                if src_folder and dest_folder:
-                    internal_rename_events.append(event)
-                    continue
-                if dest_folder:
-                    created_events.extend(_created_events_for_moved_path(event.dest_path))
-                    continue
-                if src_folder:
-                    deleted_events.append(_deleted_event_for_moved_path(event.src_path, event.is_directory))
 
-            for event in internal_rename_events:
-                if not rename_file(conn, event.src_path, event.dest_path):
-                    rename_files_in_folder(conn, event.src_path, event.dest_path)
+                if src_file:
+                    if dest_folder:
+                        internal_rename_events.append((event, src_file, dest_folder))
+                    else:
+                        deleted_events.append(_deleted_event_for_moved_path(event.src_path, event.is_directory))
+                    continue
+
+                if dest_folder:
+                    created_events.append(watchdog.events.FileCreatedEvent(event.dest_path))
+                    continue
+
+            for event, src_file, dest_folder in internal_rename_events:
+                if not rename_file(conn, event.src_path, src_file, event.dest_path, dest_folder):
+                    # TODO: verify folder rename
+                    rename_files_in_folder(conn, event.src_path, src_file, event.dest_path, dest_folder)
 
         if created_events:
             _on_created(ctx, created_events)
@@ -194,18 +201,6 @@ def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
             _on_deleted(ctx, deleted_events)
     except Exception as e:
         log("error", message=f"Error during file/folder renaming handling: {e}")
-    finally:
-        status_bar_messenger.show_status_message.emit(f"File/folder renaming completed.")
-
-
-def _created_events_for_moved_path(path: str) -> list[watchdog.events.FileCreatedEvent]:
-    if os.path.isdir(path):
-        created_events = []
-        for root, _, file_names in os.walk(path):
-            for file_name in file_names:
-                created_events.append(watchdog.events.FileCreatedEvent(os.path.join(root, file_name)))
-        return created_events
-    return [watchdog.events.FileCreatedEvent(path)]
 
 
 def _deleted_event_for_moved_path(path: str, is_directory: bool) -> watchdog.events.FileSystemEvent:
