@@ -7,6 +7,8 @@ import tempfile
 import unittest
 import uuid
 from datetime import datetime, timedelta, timezone
+import socket
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
@@ -17,6 +19,7 @@ from dt_image_search.mobile.mobile_pairing_service import (
     MobilePairingService,
     PairingResultState,
     _is_ignorable_socket_disconnect,
+    _select_advertised_host_from_netif_data,
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
@@ -191,6 +194,43 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(status_code, 500)
         self.assertEqual(response_payload["status"], "rejected")
         self.assertIn("Desktop failed while processing the pairing request.", response_payload["message"])
+
+    def test_select_advertised_host_prefers_private_lan_interface_over_tunnel(self):
+        interface_addresses = {
+            "lo0": [SimpleNamespace(family=socket.AF_INET, address="127.0.0.1")],
+            "en0": [SimpleNamespace(family=socket.AF_INET, address="192.168.50.17")],
+            "en7": [SimpleNamespace(family=socket.AF_INET, address="169.254.22.94")],
+            "utun7": [SimpleNamespace(family=socket.AF_INET, address="198.18.0.1")],
+        }
+        interface_stats = {
+            interface_name: SimpleNamespace(isup=True) for interface_name in interface_addresses
+        }
+
+        self.assertEqual(
+            _select_advertised_host_from_netif_data(
+                interface_addresses=interface_addresses,
+                interface_stats=interface_stats,
+            ),
+            "192.168.50.17",
+        )
+
+    def test_select_advertised_host_ignores_interfaces_that_are_down(self):
+        interface_addresses = {
+            "en0": [SimpleNamespace(family=socket.AF_INET, address="192.168.50.17")],
+            "en5": [SimpleNamespace(family=socket.AF_INET, address="192.168.50.18")],
+        }
+        interface_stats = {
+            "en0": SimpleNamespace(isup=False),
+            "en5": SimpleNamespace(isup=True),
+        }
+
+        self.assertEqual(
+            _select_advertised_host_from_netif_data(
+                interface_addresses=interface_addresses,
+                interface_stats=interface_stats,
+            ),
+            "192.168.50.18",
+        )
 
     def _post_pairing_request(self, payload: dict[str, str]) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)

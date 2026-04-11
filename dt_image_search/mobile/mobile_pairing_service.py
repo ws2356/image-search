@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import errno
+import ipaddress
 import json
 import secrets
 import socket
@@ -25,6 +26,26 @@ from dt_image_search.model.dts_db import create_db_conn
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
 PAIRING_CLAIM_PATH = "/api/mobile/pairing/claim"
 PAIRING_TRANSPORT = "lan"
+_PREFERRED_INTERFACE_PREFIXES = ("en", "eth", "wlan", "wl")
+_EXCLUDED_INTERFACE_PREFIXES = (
+    "lo",
+    "utun",
+    "tun",
+    "tap",
+    "ppp",
+    "bridge",
+    "awdl",
+    "llw",
+    "gif",
+    "stf",
+    "docker",
+    "br-",
+    "vboxnet",
+    "vmnet",
+    "tailscale",
+    "wg",
+    "zt",
+)
 
 
 class PairingResultState(str, Enum):
@@ -376,6 +397,61 @@ def _response(
 
 
 def _discover_advertised_host() -> str:
+    interface_host = _discover_advertised_host_from_interfaces()
+    if interface_host:
+        return interface_host
+
+    probe_host = _discover_advertised_host_via_udp_probe()
+    if probe_host and _score_advertised_host_candidate("probe", probe_host) is not None:
+        return probe_host
+
+    if probe_host:
+        return probe_host
+    return "127.0.0.1"
+
+
+def _discover_advertised_host_from_interfaces() -> str | None:
+    try:
+        import psutil
+    except ImportError:
+        return None
+
+    return _select_advertised_host_from_netif_data(
+        interface_addresses=psutil.net_if_addrs(),
+        interface_stats=psutil.net_if_stats(),
+    )
+
+
+def _select_advertised_host_from_netif_data(
+    *,
+    interface_addresses: dict[str, list[object]],
+    interface_stats: dict[str, object],
+) -> str | None:
+    candidates: list[tuple[int, str, str]] = []
+
+    for interface_name, addresses in interface_addresses.items():
+        interface_stat = interface_stats.get(interface_name)
+        if interface_stat is not None and getattr(interface_stat, "isup", False) is False:
+            continue
+
+        for address_info in addresses:
+            if getattr(address_info, "family", None) != socket.AF_INET:
+                continue
+
+            address = getattr(address_info, "address", "")
+            score = _score_advertised_host_candidate(interface_name, address)
+            if score is None:
+                continue
+            candidates.append((score, interface_name, address))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda candidate: (-candidate[0], candidate[1], candidate[2]))
+    return candidates[0][2]
+
+
+def _discover_advertised_host_via_udp_probe() -> str | None:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe_socket:
             probe_socket.connect(("8.8.8.8", 80))
@@ -384,7 +460,43 @@ def _discover_advertised_host() -> str:
                 return advertised_host
     except OSError:
         pass
-    return "127.0.0.1"
+    return None
+
+
+def _score_advertised_host_candidate(interface_name: str, address: str) -> int | None:
+    try:
+        parsed_address = ipaddress.ip_address(address)
+    except ValueError:
+        return None
+
+    if parsed_address.version != 4:
+        return None
+    if parsed_address.is_loopback or parsed_address.is_link_local or parsed_address.is_multicast or parsed_address.is_unspecified:
+        return None
+    if parsed_address.is_reserved:
+        return None
+    if not parsed_address.is_private and not parsed_address.is_global:
+        return None
+
+    normalized_name = interface_name.lower()
+    if normalized_name.startswith(_EXCLUDED_INTERFACE_PREFIXES):
+        return None
+
+    score = 0
+    if parsed_address.is_private:
+        score += 100
+    else:
+        score += 40
+
+    if normalized_name.startswith(_PREFERRED_INTERFACE_PREFIXES):
+        score += 20
+    else:
+        score += 5
+
+    if normalized_name in {"en0", "en1", "eth0", "wlan0"}:
+        score += 5
+
+    return score
 
 
 def _is_ignorable_socket_disconnect(exc: BaseException) -> bool:
