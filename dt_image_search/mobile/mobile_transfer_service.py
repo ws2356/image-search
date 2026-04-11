@@ -25,11 +25,13 @@ from dt_image_search.mobile.mobile_pairing_store import (
 )
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.tools.dts_event_bus import default_bus
 
 MOBILE_TRANSFER_SCHEMA = "dtis.mobile-transfer.v1"
 MOBILE_TRANSFER_START_PATH = "/api/mobile/transfer/start"
 MOBILE_TRANSFER_ASSET_PATH = "/api/mobile/transfer/asset"
 MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
+MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,12 @@ class MobileTransferService:
                 updated_at=current_time,
             )
 
+        default_bus.publish(
+            MOBILE_TRANSFER_STARTED_EVENT,
+            session_id=request.session_id,
+            device_uuid=request.device_uuid,
+            folder_path=transfer_context.folder_path,
+        )
         log(
             "info",
             message=(

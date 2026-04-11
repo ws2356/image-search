@@ -18,7 +18,14 @@ from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.tools.dts_perf import perffunc
 from dt_image_search.tools.dt_is_debug import is_debug
 from dt_image_search.bm_context import BMContext
-from dt_image_search.tools.dts_util import normalized_folder_path
+
+
+def _folder_path_variants(folder_path: str) -> tuple[str, ...]:
+    normalized_path = folder_path.replace('\\', '/')
+    if normalized_path == "/":
+        return (normalized_path,)
+    trimmed_path = normalized_path.rstrip('/')
+    return (trimmed_path, trimmed_path + '/')
 
 def _sql_logger(statement):
     print("SQL:", statement)
@@ -72,10 +79,18 @@ def get_subfolders(conn, folder_path: str) -> list[Folder]:
     return [Folder(id = row[0], path = row[1], status = row[2], added_at= row[3]) for row in cursor.fetchall()]  # Ensure the query is executed
 
 def get_folder_by_path(conn, folder_path: str) -> Folder:
-    folder_path = normalized_folder_path(folder_path)
-    # Replace '\' with '/' for consistency
-    folder_path = folder_path.replace('\\', '/')
-    cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE path = ?", (folder_path,))
+    folder_path_variants = _folder_path_variants(folder_path)
+    placeholders = ", ".join("?" for _ in folder_path_variants)
+    cursor = conn.execute(
+        f"""
+        SELECT id, path, status, added_at
+        FROM folders
+        WHERE path IN ({placeholders})
+        ORDER BY LENGTH(path) ASC
+        LIMIT 1
+        """,
+        folder_path_variants,
+    )
     row = cursor.fetchone()
     if row:
         return Folder(id=row[0], path=row[1], status=row[2], added_at=row[3])
@@ -86,9 +101,9 @@ def update_folder_status(conn, folder_id: int, status: int):
     conn.commit()
 
 def is_folder_exists(conn, folder_path: str) -> bool:
-    # Replace '\' with '/' for consistency
-    folder_path = normalized_folder_path(folder_path).replace('\\', '/')
-    cursor = conn.execute("SELECT 1 FROM folders WHERE path = ?", (folder_path,))
+    folder_path_variants = _folder_path_variants(folder_path)
+    placeholders = ", ".join("?" for _ in folder_path_variants)
+    cursor = conn.execute(f"SELECT 1 FROM folders WHERE path IN ({placeholders})", folder_path_variants)
     return cursor.fetchone() is not None
 
 def match_parent_folder(conn, path: str) -> Folder:

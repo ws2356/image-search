@@ -6,7 +6,7 @@ from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.dts_db import create_db_conn, insert_folder, match_parent_folder, get_all_folders
+from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_folder_by_path, insert_folder, match_parent_folder
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
@@ -15,7 +15,7 @@ from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.fs.bm_fs_monitor import add_folder, remove_folder
 from dt_image_search.bm_context import BMContext
-from dt_image_search.tools.dts_util import normalized_folder_path
+from dt_image_search.tools.dts_util import is_same_folder_path, normalized_folder_path
 from dt_image_search.tools.dts_event_bus import default_bus
 
 class BrowseController(BaseController):
@@ -55,39 +55,60 @@ class BrowseController(BaseController):
 
     def on_folder_added(self, folder_path: str):
         log("debug", message=f"BrowseController/on_folder_added: adding folder {folder_path}")
+        folder_path = normalized_folder_path(folder_path).replace('\\', '/')
         with create_db_conn(ctx=self.ctx) as conn:
             parent_folder = match_parent_folder(conn, folder_path)
-            if parent_folder:
-                log("debug", message=f"BrowseController/on_folder_added: found parent folder {parent_folder.path}")
-                # Auto-select the newly added folder in the UI
-                folder_item = self.folder_list_model().get_containing_root_folder(parent_folder.path)
-                if folder_item:
-                    log("debug", message=f"BrowseController/on_folder_added: emitting select_folder for parent item {parent_folder.path}")
-                    self._folder_selection_signal.select_folder.emit(folder_item)
-                else:
-                     log("warning", message=f"BrowseController/on_folder_added: parent folder item not found in model for {parent_folder.path}")
-                return
+        if parent_folder and not is_same_folder_path(parent_folder.path, folder_path):
+            log("debug", message=f"BrowseController/on_folder_added: found parent folder {parent_folder.path}")
+            folder_item = self.folder_list_model().find_folder_item(parent_folder.path)
+            if folder_item:
+                log("debug", message=f"BrowseController/on_folder_added: emitting select_folder for parent item {parent_folder.path}")
+                self._folder_selection_signal.select_folder.emit(folder_item)
+            else:
+                log("warning", message=f"BrowseController/on_folder_added: parent folder item not found in model for {parent_folder.path}")
+            return
+        self.ensure_folder_registered(folder_path, insert_if_missing=True)
 
-            folder = insert_folder(conn, folder_path)
+    def ensure_folder_registered(self, folder_path: str, *, insert_if_missing: bool = False) -> None:
+        folder_path = normalized_folder_path(folder_path).replace('\\', '/')
+        with create_db_conn(ctx=self.ctx) as conn:
+            folder = get_folder_by_path(conn, folder_path)
+            if folder is None and insert_if_missing:
+                folder = insert_folder(conn, folder_path)
+                if folder is None:
+                    folder = get_folder_by_path(conn, folder_path)
             if not folder:
-                log("error", message=f"BrowseController/on_folder_added: failed to insert folder {folder_path} into DB")
+                log("error", message=f"BrowseController/ensure_folder_registered: failed to load folder {folder_path} from DB")
                 return
-            log("debug", message=f"BrowseController/on_folder_added: inserted folder {folder.path} into DB with ID {folder.id}")
-            self.folder_list_model().add_root_folder([folder.path])
-            log("debug", message=f"BrowseController/on_folder_added: added root folder to model: {folder.path}")
 
-            log("info", message=f"Inserted folder with ID: {folder.id}")
-            add_index_worker(ctx=self.ctx, folder=folder)
-            log("debug", message=f"BrowseController/on_folder_added: added index worker for {folder.path}")
+        folder_item = self._ensure_folder_visible(folder.path)
+        if folder_item is None:
+            log("warning", message=f"BrowseController/ensure_folder_registered: folder item not found in model for {folder.path}")
+            return
+
+        log("debug", message=f"BrowseController/ensure_folder_registered: emitting select_folder for {folder.path}")
+        self._folder_selection_signal.select_folder.emit(folder_item)
+
+    def _ensure_folder_visible(self, folder_path: str) -> QStandardItem | None:
+        containing_root = self.folder_list_model().get_containing_root_folder(folder_path)
+        if containing_root is None:
+            with create_db_conn(ctx=self.ctx) as conn:
+                folder = get_folder_by_path(conn, folder_path)
+            if folder is None:
+                return None
+            self.folder_list_model().add_root_folder([folder.path])
             add_folder(folder.path)
-            log("debug", message=f"BrowseController/on_folder_added: added folder to FS monitor: {folder.path}")
-        # Auto-select the newly added root folder
-        folder_item = self.folder_list_model().get_containing_root_folder(folder_path)
-        if folder_item:
-            log("debug", message=f"BrowseController/on_folder_added: emitting select_folder for new item {folder_path}")
-            self._folder_selection_signal.select_folder.emit(folder_item)
-        else:
-            log("warning", message=f"BrowseController/on_folder_added: new folder item not found in model for {folder_path}")
+            if folder.status != 2:
+                add_index_worker(ctx=self.ctx, folder=folder)
+            return self.folder_list_model().find_folder_item(folder.path)
+
+        containing_root_path = containing_root.data(Qt.UserRole) or ""
+        if is_same_folder_path(containing_root_path, folder_path):
+            return containing_root
+
+        self.folder_list_model().repopulate_folder_item(folder_path)
+        folder_item = self.folder_list_model().find_folder_item(folder_path)
+        return folder_item or containing_root
 
     def on_folder_selected(self, current: QModelIndex, previous: QModelIndex):
         if not current.isValid():

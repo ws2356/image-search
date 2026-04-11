@@ -20,9 +20,11 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_ASSET_PATH,
     MOBILE_TRANSFER_COMPLETE_PATH,
     MOBILE_TRANSFER_SCHEMA,
+    MOBILE_TRANSFER_STARTED_EVENT,
     MOBILE_TRANSFER_START_PATH,
 )
 from dt_image_search.model.dts_db import create_db_conn
+from dt_image_search.tools.dts_event_bus import default_bus
 
 
 class TestMobileTransferService(unittest.TestCase):
@@ -154,6 +156,39 @@ class TestMobileTransferService(unittest.TestCase):
             ).fetchone()
             self.assertIsNotNone(folder_row)
             self.assertEqual(folder_row["transfer_state"], "transfer_completed")
+
+    def test_start_request_publishes_transfer_started_event(self):
+        pairing_context = self._pair_device()
+        received_events: list[dict[str, object]] = []
+        subscription = default_bus.subscribe(
+            MOBILE_TRANSFER_STARTED_EVENT,
+            lambda **event: received_events.append(event),
+        )
+        self.addCleanup(subscription.dispose)
+
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "total_assets": 3,
+            },
+        )
+
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+        self.assertEqual(
+            received_events,
+            [
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                }
+            ],
+        )
 
     def _pair_device(self) -> dict[str, str]:
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)

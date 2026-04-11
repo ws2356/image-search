@@ -387,10 +387,13 @@ class MobilePairingDialog(QDialog):
             ),
         )
 
+    def accept(self) -> None:
+        self._clock_timer.stop()
+        super().accept()
+
     def reject(self) -> None:
         if self._pairing_service.current_result().state == PairingResultState.ACCEPTED:
-            self._clock_timer.stop()
-            super().accept()
+            self.accept()
             return
         should_close = QMessageBox.question(
             self,

@@ -21,6 +21,8 @@ class FolderTreeModel(QStandardItemModel):
                 continue
             if not self.folder_predicate(path):
                 continue
+            if self.find_folder_item(str(path)) is not None:
+                continue
 
             root_item = QStandardItem(path.name)
             root_item.setData(str(path), Qt.UserRole)
@@ -99,6 +101,15 @@ class FolderTreeModel(QStandardItemModel):
                 return item
         return None
 
+    def find_folder_item(self, folder_path: str) -> QStandardItem | None:
+        target_path = normalized_folder_path(folder_path).replace('\\', '/')
+        for row in range(self.rowCount()):
+            item = self.item(row, 0)
+            matched_item = self._find_folder_item(item, target_path)
+            if matched_item is not None:
+                return matched_item
+        return None
+
     def _populate_subfolders(self, parent_item: QStandardItem, parent_path: Path):
         try:
             for child in sorted(parent_path.iterdir()):
@@ -117,3 +128,15 @@ class FolderTreeModel(QStandardItemModel):
         index = self.indexFromItem(item)
         if index.isValid():
             self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.DecorationRole])
+
+    def _find_folder_item(self, item: QStandardItem | None, target_path: str) -> QStandardItem | None:
+        if item is None:
+            return None
+        item_path = item.data(Qt.UserRole)
+        if item_path and normalized_folder_path(item_path).replace('\\', '/') == target_path:
+            return item
+        for row in range(item.rowCount()):
+            matched_item = self._find_folder_item(item.child(row), target_path)
+            if matched_item is not None:
+                return matched_item
+        return None

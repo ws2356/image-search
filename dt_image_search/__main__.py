@@ -167,19 +167,23 @@ class MainWindow(QMainWindow):
         self._alternativeController = None
         self._mode = _BrowseMode
 
-        self.controller = BrowseController(ctx=self.ctx)
-        self.mobile_folder_coordinator = MobileFolderCoordinator(ctx=self.ctx)
+        self.browse_controller = BrowseController(ctx=self.ctx)
+        self.controller = self.browse_controller
+        self.mobile_folder_coordinator = MobileFolderCoordinator(
+            ctx=self.ctx,
+            on_folder_ready=self._on_mobile_transfer_folder_ready,
+        )
         self.controller.is_active = True  # Set the controller to active state
 
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
-        self.ui.browsePageFolderTreeView.setModel(self.controller.folder_list_model())
+        self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
         self.ui.browsePageFolderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
         self.ui.browsePageFolderTreeView.expanded.connect(self.controller.on_item_expanded)
         self.ui.browsePageFolderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
         self.ui.browsePageFolderTreeView.customContextMenuRequested.connect(self.show_tree_context_menu)
         
         # Connect folder selection signal to auto-select folders in the tree view
-        self.controller.folder_selection_signal.select_folder.connect(self.select_folder_in_tree)
+        self.browse_controller.folder_selection_signal.select_folder.connect(self.select_folder_in_tree)
 
         self.image_list_view.setModel(self.controller.image_list_model())
 
@@ -282,7 +286,7 @@ class MainWindow(QMainWindow):
 
                 self._mode = _BrowseMode
                 self._alternativeController = self.controller
-                self.controller = tmp_controller or BrowseController(ctx=self.ctx)
+                self.controller = tmp_controller or self.browse_controller
                 self._alternativeController.is_active = False  # Deactivate the alternative controller
                 self.controller.is_active = True
                 self.image_list_view.setModel(self.controller.image_list_model())
@@ -319,13 +323,20 @@ class MainWindow(QMainWindow):
 
     def select_folder_in_tree(self, folder_item: QStandardItem):
         """Select and expand to show the specified folder in the tree view."""
-        model = self.controller.folder_list_model()
+        model = self.ui.browsePageFolderTreeView.model()
         
         # Get the model index for the item
         folder_index = model.indexFromItem(folder_item)
         if not folder_index.isValid():
             return
         
+        parent_indexes = []
+        parent_index = folder_index.parent()
+        while parent_index.isValid():
+            parent_indexes.append(parent_index)
+            parent_index = parent_index.parent()
+        for parent_index in reversed(parent_indexes):
+            self.ui.browsePageFolderTreeView.expand(parent_index)
         self.ui.browsePageFolderTreeView.expand(folder_index)
         
         # Select the folder
@@ -337,6 +348,9 @@ class MainWindow(QMainWindow):
         
         from dt_image_search.telemetry.telemetry_client import log
         log("debug", message=f"Auto-selected folder in tree: {folder_item.data(Qt.UserRole)}")
+
+    def _on_mobile_transfer_folder_ready(self, folder_path: str):
+        self.browse_controller.ensure_folder_registered(normalized_folder_path(folder_path))
 
     def on_image_list_context_menu(self, pos):
         index = self.image_list_view.indexAt(pos)
