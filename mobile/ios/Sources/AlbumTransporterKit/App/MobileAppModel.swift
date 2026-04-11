@@ -85,7 +85,7 @@ final class MobileAppModel {
             desktopName: homeSummary.desktopName,
             sessionID: nil,
             transport: nil,
-            message: "Paste the pairing link now, or open the live scanner once camera capture lands. Camera permission should only be requested when the scanner is about to be used."
+            message: "Point the camera at the desktop QR code, or paste the pairing link if you need a fallback."
         )
         route = .scanAndPair
         await telemetryClient.record(event: .scanStarted)

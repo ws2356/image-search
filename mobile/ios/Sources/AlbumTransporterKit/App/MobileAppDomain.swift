@@ -139,7 +139,7 @@ struct PairingStatus: Equatable, Sendable, Codable {
         desktopName: nil,
         sessionID: nil,
         transport: nil,
-        message: "Scan or paste the pairing link shown by the desktop app to begin secure local pairing. Camera permission should only be requested when the live scanner opens."
+        message: "Scan the desktop QR code or paste the pairing link to begin secure local pairing."
     )
 }
 

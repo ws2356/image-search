@@ -27,6 +27,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Album Transporter connects directly to your desktop on the local network during pairing and transfer.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Album Transporter uses the camera to scan the desktop pairing QR code and start a local backup session.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Album Transporter reads your local photos and videos so it can transfer them directly to your paired desktop.</string>
 </dict>

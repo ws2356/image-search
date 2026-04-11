@@ -167,14 +167,51 @@ def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
 def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
     try:
         status_bar_messenger.show_status_message.emit(f"File/folder renaming started...")
+        created_events = []
+        deleted_events = []
+        internal_rename_events = []
+
         with create_db_conn(ctx=ctx) as conn:
             for event in events:
+                src_folder = match_parent_folder(conn, event.src_path)
+                dest_folder = match_parent_folder(conn, event.dest_path)
+                if src_folder and dest_folder:
+                    internal_rename_events.append(event)
+                    continue
+                if dest_folder:
+                    created_events.extend(_created_events_for_moved_path(event.dest_path))
+                    continue
+                if src_folder:
+                    deleted_events.append(_deleted_event_for_moved_path(event.src_path, event.is_directory))
+
+            for event in internal_rename_events:
                 if not rename_file(conn, event.src_path, event.dest_path):
                     rename_files_in_folder(conn, event.src_path, event.dest_path)
+
+        if created_events:
+            _on_created(ctx, created_events)
+        if deleted_events:
+            _on_deleted(ctx, deleted_events)
     except Exception as e:
         log("error", message=f"Error during file/folder renaming handling: {e}")
     finally:
         status_bar_messenger.show_status_message.emit(f"File/folder renaming completed.")
+
+
+def _created_events_for_moved_path(path: str) -> list[watchdog.events.FileCreatedEvent]:
+    if os.path.isdir(path):
+        created_events = []
+        for root, _, file_names in os.walk(path):
+            for file_name in file_names:
+                created_events.append(watchdog.events.FileCreatedEvent(os.path.join(root, file_name)))
+        return created_events
+    return [watchdog.events.FileCreatedEvent(path)]
+
+
+def _deleted_event_for_moved_path(path: str, is_directory: bool) -> watchdog.events.FileSystemEvent:
+    if is_directory:
+        return watchdog.events.DirDeletedEvent(path)
+    return watchdog.events.FileDeletedEvent(path)
 
 _event_buffer = []
 _event_buffer_lock = threading.Lock()

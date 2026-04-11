@@ -31,7 +31,15 @@ struct PairingFlowView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Label("Paste the desktop pairing link until the live QR camera surface lands.", systemImage: "doc.on.clipboard")
+#if os(iOS)
+                        LiveQRCodeScannerCard(
+                            status: status,
+                            scannedQRCodeValue: $scannedQRCodeValue,
+                            onStartPairing: onStartPairing
+                        )
+#endif
+
+                        Label("Point the camera at the desktop QR, or paste the pairing link if you need a fallback.", systemImage: "doc.on.clipboard")
                             .foregroundStyle(.secondary)
 
                         TextField("Paste the desktop pairing link", text: $scannedQRCodeValue, axis: .vertical)

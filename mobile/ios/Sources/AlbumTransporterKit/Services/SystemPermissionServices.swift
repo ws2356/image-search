@@ -1,6 +1,7 @@
 import Foundation
 import Photos
 #if os(iOS)
+import AVFoundation
 import UIKit
 import UserNotifications
 #endif
@@ -8,11 +9,12 @@ import UserNotifications
 struct SystemPermissionService: PermissionService {
     func loadPermissionSummary() async -> PermissionSummary {
         let mediaAuthorization = await currentMediaAuthorization()
+        let cameraGranted = currentCameraAuthorization()
         let notificationsGranted = await currentNotificationAuthorization()
         let batteryState = currentBatteryState()
 
         return PermissionSummary(
-            cameraGranted: false,
+            cameraGranted: cameraGranted,
             notificationsGranted: notificationsGranted,
             mediaScope: permissionScope(for: mediaAuthorization),
             excludedCategoryDescription: excludedCategoryDescription(for: mediaAuthorization),
@@ -62,6 +64,14 @@ struct SystemPermissionService: PermissionService {
         return settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
 #else
         return false
+#endif
+    }
+
+    private func currentCameraAuthorization() -> Bool {
+#if os(iOS)
+        AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+#else
+        false
 #endif
     }
 
