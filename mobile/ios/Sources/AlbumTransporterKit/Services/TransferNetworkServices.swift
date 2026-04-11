@@ -474,6 +474,7 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
 
     private static func preferredResource(for asset: PHAsset) -> PHAssetResource? {
         let resources = PHAssetResource.assetResources(for: asset)
+        // Are we only returning the first resource that match .photo/.fullSizePhoto/.video/.fullSizeVideo? That may picking an ordinary photo or video and miss the fullSize variant?
         return resources.first { resource in
             switch resource.type {
             case .photo, .fullSizePhoto, .video, .fullSizeVideo:
