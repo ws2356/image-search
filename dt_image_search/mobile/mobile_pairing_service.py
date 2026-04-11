@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import errno
 import json
 import secrets
 import socket
@@ -288,37 +289,71 @@ class MobilePairingService:
 
 def _build_handler(service: MobilePairingService) -> type[BaseHTTPRequestHandler]:
     class PairingHandler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:
-            parsed_path = urlparse(self.path)
-            if parsed_path.path != PAIRING_CLAIM_PATH:
-                self._write_json_response(404, {"schema": PAIRING_PROTOCOL_SCHEMA, "status": PairingResultState.REJECTED.value, "message": "Unknown pairing endpoint."})
-                return
-
-            content_length = int(self.headers.get("Content-Length", "0"))
-            raw_payload = self.rfile.read(content_length)
+        def handle_one_request(self) -> None:
             try:
-                request_payload = json.loads(raw_payload.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                self._write_json_response(
-                    400,
-                    {
-                        "schema": PAIRING_PROTOCOL_SCHEMA,
-                        "status": PairingResultState.REJECTED.value,
-                        "message": "Desktop could not parse the pairing request JSON payload.",
-                    },
+                super().handle_one_request()
+            except OSError as exc:
+                if not _is_ignorable_socket_disconnect(exc):
+                    raise
+                self.close_connection = True
+                _try_log(
+                    "debug",
+                    message=(
+                        "MobilePairingService/http: ignoring disconnected client during HTTP request handling "
+                        f"from {self.client_address}: {exc}"
+                    ),
                 )
-                return
 
-            status_code, response_payload = service.handle_pairing_request(request_payload)
-            self._write_json_response(status_code, response_payload)
+        def do_POST(self) -> None:
+            try:
+                parsed_path = urlparse(self.path)
+                if parsed_path.path != PAIRING_CLAIM_PATH:
+                    self._write_json_response(404, {"schema": PAIRING_PROTOCOL_SCHEMA, "status": PairingResultState.REJECTED.value, "message": "Unknown pairing endpoint."})
+                    return
+
+                content_length = int(self.headers.get("Content-Length", "0"))
+                raw_payload = self.rfile.read(content_length)
+                try:
+                    request_payload = json.loads(raw_payload.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    self._write_json_response(
+                        400,
+                        {
+                            "schema": PAIRING_PROTOCOL_SCHEMA,
+                            "status": PairingResultState.REJECTED.value,
+                            "message": "Desktop could not parse the pairing request JSON payload.",
+                        },
+                    )
+                    return
+
+                status_code, response_payload = service.handle_pairing_request(request_payload)
+                self._write_json_response(status_code, response_payload)
+            except Exception as exc:
+                _try_log(
+                    "error",
+                    error_type=type(exc).__name__,
+                    where="mobile_pairing_service.PairingHandler.do_POST",
+                    message=f"Unhandled pairing request error: {exc}",
+                )
+                if not self.wfile.closed:
+                    self._write_json_response(
+                        500,
+                        {
+                            "schema": PAIRING_PROTOCOL_SCHEMA,
+                            "status": PairingResultState.REJECTED.value,
+                            "message": "Desktop failed while processing the pairing request. Retry pairing and check desktop logs if the issue persists.",
+                        },
+                    )
 
         def log_message(self, format: str, *args: object) -> None:
-            _log("debug", message=f"MobilePairingService/http: {format % args}")
+            _try_log("debug", message=f"MobilePairingService/http: {format % args}")
 
         def _write_json_response(self, status_code: int, payload: dict[str, object]) -> None:
             encoded_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+            self.close_connection = True
             self.send_response(status_code)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Connection", "close")
             self.send_header("Content-Length", str(len(encoded_body)))
             self.end_headers()
             self.wfile.write(encoded_body)
@@ -352,6 +387,25 @@ def _discover_advertised_host() -> str:
     return "127.0.0.1"
 
 
+def _is_ignorable_socket_disconnect(exc: BaseException) -> bool:
+    if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+        return True
+    return isinstance(exc, OSError) and exc.errno in {
+        errno.EPIPE,
+        errno.ECONNABORTED,
+        errno.ECONNRESET,
+        errno.ENOTCONN,
+    }
+
+
+def _try_log(severity: str, *, message: str, error_type: str = "", where: str = "") -> None:
+    try:
+        _log(severity, message=message, error_type=error_type, where=where)
+    except Exception:
+        # Pairing HTTP request handling must not fail just because telemetry logging failed.
+        return
+
+
 def _utc_now(now: datetime | None = None) -> datetime:
     if now is None:
         return datetime.now(timezone.utc)
@@ -360,7 +414,7 @@ def _utc_now(now: datetime | None = None) -> datetime:
     return now.astimezone(timezone.utc)
 
 
-def _log(level: str, *, message: str) -> None:
+def _log(level: str, error_type: str = "", message: str = "", where: str = ""):
     from dt_image_search.telemetry.telemetry_client import log
 
-    log(level, message=message)
+    log(severity=level, error_type=error_type, where=where, message=message)

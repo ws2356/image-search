@@ -1,14 +1,23 @@
+import errno
+import http.client
+import json
 import os
 import sys
 import tempfile
 import unittest
 import uuid
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+from urllib.parse import urlsplit
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
-from dt_image_search.mobile.mobile_pairing_service import MobilePairingService, PairingResultState
+from dt_image_search.mobile.mobile_pairing_service import (
+    MobilePairingService,
+    PairingResultState,
+    _is_ignorable_socket_disconnect,
+)
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
 from dt_image_search.model.dts_db import create_db_conn
@@ -132,3 +141,72 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(status_code, 410)
         self.assertEqual(response_payload["status"], "expired")
         self.assertEqual(self._pairing_service.current_result().state, PairingResultState.EXPIRED)
+
+    def test_is_ignorable_socket_disconnect_recognizes_client_disconnect_errors(self):
+        self.assertTrue(_is_ignorable_socket_disconnect(OSError(errno.ENOTCONN, "Socket is not connected")))
+        self.assertTrue(_is_ignorable_socket_disconnect(BrokenPipeError()))
+        self.assertTrue(_is_ignorable_socket_disconnect(ConnectionResetError()))
+        self.assertFalse(_is_ignorable_socket_disconnect(OSError(errno.EINVAL, "Invalid argument")))
+
+    def test_live_pairing_http_endpoint_accepts_request(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+
+        status_code, response_payload = self._post_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-live-http-001",
+                "device_name": "Live HTTP iPhone",
+                "client_nonce": "live-http-nonce-001",
+            }
+        )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(response_payload["status"], "accepted")
+        self.assertEqual(response_payload["session_id"], session.session_id)
+
+    def test_live_pairing_http_endpoint_returns_json_for_unhandled_error(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+
+        with patch.object(self._pairing_service, "handle_pairing_request", side_effect=RuntimeError("boom")):
+            status_code, response_payload = self._post_pairing_request(
+                {
+                    "schema": "dtis.mobile-pairing.v1",
+                    "sid": session.session_id,
+                    "opt": token.one_time_passcode,
+                    "platform": "ios",
+                    "device_uuid": "ios-live-http-err-001",
+                    "device_name": "Live HTTP Error iPhone",
+                    "client_nonce": "live-http-nonce-err-001",
+                }
+            )
+
+        self.assertEqual(status_code, 500)
+        self.assertEqual(response_payload["status"], "rejected")
+        self.assertIn("Desktop failed while processing the pairing request.", response_payload["message"])
+
+    def _post_pairing_request(self, payload: dict[str, str]) -> tuple[int, dict[str, object]]:
+        endpoint = urlsplit(self._pairing_service.endpoint_url)
+        connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
+        try:
+            encoded_payload = json.dumps(payload).encode("utf-8")
+            connection.request(
+                "POST",
+                endpoint.path,
+                body=encoded_payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            response_body = response.read().decode("utf-8")
+            return response.status, json.loads(response_body)
+        finally:
+            connection.close()
