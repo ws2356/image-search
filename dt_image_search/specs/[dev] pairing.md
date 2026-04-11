@@ -101,11 +101,12 @@ The QR value is a universal-link-style URL:
 Query fields:
 
 - `v`: schema version, currently `1`
-- `ept`: `192.168.50.12:38933` (desktop local server host and port)
+- `ept`: comma-separated list of up to 5 filtered desktop endpoint targets, for example `192.168.50.12:38933,10.0.0.8:38933`
 - `sid`: desktop pairing intent / session ID
 - `opt`: 6-digit numeric one-time passcode
 
 Desktop remains authoritative for expiry. MVP does not encode an `expires_at` value into the QR; mobile learns about expiry from the desktop claim response.
+Mobile tries the advertised `ept` targets in order until one reaches the desktop pairing bootstrap service or the desktop returns a non-retryable pairing result.
 
 
 ### 5.2 Mobile -> desktop bootstrap claim

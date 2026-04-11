@@ -109,6 +109,68 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertEqual(result.phase, .expired)
         XCTAssertEqual(result.message, "This QR code expired on desktop. Refresh and scan again.")
     }
+
+    func test_desktop_bootstrap_pairing_service_retries_next_advertised_endpoint() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let bootstrapClient = RetryingPairingBootstrapClient(
+            scriptedResults: [
+                "http://192.168.50.17:38933/api/mobile/pairing/claim": .failure(
+                    .transport(message: "The network connection was lost.")
+                ),
+                "http://10.0.0.5:38933/api/mobile/pairing/claim": .success(
+                    PairingClaimResponse(
+                        schema: PairingProtocol.schema,
+                        status: .accepted,
+                        message: "Pairing accepted for Alice iPhone.",
+                        sessionID: "pairing-demo-001",
+                        desktopDeviceID: "desktop-device-001",
+                        desktopName: "Studio Mac",
+                        deviceUUID: "ios-device-001",
+                        folderID: 1,
+                        folderPath: "/Users/demo/Alice iPhone",
+                        transport: "lan",
+                        pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                        serverNonce: "server-nonce-001"
+                    )
+                ),
+            ]
+        )
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: bootstrapClient,
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentity(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+        let payload = PairingQRCodePayload(
+            schemaVersion: 1,
+            endpointTargets: ["192.168.50.17:38933", "10.0.0.5:38933"],
+            sessionID: "pairing-demo-001",
+            oneTimePasscode: "482913"
+        )
+
+        let result = await service.startPairing(using: payload)
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+        let requestedEndpoints = await bootstrapClient.requestedEndpoints()
+
+        XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(
+            requestedEndpoints,
+            [
+                "http://192.168.50.17:38933/api/mobile/pairing/claim",
+                "http://10.0.0.5:38933/api/mobile/pairing/claim",
+            ]
+        )
+        XCTAssertEqual(
+            trustedDesktop?.endpointURL.absoluteString,
+            "http://10.0.0.5:38933/api/mobile/pairing/claim"
+        )
+    }
 }
 
 private struct StaticPairingBootstrapClient: PairingBootstrapClient {
@@ -120,6 +182,35 @@ private struct StaticPairingBootstrapClient: PairingBootstrapClient {
         XCTAssertEqual(request.oneTimePasscode, PairingQRCodePayload.demo.oneTimePasscode)
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
         return response
+    }
+}
+
+private actor RetryingPairingBootstrapClient: PairingBootstrapClient {
+    private let scriptedResults: [String: Result<PairingClaimResponse, PairingServiceError>]
+    private var endpointLog: [String] = []
+
+    init(scriptedResults: [String: Result<PairingClaimResponse, PairingServiceError>]) {
+        self.scriptedResults = scriptedResults
+    }
+
+    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+        endpointLog.append(endpoint.absoluteString)
+        XCTAssertEqual(request.deviceUUID, "ios-device-001")
+        guard let result = scriptedResults[endpoint.absoluteString] else {
+            XCTFail("Unexpected endpoint \(endpoint.absoluteString)")
+            throw PairingServiceError.transport(message: "Unexpected endpoint.")
+        }
+
+        switch result {
+        case .success(let response):
+            return response
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func requestedEndpoints() -> [String] {
+        endpointLog
     }
 }
 

@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from enum import Enum
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import errno
-import ipaddress
 import json
 import secrets
 import socket
@@ -13,6 +12,7 @@ import threading
 from urllib.parse import urlparse
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.mobile.mobile_pairing_discovery import discover_advertised_hosts
 from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobilePairingToken, MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import (
     derive_pairing_key_b64,
@@ -26,26 +26,6 @@ from dt_image_search.model.dts_db import create_db_conn
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
 PAIRING_CLAIM_PATH = "/api/mobile/pairing/claim"
 PAIRING_TRANSPORT = "lan"
-_PREFERRED_INTERFACE_PREFIXES = ("en", "eth", "wlan", "wl")
-_EXCLUDED_INTERFACE_PREFIXES = (
-    "lo",
-    "utun",
-    "tun",
-    "tap",
-    "ppp",
-    "bridge",
-    "awdl",
-    "llw",
-    "gif",
-    "stf",
-    "docker",
-    "br-",
-    "vboxnet",
-    "vmnet",
-    "tailscale",
-    "wg",
-    "zt",
-)
 
 
 class PairingResultState(str, Enum):
@@ -81,12 +61,13 @@ class MobilePairingService:
     ):
         self._ctx = ctx
         self._listen_host = listen_host
-        self._advertised_host = advertised_host or _discover_advertised_host()
+        self._advertised_host = advertised_host
         self._desktop_name = desktop_name or socket.gethostname()
         self._lock = threading.RLock()
         self._server: _MobilePairingHTTPServer | None = None
         self._server_thread: threading.Thread | None = None
         self._endpoint_url: str | None = None
+        self._endpoint_urls: tuple[str, ...] = tuple()
         self._active_session: MobilePairingSessionDraft | None = None
         self._pairing_result = MobilePairingResult(
             state=PairingResultState.WAITING,
@@ -100,6 +81,13 @@ class MobilePairingService:
             raise RuntimeError("Pairing endpoint URL is not available.")
         return self._endpoint_url
 
+    @property
+    def endpoint_urls(self) -> tuple[str, ...]:
+        self._ensure_server_started()
+        if not self._endpoint_urls:
+            raise RuntimeError("Pairing endpoint URLs are not available.")
+        return self._endpoint_urls
+
     def start_pairing_session(
         self,
         destination_parent: str,
@@ -109,7 +97,7 @@ class MobilePairingService:
         with self._lock:
             self._active_session = MobilePairingSessionDraft.create(
                 destination_parent=destination_parent,
-                desktop_endpoint_url=self.endpoint_url,
+                desktop_endpoint_urls=self.endpoint_urls,
                 now=now,
             )
             self._pairing_result = MobilePairingResult(
@@ -153,6 +141,7 @@ class MobilePairingService:
             self._server = None
             self._server_thread = None
             self._endpoint_url = None
+            self._endpoint_urls = tuple()
             self._active_session = None
 
         if server_to_stop is not None:
@@ -292,7 +281,9 @@ class MobilePairingService:
             handler_class = _build_handler(self)
             self._server = _MobilePairingHTTPServer((self._listen_host, 0), handler_class)
             port = self._server.server_address[1]
-            self._endpoint_url = f"http://{self._advertised_host}:{port}{PAIRING_CLAIM_PATH}"
+            advertised_hosts = _resolve_advertised_hosts(self._advertised_host)
+            self._endpoint_urls = tuple(_format_pairing_endpoint_url(host, port) for host in advertised_hosts)
+            self._endpoint_url = self._endpoint_urls[0]
             self._server_thread = threading.Thread(
                 target=self._server.serve_forever,
                 name="mobile-pairing-bootstrap",
@@ -396,107 +387,17 @@ def _response(
     )
 
 
-def _discover_advertised_host() -> str:
-    interface_host = _discover_advertised_host_from_interfaces()
-    if interface_host:
-        return interface_host
-
-    probe_host = _discover_advertised_host_via_udp_probe()
-    if probe_host and _score_advertised_host_candidate("probe", probe_host) is not None:
-        return probe_host
-
-    if probe_host:
-        return probe_host
-    return "127.0.0.1"
+def _resolve_advertised_hosts(configured_host: str | None) -> tuple[str, ...]:
+    if configured_host:
+        return (configured_host,)
+    return discover_advertised_hosts()
 
 
-def _discover_advertised_host_from_interfaces() -> str | None:
-    try:
-        import psutil
-    except ImportError:
-        return None
-
-    return _select_advertised_host_from_netif_data(
-        interface_addresses=psutil.net_if_addrs(),
-        interface_stats=psutil.net_if_stats(),
-    )
-
-
-def _select_advertised_host_from_netif_data(
-    *,
-    interface_addresses: dict[str, list[object]],
-    interface_stats: dict[str, object],
-) -> str | None:
-    candidates: list[tuple[int, str, str]] = []
-
-    for interface_name, addresses in interface_addresses.items():
-        interface_stat = interface_stats.get(interface_name)
-        if interface_stat is not None and getattr(interface_stat, "isup", False) is False:
-            continue
-
-        for address_info in addresses:
-            if getattr(address_info, "family", None) != socket.AF_INET:
-                continue
-
-            address = getattr(address_info, "address", "")
-            score = _score_advertised_host_candidate(interface_name, address)
-            if score is None:
-                continue
-            candidates.append((score, interface_name, address))
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=lambda candidate: (-candidate[0], candidate[1], candidate[2]))
-    return candidates[0][2]
-
-
-def _discover_advertised_host_via_udp_probe() -> str | None:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe_socket:
-            probe_socket.connect(("8.8.8.8", 80))
-            advertised_host = probe_socket.getsockname()[0]
-            if advertised_host:
-                return advertised_host
-    except OSError:
-        pass
-    return None
-
-
-def _score_advertised_host_candidate(interface_name: str, address: str) -> int | None:
-    try:
-        parsed_address = ipaddress.ip_address(address)
-    except ValueError:
-        return None
-
-    if parsed_address.version != 4:
-        return None
-    if parsed_address.is_loopback or parsed_address.is_link_local or parsed_address.is_multicast or parsed_address.is_unspecified:
-        return None
-    if parsed_address.is_reserved:
-        return None
-    if not parsed_address.is_private and not parsed_address.is_global:
-        return None
-
-    normalized_name = interface_name.lower()
-    if normalized_name.startswith(_EXCLUDED_INTERFACE_PREFIXES):
-        return None
-
-    score = 0
-    if parsed_address.is_private:
-        score += 100
-    else:
-        score += 40
-
-    if normalized_name.startswith(_PREFERRED_INTERFACE_PREFIXES):
-        score += 20
-    else:
-        score += 5
-
-    if normalized_name in {"en0", "en1", "eth0", "wlan0"}:
-        score += 5
-
-    return score
+def _format_pairing_endpoint_url(host: str, port: int) -> str:
+    formatted_host = host
+    if ":" in formatted_host and not formatted_host.startswith("["):
+        formatted_host = f"[{formatted_host}]"
+    return f"http://{formatted_host}:{port}{PAIRING_CLAIM_PATH}"
 
 
 def _is_ignorable_socket_disconnect(exc: BaseException) -> bool:

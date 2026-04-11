@@ -15,7 +15,14 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(request)
 
-        let (data, response) = try await session.data(for: urlRequest)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: urlRequest)
+        } catch {
+            throw PairingServiceError.transport(message: error.localizedDescription)
+        }
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PairingServiceError.invalidHTTPResponse
         }
@@ -75,7 +82,8 @@ struct DesktopBootstrapPairingService: PairingService {
         )
 
         do {
-            let response = try await bootstrapClient.claimPairing(at: payload.bootstrapURL, request: request)
+            let attempt = try await claimPairing(using: payload, request: request)
+            let response = attempt.response
             switch response.status {
             case .accepted:
                 break
@@ -105,7 +113,7 @@ struct DesktopBootstrapPairingService: PairingService {
             let trustedRecord = TrustedDesktopRecord(
                 desktopDeviceID: desktopDeviceID,
                 desktopName: desktopName,
-                endpointURL: payload.bootstrapURL,
+                endpointURL: attempt.endpoint,
                 mobileDeviceUUID: identity.deviceUUID,
                 sharedKeyBase64: sharedKeyBase64,
                 transport: transport,
@@ -140,6 +148,34 @@ struct DesktopBootstrapPairingService: PairingService {
         }
     }
 
+    private func claimPairing(
+        using payload: PairingQRCodePayload,
+        request: PairingClaimRequest
+    ) async throws -> PairingBootstrapAttempt {
+        var retryableError: PairingServiceError?
+
+        // Try each advertised endpoint because desktops may be reachable on only one LAN.
+        for endpoint in payload.bootstrapURLs {
+            do {
+                let response = try await bootstrapClient.claimPairing(at: endpoint, request: request)
+                return PairingBootstrapAttempt(endpoint: endpoint, response: response)
+            } catch let error as PairingServiceError {
+                switch error {
+                case .expired, .rejected:
+                    throw error
+                default:
+                    retryableError = error
+                }
+            } catch {
+                retryableError = .transport(message: error.localizedDescription)
+            }
+        }
+
+        throw retryableError ?? PairingServiceError.transport(
+            message: "Desktop pairing could not reach any advertised endpoint."
+        )
+    }
+
     private func derivePairingKeyBase64(
         payload: PairingQRCodePayload,
         identity: LocalDeviceIdentity,
@@ -160,6 +196,11 @@ struct DesktopBootstrapPairingService: PairingService {
         let digest = SHA256.hash(data: Data(material.utf8))
         return Data(digest).base64URLEncodedString()
     }
+}
+
+private struct PairingBootstrapAttempt {
+    let endpoint: URL
+    let response: PairingClaimResponse
 }
 
 private extension PairingServiceError {

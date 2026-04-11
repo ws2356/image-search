@@ -8,6 +8,8 @@ import secrets
 from urllib.parse import urlencode, urlsplit, urlunsplit
 import uuid
 
+from dt_image_search.mobile.mobile_pairing_discovery import PAIRING_ADVERTISED_HOST_LIMIT
+
 PAIRING_TOKEN_TTL = timedelta(minutes=15)
 PAIRING_QR_SCHEMA_VERSION = 1
 PAIRING_QR_HOST = "dl.boldman.net"
@@ -54,11 +56,15 @@ class MobilePairingToken:
     platform: MobilePlatform
     one_time_passcode: str
     payload: str
-    endpoint_target: str
+    endpoint_targets: tuple[str, ...]
     expires_at: datetime
     refresh_generation: int
     deep_link_url: str
     store_url: str
+
+    @property
+    def endpoint_target(self) -> str:
+        return self.endpoint_targets[0]
 
     def seconds_remaining(self, now: datetime | None = None) -> int:
         remaining = int((self.expires_at - _utc_now(now)).total_seconds())
@@ -71,29 +77,38 @@ class MobilePairingToken:
 @dataclass
 class MobilePairingSessionDraft:
     destination_parent: str
-    desktop_endpoint_url: str
+    desktop_endpoint_urls: tuple[str, ...]
     session_id: str
     created_at: datetime
     tokens: dict[MobilePlatform, MobilePairingToken] = field(default_factory=dict)
+
+    @property
+    def desktop_endpoint_url(self) -> str:
+        return self.desktop_endpoint_urls[0]
 
     @classmethod
     def create(
         cls,
         destination_parent: str,
-        desktop_endpoint_url: str,
+        desktop_endpoint_url: str | None = None,
+        desktop_endpoint_urls: list[str] | tuple[str, ...] | None = None,
         now: datetime | None = None,
     ) -> "MobilePairingSessionDraft":
         current_time = _utc_now(now)
+        normalized_endpoint_urls = _normalize_endpoint_urls(
+            desktop_endpoint_url=desktop_endpoint_url,
+            desktop_endpoint_urls=desktop_endpoint_urls,
+        )
         session = cls(
             destination_parent=_normalize_directory_path(destination_parent),
-            desktop_endpoint_url=desktop_endpoint_url,
+            desktop_endpoint_urls=normalized_endpoint_urls,
             session_id=uuid.uuid4().hex,
             created_at=current_time,
         )
         for platform in MobilePlatform:
             session.tokens[platform] = _new_pairing_token(
                 session_id=session.session_id,
-                desktop_endpoint_url=session.desktop_endpoint_url,
+                desktop_endpoint_urls=session.desktop_endpoint_urls,
                 platform=platform,
                 refresh_generation=0,
                 now=current_time,
@@ -107,7 +122,7 @@ class MobilePairingSessionDraft:
         current_token = self.tokens[platform]
         refreshed_token = _new_pairing_token(
             session_id=self.session_id,
-            desktop_endpoint_url=self.desktop_endpoint_url,
+            desktop_endpoint_urls=self.desktop_endpoint_urls,
             platform=platform,
             refresh_generation=current_token.refresh_generation + 1,
             now=now,
@@ -121,20 +136,20 @@ class MobilePairingSessionDraft:
 
 def _new_pairing_token(
     session_id: str,
-    desktop_endpoint_url: str,
+    desktop_endpoint_urls: tuple[str, ...],
     platform: MobilePlatform,
     refresh_generation: int,
     now: datetime | None = None,
 ) -> MobilePairingToken:
     current_time = _utc_now(now)
     metadata = _PLATFORM_METADATA[platform]
-    endpoint_target = _endpoint_target_from_url(desktop_endpoint_url)
+    endpoint_targets = tuple(_endpoint_target_from_url(endpoint_url) for endpoint_url in desktop_endpoint_urls)
     one_time_passcode = f"{secrets.randbelow(1_000_000):06d}"
     expires_at = current_time + PAIRING_TOKEN_TTL
     payload_query = urlencode(
         {
             "v": str(PAIRING_QR_SCHEMA_VERSION),
-            "ept": endpoint_target,
+            "ept": ",".join(endpoint_targets),
             "sid": session_id,
             "opt": one_time_passcode,
         }
@@ -144,12 +159,39 @@ def _new_pairing_token(
         platform=platform,
         one_time_passcode=one_time_passcode,
         payload=payload,
-        endpoint_target=endpoint_target,
+        endpoint_targets=endpoint_targets,
         expires_at=expires_at,
         refresh_generation=refresh_generation,
         deep_link_url=metadata["deep_link_url"],
         store_url=metadata["store_url"],
     )
+
+
+def _normalize_endpoint_urls(
+    *,
+    desktop_endpoint_url: str | None,
+    desktop_endpoint_urls: list[str] | tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    raw_endpoint_urls: list[str] = []
+    if desktop_endpoint_urls is not None:
+        raw_endpoint_urls.extend(desktop_endpoint_urls)
+    elif desktop_endpoint_url is not None:
+        raw_endpoint_urls.append(desktop_endpoint_url)
+
+    normalized_endpoint_urls: list[str] = []
+    seen_endpoint_urls: set[str] = set()
+    for endpoint_url in raw_endpoint_urls:
+        if not isinstance(endpoint_url, str) or not endpoint_url:
+            raise ValueError("Desktop pairing endpoint URLs must be non-empty strings.")
+        if endpoint_url in seen_endpoint_urls:
+            continue
+        seen_endpoint_urls.add(endpoint_url)
+        normalized_endpoint_urls.append(endpoint_url)
+
+    if not normalized_endpoint_urls:
+        raise ValueError("Desktop pairing requires at least one endpoint URL.")
+
+    return tuple(normalized_endpoint_urls[:PAIRING_ADVERTISED_HOST_LIMIT])
 
 
 def _endpoint_target_from_url(desktop_endpoint_url: str) -> str:

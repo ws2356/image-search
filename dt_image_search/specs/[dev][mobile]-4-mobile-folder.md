@@ -398,6 +398,7 @@ Key update from the earlier draft:
 
 - keep the 6-digit `opt` value for QR bootstrap
 - keep the QR payload to `v`, `ept`, `sid`, and `opt`
+- allow `ept` to advertise up to five filtered LAN endpoint targets so the phone can retry across multi-network desktops
 - keep platform out of the payload because mobile still sends platform in the claim request
 
 This keeps the MVP contract small while still scoping the QR payload strictly to pairing bootstrap.

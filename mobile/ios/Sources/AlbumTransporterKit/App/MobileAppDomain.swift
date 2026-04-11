@@ -144,21 +144,38 @@ struct PairingStatus: Equatable, Sendable, Codable {
 }
 
 struct PairingQRCodePayload: Codable, Equatable, Sendable {
+    static let maxEndpointTargets = 5
+
     var schemaVersion: Int
-    var endpointTarget: String
+    var endpointTargets: [String]
     var sessionID: String
     var oneTimePasscode: String
 
+    var endpointTarget: String {
+        guard let target = endpointTargets.first else {
+            preconditionFailure("Pairing payload must include at least one endpoint target.")
+        }
+        return target
+    }
+
+    var bootstrapURLs: [URL] {
+        let urls = endpointTargets.compactMap(Self.bootstrapURL(for:))
+        guard urls.count == endpointTargets.count, !urls.isEmpty else {
+            preconditionFailure("Invalid pairing endpoint targets: \(endpointTargets)")
+        }
+        return urls
+    }
+
     var bootstrapURL: URL {
-        guard let url = Self.bootstrapURL(for: endpointTarget) else {
-            preconditionFailure("Invalid pairing endpoint target: \(endpointTarget)")
+        guard let url = bootstrapURLs.first else {
+            preconditionFailure("Pairing payload must include at least one bootstrap URL.")
         }
         return url
     }
 
     static let demo = PairingQRCodePayload(
         schemaVersion: 1,
-        endpointTarget: "127.0.0.1:38933",
+        endpointTargets: ["127.0.0.1:38933"],
         sessionID: "pairing-demo-001",
         oneTimePasscode: "482913"
     )
@@ -169,7 +186,7 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
         components.host = "dl.boldman.net"
         components.queryItems = [
             URLQueryItem(name: "v", value: String(demo.schemaVersion)),
-            URLQueryItem(name: "ept", value: demo.endpointTarget),
+            URLQueryItem(name: "ept", value: demo.endpointTargets.joined(separator: ",")),
             URLQueryItem(name: "sid", value: demo.sessionID),
             URLQueryItem(name: "opt", value: demo.oneTimePasscode),
         ]

@@ -227,11 +227,19 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
             return .failure(.invalidSchemaVersion)
         }
 
-        guard let endpointTarget = item(named: "ept") else {
+        guard let endpointTargetsValue = item(named: "ept") else {
             return .failure(.missingField("ept"))
         }
 
-        guard PairingQRCodePayload.bootstrapURL(for: endpointTarget) != nil else {
+        let endpointTargets = endpointTargetsValue
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !endpointTargets.isEmpty,
+              endpointTargets.count <= PairingQRCodePayload.maxEndpointTargets,
+              endpointTargets.allSatisfy({ PairingQRCodePayload.bootstrapURL(for: $0) != nil })
+        else {
             return .failure(.invalidEndpoint)
         }
 
@@ -246,7 +254,7 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
         return .success(
             PairingQRCodePayload(
                 schemaVersion: schemaVersion,
-                endpointTarget: endpointTarget,
+                endpointTargets: endpointTargets,
                 sessionID: sessionID,
                 oneTimePasscode: oneTimePasscode
             )

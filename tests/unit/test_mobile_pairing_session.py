@@ -16,7 +16,10 @@ class TestMobilePairingSession(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             session = MobilePairingSessionDraft.create(
                 temp_dir,
-                desktop_endpoint_url="http://192.168.50.12:38933/api/mobile/pairing/claim",
+                desktop_endpoint_urls=[
+                    "http://192.168.50.12:38933/api/mobile/pairing/claim",
+                    "http://10.0.0.5:38933/api/mobile/pairing/claim",
+                ],
                 now=now,
             )
 
@@ -26,7 +29,7 @@ class TestMobilePairingSession(unittest.TestCase):
         ios_token = session.token_for(MobilePlatform.IOS)
 
         self.assertNotEqual(android_token.one_time_passcode, ios_token.one_time_passcode)
-        self.assertEqual(android_token.endpoint_target, "192.168.50.12:38933")
+        self.assertEqual(android_token.endpoint_targets, ("192.168.50.12:38933", "10.0.0.5:38933"))
         self.assertEqual(android_token.expires_at, now + timedelta(minutes=15))
 
         payload_components = urlsplit(android_token.payload)
@@ -35,7 +38,7 @@ class TestMobilePairingSession(unittest.TestCase):
         self.assertEqual(payload_components.scheme, "https")
         self.assertEqual(payload_components.netloc, "dl.boldman.net")
         self.assertEqual(payload_query["v"][0], "1")
-        self.assertEqual(payload_query["ept"][0], "192.168.50.12:38933")
+        self.assertEqual(payload_query["ept"][0], "192.168.50.12:38933,10.0.0.5:38933")
         self.assertEqual(payload_query["sid"][0], session.session_id)
         self.assertEqual(payload_query["opt"][0], android_token.one_time_passcode)
 
@@ -64,6 +67,32 @@ class TestMobilePairingSession(unittest.TestCase):
         session.set_destination_parent(".")
 
         self.assertTrue(session.destination_parent.endswith("/image-search"))
+
+    def test_create_limits_endpoint_targets_to_five(self):
+        endpoint_urls = [
+            "http://192.168.50.12:38933/api/mobile/pairing/claim",
+            "http://10.0.0.5:38933/api/mobile/pairing/claim",
+            "http://10.0.0.6:38933/api/mobile/pairing/claim",
+            "http://10.0.0.7:38933/api/mobile/pairing/claim",
+            "http://10.0.0.8:38933/api/mobile/pairing/claim",
+            "http://10.0.0.9:38933/api/mobile/pairing/claim",
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = MobilePairingSessionDraft.create(
+                temp_dir,
+                desktop_endpoint_urls=endpoint_urls,
+            )
+
+        self.assertEqual(
+            session.token_for(MobilePlatform.IOS).endpoint_targets,
+            (
+                "192.168.50.12:38933",
+                "10.0.0.5:38933",
+                "10.0.0.6:38933",
+                "10.0.0.7:38933",
+                "10.0.0.8:38933",
+            ),
+        )
 
 
 if __name__ == '__main__':

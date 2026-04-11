@@ -35,6 +35,24 @@ except Exception:
     qrcode = None
 
 
+def _endpoint_target_summary(endpoint_targets: tuple[str, ...]) -> str:
+    primary_target = endpoint_targets[0]
+    if len(endpoint_targets) == 1:
+        return primary_target
+    return f"{primary_target} +{len(endpoint_targets) - 1} more"
+
+
+def _endpoint_urls_detail(endpoint_urls: tuple[str, ...]) -> str:
+    if len(endpoint_urls) == 1:
+        endpoint_heading = f"Desktop endpoint: {endpoint_urls[0]}"
+    else:
+        endpoint_heading = "Desktop endpoints:\n" + "\n".join(endpoint_urls)
+    return (
+        f"{endpoint_heading}\n"
+        "Destination folder will be resolved after the mobile device identity is accepted."
+    )
+
+
 class SourceSelectionDialog(QDialog):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -180,7 +198,9 @@ class PairingQrCard(QFrame):
         self._token = token
         pixmap = _render_qr_pixmap(token.payload, size=220)
         self.qr_label.setPixmap(pixmap)
-        self.token_label.setText(f"OPT {token.one_time_passcode} · endpoint {token.endpoint_target}")
+        self.token_label.setText(
+            f"OPT {token.one_time_passcode} · endpoints {_endpoint_target_summary(token.endpoint_targets)}"
+        )
         self.update_clock(datetime.now(token.expires_at.tzinfo))
 
     def update_clock(self, now: datetime) -> None:
@@ -227,7 +247,7 @@ class MobilePairingDialog(QDialog):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "Keep the desktop pairing window open while the mobile app claims the session. Each QR now carries only the live endpoint target, session ID, and one-time passcode needed for bootstrap."
+            "Keep the desktop pairing window open while the mobile app claims the session. Each QR carries up to five filtered LAN endpoints plus the session ID and one-time passcode needed for bootstrap."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #4b5563;")
@@ -265,7 +285,7 @@ class MobilePairingDialog(QDialog):
         layout.addLayout(qr_row)
 
         helper_text = QLabel(
-            "Use the companion app to scan or paste the platform-specific QR link. Each code carries a distinct 6-digit OPT and expires independently after fifteen minutes."
+            "Use the companion app to scan or paste the platform-specific QR link. Each code carries a distinct 6-digit OPT, can advertise up to five LAN endpoints, and expires independently after fifteen minutes."
         )
         helper_text.setWordWrap(True)
         helper_text.setStyleSheet("color: #4b5563;")
@@ -276,9 +296,7 @@ class MobilePairingDialog(QDialog):
         self.session_status_label.setStyleSheet("font-weight: 600; color: #1f2937;")
         layout.addWidget(self.session_status_label)
 
-        self.session_details_label = QLabel(
-            f"Desktop endpoint: {pairing_service.endpoint_url}\nDestination folder will be resolved after the mobile device identity is accepted."
-        )
+        self.session_details_label = QLabel(_endpoint_urls_detail(pairing_service.endpoint_urls))
         self.session_details_label.setWordWrap(True)
         self.session_details_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.session_details_label.setStyleSheet("color: #4b5563;")
@@ -346,9 +364,7 @@ class MobilePairingDialog(QDialog):
             return
 
         self.session_status_label.setText(pairing_result.message)
-        self.session_details_label.setText(
-            f"Desktop endpoint: {self._pairing_service.endpoint_url}\nDestination folder will be resolved after the mobile device identity is accepted."
-        )
+        self.session_details_label.setText(_endpoint_urls_detail(self._pairing_service.endpoint_urls))
         self.session_status_label.setStyleSheet("font-weight: 600; color: #1f2937;")
         self.change_button.setEnabled(True)
         self.close_button.setText("Close")
