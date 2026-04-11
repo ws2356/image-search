@@ -33,7 +33,7 @@ from dt_image_search.tools.dts_util import normalized_folder_path
 def index_path_for_folder(ctx: BMContext, folder: Folder):
     return f"{get_app_data_path(ctx)}/{folder.id}.faiss"
 
-_supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".heic")
+_supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".heic", ".heif")
 
 def is_image_file(file_path: str) -> bool:
     file_path = file_path.lower() if file_path else ""

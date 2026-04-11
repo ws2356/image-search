@@ -79,6 +79,55 @@ final class TransferServiceTests: XCTestCase {
             "No paired desktop record is available for transfer."
         )
     }
+
+    func test_photo_library_transfer_service_points_failed_assets_to_device_logs() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.HEIC",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-002",
+                    assetVersion: "v2",
+                    filename: "IMG_0002.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_710),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_710)
+                ),
+            ],
+            failingAssetIDs: ["ph://asset-002"]
+        )
+        let transferClient = RecordingMobileTransferClient()
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer()
+
+        XCTAssertEqual(snapshot.transferredCount, 1)
+        XCTAssertEqual(snapshot.totalCount, 2)
+        XCTAssertEqual(snapshot.failedCount, 1)
+        XCTAssertTrue(snapshot.guidanceMessage.contains("MobileTransfer device logs"))
+    }
 }
 
 private actor InMemoryTransferTrustedDesktopStore: TrustedDesktopStore {
@@ -154,9 +203,11 @@ private actor RecordingMobileTransferClient: MobileTransferClient {
 
 private actor StaticTransferAssetSource: TransferAssetSource {
     private let descriptors: [TransferAssetDescriptor]
+    private let failingAssetIDs: Set<String>
 
-    init(descriptors: [TransferAssetDescriptor]) {
+    init(descriptors: [TransferAssetDescriptor], failingAssetIDs: Set<String> = []) {
         self.descriptors = descriptors
+        self.failingAssetIDs = failingAssetIDs
     }
 
     func fetchAssets() async throws -> [TransferAssetDescriptor] {
@@ -164,6 +215,9 @@ private actor StaticTransferAssetSource: TransferAssetSource {
     }
 
     func exportAsset(_ descriptor: TransferAssetDescriptor) async throws -> ExportedTransferAsset {
+        if failingAssetIDs.contains(descriptor.assetID) {
+            throw TransferClientError.transport(message: "Synthetic export failure for tests.")
+        }
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString.lowercased())
             .appendingPathExtension((descriptor.filename as NSString).pathExtension)

@@ -140,7 +140,7 @@ class FolderBasedNavigator(ImageNavigator):
             return
         
         # Get all image files in the same directory
-        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
+        image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp', '.heic', '.heif'}
         folder = self.current_path.parent
         
         image_files = []

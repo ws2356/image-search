@@ -2,10 +2,9 @@ import threading
 from PySide6.QtCore import QRunnable, Signal, QObject, Qt
 from PySide6.QtGui import QImage
 from dt_image_search.telemetry.telemetry_client import log
-from PIL import Image, ImageFile
+from PIL import Image
 
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-Image.MAX_IMAGE_PIXELS = None
+from dt_image_search.pil_image_support import open_pil_image
 
 class ThumbnailJobSignals(QObject):
     finished = Signal(str, QImage)  # path and icon
@@ -22,7 +21,7 @@ class ThumbnailJob(QRunnable):
         image = QImage()
         try:
             target_size = (self.icon_size.width(), self.icon_size.height())
-            with Image.open(self.path) as pil_image:
+            with open_pil_image(self.path) as pil_image:
                 # Hint decoders (e.g. JPEG) to avoid full-resolution decode when possible.
                 try:
                     pil_image.draft("RGBA", target_size)

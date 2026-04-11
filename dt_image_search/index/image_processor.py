@@ -3,13 +3,10 @@ Separate module for image processing workers to avoid GUI import issues.
 """
 import torch
 import open_clip
-from PIL import Image, ImageFile
+from PIL import Image
 from dt_image_search.bm_context import BMContext
 from dt_image_search.telemetry.telemetry_client import log, with_trace
-
-# Allow loading of truncated images
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-Image.MAX_IMAGE_PIXELS = None
+from dt_image_search.pil_image_support import open_pil_image
 
 _MAX_EMBEDDING_IMAGE_DIM = 4096
 
@@ -47,7 +44,7 @@ def process_image_batch(files):
     for file in files:
         file_path = file.path
         try:
-            with Image.open(file_path) as image:
+            with open_pil_image(file_path) as image:
                 # Hint decoders (e.g. JPEG) to avoid full-resolution decode when possible.
                 try:
                     image.draft("RGB", (_MAX_EMBEDDING_IMAGE_DIM, _MAX_EMBEDDING_IMAGE_DIM))
