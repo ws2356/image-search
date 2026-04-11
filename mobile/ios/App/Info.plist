@@ -27,5 +27,7 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Album Transporter connects directly to your desktop on the local network during pairing and transfer.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Album Transporter reads your local photos and videos so it can transfer them directly to your paired desktop.</string>
 </dict>
 </plist>

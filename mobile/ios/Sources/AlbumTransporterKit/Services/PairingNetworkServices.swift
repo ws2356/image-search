@@ -13,6 +13,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        urlRequest.timeoutInterval = 5
         urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(request)
 
         let data: Data

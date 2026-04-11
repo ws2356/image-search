@@ -195,7 +195,7 @@ struct TransferSessionView: View {
                         Button("Stop", role: .destructive, action: onStop)
                             .buttonStyle(.borderedProminent)
 
-                        Button("Simulate Desktop Completion", action: onSimulateCompletion)
+                        Button("Finish Backup", action: onSimulateCompletion)
                             .buttonStyle(.bordered)
                     }
                 }

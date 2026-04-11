@@ -179,8 +179,9 @@ final class MobileAppModel {
     }
 
     func resumeTransfer() async {
-        transferSnapshot = await transferService.resumeTransfer(from: transferSnapshot)
         route = .transfer
+        transferSnapshot.statusMessage = "Resuming the backup with the paired desktop."
+        transferSnapshot = await transferService.resumeTransfer(from: transferSnapshot)
 
         await telemetryClient.record(event: .resumeTapped)
         await persistSnapshot()
@@ -209,9 +210,20 @@ final class MobileAppModel {
     }
 
     private func startTransfer() async {
-        transferSnapshot = await transferService.startTransfer()
         route = .transfer
+        transferSnapshot = TransferSnapshot(
+            transferredCount: 0,
+            totalCount: 0,
+            failedCount: 0,
+            transport: pairingStatus.transport ?? .lan,
+            etaDescription: nil,
+            statusMessage: "Preparing the local media backup with the paired desktop.",
+            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
+            isIncompleteLibrary: permissionSummary.mediaScope != .full
+        )
         await telemetryClient.record(event: .transferStarted)
+        await persistSnapshot()
+        transferSnapshot = await transferService.startTransfer()
         await persistSnapshot()
     }
 

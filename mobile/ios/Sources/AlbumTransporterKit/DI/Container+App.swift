@@ -38,12 +38,18 @@ extension Container {
     }
 
     var permissionService: Factory<PermissionService> {
-        self { DemoPermissionService() }
+        self { SystemPermissionService() }
             .singleton
     }
 
     var transferService: Factory<TransferService> {
-        self { DemoTransferService() }
+        self {
+            PhotoLibraryTransferService(
+                assetSource: PhotoLibraryAssetSource(),
+                transferClient: URLSessionMobileTransferClient(),
+                trustedDesktopStore: self.trustedDesktopStore()
+            )
+        }
             .singleton
     }
 

@@ -9,7 +9,7 @@ import json
 import secrets
 import socket
 import threading
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_discovery import discover_advertised_hosts
@@ -20,6 +20,13 @@ from dt_image_search.mobile.mobile_pairing_store import (
     get_or_create_mobile_folder,
     insert_mobile_backup_session,
     upsert_mobile_device,
+)
+from dt_image_search.mobile.mobile_transfer_service import (
+    MOBILE_TRANSFER_ASSET_PATH,
+    MOBILE_TRANSFER_COMPLETE_PATH,
+    MOBILE_TRANSFER_START_PATH,
+    MobileTransferService,
+    decode_transfer_asset_metadata,
 )
 from dt_image_search.model.dts_db import create_db_conn
 
@@ -69,6 +76,7 @@ class MobilePairingService:
         self._endpoint_url: str | None = None
         self._endpoint_urls: tuple[str, ...] = tuple()
         self._active_session: MobilePairingSessionDraft | None = None
+        self._transfer_service = MobileTransferService(ctx)
         self._pairing_result = MobilePairingResult(
             state=PairingResultState.WAITING,
             message="Scan the QR code from the mobile app to begin pairing.",
@@ -319,27 +327,86 @@ def _build_handler(service: MobilePairingService) -> type[BaseHTTPRequestHandler
         def do_POST(self) -> None:
             try:
                 parsed_path = urlparse(self.path)
+                if parsed_path.path == PAIRING_CLAIM_PATH:
+                    request_payload = self._read_json_payload(
+                        schema=PAIRING_PROTOCOL_SCHEMA,
+                        status=PairingResultState.REJECTED.value,
+                        parse_error_message="Desktop could not parse the pairing request JSON payload.",
+                        object_error_message="Desktop requires JSON object payloads for pairing requests.",
+                    )
+                    if request_payload is None:
+                        return
+
+                    status_code, response_payload = service.handle_pairing_request(request_payload)
+                    self._write_json_response(status_code, response_payload)
+                    return
+
+                if parsed_path.path == MOBILE_TRANSFER_START_PATH:
+                    request_payload = self._read_json_payload(
+                        schema="dtis.mobile-transfer.v1",
+                        status="rejected",
+                        parse_error_message="Desktop could not parse the transfer request JSON payload.",
+                        object_error_message="Desktop requires JSON object payloads for transfer requests.",
+                    )
+                    if request_payload is None:
+                        return
+
+                    status_code, response_payload = service._transfer_service.handle_start_request(request_payload)
+                    self._write_json_response(status_code, response_payload)
+                    return
+
+                if parsed_path.path == MOBILE_TRANSFER_COMPLETE_PATH:
+                    request_payload = self._read_json_payload(
+                        schema="dtis.mobile-transfer.v1",
+                        status="rejected",
+                        parse_error_message="Desktop could not parse the transfer completion JSON payload.",
+                        object_error_message="Desktop requires JSON object payloads for transfer completion requests.",
+                    )
+                    if request_payload is None:
+                        return
+
+                    status_code, response_payload = service._transfer_service.handle_complete_request(request_payload)
+                    self._write_json_response(status_code, response_payload)
+                    return
+
+                if parsed_path.path == MOBILE_TRANSFER_ASSET_PATH:
+                    query_parameters = parse_qs(parsed_path.query, keep_blank_values=False)
+                    encoded_metadata = query_parameters.get("meta", [None])[0]
+                    if not encoded_metadata:
+                        self._write_json_response(
+                            400,
+                            {
+                                "schema": "dtis.mobile-transfer.v1",
+                                "status": "rejected",
+                                "message": "Desktop did not receive the transfer asset metadata.",
+                            },
+                        )
+                        return
+                    try:
+                        metadata_payload = decode_transfer_asset_metadata(encoded_metadata)
+                    except (OSError, ValueError, json.JSONDecodeError):
+                        self._write_json_response(
+                            400,
+                            {
+                                "schema": "dtis.mobile-transfer.v1",
+                                "status": "rejected",
+                                "message": "Desktop could not parse the transfer asset metadata.",
+                            },
+                        )
+                        return
+
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    status_code, response_payload = service._transfer_service.handle_asset_upload(
+                        metadata_payload=metadata_payload,
+                        body_stream=self.rfile,
+                        content_length=content_length,
+                    )
+                    self._write_json_response(status_code, response_payload)
+                    return
+
                 if parsed_path.path != PAIRING_CLAIM_PATH:
                     self._write_json_response(404, {"schema": PAIRING_PROTOCOL_SCHEMA, "status": PairingResultState.REJECTED.value, "message": "Unknown pairing endpoint."})
                     return
-
-                content_length = int(self.headers.get("Content-Length", "0"))
-                raw_payload = self.rfile.read(content_length)
-                try:
-                    request_payload = json.loads(raw_payload.decode("utf-8"))
-                except (UnicodeDecodeError, json.JSONDecodeError):
-                    self._write_json_response(
-                        400,
-                        {
-                            "schema": PAIRING_PROTOCOL_SCHEMA,
-                            "status": PairingResultState.REJECTED.value,
-                            "message": "Desktop could not parse the pairing request JSON payload.",
-                        },
-                    )
-                    return
-
-                status_code, response_payload = service.handle_pairing_request(request_payload)
-                self._write_json_response(status_code, response_payload)
             except Exception as exc:
                 _try_log(
                     "error",
@@ -359,6 +426,41 @@ def _build_handler(service: MobilePairingService) -> type[BaseHTTPRequestHandler
 
         def log_message(self, format: str, *args: object) -> None:
             _try_log("debug", message=f"MobilePairingService/http: {format % args}")
+
+        def _read_json_payload(
+            self,
+            *,
+            schema: str,
+            status: str,
+            parse_error_message: str,
+            object_error_message: str,
+        ) -> dict[str, object] | None:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            raw_payload = self.rfile.read(content_length)
+            try:
+                request_payload = json.loads(raw_payload.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._write_json_response(
+                    400,
+                    {
+                        "schema": schema,
+                        "status": status,
+                        "message": parse_error_message,
+                    },
+                )
+                return None
+
+            if not isinstance(request_payload, dict):
+                self._write_json_response(
+                    400,
+                    {
+                        "schema": schema,
+                        "status": status,
+                        "message": object_error_message,
+                    },
+                )
+                return None
+            return request_payload
 
         def _write_json_response(self, status_code: int, payload: dict[str, object]) -> None:
             encoded_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")

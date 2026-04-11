@@ -429,6 +429,12 @@ The likely implementation surface is:
 - `dt_image_search/model/dts_db.py`
 - `dt_image_search/model/db_schema.sql`
 
+Current MVP transport slice:
+
+- The desktop reuses the pairing HTTP server and now exposes `/api/mobile/transfer/start`, `/api/mobile/transfer/asset`, and `/api/mobile/transfer/complete`.
+- Transfer requests are authenticated with the paired trust key already derived during pairing acceptance.
+- Uploaded assets land in `YYYY-MM` subfolders beneath the paired mobile folder, and `mobile_assets` tracks remote asset ID/version plus the local relative path for repeat-backup skipping.
+
 Probable new modules:
 
 - `dt_image_search/mobile/mobile_session_manager.py`

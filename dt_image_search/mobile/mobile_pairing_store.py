@@ -13,6 +13,12 @@ from dt_image_search.model.dts_db import get_config, insert_folder, set_config
 
 MOBILE_PAIRING_DESKTOP_DEVICE_ID_KEY = "mobile_pairing_desktop_device_id"
 MOBILE_TRANSFER_STATE_PAIRED = "paired"
+MOBILE_TRANSFER_STATE_TRANSFERRING = "transferring"
+MOBILE_TRANSFER_STATE_COMPLETED = "transfer_completed"
+MOBILE_TRANSFER_STATE_FAILED = "failed"
+MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING = "transferring"
+MOBILE_BACKUP_SESSION_STATUS_COMPLETED = "completed"
+MOBILE_BACKUP_SESSION_STATUS_FAILED = "failed"
 
 _MOBILE_PAIRING_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS mobile_devices (
@@ -43,6 +49,15 @@ CREATE TABLE IF NOT EXISTS mobile_backup_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_mobile_backup_sessions_device_started_at
 ON mobile_backup_sessions(device_uuid, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS mobile_assets (
+    device_uuid TEXT NOT NULL REFERENCES mobile_devices(device_uuid),
+    remote_asset_id TEXT NOT NULL,
+    remote_asset_version TEXT,
+    local_relative_path TEXT NOT NULL,
+    last_transferred_at TEXT NOT NULL,
+    PRIMARY KEY (device_uuid, remote_asset_id)
+);
 """
 
 
@@ -51,6 +66,15 @@ class MobileFolderRecord:
     folder_id: int
     folder_path: str
     reused_existing: bool
+
+
+@dataclass(frozen=True)
+class MobileTransferContext:
+    session_id: str
+    device_uuid: str
+    folder_id: int
+    folder_path: str
+    trust_key_b64: str
 
 
 def ensure_mobile_pairing_schema(conn: sqlite3.Connection) -> None:
@@ -202,6 +226,126 @@ def insert_mobile_backup_session(
         ) VALUES (?, ?, ?, ?, ?, ?)
         """,
         (session_id, device_uuid, folder_id, status, started_at.isoformat(), paired_at.isoformat()),
+    )
+    conn.commit()
+
+
+def get_mobile_transfer_context(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    device_uuid: str,
+    trust_key_b64: str,
+) -> MobileTransferContext | None:
+    row = conn.execute(
+        """
+        SELECT
+            mobile_backup_sessions.session_id AS session_id,
+            mobile_backup_sessions.device_uuid AS device_uuid,
+            mobile_backup_sessions.folder_id AS folder_id,
+            folders.path AS folder_path,
+            mobile_devices.trust_key_b64 AS trust_key_b64
+        FROM mobile_backup_sessions
+        JOIN mobile_devices ON mobile_devices.device_uuid = mobile_backup_sessions.device_uuid
+        JOIN folders ON folders.id = mobile_backup_sessions.folder_id
+        WHERE mobile_backup_sessions.session_id = ?
+          AND mobile_backup_sessions.device_uuid = ?
+        """,
+        (session_id, device_uuid),
+    ).fetchone()
+    if row is None:
+        return None
+    if row["trust_key_b64"] != trust_key_b64:
+        return None
+    return MobileTransferContext(
+        session_id=row["session_id"],
+        device_uuid=row["device_uuid"],
+        folder_id=int(row["folder_id"]),
+        folder_path=row["folder_path"],
+        trust_key_b64=row["trust_key_b64"],
+    )
+
+
+def get_mobile_asset_record(
+    conn: sqlite3.Connection,
+    *,
+    device_uuid: str,
+    remote_asset_id: str,
+):
+    return conn.execute(
+        """
+        SELECT device_uuid, remote_asset_id, remote_asset_version, local_relative_path, last_transferred_at
+        FROM mobile_assets
+        WHERE device_uuid = ? AND remote_asset_id = ?
+        """,
+        (device_uuid, remote_asset_id),
+    ).fetchone()
+
+
+def upsert_mobile_asset_record(
+    conn: sqlite3.Connection,
+    *,
+    device_uuid: str,
+    remote_asset_id: str,
+    remote_asset_version: str | None,
+    local_relative_path: str,
+    last_transferred_at: datetime,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO mobile_assets (
+            device_uuid,
+            remote_asset_id,
+            remote_asset_version,
+            local_relative_path,
+            last_transferred_at
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(device_uuid, remote_asset_id) DO UPDATE SET
+            remote_asset_version = excluded.remote_asset_version,
+            local_relative_path = excluded.local_relative_path,
+            last_transferred_at = excluded.last_transferred_at
+        """,
+        (
+            device_uuid,
+            remote_asset_id,
+            remote_asset_version,
+            local_relative_path,
+            last_transferred_at.isoformat(),
+        ),
+    )
+    conn.commit()
+
+
+def update_mobile_transfer_state(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    device_uuid: str,
+    session_status: str,
+    folder_transfer_state: str,
+    updated_at: datetime,
+    ended_at: datetime | None = None,
+) -> None:
+    conn.execute(
+        """
+        UPDATE mobile_backup_sessions
+        SET status = ?, ended_at = COALESCE(?, ended_at)
+        WHERE session_id = ? AND device_uuid = ?
+        """,
+        (
+            session_status,
+            ended_at.isoformat() if ended_at is not None else None,
+            session_id,
+            device_uuid,
+        ),
+    )
+    conn.execute(
+        """
+        UPDATE mobile_folders
+        SET transfer_state = ?, transfer_state_updated_at = ?
+        WHERE device_uuid = ?
+        """,
+        (folder_transfer_state, updated_at.isoformat(), device_uuid),
     )
     conn.commit()
 

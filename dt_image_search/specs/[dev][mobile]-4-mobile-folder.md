@@ -310,6 +310,12 @@ Responsibilities:
 - resume from the last resumable marker
 - finalize only after desktop confirms completion
 
+Current MVP transport slice:
+
+- export accessible PhotoKit assets one at a time to temporary files
+- upload each asset over LAN to the paired desktop using the trusted desktop record from pairing
+- ask desktop to mark the session complete once the current upload batch finishes
+
 #### E. App state store
 
 Responsibilities:
