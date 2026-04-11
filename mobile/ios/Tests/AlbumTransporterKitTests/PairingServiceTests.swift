@@ -3,6 +3,33 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class PairingServiceTests: XCTestCase {
+    func test_pairing_decoder_accepts_fractional_second_response_dates() throws {
+        let responseData = """
+        {
+          "schema": "dtis.mobile-pairing.v1",
+          "status": "accepted",
+          "message": "Pairing accepted for Alice iPhone.",
+          "session_id": "pairing-demo-001",
+          "desktop_device_id": "desktop-device-001",
+          "desktop_name": "Studio Mac",
+          "device_uuid": "ios-device-001",
+          "folder_id": 1,
+          "folder_path": "/Users/demo/Alice iPhone",
+          "transport": "lan",
+          "paired_at": "2026-04-10T16:23:04.577047+00:00",
+          "server_nonce": "server-nonce-001"
+        }
+        """.data(using: .utf8)!
+
+        let decodedResponse = try JSONDecoder.pairingDecoder.decode(PairingClaimResponse.self, from: responseData)
+
+        XCTAssertEqual(decodedResponse.schema, PairingProtocol.schema)
+        XCTAssertEqual(decodedResponse.status, .accepted)
+        XCTAssertEqual(decodedResponse.sessionID, "pairing-demo-001")
+        XCTAssertEqual(decodedResponse.desktopName, "Studio Mac")
+        XCTAssertEqual(decodedResponse.pairedAt?.timeIntervalSince1970 ?? 0, 1_775_838_184.577, accuracy: 0.001)
+    }
+
     func test_desktop_bootstrap_pairing_service_persists_trusted_desktop_record() async {
         let trustedDesktopStore = InMemoryTrustedDesktopStore()
         let service = DesktopBootstrapPairingService(

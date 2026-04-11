@@ -258,7 +258,7 @@ class MobilePairingService:
                     "folder_id": folder_record.folder_id,
                     "folder_path": folder_record.folder_path,
                     "transport": PAIRING_TRANSPORT,
-                    "paired_at": current_time.isoformat(),
+                    "paired_at": current_time.isoformat(timespec="seconds"),
                     "server_nonce": server_nonce,
                 },
             )

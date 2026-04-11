@@ -72,6 +72,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(response_payload["device_uuid"], "ios-device-001")
         self.assertEqual(response_payload["transport"], "lan")
         self.assertTrue(response_payload["folder_path"].endswith("/Alice iPhone"))
+        self.assertNotIn(".", response_payload["paired_at"])
 
         pairing_result = self._pairing_service.current_result()
         self.assertEqual(pairing_result.state, PairingResultState.ACCEPTED)
