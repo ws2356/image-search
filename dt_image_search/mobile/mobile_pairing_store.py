@@ -83,11 +83,12 @@ def ensure_mobile_pairing_schema(conn: sqlite3.Connection) -> None:
 
 
 def get_or_create_desktop_device_id(conn: sqlite3.Connection) -> str:
+    from dt_image_search.model.dt_device_id import get_device_id
     existing_value = get_config(conn, MOBILE_PAIRING_DESKTOP_DEVICE_ID_KEY)
     if existing_value:
         return existing_value
 
-    desktop_device_id = uuid.uuid4().hex
+    desktop_device_id = uuid.UUID(get_device_id()).hex
     set_config(conn, MOBILE_PAIRING_DESKTOP_DEVICE_ID_KEY, desktop_device_id)
     return desktop_device_id
 
