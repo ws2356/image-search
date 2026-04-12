@@ -4,11 +4,15 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtWidgets import QFileDialog, QWidget
+from PySide6.QtWidgets import QWidget
 
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.bm_context import BMContext
-from dt_image_search.mobile.mobile_dialogs import MobilePairingDialog, SourceSelectionDialog
+from dt_image_search.mobile.mobile_dialogs import (
+    MobilePairingDialog,
+    ParentFolderSelectionDialog,
+    SourceSelectionDialog,
+)
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService, PairingResultState
 from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobileSourceType
 from dt_image_search.mobile.mobile_transfer_service import MOBILE_TRANSFER_STARTED_EVENT
@@ -70,15 +74,17 @@ class MobileFolderCoordinator(QObject):
         return pairing_session
 
     def _choose_destination_parent(self, parent: QWidget | None = None) -> str | None:
-        initial_directory = self._last_destination_parent() or Path.home().as_posix()
-        selected_directory = QFileDialog.getExistingDirectory(
-            parent,
-            "Select Mobile Backup Parent Folder",
-            initial_directory,
-        )
-        if not selected_directory:
-            return None
-        return Path(selected_directory).expanduser().resolve().as_posix()
+        initial_directory = self._last_destination_parent()
+        if not initial_directory or not Path(initial_directory).is_dir():
+            initial_directory = self._default_destination_parent()
+        return ParentFolderSelectionDialog.select_destination_parent(initial_directory=initial_directory, parent=parent)
+
+    @staticmethod
+    def _default_destination_parent() -> str:
+        pictures_path = (Path.home() / "Pictures").resolve()
+        if pictures_path.is_dir():
+            return pictures_path.as_posix()
+        return Path.home().resolve().as_posix()
 
     def _last_destination_parent(self) -> str | None:
         with create_db_conn(ctx=self.ctx) as conn:

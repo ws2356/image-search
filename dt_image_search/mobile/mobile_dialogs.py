@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
 from PIL import Image
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -34,13 +36,6 @@ except Exception:
     qrcode = None
 
 
-def _endpoint_target_summary(endpoint_targets: tuple[str, ...]) -> str:
-    primary_target = endpoint_targets[0]
-    if len(endpoint_targets) == 1:
-        return primary_target
-    return f"{primary_target} +{len(endpoint_targets) - 1} more"
-
-
 def _endpoint_urls_detail(endpoint_urls: tuple[str, ...]) -> str:
     if len(endpoint_urls) == 1:
         endpoint_heading = f"Desktop endpoint: {endpoint_urls[0]}"
@@ -59,7 +54,6 @@ class SourceSelectionDialog(QDialog):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self._selected_source: MobileSourceType | None = None
-        self._source_buttons: list[QPushButton] = []
         self.setWindowTitle("Add Folder")
         self.setModal(True)
         self.resize(500, 300)
@@ -128,7 +122,7 @@ class SourceSelectionDialog(QDialog):
         card = QFrame()
         card.setFixedHeight(160)
         card.setCursor(Qt.PointingHandCursor)
-        card.setStyleSheet(self._card_style(selected=False))
+        card.setStyleSheet(self._card_style())
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(16, 16, 16, 16)
@@ -153,35 +147,14 @@ class SourceSelectionDialog(QDialog):
         card_layout.addStretch()
 
         card.mousePressEvent = lambda _event, s=source: self._confirm_source(s)
-        self._source_buttons.append(card)
-        card._title_label = title_label  # type: ignore[attr-defined]
         return card
 
     @staticmethod
-    def _card_style(selected: bool) -> str:
-        if selected:
-            return (
-                "QFrame { background: #ffffff; border: 2px solid #007AFF;"
-                " border-radius: 12px; }"
-            )
+    def _card_style() -> str:
         return (
             "QFrame { background: #ffffff; border: 1.5px solid #d8d8d8;"
             " border-radius: 12px; }"
             "QFrame:hover { border-color: #90b8ff; }"
-        )
-
-    def _select_card(self, source: MobileSourceType, card: QFrame, title_label: QLabel) -> None:
-        self._selected_source = source
-        for btn in self._source_buttons:
-            btn.setStyleSheet(self._card_style(selected=False))
-            lbl = getattr(btn, "_title_label", None)
-            if lbl is not None:
-                lbl.setStyleSheet(
-                    "font-size: 14px; font-weight: 600; color: #1f2937; border: none; background: transparent;"
-                )
-        card.setStyleSheet(self._card_style(selected=True))
-        title_label.setStyleSheet(
-            "font-size: 14px; font-weight: 600; color: #007AFF; border: none; background: transparent;"
         )
 
     def _confirm_source(self, source: MobileSourceType) -> None:
@@ -194,6 +167,178 @@ class SourceSelectionDialog(QDialog):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog._selected_source
         return None
+
+
+class ParentFolderSelectionDialog(QDialog):
+    def __init__(self, initial_directory: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._selected_directory = self._normalize_directory(initial_directory)
+        self.setWindowTitle("Choose Backup Location")
+        self.setModal(True)
+        self.resize(560, 320)
+        self.setStyleSheet("QDialog { background: #f5f5f5; border-radius: 12px; }")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Choose Backup Location")
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setWeight(QFont.Weight.DemiBold)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #1f2937;")
+        layout.addWidget(title)
+
+        subtitle = QLabel("Select where images from your mobile device will be stored.")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("color: #666666; font-size: 13px;")
+        layout.addWidget(subtitle)
+
+        info_banner = QFrame()
+        info_banner.setStyleSheet(
+            "QFrame { background: #f0f8ff; border: 1px solid #c4dcff; border-radius: 8px; }"
+        )
+        info_layout = QHBoxLayout(info_banner)
+        info_layout.setContentsMargins(12, 10, 12, 10)
+        info_layout.setSpacing(8)
+
+        info_icon = QLabel("ℹ")
+        info_icon.setStyleSheet("color: #1a5a9c; font-size: 15px; font-weight: 600;")
+        info_layout.addWidget(info_icon, alignment=Qt.AlignTop)
+
+        info_text = QLabel(
+            "Your mobile photos will be transferred directly over your local network and stored on this computer.\n"
+            "This keeps your images private and allows DTImageSearch to index them for fast semantic search.\n"
+            "No cloud upload required."
+        )
+        info_text.setWordWrap(True)
+        info_text.setStyleSheet("color: #3a5a9c; font-size: 12px; line-height: 1.5;")
+        info_layout.addWidget(info_text, stretch=1)
+        layout.addWidget(info_banner)
+
+        destination_label = QLabel("Destination Folder")
+        destination_label.setStyleSheet("font-size: 12px; font-weight: 600; color: #444;")
+        layout.addWidget(destination_label)
+
+        destination_row = QHBoxLayout()
+        destination_row.setSpacing(8)
+        self._path_input = QLineEdit(self._selected_directory)
+        self._path_input.setReadOnly(True)
+        self._path_input.setStyleSheet(
+            """
+            QLineEdit {
+                background: #ffffff; border: 1.5px solid #c8c8c8; border-radius: 6px;
+                padding: 7px 10px; color: #333333; font-size: 12px;
+            }
+            """
+        )
+        destination_row.addWidget(self._path_input, stretch=1)
+
+        browse_button = QPushButton("Browse…")
+        browse_button.setCursor(Qt.PointingHandCursor)
+        browse_button.setStyleSheet(
+            """
+            QPushButton {
+                background: #e0e0e0; border: 1px solid #c0c0c0; border-radius: 6px;
+                padding: 7px 16px; font-size: 12px; color: #333333; font-weight: 500;
+            }
+            QPushButton:hover { background: #d4d4d4; }
+            """
+        )
+        browse_button.clicked.connect(self._browse_directory)
+        destination_row.addWidget(browse_button)
+        layout.addLayout(destination_row)
+
+        bottom_row = QHBoxLayout()
+        bottom_row.addStretch()
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setCursor(Qt.PointingHandCursor)
+        cancel_button.setStyleSheet(
+            """
+            QPushButton {
+                background: #e0e0e0; border: 1px solid #c0c0c0; border-radius: 6px;
+                padding: 7px 16px; font-size: 13px; color: #333333; font-weight: 500;
+            }
+            QPushButton:hover { background: #d4d4d4; }
+            """
+        )
+        cancel_button.clicked.connect(self.reject)
+        bottom_row.addWidget(cancel_button)
+
+        self._continue_button = QPushButton("Continue")
+        self._continue_button.setCursor(Qt.PointingHandCursor)
+        self._continue_button.setStyleSheet(
+            """
+            QPushButton {
+                background: #007AFF; border: 1px solid #0068dd; border-radius: 6px;
+                padding: 7px 18px; font-size: 13px; color: #ffffff; font-weight: 600;
+            }
+            QPushButton:hover { background: #0070ef; }
+            QPushButton:disabled { background: #b0d4ff; border-color: #90c0ef; }
+            """
+        )
+        self._continue_button.clicked.connect(self._confirm_selection)
+        bottom_row.addWidget(self._continue_button)
+        layout.addLayout(bottom_row)
+
+        self._path_input.textChanged.connect(self._update_continue_state)
+        self._update_continue_state()
+
+    @property
+    def selected_directory(self) -> str:
+        return self._selected_directory
+
+    @classmethod
+    def select_destination_parent(
+        cls,
+        initial_directory: str,
+        parent: QWidget | None = None,
+    ) -> str | None:
+        dialog = cls(initial_directory=initial_directory, parent=parent)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return dialog.selected_directory
+        return None
+
+    @staticmethod
+    def _normalize_directory(directory_path: str) -> str:
+        if directory_path:
+            return Path(directory_path).expanduser().resolve().as_posix()
+        return Path.home().resolve().as_posix()
+
+    def _browse_directory(self) -> None:
+        initial_directory = self._path_input.text().strip() or self._selected_directory
+        selected_directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Mobile Backup Parent Folder",
+            initial_directory,
+        )
+        if not selected_directory:
+            return
+        normalized_directory = self._normalize_directory(selected_directory)
+        self._selected_directory = normalized_directory
+        self._path_input.setText(normalized_directory)
+
+    def _confirm_selection(self) -> None:
+        selected_directory = self._path_input.text().strip()
+        if not selected_directory:
+            self._update_continue_state()
+            return
+
+        normalized_directory = self._normalize_directory(selected_directory)
+        if not Path(normalized_directory).is_dir():
+            QMessageBox.warning(
+                self,
+                "Invalid Destination Folder",
+                "The selected destination folder does not exist. Please choose an existing folder.",
+            )
+            return
+
+        self._selected_directory = normalized_directory
+        self.accept()
+
+    def _update_continue_state(self) -> None:
+        self._continue_button.setEnabled(bool(self._path_input.text().strip()))
 
 
 class PairingQrCard(QFrame):
@@ -342,7 +487,7 @@ class MobilePairingDialog(QDialog):
         self._pairing_session = pairing_session
         self.setWindowTitle("Pair Mobile Device")
         self.setModal(True)
-        self.resize(700, 620)
+        self.resize(700, 590)
         self.setStyleSheet("QDialog { background: #f4f4f4; }")
 
         layout = QVBoxLayout(self)
@@ -357,39 +502,10 @@ class MobilePairingDialog(QDialog):
         title.setStyleSheet("color: #1f2937;")
         layout.addWidget(title)
 
-        subtitle = QLabel(
-            "Keep this window open while the mobile app scans and claims the session."
-        )
+        subtitle = QLabel("Scan the QR code for your device. Each code is valid for 15 minutes.")
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 13px;")
         layout.addWidget(subtitle)
-
-        destination_row = QHBoxLayout()
-        destination_row.setSpacing(8)
-        destination_caption = QLabel("📂 Destination")
-        destination_caption.setStyleSheet("font-weight: 600; font-size: 13px; color: #1f2937;")
-        destination_row.addWidget(destination_caption)
-
-        self.destination_label = QLabel(pairing_session.destination_parent)
-        self.destination_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.destination_label.setWordWrap(True)
-        self.destination_label.setStyleSheet("color: #666666; font-size: 13px;")
-        destination_row.addWidget(self.destination_label, stretch=1)
-
-        self.change_button = QPushButton("Change")
-        self.change_button.setCursor(Qt.PointingHandCursor)
-        self.change_button.setStyleSheet(
-            """
-            QPushButton {
-                background: #e0e0e0; border: 1px solid #c0c0c0; border-radius: 5px;
-                padding: 4px 12px; font-size: 12px; color: #333;
-            }
-            QPushButton:hover { background: #d4d4d4; }
-            """
-        )
-        self.change_button.clicked.connect(self._change_destination)
-        destination_row.addWidget(self.change_button)
-        layout.addLayout(destination_row)
 
         qr_row = QHBoxLayout()
         qr_row.setSpacing(14)
@@ -486,7 +602,6 @@ class MobilePairingDialog(QDialog):
             self.session_details_label.setText("\n".join(details))
             color = self._STATUS_COLORS[PairingResultState.ACCEPTED]
             self.session_status_label.setStyleSheet(f"font-weight: 600; color: {color}; font-size: 13px;")
-            self.change_button.setEnabled(False)
             self.close_button.setText("Done")
             self.close_button.setStyleSheet(
                 """
@@ -516,25 +631,6 @@ class MobilePairingDialog(QDialog):
         self.session_status_label.setText(pairing_result.message)
         self.session_details_label.setText(_endpoint_urls_detail(self._pairing_service.endpoint_urls))
         self.session_status_label.setStyleSheet("font-weight: 600; color: #1f2937; font-size: 13px;")
-        self.change_button.setEnabled(True)
-
-    def _change_destination(self) -> None:
-        selected_directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Mobile Backup Parent Folder",
-            self._pairing_session.destination_parent,
-        )
-        if not selected_directory:
-            return
-        self._pairing_session.set_destination_parent(selected_directory)
-        self.destination_label.setText(self._pairing_session.destination_parent)
-        log(
-            "info",
-            message=(
-                "MobilePairingDialog/_change_destination: updated destination parent "
-                f"for session {self._pairing_session.session_id}"
-            ),
-        )
 
     def accept(self) -> None:
         self._clock_timer.stop()
