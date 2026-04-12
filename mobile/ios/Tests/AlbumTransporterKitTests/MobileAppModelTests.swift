@@ -21,11 +21,19 @@ final class MobileAppModelTests: XCTestCase {
     }
 
     func test_start_backup_shows_low_battery_alert_when_needed() async {
+        let lowBatteryFullAccess = PermissionSummary(
+            cameraGranted: true,
+            notificationsGranted: true,
+            mediaScope: .full,
+            excludedCategoryDescription: nil,
+            lowBatteryWarningNeeded: true,
+            isCharging: false
+        )
         let model = MobileAppModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
-            permissionService: StaticPermissionService(summary: .demo),
+            permissionService: StaticPermissionService(summary: lowBatteryFullAccess),
             transferService: StaticTransferService(),
             telemetryClient: RecordingTelemetryClient()
         )
@@ -38,6 +46,35 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertEqual(model.route, .permissions)
         XCTAssertTrue(model.isShowingLowBatteryWarning)
+    }
+
+    func test_start_backup_requires_full_media_library_access() async {
+        let limitedAccessSummary = PermissionSummary(
+            cameraGranted: true,
+            notificationsGranted: true,
+            mediaScope: .limited,
+            excludedCategoryDescription: "Only selected items are currently granted by iOS.",
+            lowBatteryWarningNeeded: false,
+            isCharging: true
+        )
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: limitedAccessSummary),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await model.startBackup()
+
+        XCTAssertEqual(model.route, .permissions)
+        XCTAssertTrue(model.isShowingMediaAccessAlert)
+        XCTAssertFalse(model.mediaAccessAlertMessage.isEmpty)
     }
 
     func test_stop_transfer_returns_home_without_interrupted_page() async {
@@ -145,6 +182,10 @@ final class MobileAppModelTests: XCTestCase {
         await transferTask.value
         XCTAssertEqual(model.route, .completed)
         XCTAssertEqual(model.transferSnapshot.transferredCount, 5)
+        XCTAssertEqual(model.completionSummary.itemsBackedUp, 5)
+        XCTAssertEqual(model.completionSummary.totalTransferredDescription, "5/5")
+        XCTAssertNotNil(model.completionSummary.durationDescription)
+        XCTAssertNotNil(model.completionSummary.completedAtDescription)
     }
 
     func test_qr_payload_decoder_uses_url_query_format() {

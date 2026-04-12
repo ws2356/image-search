@@ -14,10 +14,13 @@ final class MobileAppModel {
 
     var isShowingStopConfirmation = false
     var isShowingLowBatteryWarning = false
+    var isShowingMediaAccessAlert = false
+    var mediaAccessAlertMessage = "Album Transporter needs Full Library Access before backup can start."
 
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var transferProgressPollingTask: Task<Void, Never>?
     @ObservationIgnored private let transferProgressPollingInterval: Duration
+    @ObservationIgnored private var transferStartedAt: Date?
     @ObservationIgnored private let stateStore: AppStateStore
     @ObservationIgnored private let qrCodePayloadDecoder: QRCodePayloadDecoding
     @ObservationIgnored private let pairingService: PairingService
@@ -66,6 +69,10 @@ final class MobileAppModel {
         hasLoaded = true
         let snapshot = await stateStore.loadLaunchSnapshot()
         apply(snapshot: snapshot)
+        let pairingService = pairingService
+        Task.detached(priority: .utility) {
+            await pairingService.primeNetworkAccess()
+        }
         await telemetryClient.record(event: .appLaunched)
     }
 
@@ -138,8 +145,18 @@ final class MobileAppModel {
     }
 
     func startBackup() async {
+        isShowingMediaAccessAlert = false
+        permissionSummary = await permissionService.loadPermissionSummary()
+        guard permissionSummary.mediaScope == .full else {
+            mediaAccessAlertMessage = mediaAccessAlertMessage(for: permissionSummary.mediaScope)
+            isShowingMediaAccessAlert = true
+            await persistSnapshot()
+            return
+        }
+
         if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
+            await persistSnapshot()
             return
         }
 
@@ -159,6 +176,7 @@ final class MobileAppModel {
         isShowingStopConfirmation = false
         stopTransferProgressPolling()
         _ = await transferService.stopTransfer(current: transferSnapshot)
+        transferStartedAt = nil
         route = .home
 
         await telemetryClient.record(event: .transferStopped)
@@ -168,15 +186,29 @@ final class MobileAppModel {
     func completeTransfer() async {
         stopTransferProgressPolling()
         transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
+        let completedAt = Date()
+        let sessionDuration = transferStartedAt.map { completedAt.timeIntervalSince($0) }
+        let totalTransferredDescription: String = {
+            let total = max(transferSnapshot.totalCount, transferSnapshot.transferredCount)
+            if transferSnapshot.failedCount > 0 {
+                return "\(transferSnapshot.transferredCount)/\(total) (\(transferSnapshot.failedCount) failed)"
+            }
+            return "\(transferSnapshot.transferredCount)/\(total)"
+        }()
         completionSummary = CompletionSummary(
             title: "Backup Complete!",
-            message: "Desktop confirmed \(transferSnapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop."
+            message: "Desktop confirmed \(transferSnapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop.",
+            itemsBackedUp: transferSnapshot.transferredCount,
+            totalTransferredDescription: totalTransferredDescription,
+            durationDescription: formattedDuration(sessionDuration),
+            completedAtDescription: formattedCompletionTimestamp(completedAt)
         )
         homeSummary = .completed(
             desktopName: homeSummary.desktopName,
             permissionScope: permissionSummary.mediaScope,
             lastBackupDescription: "Last backup completed just now."
         )
+        transferStartedAt = nil
         route = .completed
 
         await telemetryClient.record(event: .transferCompleted)
@@ -185,11 +217,13 @@ final class MobileAppModel {
 
     func returnHome() async {
         stopTransferProgressPolling()
+        transferStartedAt = nil
         route = .home
         await persistSnapshot()
     }
 
     private func startTransfer() async {
+        transferStartedAt = Date()
         route = .transfer
         transferSnapshot = TransferSnapshot(
             transferredCount: 0,
@@ -252,5 +286,34 @@ final class MobileAppModel {
             transferSnapshot: transferSnapshot
         )
         await stateStore.saveLaunchSnapshot(snapshot)
+    }
+
+    private func mediaAccessAlertMessage(for scope: PermissionScope) -> String {
+        switch scope {
+        case .full:
+            return "Album Transporter already has Full Library Access."
+        case .limited:
+            return "Album Transporter needs Full Library Access before backup can start. Open Settings and change Photos access to Full Access."
+        case .photosOnly, .videosOnly, .denied:
+            return "Album Transporter needs Full Library Access before backup can start. Open Settings and allow full Photos access."
+        }
+    }
+
+    private func formattedDuration(_ duration: TimeInterval?) -> String {
+        guard let duration else {
+            return "—"
+        }
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = duration >= 3600 ? [.hour, .minute] : [.minute, .second]
+        formatter.unitsStyle = .abbreviated
+        formatter.zeroFormattingBehavior = [.dropLeading]
+        return formatter.string(from: max(duration, 0)) ?? "—"
+    }
+
+    private func formattedCompletionTimestamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 }

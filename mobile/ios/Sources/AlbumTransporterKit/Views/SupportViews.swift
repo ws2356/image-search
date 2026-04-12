@@ -72,7 +72,9 @@ struct PairingFlowView: View {
                         )
                         .disabled(isPrimaryActionDisabled)
 
-                        if status.phase != .paired {
+                        if status.phase == .failed {
+                            ActionButton(title: "Cancel", style: .secondary, action: onBack)
+                        } else if status.phase != .paired {
                             ActionButton(title: "Back", icon: "chevron.left", style: .plain, action: onBack)
                         }
                     }

@@ -8,6 +8,17 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         self.session = session
     }
 
+    func primeInternetAccess() async {
+        guard let warmupURL = URL(string: "https://dl.boldman.net/") else {
+            return
+        }
+
+        var request = URLRequest(url: warmupURL)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 2
+        _ = try? await session.data(for: request)
+    }
+
     func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
@@ -19,7 +30,9 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: urlRequest)
+            (data, response) = try await requestWithLocalNetworkRetry(urlRequest, endpoint: endpoint)
+        } catch let error as PairingServiceError {
+            throw error
         } catch {
             throw PairingServiceError.transport(message: error.localizedDescription)
         }
@@ -52,6 +65,56 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
             throw PairingServiceError.decoding(message: error.localizedDescription)
         }
     }
+
+    private func requestWithLocalNetworkRetry(
+        _ request: URLRequest,
+        endpoint: URL
+    ) async throws -> (Data, URLResponse) {
+        let isLocalEndpoint = endpoint.isLikelyLocalNetworkEndpoint
+        let maxAttempts = isLocalEndpoint ? 10 : 1
+        var attemptRequest = request
+        if isLocalEndpoint {
+            attemptRequest.timeoutInterval = 1
+        }
+
+        for attempt in 1 ... maxAttempts {
+            do {
+                return try await session.data(for: attemptRequest)
+            } catch let error as URLError {
+                let shouldRetry = isLocalEndpoint &&
+                    error.isLikelyLocalNetworkPermissionError &&
+                    attempt < maxAttempts
+                if shouldRetry {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    continue
+                }
+
+                if isLocalEndpoint && error.isLikelyLocalNetworkPermissionError {
+                    throw PairingServiceError.transport(message: Self.localNetworkPermissionFailureMessage)
+                }
+                throw PairingServiceError.transport(message: error.localizedDescription)
+            } catch {
+                let nsError = error as NSError
+                let shouldRetry = isLocalEndpoint &&
+                    nsError.isLikelyLocalNetworkPermissionError &&
+                    attempt < maxAttempts
+                if shouldRetry {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    continue
+                }
+
+                if isLocalEndpoint && nsError.isLikelyLocalNetworkPermissionError {
+                    throw PairingServiceError.transport(message: Self.localNetworkPermissionFailureMessage)
+                }
+                throw PairingServiceError.transport(message: error.localizedDescription)
+            }
+        }
+
+        throw PairingServiceError.transport(message: Self.localNetworkPermissionFailureMessage)
+    }
+
+    private static let localNetworkPermissionFailureMessage =
+        "Local Network access is required before pairing can continue. Allow access in iOS Settings, then scan the desktop QR code again."
 }
 
 struct DesktopBootstrapPairingService: PairingService {
@@ -67,6 +130,10 @@ struct DesktopBootstrapPairingService: PairingService {
         self.bootstrapClient = bootstrapClient
         self.identityProvider = identityProvider
         self.trustedDesktopStore = trustedDesktopStore
+    }
+
+    func primeNetworkAccess() async {
+        await bootstrapClient.primeInternetAccess()
     }
 
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
@@ -234,5 +301,78 @@ private extension Data {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+}
+
+private extension URL {
+    var isLikelyLocalNetworkEndpoint: Bool {
+        guard let host else {
+            return false
+        }
+
+        let normalizedHost = host.lowercased()
+        if normalizedHost == "localhost" || normalizedHost.hasSuffix(".local") || normalizedHost == "::1" {
+            return true
+        }
+
+        let octets = normalizedHost.split(separator: ".")
+        guard octets.count == 4,
+              let firstOctet = Int(octets[0]),
+              let secondOctet = Int(octets[1])
+        else {
+            return false
+        }
+
+        if firstOctet == 10 || firstOctet == 127 || firstOctet == 192 && secondOctet == 168 {
+            return true
+        }
+        return firstOctet == 172 && (16 ... 31).contains(secondOctet)
+    }
+}
+
+private extension URLError {
+    var isLikelyLocalNetworkPermissionError: Bool {
+        switch code {
+        case .notConnectedToInternet,
+             .cannotFindHost,
+             .cannotConnectToHost,
+             .networkConnectionLost,
+             .dnsLookupFailed,
+             .timedOut:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+private extension NSError {
+    var isLikelyLocalNetworkPermissionError: Bool {
+        if domain == NSURLErrorDomain {
+            let urlErrorCode = URLError.Code(rawValue: code)
+            switch urlErrorCode {
+            case .notConnectedToInternet,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .networkConnectionLost,
+                 .dnsLookupFailed,
+                 .timedOut,
+                 .cannotLoadFromNetwork:
+                return true
+            default:
+                return false
+            }
+        }
+
+        if domain == NSPOSIXErrorDomain {
+            switch code {
+            case Int(EPERM), Int(EACCES), Int(ENETDOWN), Int(ENETUNREACH), Int(EHOSTUNREACH):
+                return true
+            default:
+                return false
+            }
+        }
+
+        return false
     }
 }

@@ -6,10 +6,12 @@ protocol AppStateStore: Sendable {
 }
 
 protocol PairingService: Sendable {
+    func primeNetworkAccess() async
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus
 }
 
 protocol PairingBootstrapClient: Sendable {
+    func primeInternetAccess() async
     func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse
 }
 
@@ -56,6 +58,14 @@ enum MobileTelemetryEvent: String, Sendable {
 
 enum PairingProtocol {
     static let schema = "dtis.mobile-pairing.v1"
+}
+
+extension PairingService {
+    func primeNetworkAccess() async {}
+}
+
+extension PairingBootstrapClient {
+    func primeInternetAccess() async {}
 }
 
 enum PairingBootstrapResponseStatus: String, Codable, Sendable {

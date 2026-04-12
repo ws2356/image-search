@@ -1,5 +1,8 @@
 import Factory
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 @MainActor
 public struct AlbumTransporterRootView: View {
@@ -48,6 +51,19 @@ public struct AlbumTransporterRootView: View {
             Button("Not Now", role: .cancel) {}
         } message: {
             Text("Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.")
+        }
+        .alert("Full media access required", isPresented: $model.isShowingMediaAccessAlert) {
+#if os(iOS)
+            Button("Open Settings") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                    return
+                }
+                UIApplication.shared.open(url)
+            }
+#endif
+            Button("Not Now", role: .cancel) {}
+        } message: {
+            Text(model.mediaAccessAlertMessage)
         }
     }
 
