@@ -1,8 +1,10 @@
 import base64
+import hashlib
 import http.client
 import json
 import os
 from pathlib import Path
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -15,10 +17,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
-from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
+from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64, ensure_mobile_pairing_schema
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_ASSET_PATH,
     MOBILE_TRANSFER_COMPLETE_PATH,
+    MOBILE_TRANSFER_EXISTENCE_PATH,
     MOBILE_TRANSFER_SCHEMA,
     MOBILE_TRANSFER_STARTED_EVENT,
     MOBILE_TRANSFER_START_PATH,
@@ -190,6 +193,162 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
+    def test_live_transfer_http_endpoints_skip_by_signature_tuple_for_different_asset_id(self):
+        pairing_context = self._pair_device()
+
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "total_assets": 2,
+            },
+        )
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+
+        asset_bytes = b"image-bytes-001"
+        asset_metadata = {
+            "schema": MOBILE_TRANSFER_SCHEMA,
+            "session_id": pairing_context["session_id"],
+            "device_uuid": pairing_context["device_uuid"],
+            "trust_key": pairing_context["trust_key_b64"],
+            "asset_id": "ph://asset-001",
+            "asset_version": "2026-04-09T12:30:00+00:00",
+            "filename": "IMG_0001.JPG",
+            "media_type": "image",
+            "created_at": "2026-04-09T12:00:00+00:00",
+            "updated_at": "2026-04-09T12:30:00+00:00",
+            **self._signature_metadata_fields(asset_bytes),
+        }
+        stored_status, stored_response = self._post_asset(
+            asset_metadata=asset_metadata,
+            asset_bytes=asset_bytes,
+        )
+        self.assertEqual(stored_status, 200)
+        self.assertEqual(stored_response["status"], "stored")
+
+        duplicate_metadata = dict(asset_metadata)
+        duplicate_metadata["asset_id"] = "ph://asset-duplicate"
+        duplicate_metadata["asset_version"] = "2026-04-09T13:30:00+00:00"
+        skipped_status, skipped_response = self._post_asset(
+            asset_metadata=duplicate_metadata,
+            asset_bytes=asset_bytes,
+        )
+        self.assertEqual(skipped_status, 200)
+        self.assertEqual(skipped_response["status"], "skipped")
+        self.assertEqual(skipped_response["local_relative_path"], stored_response["local_relative_path"])
+
+        with create_db_conn(self._ctx) as conn:
+            asset_count_row = conn.execute(
+                "SELECT COUNT(*) AS asset_count FROM mobile_assets WHERE device_uuid = ?",
+                (pairing_context["device_uuid"],),
+            ).fetchone()
+            self.assertIsNotNone(asset_count_row)
+            self.assertEqual(asset_count_row["asset_count"], 1)
+
+    def test_live_transfer_existence_endpoint_returns_batch_matches_for_signature_tuples(self):
+        pairing_context = self._pair_device()
+
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "total_assets": 2,
+            },
+        )
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+
+        asset_bytes = b"image-bytes-lookup"
+        created_at = "2026-04-09T12:00:00+00:00"
+        uploaded_asset_metadata = {
+            "schema": MOBILE_TRANSFER_SCHEMA,
+            "session_id": pairing_context["session_id"],
+            "device_uuid": pairing_context["device_uuid"],
+            "trust_key": pairing_context["trust_key_b64"],
+            "asset_id": "ph://asset-lookup-source",
+            "asset_version": "2026-04-09T12:30:00+00:00",
+            "filename": "IMG_0002.JPG",
+            "media_type": "image",
+            "created_at": created_at,
+            "updated_at": "2026-04-09T12:30:00+00:00",
+            **self._signature_metadata_fields(asset_bytes),
+        }
+        stored_status, stored_response = self._post_asset(
+            asset_metadata=uploaded_asset_metadata,
+            asset_bytes=asset_bytes,
+        )
+        self.assertEqual(stored_status, 200)
+        self.assertEqual(stored_response["status"], "stored")
+
+        existence_status, existence_response = self._post_json(
+            MOBILE_TRANSFER_EXISTENCE_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "assets": [
+                    {
+                        "asset_id": "ph://asset-lookup-match",
+                        "created_at": created_at,
+                        **self._signature_metadata_fields(asset_bytes),
+                    },
+                    {
+                        "asset_id": "ph://asset-lookup-miss",
+                        "created_at": created_at,
+                        **self._signature_metadata_fields(b"image-bytes-missing"),
+                    },
+                ],
+            },
+        )
+        self.assertEqual(existence_status, 200)
+        self.assertEqual(existence_response["status"], "checked")
+        self.assertEqual(
+            existence_response["matches"],
+            [
+                {
+                    "asset_id": "ph://asset-lookup-match",
+                    "local_relative_path": stored_response["local_relative_path"],
+                }
+            ],
+        )
+
+    def test_ensure_mobile_pairing_schema_adds_signature_columns_to_legacy_mobile_assets_table(self):
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+
+        conn.executescript(
+            """
+            CREATE TABLE mobile_assets (
+                device_uuid TEXT NOT NULL,
+                remote_asset_id TEXT NOT NULL,
+                remote_asset_version TEXT,
+                local_relative_path TEXT NOT NULL,
+                last_transferred_at TEXT NOT NULL,
+                PRIMARY KEY (device_uuid, remote_asset_id)
+            );
+            """
+        )
+
+        ensure_mobile_pairing_schema(conn)
+
+        table_info = conn.execute("PRAGMA table_info(mobile_assets)").fetchall()
+        column_names = {row[1] for row in table_info}
+        self.assertIn("content_sha1", column_names)
+        self.assertIn("file_size_bytes", column_names)
+        self.assertIn("asset_created_at", column_names)
+
+        index_rows = conn.execute("PRAGMA index_list(mobile_assets)").fetchall()
+        index_names = {row[1] for row in index_rows}
+        self.assertIn("idx_mobile_assets_device_signature", index_names)
+
     def _pair_device(self) -> dict[str, str]:
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
         session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
@@ -263,6 +422,13 @@ class TestMobileTransferService(unittest.TestCase):
             return response.status, json.loads(response.read().decode("utf-8"))
         finally:
             connection.close()
+
+    @staticmethod
+    def _signature_metadata_fields(asset_bytes: bytes) -> dict[str, object]:
+        return {
+            "sha1": hashlib.sha1(asset_bytes).hexdigest(),
+            "file_size": len(asset_bytes),
+        }
 
 
 if __name__ == "__main__":

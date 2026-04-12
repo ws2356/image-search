@@ -19,6 +19,7 @@ MOBILE_TRANSFER_STATE_FAILED = "failed"
 MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING = "transferring"
 MOBILE_BACKUP_SESSION_STATUS_COMPLETED = "completed"
 MOBILE_BACKUP_SESSION_STATUS_FAILED = "failed"
+MobileAssetSignatureKey = tuple[str, int, str]
 
 _MOBILE_PAIRING_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS mobile_devices (
@@ -54,6 +55,9 @@ CREATE TABLE IF NOT EXISTS mobile_assets (
     device_uuid TEXT NOT NULL REFERENCES mobile_devices(device_uuid),
     remote_asset_id TEXT NOT NULL,
     remote_asset_version TEXT,
+    content_sha1 TEXT,
+    file_size_bytes INTEGER,
+    asset_created_at TEXT,
     local_relative_path TEXT NOT NULL,
     last_transferred_at TEXT NOT NULL,
     PRIMARY KEY (device_uuid, remote_asset_id)
@@ -79,6 +83,13 @@ class MobileTransferContext:
 
 def ensure_mobile_pairing_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_MOBILE_PAIRING_SCHEMA_SQL)
+    _ensure_mobile_asset_signature_columns(conn)
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_mobile_assets_device_signature
+        ON mobile_assets(device_uuid, content_sha1, file_size_bytes, asset_created_at)
+        """
+    )
     conn.commit()
 
 
@@ -283,12 +294,81 @@ def get_mobile_asset_record(
     ).fetchone()
 
 
+def get_mobile_asset_record_by_signature(
+    conn: sqlite3.Connection,
+    *,
+    device_uuid: str,
+    content_sha1: str,
+    file_size_bytes: int,
+    asset_created_at: datetime,
+):
+    signature_key = mobile_asset_signature_key(
+        content_sha1=content_sha1,
+        file_size_bytes=file_size_bytes,
+        asset_created_at=asset_created_at,
+    )
+    return get_mobile_asset_records_by_signatures(conn, device_uuid=device_uuid, signature_keys=[signature_key]).get(signature_key)
+
+
+def get_mobile_asset_records_by_signatures(
+    conn: sqlite3.Connection,
+    *,
+    device_uuid: str,
+    signature_keys: list[MobileAssetSignatureKey],
+) -> dict[MobileAssetSignatureKey, sqlite3.Row]:
+    if not signature_keys:
+        return {}
+
+    unique_signature_keys = list(dict.fromkeys(signature_keys))
+    where_clause = " OR ".join("(mobile_assets.content_sha1 = ? AND mobile_assets.file_size_bytes = ? AND mobile_assets.asset_created_at = ?)" for _ in unique_signature_keys)
+    query_parameters: list[object] = [device_uuid]
+    for content_sha1, file_size_bytes, asset_created_at in unique_signature_keys:
+        query_parameters.extend((content_sha1, file_size_bytes, asset_created_at))
+
+    matching_rows = conn.execute(
+        f"""
+        SELECT
+            mobile_assets.device_uuid,
+            mobile_assets.remote_asset_id,
+            mobile_assets.remote_asset_version,
+            mobile_assets.content_sha1,
+            mobile_assets.file_size_bytes,
+            mobile_assets.asset_created_at,
+            mobile_assets.local_relative_path,
+            mobile_assets.last_transferred_at,
+            folders.path AS folder_path
+        FROM mobile_assets
+        JOIN mobile_folders ON mobile_folders.device_uuid = mobile_assets.device_uuid
+        JOIN folders ON folders.id = mobile_folders.folder_id
+        WHERE mobile_assets.device_uuid = ?
+          AND ({where_clause})
+        """,
+        query_parameters,
+    ).fetchall()
+
+    matches: dict[MobileAssetSignatureKey, sqlite3.Row] = {}
+    for row in matching_rows:
+        local_path = Path(row["folder_path"]) / row["local_relative_path"]
+        if not local_path.exists():
+            continue
+        signature_key = (
+            row["content_sha1"],
+            int(row["file_size_bytes"]),
+            row["asset_created_at"],
+        )
+        matches.setdefault(signature_key, row)
+    return matches
+
+
 def upsert_mobile_asset_record(
     conn: sqlite3.Connection,
     *,
     device_uuid: str,
     remote_asset_id: str,
     remote_asset_version: str | None,
+    content_sha1: str | None,
+    file_size_bytes: int | None,
+    asset_created_at: datetime | None,
     local_relative_path: str,
     last_transferred_at: datetime,
 ) -> None:
@@ -298,11 +378,17 @@ def upsert_mobile_asset_record(
             device_uuid,
             remote_asset_id,
             remote_asset_version,
+            content_sha1,
+            file_size_bytes,
+            asset_created_at,
             local_relative_path,
             last_transferred_at
-        ) VALUES (?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(device_uuid, remote_asset_id) DO UPDATE SET
             remote_asset_version = excluded.remote_asset_version,
+            content_sha1 = excluded.content_sha1,
+            file_size_bytes = excluded.file_size_bytes,
+            asset_created_at = excluded.asset_created_at,
             local_relative_path = excluded.local_relative_path,
             last_transferred_at = excluded.last_transferred_at
         """,
@@ -310,6 +396,9 @@ def upsert_mobile_asset_record(
             device_uuid,
             remote_asset_id,
             remote_asset_version,
+            content_sha1.lower() if content_sha1 is not None else None,
+            file_size_bytes,
+            asset_created_at.isoformat() if asset_created_at is not None else None,
             local_relative_path,
             last_transferred_at.isoformat(),
         ),
@@ -349,6 +438,19 @@ def update_mobile_transfer_state(
         (folder_transfer_state, updated_at.isoformat(), device_uuid),
     )
     conn.commit()
+
+
+def mobile_asset_signature_key(
+    *,
+    content_sha1: str,
+    file_size_bytes: int,
+    asset_created_at: datetime,
+) -> MobileAssetSignatureKey:
+    return (
+        content_sha1.strip().lower(),
+        int(file_size_bytes),
+        asset_created_at.isoformat(),
+    )
 
 
 def _unique_mobile_folder_name(
@@ -397,3 +499,23 @@ def _folder_id(folder) -> int:
     if hasattr(folder, "id"):
         return int(folder.id)
     return int(folder["id"])
+
+
+def _ensure_mobile_asset_signature_columns(conn: sqlite3.Connection) -> None:
+    existing_columns = _table_columns(conn, "mobile_assets")
+    if "content_sha1" not in existing_columns:
+        conn.execute("ALTER TABLE mobile_assets ADD COLUMN content_sha1 TEXT")
+    if "file_size_bytes" not in existing_columns:
+        conn.execute("ALTER TABLE mobile_assets ADD COLUMN file_size_bytes INTEGER")
+    if "asset_created_at" not in existing_columns:
+        conn.execute("ALTER TABLE mobile_assets ADD COLUMN asset_created_at TEXT")
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    columns: set[str] = set()
+    for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall():
+        if isinstance(row, sqlite3.Row):
+            columns.add(str(row["name"]))
+        else:
+            columns.add(str(row[1]))
+    return columns

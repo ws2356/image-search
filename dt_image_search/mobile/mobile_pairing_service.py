@@ -24,6 +24,7 @@ from dt_image_search.mobile.mobile_pairing_store import (
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_ASSET_PATH,
     MOBILE_TRANSFER_COMPLETE_PATH,
+    MOBILE_TRANSFER_EXISTENCE_PATH,
     MOBILE_TRANSFER_START_PATH,
     MobileTransferService,
     decode_transfer_asset_metadata,
@@ -352,6 +353,20 @@ def _build_handler(service: MobilePairingService) -> type[BaseHTTPRequestHandler
                         return
 
                     status_code, response_payload = service._transfer_service.handle_start_request(request_payload)
+                    self._write_json_response(status_code, response_payload)
+                    return
+
+                if parsed_path.path == MOBILE_TRANSFER_EXISTENCE_PATH:
+                    request_payload = self._read_json_payload(
+                        schema="dtis.mobile-transfer.v1",
+                        status="rejected",
+                        parse_error_message="Desktop could not parse the transfer existence JSON payload.",
+                        object_error_message="Desktop requires JSON object payloads for transfer existence requests.",
+                    )
+                    if request_payload is None:
+                        return
+
+                    status_code, response_payload = service._transfer_service.handle_asset_existence_request(request_payload)
                     self._write_json_response(status_code, response_payload)
                     return
 

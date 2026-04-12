@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import XCTest
 @testable import AlbumTransporterKit
@@ -179,6 +180,115 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(finalSnapshot.transferredCount, 2)
         XCTAssertEqual(finalSnapshot.totalCount, 2)
     }
+
+    func test_photo_library_transfer_service_skips_known_assets_before_upload() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-002",
+                    assetVersion: "v2",
+                    filename: "IMG_0002.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_710),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_710)
+                ),
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient(existingAssetIDs: ["ph://asset-001"])
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let uploadedAssetIDs = await transferClient.uploadedAssetIDs()
+        let lookupBatchSizes = await transferClient.lookupBatchSizes()
+
+        XCTAssertEqual(snapshot.transferredCount, 2)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(uploadedAssetIDs, ["ph://asset-002"])
+        XCTAssertEqual(lookupBatchSizes, [2])
+    }
+
+    func test_photo_library_transfer_service_checks_desktop_existence_in_batches() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-002",
+                    assetVersion: "v2",
+                    filename: "IMG_0002.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_710),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_710)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-003",
+                    assetVersion: "v3",
+                    filename: "IMG_0003.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_810),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_810)
+                ),
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient()
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore,
+            lookupBatchSize: 2
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let uploadedAssetIDs = await transferClient.uploadedAssetIDs()
+        let lookupBatchSizes = await transferClient.lookupBatchSizes()
+
+        XCTAssertEqual(snapshot.transferredCount, 3)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(uploadedAssetIDs, ["ph://asset-001", "ph://asset-002", "ph://asset-003"])
+        XCTAssertEqual(lookupBatchSizes, [2, 1])
+    }
 }
 
 private actor InMemoryTransferTrustedDesktopStore: TrustedDesktopStore {
@@ -199,13 +309,40 @@ private actor InMemoryTransferTrustedDesktopStore: TrustedDesktopStore {
 
 private actor RecordingMobileTransferClient: MobileTransferClient {
     private var startedCount: Int?
+    private let existingAssetIDs: Set<String>
+    private var lookupAssetIDsByBatch: [[String]] = []
     private var uploadedIDs: [String] = []
     private var completedTransferred: Int?
     private var completedFailed: Int?
 
+    init(existingAssetIDs: Set<String> = []) {
+        self.existingAssetIDs = existingAssetIDs
+    }
+
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
         XCTAssertEqual(desktop.desktopName, "Studio Mac")
         startedCount = totalAssets
+    }
+
+    func lookupExistingAssets(
+        _ candidates: [TransferAssetExistenceCandidate],
+        desktop: TrustedDesktopRecord
+    ) async throws -> [String: TransferAssetExistenceMatch] {
+        lookupAssetIDsByBatch.append(candidates.map(\.assetID))
+        return Dictionary(
+            uniqueKeysWithValues: candidates.compactMap { candidate in
+                guard existingAssetIDs.contains(candidate.assetID) else {
+                    return nil
+                }
+                return (
+                    candidate.assetID,
+                    TransferAssetExistenceMatch(
+                        assetID: candidate.assetID,
+                        localRelativePath: "2026-04/\(candidate.assetID.replacingOccurrences(of: "://", with: "-")).bin"
+                    )
+                )
+            }
+        )
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
@@ -239,6 +376,10 @@ private actor RecordingMobileTransferClient: MobileTransferClient {
         startedCount
     }
 
+    func lookupBatchSizes() -> [Int] {
+        lookupAssetIDsByBatch.map(\.count)
+    }
+
     func uploadedAssetIDs() -> [String] {
         uploadedIDs
     }
@@ -269,14 +410,17 @@ private actor StaticTransferAssetSource: TransferAssetSource {
         if failingAssetIDs.contains(descriptor.assetID) {
             throw TransferClientError.transport(message: "Synthetic export failure for tests.")
         }
+        let payload = Data(descriptor.assetID.utf8)
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString.lowercased())
             .appendingPathExtension((descriptor.filename as NSString).pathExtension)
-        try Data(descriptor.assetID.utf8).write(to: fileURL)
+        try payload.write(to: fileURL)
         return ExportedTransferAsset(
             descriptor: descriptor,
             fileURL: fileURL,
-            mimeType: "application/octet-stream"
+            mimeType: "application/octet-stream",
+            fileSize: payload.count,
+            contentSHA1: sha1Hex(for: payload)
         )
     }
 }
@@ -296,4 +440,8 @@ private final class ProgressSnapshotRecorder: @unchecked Sendable {
         defer { lock.unlock() }
         return recordedSnapshots
     }
+}
+
+private func sha1Hex(for data: Data) -> String {
+    Insecure.SHA1.hash(data: data).map { String(format: "%02x", $0) }.joined()
 }

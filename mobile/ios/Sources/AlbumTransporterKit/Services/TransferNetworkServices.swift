@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import OSLog
 import Photos
@@ -6,6 +7,7 @@ import UniformTypeIdentifiers
 enum TransferProtocol {
     static let schema = "dtis.mobile-transfer.v1"
     static let startPath = "/api/mobile/transfer/start"
+    static let existencePath = "/api/mobile/transfer/existence"
     static let assetPath = "/api/mobile/transfer/asset"
     static let completePath = "/api/mobile/transfer/complete"
 }
@@ -44,11 +46,32 @@ struct TransferCompleteRequest: Codable, Sendable {
     }
 }
 
+struct TransferExistenceRequest: Codable, Sendable {
+    var schema = TransferProtocol.schema
+    var sessionID: String
+    var deviceUUID: String
+    var trustKey: String
+    var assets: [TransferAssetExistenceCandidate]
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+        case trustKey = "trust_key"
+        case assets
+    }
+}
+
 enum TransferResponseStatus: String, Codable, Sendable {
     case accepted
     case stored
     case skipped
     case completed
+    case rejected
+}
+
+enum TransferExistenceResponseStatus: String, Codable, Sendable {
+    case checked
     case rejected
 }
 
@@ -72,6 +95,24 @@ struct TransferServerResponse: Codable, Sendable {
     }
 }
 
+struct TransferExistenceResponse: Codable, Sendable {
+    var schema: String
+    var status: TransferExistenceResponseStatus
+    var message: String
+    var sessionID: String?
+    var deviceUUID: String?
+    var matches: [TransferAssetExistenceMatch]
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case status
+        case message
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+        case matches
+    }
+}
+
 struct TransferAssetDescriptor: Equatable, Sendable {
     var assetID: String
     var assetVersion: String
@@ -81,10 +122,36 @@ struct TransferAssetDescriptor: Equatable, Sendable {
     var updatedAt: Date?
 }
 
+struct TransferAssetExistenceCandidate: Codable, Equatable, Hashable, Sendable {
+    var assetID: String
+    var contentSHA1: String
+    var fileSize: Int
+    var createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case assetID = "asset_id"
+        case contentSHA1 = "sha1"
+        case fileSize = "file_size"
+        case createdAt = "created_at"
+    }
+}
+
+struct TransferAssetExistenceMatch: Codable, Equatable, Sendable {
+    var assetID: String
+    var localRelativePath: String
+
+    enum CodingKeys: String, CodingKey {
+        case assetID = "asset_id"
+        case localRelativePath = "local_relative_path"
+    }
+}
+
 struct ExportedTransferAsset: Sendable {
     var descriptor: TransferAssetDescriptor
     var fileURL: URL
     var mimeType: String?
+    var fileSize: Int
+    var contentSHA1: String
 }
 
 private struct TransferAssetUploadMetadata: Codable, Sendable {
@@ -94,6 +161,8 @@ private struct TransferAssetUploadMetadata: Codable, Sendable {
     var trustKey: String
     var assetID: String
     var assetVersion: String
+    var contentSHA1: String
+    var fileSize: Int
     var filename: String
     var mediaType: String
     var createdAt: Date?
@@ -106,6 +175,8 @@ private struct TransferAssetUploadMetadata: Codable, Sendable {
         case trustKey = "trust_key"
         case assetID = "asset_id"
         case assetVersion = "asset_version"
+        case contentSHA1 = "sha1"
+        case fileSize = "file_size"
         case filename
         case mediaType = "media_type"
         case createdAt = "created_at"
@@ -120,6 +191,10 @@ protocol TransferAssetSource: Sendable {
 
 protocol MobileTransferClient: Sendable {
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws
+    func lookupExistingAssets(
+        _ candidates: [TransferAssetExistenceCandidate],
+        desktop: TrustedDesktopRecord
+    ) async throws -> [String: TransferAssetExistenceMatch]
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse
     func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse
 }
@@ -142,6 +217,14 @@ enum TransferClientError: Error, Sendable {
         }
     }
 }
+
+private protocol TransferSchemaResponse: Decodable {
+    var schema: String { get }
+    var message: String { get }
+}
+
+extension TransferServerResponse: TransferSchemaResponse {}
+extension TransferExistenceResponse: TransferSchemaResponse {}
 
 private enum TransferDebugLogger {
     private static let logger = Logger(
@@ -241,11 +324,45 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             "Starting transfer session host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) total_assets=\(totalAssets)"
         )
         do {
-            let response = try await postJSON(to: endpoint, body: request)
+            let response = try await postJSON(to: endpoint, body: request, responseType: TransferServerResponse.self)
             TransferDebugLogger.info("Transfer start response \(TransferDebugLogger.responseSummary(response))")
         } catch {
             TransferDebugLogger.error(
                 "Transfer start failed session_id=\(desktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
+            )
+            throw error
+        }
+    }
+
+    func lookupExistingAssets(
+        _ candidates: [TransferAssetExistenceCandidate],
+        desktop: TrustedDesktopRecord
+    ) async throws -> [String: TransferAssetExistenceMatch] {
+        guard !candidates.isEmpty else {
+            return [:]
+        }
+
+        let request = TransferExistenceRequest(
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            trustKey: desktop.sharedKeyBase64,
+            assets: candidates
+        )
+        let endpoint = transferURL(for: desktop, path: TransferProtocol.existencePath)
+        TransferDebugLogger.debug(
+            "Checking desktop transfer signatures host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) asset_count=\(candidates.count)"
+        )
+        do {
+            let response = try await postJSON(to: endpoint, body: request, responseType: TransferExistenceResponse.self)
+            switch response.status {
+            case .checked:
+                return Dictionary(uniqueKeysWithValues: response.matches.map { ($0.assetID, $0) })
+            case .rejected:
+                throw TransferClientError.rejected(message: response.message)
+            }
+        } catch {
+            TransferDebugLogger.error(
+                "Desktop transfer signature check failed session_id=\(desktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
             throw error
         }
@@ -258,6 +375,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             trustKey: desktop.sharedKeyBase64,
             assetID: asset.descriptor.assetID,
             assetVersion: asset.descriptor.assetVersion,
+            contentSHA1: asset.contentSHA1,
+            fileSize: asset.fileSize,
             filename: asset.descriptor.filename,
             mediaType: asset.descriptor.mediaType,
             createdAt: asset.descriptor.createdAt,
@@ -315,7 +434,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             "Completing transfer session host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount)"
         )
         do {
-            let response = try await postJSON(to: endpoint, body: request)
+            let response = try await postJSON(to: endpoint, body: request, responseType: TransferServerResponse.self)
             TransferDebugLogger.info("Transfer completion response \(TransferDebugLogger.responseSummary(response))")
             return response
         } catch {
@@ -326,14 +445,18 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         }
     }
 
-    private func postJSON<T: Encodable>(to endpoint: URL, body: T) async throws -> TransferServerResponse {
+    private func postJSON<RequestBody: Encodable, ResponseBody: TransferSchemaResponse>(
+        to endpoint: URL,
+        body: RequestBody,
+        responseType: ResponseBody.Type
+    ) async throws -> ResponseBody {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.timeoutInterval = 30
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(body)
-        return try await execute(request: urlRequest)
+        return try await execute(request: urlRequest, responseType: responseType)
     }
 
     private func uploadFile(using request: URLRequest, fileURL: URL) async throws -> TransferServerResponse {
@@ -344,10 +467,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
         }
-        return try decodeResponse(data: data, response: response)
+        return try decodeResponse(data: data, response: response, responseType: TransferServerResponse.self)
     }
 
-    private func execute(request: URLRequest) async throws -> TransferServerResponse {
+    private func execute<ResponseBody: TransferSchemaResponse>(
+        request: URLRequest,
+        responseType: ResponseBody.Type
+    ) async throws -> ResponseBody {
         let data: Data
         let response: URLResponse
         do {
@@ -355,17 +481,21 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
         }
-        return try decodeResponse(data: data, response: response)
+        return try decodeResponse(data: data, response: response, responseType: responseType)
     }
 
-    private func decodeResponse(data: Data, response: URLResponse) throws -> TransferServerResponse {
+    private func decodeResponse<ResponseBody: TransferSchemaResponse>(
+        data: Data,
+        response: URLResponse,
+        responseType: ResponseBody.Type
+    ) throws -> ResponseBody {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TransferClientError.invalidHTTPResponse
         }
 
         let bodyPreview = TransferDebugLogger.responseBodyPreview(from: data)
         do {
-            let decodedResponse = try JSONDecoder().decode(TransferServerResponse.self, from: data)
+            let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: data)
             guard decodedResponse.schema == TransferProtocol.schema else {
                 TransferDebugLogger.error(
                     "Unsupported transfer response schema http_status=\(httpResponse.statusCode) schema=\(decodedResponse.schema) body=\(bodyPreview)"
@@ -377,7 +507,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
                 return decodedResponse
             }
             TransferDebugLogger.error(
-                "Desktop rejected transfer request http_status=\(httpResponse.statusCode) \(TransferDebugLogger.responseSummary(decodedResponse))"
+                "Desktop rejected transfer request http_status=\(httpResponse.statusCode) message=\(decodedResponse.message.replacingOccurrences(of: "\n", with: "\\n"))"
             )
             throw TransferClientError.rejected(message: decodedResponse.message)
         } catch let error as TransferClientError {
@@ -483,14 +613,25 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         }
 
         let fileSize = (try? exportURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let contentSHA1: String
+        do {
+            contentSHA1 = try Self.sha1Hex(for: exportURL)
+        } catch {
+            TransferDebugLogger.error(
+                "Failed to hash exported asset \(TransferDebugLogger.assetSummary(for: descriptor)) error=\(TransferDebugLogger.describe(error))"
+            )
+            throw TransferClientError.transport(message: "The exported asset could not be hashed for transfer verification.")
+        }
         TransferDebugLogger.debug(
-            "Exported asset \(TransferDebugLogger.assetSummary(for: descriptor)) bytes=\(fileSize)"
+            "Exported asset \(TransferDebugLogger.assetSummary(for: descriptor)) bytes=\(fileSize) sha1=\(contentSHA1)"
         )
 
         return ExportedTransferAsset(
             descriptor: descriptor,
             fileURL: exportURL,
-            mimeType: UTType(resource.uniformTypeIdentifier)?.preferredMIMEType
+            mimeType: UTType(resource.uniformTypeIdentifier)?.preferredMIMEType,
+            fileSize: fileSize,
+            contentSHA1: contentSHA1
         )
     }
 
@@ -523,6 +664,24 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         return resources.first
     }
 
+    private static func sha1Hex(for fileURL: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer {
+            try? handle.close()
+        }
+
+        var hasher = Insecure.SHA1()
+        while true {
+            let chunk = try handle.read(upToCount: 1024 * 1024) ?? Data()
+            if chunk.isEmpty {
+                break
+            }
+            hasher.update(data: chunk)
+        }
+        let digest = hasher.finalize()
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     private static func assetVersion(for asset: PHAsset) -> String {
         let timestamp = asset.modificationDate ?? asset.creationDate ?? Date(timeIntervalSince1970: 0)
         return [
@@ -542,21 +701,43 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
     }
 }
 
+private struct PreparedTransferAsset: Sendable {
+    let exportedAsset: ExportedTransferAsset
+    let existenceCandidate: TransferAssetExistenceCandidate?
+
+    init(exportedAsset: ExportedTransferAsset) {
+        self.exportedAsset = exportedAsset
+        if let createdAt = exportedAsset.descriptor.createdAt {
+            self.existenceCandidate = TransferAssetExistenceCandidate(
+                assetID: exportedAsset.descriptor.assetID,
+                contentSHA1: exportedAsset.contentSHA1,
+                fileSize: exportedAsset.fileSize,
+                createdAt: createdAt
+            )
+        } else {
+            self.existenceCandidate = nil
+        }
+    }
+}
+
 actor PhotoLibraryTransferService: TransferService {
     private let assetSource: TransferAssetSource
     private let transferClient: MobileTransferClient
     private let trustedDesktopStore: TrustedDesktopStore
+    private let lookupBatchSize: Int
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
 
     init(
         assetSource: TransferAssetSource,
         transferClient: MobileTransferClient,
-        trustedDesktopStore: TrustedDesktopStore
+        trustedDesktopStore: TrustedDesktopStore,
+        lookupBatchSize: Int = 32
     ) {
         self.assetSource = assetSource
         self.transferClient = transferClient
         self.trustedDesktopStore = trustedDesktopStore
+        self.lookupBatchSize = max(1, lookupBatchSize)
     }
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
@@ -660,6 +841,7 @@ actor PhotoLibraryTransferService: TransferService {
 
             var transferredCount = 0
             var failedCount = 0
+            var pendingBatch: [PreparedTransferAsset] = []
             let initialSnapshot = makeProgressSnapshot(
                 transport: trustedDesktop.transport,
                 transferredCount: transferredCount,
@@ -668,60 +850,102 @@ actor PhotoLibraryTransferService: TransferService {
             )
             currentSnapshot = initialSnapshot
             progress(initialSnapshot)
+
             for (index, asset) in assets.enumerated() {
                 if stopRequested {
-                    TransferDebugLogger.info(
-                        "Transfer paused session_id=\(trustedDesktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount)"
-                    )
-                    let pausedSnapshot = TransferSnapshot(
+                    cleanupPreparedAssets(pendingBatch)
+                    let pausedSnapshot = makePausedSnapshot(
+                        transport: trustedDesktop.transport,
                         transferredCount: transferredCount,
                         totalCount: assets.count,
                         failedCount: failedCount,
-                        transport: trustedDesktop.transport,
-                        etaDescription: nil,
-                        statusMessage: "Backup paused after finishing the current asset upload.",
-                        guidanceMessage: "Resume to continue sending the remaining accessible items.",
-                        isIncompleteLibrary: false
+                        sessionID: trustedDesktop.lastSessionID
                     )
                     currentSnapshot = pausedSnapshot
                     return pausedSnapshot
                 }
 
                 let assetSummary = TransferDebugLogger.assetSummary(for: asset)
-                TransferDebugLogger.debug("Processing asset \(index + 1)/\(assets.count) \(assetSummary)")
+                TransferDebugLogger.debug("Preparing asset \(index + 1)/\(assets.count) \(assetSummary)")
                 do {
-                    let exportedAsset = try await assetSource.exportAsset(asset)
-                    defer { try? FileManager.default.removeItem(at: exportedAsset.fileURL) }
-                    let response = try await transferClient.uploadAsset(exportedAsset, desktop: trustedDesktop)
-                    switch response.status {
-                    case .stored, .skipped:
-                        transferredCount += 1
-                        TransferDebugLogger.debug(
-                            "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                        )
-                    case .accepted, .completed, .rejected:
-                        failedCount += 1
-                        TransferDebugLogger.error(
-                            "Unexpected asset response for \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                        )
+                    let preparedAsset = PreparedTransferAsset(exportedAsset: try await assetSource.exportAsset(asset))
+                    if preparedAsset.existenceCandidate == nil {
+                        if let pausedSnapshot = await processPreparedBatch(
+                            pendingBatch,
+                            desktop: trustedDesktop,
+                            totalCount: assets.count,
+                            transferredCount: &transferredCount,
+                            failedCount: &failedCount,
+                            progress: progress
+                        ) {
+                            return pausedSnapshot
+                        }
+                        pendingBatch.removeAll(keepingCapacity: true)
+
+                        if let pausedSnapshot = await processPreparedBatch(
+                            [preparedAsset],
+                            desktop: trustedDesktop,
+                            totalCount: assets.count,
+                            transferredCount: &transferredCount,
+                            failedCount: &failedCount,
+                            progress: progress
+                        ) {
+                            return pausedSnapshot
+                        }
+                        continue
+                    }
+
+                    pendingBatch.append(preparedAsset)
+                    if pendingBatch.count >= lookupBatchSize {
+                        if let pausedSnapshot = await processPreparedBatch(
+                            pendingBatch,
+                            desktop: trustedDesktop,
+                            totalCount: assets.count,
+                            transferredCount: &transferredCount,
+                            failedCount: &failedCount,
+                            progress: progress
+                        ) {
+                            return pausedSnapshot
+                        }
+                        pendingBatch.removeAll(keepingCapacity: true)
                     }
                 } catch {
                     failedCount += 1
                     TransferDebugLogger.error(
                         "Transfer failed for \(assetSummary) error=\(TransferDebugLogger.describe(error))"
                     )
+                    recordProgressUpdate(
+                        transport: trustedDesktop.transport,
+                        transferredCount: transferredCount,
+                        totalCount: assets.count,
+                        failedCount: failedCount,
+                        progress: progress
+                    )
                 }
-                TransferDebugLogger.debug(
-                    "Updated transfer progress processed=\(index + 1) total=\(assets.count) transferred=\(transferredCount) failed=\(failedCount)"
-                )
-                let updatedSnapshot = makeProgressSnapshot(
+            }
+
+            if stopRequested {
+                cleanupPreparedAssets(pendingBatch)
+                let pausedSnapshot = makePausedSnapshot(
                     transport: trustedDesktop.transport,
                     transferredCount: transferredCount,
                     totalCount: assets.count,
-                    failedCount: failedCount
+                    failedCount: failedCount,
+                    sessionID: trustedDesktop.lastSessionID
                 )
-                currentSnapshot = updatedSnapshot
-                progress(updatedSnapshot)
+                currentSnapshot = pausedSnapshot
+                return pausedSnapshot
+            }
+
+            if let pausedSnapshot = await processPreparedBatch(
+                pendingBatch,
+                desktop: trustedDesktop,
+                totalCount: assets.count,
+                transferredCount: &transferredCount,
+                failedCount: &failedCount,
+                progress: progress
+            ) {
+                return pausedSnapshot
             }
 
             TransferDebugLogger.info(
@@ -776,6 +1000,152 @@ actor PhotoLibraryTransferService: TransferService {
         }
     }
 
+    private func processPreparedBatch(
+        _ batch: [PreparedTransferAsset],
+        desktop: TrustedDesktopRecord,
+        totalCount: Int,
+        transferredCount: inout Int,
+        failedCount: inout Int,
+        progress: @escaping @Sendable (TransferSnapshot) -> Void
+    ) async -> TransferSnapshot? {
+        guard !batch.isEmpty else {
+            return nil
+        }
+
+        let lookupCandidates = batch.compactMap(\.existenceCandidate)
+        var matchesByAssetID: [String: TransferAssetExistenceMatch] = [:]
+        if !lookupCandidates.isEmpty {
+            do {
+                matchesByAssetID = try await transferClient.lookupExistingAssets(lookupCandidates, desktop: desktop)
+                TransferDebugLogger.debug(
+                    "Desktop signature check completed session_id=\(desktop.lastSessionID) requested=\(lookupCandidates.count) matched=\(matchesByAssetID.count)"
+                )
+            } catch {
+                TransferDebugLogger.error(
+                    "Desktop signature check failed session_id=\(desktop.lastSessionID) requested=\(lookupCandidates.count) error=\(TransferDebugLogger.describe(error))"
+                )
+                for preparedAsset in batch {
+                    failedCount += 1
+                    cleanupExportedAsset(preparedAsset.exportedAsset)
+                    recordProgressUpdate(
+                        transport: desktop.transport,
+                        transferredCount: transferredCount,
+                        totalCount: totalCount,
+                        failedCount: failedCount,
+                        progress: progress
+                    )
+                }
+                return nil
+            }
+        }
+
+        for (index, preparedAsset) in batch.enumerated() {
+            let assetSummary = TransferDebugLogger.assetSummary(for: preparedAsset.exportedAsset.descriptor)
+            if let existingMatch = matchesByAssetID[preparedAsset.exportedAsset.descriptor.assetID] {
+                transferredCount += 1
+                cleanupExportedAsset(preparedAsset.exportedAsset)
+                TransferDebugLogger.debug(
+                    "Skipped upload after desktop signature hit \(assetSummary) local_relative_path=\(existingMatch.localRelativePath)"
+                )
+                recordProgressUpdate(
+                    transport: desktop.transport,
+                    transferredCount: transferredCount,
+                    totalCount: totalCount,
+                    failedCount: failedCount,
+                    progress: progress
+                )
+                continue
+            }
+
+            if stopRequested {
+                cleanupPreparedAssets(Array(batch[index...]))
+                let pausedSnapshot = makePausedSnapshot(
+                    transport: desktop.transport,
+                    transferredCount: transferredCount,
+                    totalCount: totalCount,
+                    failedCount: failedCount,
+                    sessionID: desktop.lastSessionID
+                )
+                currentSnapshot = pausedSnapshot
+                return pausedSnapshot
+            }
+
+            do {
+                let response = try await transferClient.uploadAsset(preparedAsset.exportedAsset, desktop: desktop)
+                switch response.status {
+                case .stored, .skipped:
+                    transferredCount += 1
+                    TransferDebugLogger.debug(
+                        "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                    )
+                case .accepted, .completed, .rejected:
+                    failedCount += 1
+                    TransferDebugLogger.error(
+                        "Unexpected asset response for \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                    )
+                }
+            } catch {
+                failedCount += 1
+                TransferDebugLogger.error(
+                    "Transfer failed for \(assetSummary) error=\(TransferDebugLogger.describe(error))"
+                )
+            }
+            cleanupExportedAsset(preparedAsset.exportedAsset)
+            recordProgressUpdate(
+                transport: desktop.transport,
+                transferredCount: transferredCount,
+                totalCount: totalCount,
+                failedCount: failedCount,
+                progress: progress
+            )
+        }
+
+        return nil
+    }
+
+    private func makePausedSnapshot(
+        transport: TransferTransport,
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int,
+        sessionID: String
+    ) -> TransferSnapshot {
+        TransferDebugLogger.info(
+            "Transfer paused session_id=\(sessionID) transferred=\(transferredCount) failed=\(failedCount)"
+        )
+        return TransferSnapshot(
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount,
+            transport: transport,
+            etaDescription: nil,
+            statusMessage: "Backup paused after finishing the current asset upload.",
+            guidanceMessage: "Resume to continue sending the remaining accessible items.",
+            isIncompleteLibrary: false
+        )
+    }
+
+    private func recordProgressUpdate(
+        transport: TransferTransport,
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int,
+        progress: @escaping @Sendable (TransferSnapshot) -> Void
+    ) {
+        let processedCount = min(transferredCount + failedCount, totalCount)
+        TransferDebugLogger.debug(
+            "Updated transfer progress processed=\(processedCount) total=\(totalCount) transferred=\(transferredCount) failed=\(failedCount)"
+        )
+        let updatedSnapshot = makeProgressSnapshot(
+            transport: transport,
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount
+        )
+        currentSnapshot = updatedSnapshot
+        progress(updatedSnapshot)
+    }
+
     private func makeProgressSnapshot(
         transport: TransferTransport,
         transferredCount: Int,
@@ -797,6 +1167,16 @@ actor PhotoLibraryTransferService: TransferService {
                 : "Some items have failed so far. Let the current run finish, then inspect the MobileTransfer device logs for per-item errors.",
             isIncompleteLibrary: false
         )
+    }
+
+    private func cleanupPreparedAssets(_ batch: [PreparedTransferAsset]) {
+        for preparedAsset in batch {
+            cleanupExportedAsset(preparedAsset.exportedAsset)
+        }
+    }
+
+    private func cleanupExportedAsset(_ asset: ExportedTransferAsset) {
+        try? FileManager.default.removeItem(at: asset.fileURL)
     }
 }
 
