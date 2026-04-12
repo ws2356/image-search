@@ -17,4 +17,5 @@
 - **Phase 5**
   - Encrypted transfer with key exchange and verification on both devices
 - **Phase 6 (GA)**
+  - ETA calculation and display based on transfer speed and remaining data
   - Automatic USB preference and in-session handoff when a supported mobile device is connected via USB during backup

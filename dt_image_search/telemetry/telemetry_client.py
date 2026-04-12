@@ -21,8 +21,8 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from dt_image_search.dts_logging import get_other_handlers
-from dt_image_search.telemetry.dt_device_id import get_device_id
-from dt_image_search.telemetry.dt_session_id import session_id
+from dt_image_search.model.dt_device_id import get_device_id
+from dt_image_search.model.dt_session_id import session_id
 from dt_image_search.telemetry.otlp_settings import EXPORT_BATCH_SIZE, EXPORT_QUEUE_SIZE, EXPORT_TIMEOUT_SECONDS, LOGS_UPLOAD_ENDPOINT, METRICS_UPLOAD_ENDPOINT, TELEMETRY_UPLOAD_HOST, TRACES_UPLOAD_ENDPOINT
 from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
 from dt_image_search.model.dts_config import get_log_level
