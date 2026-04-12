@@ -3,3 +3,4 @@ tomlkit
 pyinstaller
 profilehooks
 Nuitka
+pytest
