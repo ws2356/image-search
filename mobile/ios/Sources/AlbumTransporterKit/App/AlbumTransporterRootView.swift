@@ -141,9 +141,9 @@ public struct AlbumTransporterRootView: View {
     private var backgroundGradient: some View {
         LinearGradient(
             colors: [
-                Color.indigo.opacity(0.20),
-                Color.blue.opacity(0.08),
-                Color.clear,
+                Color(red: 0.95, green: 0.97, blue: 1.0),   // #F2F8FF
+                Color.white,
+                Color(red: 0.96, green: 1.0, blue: 0.97),   // #F5FFF8
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
