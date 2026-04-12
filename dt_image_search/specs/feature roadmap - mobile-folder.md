@@ -6,7 +6,6 @@
 - **Phase 2**
   - Initial USB transport support after QR/bootstrap pairing, with Wi-Fi LAN retained as fallback
   - Reconnect path that depends on the desktop-driven reconnect workflow
-  - Deep-link onboarding from desktop to mobile app store
   - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
   - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
   - Device mismatch handling during reconnect flows, with user-friendly error messaging and clear recovery paths
@@ -17,6 +16,7 @@
 - **Phase 5**
   - Encrypted transfer with key exchange and verification on both devices
 - **Phase 6 (GA)**
+  - Deep-link onboarding from desktop to mobile app store
   - Android companion app with similar capabilities to iOS version, with platform-specific adjustments as needed
   - ETA calculation and display based on transfer speed and remaining data
   - Automatic USB preference and in-session handoff when a supported mobile device is connected via USB during backup
