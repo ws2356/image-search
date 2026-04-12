@@ -6,6 +6,7 @@ from datetime import datetime
 import hashlib
 import http.client
 import json
+import logging
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -185,6 +186,7 @@ class MockMobileBackupClient:
         pairing_record: MockPairingRecord,
         asset: MockBackupAsset,
     ) -> dict[str, object]:
+        from dt_image_search.telemetry.telemetry_client import log
         endpoint = urlsplit(pairing_record.endpoint_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
@@ -199,6 +201,7 @@ class MockMobileBackupClient:
                     "Accept": "application/json",
                 },
             )
+            log("info", message=f"Uploaded asset {asset.asset_id} to {pairing_record.endpoint_url}{MOBILE_TRANSFER_ASSET_PATH} with metadata: {metadata}")
             response = connection.getresponse()
             response_payload = json.loads(response.read().decode("utf-8"))
         finally:

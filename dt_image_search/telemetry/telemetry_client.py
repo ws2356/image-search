@@ -127,10 +127,13 @@ def log(severity: str, error_type: str = "", message: str = "", where: str = "")
             level = get_log_level()
             if "PYTEST_CURRENT_TEST" in os.environ:
                 level = logging.DEBUG
-            logging_handler = LoggingHandler(level=level, logger_provider=_logger_provider)
-            logging_handler.addFilter(OtelLogFilter())
-            logging_handler.addFilter(OtelContextFilter())
-            logging.basicConfig(level=level, handlers=[logging_handler] + get_other_handlers())
+            handlers = get_other_handlers()
+            if os.getenv('IS_TESTING', 'false') != 'true':
+                logging_handler = LoggingHandler(level=level, logger_provider=_logger_provider)
+                logging_handler.addFilter(OtelLogFilter())
+                logging_handler.addFilter(OtelContextFilter())
+                handlers.insert(0, logging_handler)
+            logging.basicConfig(level=level, handlers=handlers)
             _logger = logging.getLogger(_image_search_client)
     if severity not in ["debug", "info", "warning", "error"]:
         raise ValueError(f"Invalid log severity: {severity}")

@@ -9,6 +9,7 @@ def set_config(conn, key: str, value: str):
     conn.execute("INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
     conn.commit()
 
+import os
 import sqlite3
 import threading
 from importlib.resources import files
@@ -16,7 +17,6 @@ from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.tools.dts_perf import perffunc
-from dt_image_search.tools.dt_is_debug import is_debug
 from dt_image_search.bm_context import BMContext
 
 
@@ -45,7 +45,7 @@ def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     from dt_image_search.mobile.mobile_pairing_store import ensure_mobile_pairing_schema
     ensure_mobile_pairing_schema(conn)
-    if is_debug():
+    if 'DB_LOGGING' in os.environ:
         conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
     return conn
 

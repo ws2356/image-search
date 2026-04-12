@@ -43,9 +43,12 @@ if ! command -v $python_bin &> /dev/null; then
     fi
 fi
 
+export IS_TESTING=true
+
 $python_bin -m pytest -s --log-cli-level=$level tests/unit/test_dts_index.py
 $python_bin -m pytest -s --log-cli-level=$level tests/unit/test_search_controller.py
 $python_bin -m pytest -s --log-cli-level=$level tests/functional/test_app_flow.py
+$python_bin -m pytest -s --log-cli-level=$level tests/functional/test_mobile_backup_flow.py
 
 if [ "$need_build" = true ]; then
     echo "Building app with PyInstaller..."
