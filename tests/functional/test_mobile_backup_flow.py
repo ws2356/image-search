@@ -1,10 +1,13 @@
 import base64
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 import uuid
 from datetime import datetime, timedelta, timezone
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService, PairingResultState
