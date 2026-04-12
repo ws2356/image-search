@@ -43,7 +43,7 @@ final class TransferServiceTests: XCTestCase {
             trustedDesktopStore: trustedDesktopStore
         )
 
-        let startSnapshot = await service.startTransfer()
+        let startSnapshot = await service.startTransfer(progress: { _ in })
         let completedSnapshot = await service.completeTransfer(current: startSnapshot)
         let uploadedAssetIDs = await transferClient.uploadedAssetIDs()
         let startedAssetCount = await transferClient.startedAssetCount()
@@ -70,7 +70,7 @@ final class TransferServiceTests: XCTestCase {
             trustedDesktopStore: InMemoryTransferTrustedDesktopStore(record: nil)
         )
 
-        let snapshot = await service.startTransfer()
+        let snapshot = await service.startTransfer(progress: { _ in })
 
         XCTAssertEqual(snapshot.totalCount, 0)
         XCTAssertEqual(snapshot.failedCount, 0)
@@ -121,12 +121,63 @@ final class TransferServiceTests: XCTestCase {
             trustedDesktopStore: trustedDesktopStore
         )
 
-        let snapshot = await service.startTransfer()
+        let snapshot = await service.startTransfer(progress: { _ in })
 
         XCTAssertEqual(snapshot.transferredCount, 1)
         XCTAssertEqual(snapshot.totalCount, 2)
         XCTAssertEqual(snapshot.failedCount, 1)
         XCTAssertTrue(snapshot.guidanceMessage.contains("MobileTransfer device logs"))
+    }
+
+    func test_photo_library_transfer_service_emits_progress_updates_during_transfer() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-002",
+                    assetVersion: "v2",
+                    filename: "IMG_0002.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_710),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_710)
+                ),
+            ]
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: RecordingMobileTransferClient(),
+            trustedDesktopStore: trustedDesktopStore
+        )
+        let recorder = ProgressSnapshotRecorder()
+
+        let finalSnapshot = await service.startTransfer { snapshot in
+            recorder.record(snapshot)
+        }
+        let recordedSnapshots = recorder.snapshots()
+
+        XCTAssertEqual(recordedSnapshots.map(\.totalCount), [2, 2, 2])
+        XCTAssertEqual(recordedSnapshots.map(\.transferredCount), [0, 1, 2])
+        XCTAssertEqual(finalSnapshot.transferredCount, 2)
+        XCTAssertEqual(finalSnapshot.totalCount, 2)
     }
 }
 
@@ -227,5 +278,22 @@ private actor StaticTransferAssetSource: TransferAssetSource {
             fileURL: fileURL,
             mimeType: "application/octet-stream"
         )
+    }
+}
+
+private final class ProgressSnapshotRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedSnapshots: [TransferSnapshot] = []
+
+    func record(_ snapshot: TransferSnapshot) {
+        lock.lock()
+        recordedSnapshots.append(snapshot)
+        lock.unlock()
+    }
+
+    func snapshots() -> [TransferSnapshot] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedSnapshots
     }
 }

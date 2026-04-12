@@ -43,8 +43,9 @@ struct DemoPermissionService: PermissionService {
 struct DemoTransferService: TransferService {
     var initialSnapshot: TransferSnapshot = .demo
 
-    func startTransfer() async -> TransferSnapshot {
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         try? await Task.sleep(for: .milliseconds(150))
+        progress(initialSnapshot)
         return initialSnapshot
     }
 
@@ -52,7 +53,7 @@ struct DemoTransferService: TransferService {
         .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot) async -> TransferSnapshot {
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         try? await Task.sleep(for: .milliseconds(150))
 
         var resumed = snapshot
@@ -61,6 +62,7 @@ struct DemoTransferService: TransferService {
         resumed.etaDescription = resumed.transferredCount == resumed.totalCount ? nil : "8 min remaining"
         resumed.statusMessage = "Transfer resumed from the last saved marker."
         resumed.guidanceMessage = "Keep the app in the foreground when possible. iOS may still pause long-running transfers when the app backgrounds."
+        progress(resumed)
         return resumed
     }
 
@@ -73,5 +75,9 @@ struct DemoTransferService: TransferService {
         completed.statusMessage = "Desktop confirmed that this session is complete."
         completed.guidanceMessage = "You can return to the home screen and start a fresh session whenever new media appears on the device."
         return completed
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        initialSnapshot
     }
 }

@@ -17,6 +17,8 @@ final class MobileAppModel {
     var isShowingLowBatteryWarning = false
 
     @ObservationIgnored private var hasLoaded = false
+    @ObservationIgnored private var transferProgressPollingTask: Task<Void, Never>?
+    @ObservationIgnored private let transferProgressPollingInterval: Duration
     @ObservationIgnored private let stateStore: AppStateStore
     @ObservationIgnored private let qrCodePayloadDecoder: QRCodePayloadDecoding
     @ObservationIgnored private let pairingService: PairingService
@@ -30,7 +32,8 @@ final class MobileAppModel {
         pairingService: PairingService,
         permissionService: PermissionService,
         transferService: TransferService,
-        telemetryClient: TelemetryClient
+        telemetryClient: TelemetryClient,
+        transferProgressPollingInterval: Duration = .seconds(2)
     ) {
         self.stateStore = stateStore
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
@@ -38,6 +41,7 @@ final class MobileAppModel {
         self.permissionService = permissionService
         self.transferService = transferService
         self.telemetryClient = telemetryClient
+        self.transferProgressPollingInterval = transferProgressPollingInterval
     }
 
     var navigationTitle: String {
@@ -166,6 +170,7 @@ final class MobileAppModel {
 
     func confirmStopTransfer() async {
         isShowingStopConfirmation = false
+        stopTransferProgressPolling()
         interruptionReason = await transferService.stopTransfer(current: transferSnapshot)
         homeSummary = .resumable(
             desktopName: homeSummary.desktopName,
@@ -181,13 +186,19 @@ final class MobileAppModel {
     func resumeTransfer() async {
         route = .transfer
         transferSnapshot.statusMessage = "Resuming the backup with the paired desktop."
-        transferSnapshot = await transferService.resumeTransfer(from: transferSnapshot)
+        startTransferProgressPolling()
+        transferSnapshot = await transferService.resumeTransfer(
+            from: transferSnapshot,
+            progress: { _ in }
+        )
+        stopTransferProgressPolling()
 
         await telemetryClient.record(event: .resumeTapped)
         await persistSnapshot()
     }
 
     func completeTransfer() async {
+        stopTransferProgressPolling()
         transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
         completionSummary = CompletionSummary(
             title: "Backup complete",
@@ -205,6 +216,7 @@ final class MobileAppModel {
     }
 
     func returnHome() async {
+        stopTransferProgressPolling()
         route = .home
         await persistSnapshot()
     }
@@ -223,8 +235,32 @@ final class MobileAppModel {
         )
         await telemetryClient.record(event: .transferStarted)
         await persistSnapshot()
-        transferSnapshot = await transferService.startTransfer()
+        startTransferProgressPolling()
+        transferSnapshot = await transferService.startTransfer(progress: { _ in })
+        stopTransferProgressPolling()
         await persistSnapshot()
+    }
+
+    private func startTransferProgressPolling() {
+        stopTransferProgressPolling()
+        transferProgressPollingTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            while !Task.isCancelled {
+                if let snapshot = await self.transferService.progressSnapshot() {
+                    await MainActor.run {
+                        self.transferSnapshot = snapshot
+                    }
+                }
+                try? await Task.sleep(for: self.transferProgressPollingInterval)
+            }
+        }
+    }
+
+    private func stopTransferProgressPolling() {
+        transferProgressPollingTask?.cancel()
+        transferProgressPollingTask = nil
     }
 
     private func apply(snapshot: LaunchSnapshot) {

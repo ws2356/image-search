@@ -31,10 +31,11 @@ protocol PermissionService: Sendable {
 }
 
 protocol TransferService: Sendable {
-    func startTransfer() async -> TransferSnapshot
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot
     func stopTransfer(current: TransferSnapshot) async -> InterruptionReason
-    func resumeTransfer(from snapshot: TransferSnapshot) async -> TransferSnapshot
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot
+    func progressSnapshot() async -> TransferSnapshot?
 }
 
 protocol TelemetryClient: Sendable {

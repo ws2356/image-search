@@ -547,6 +547,7 @@ actor PhotoLibraryTransferService: TransferService {
     private let transferClient: MobileTransferClient
     private let trustedDesktopStore: TrustedDesktopStore
     private var stopRequested = false
+    private var currentSnapshot: TransferSnapshot?
 
     init(
         assetSource: TransferAssetSource,
@@ -558,8 +559,8 @@ actor PhotoLibraryTransferService: TransferService {
         self.trustedDesktopStore = trustedDesktopStore
     }
 
-    func startTransfer() async -> TransferSnapshot {
-        await runTransfer()
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        await runTransfer(progress: progress)
     }
 
     func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
@@ -567,14 +568,15 @@ actor PhotoLibraryTransferService: TransferService {
         return .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot) async -> TransferSnapshot {
-        await runTransfer()
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        await runTransfer(progress: progress)
     }
 
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             var failedSnapshot = current
             failedSnapshot.statusMessage = "Backup finished on the phone, but the paired desktop record is no longer available."
+            currentSnapshot = failedSnapshot
             return failedSnapshot
         }
 
@@ -590,6 +592,7 @@ actor PhotoLibraryTransferService: TransferService {
             TransferDebugLogger.info(
                 "Desktop confirmed transfer completion session_id=\(trustedDesktop.lastSessionID) transferred=\(current.transferredCount) failed=\(current.failedCount)"
             )
+            currentSnapshot = completedSnapshot
             return completedSnapshot
         } catch let error as TransferClientError {
             var failedSnapshot = current
@@ -597,6 +600,7 @@ actor PhotoLibraryTransferService: TransferService {
             TransferDebugLogger.error(
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
+            currentSnapshot = failedSnapshot
             return failedSnapshot
         } catch {
             var failedSnapshot = current
@@ -604,15 +608,20 @@ actor PhotoLibraryTransferService: TransferService {
             TransferDebugLogger.error(
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
+            currentSnapshot = failedSnapshot
             return failedSnapshot
         }
     }
 
-    private func runTransfer() async -> TransferSnapshot {
+    func progressSnapshot() async -> TransferSnapshot? {
+        currentSnapshot
+    }
+
+    private func runTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         stopRequested = false
 
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
-            return TransferSnapshot(
+            let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
                 failedCount: 0,
@@ -622,13 +631,15 @@ actor PhotoLibraryTransferService: TransferService {
                 guidanceMessage: "Pair with the desktop again before starting a backup.",
                 isIncompleteLibrary: false
             )
+            currentSnapshot = failedSnapshot
+            return failedSnapshot
         }
 
         do {
             let assets = try await assetSource.fetchAssets()
             if assets.isEmpty {
                 TransferDebugLogger.warning("Transfer did not start because there are no eligible local assets.")
-                return TransferSnapshot(
+                let emptySnapshot = TransferSnapshot(
                     transferredCount: 0,
                     totalCount: 0,
                     failedCount: 0,
@@ -638,6 +649,8 @@ actor PhotoLibraryTransferService: TransferService {
                     guidanceMessage: "Check photo-library access or capture new media, then retry the backup.",
                     isIncompleteLibrary: false
                 )
+                currentSnapshot = emptySnapshot
+                return emptySnapshot
             }
 
             TransferDebugLogger.info(
@@ -647,12 +660,20 @@ actor PhotoLibraryTransferService: TransferService {
 
             var transferredCount = 0
             var failedCount = 0
+            let initialSnapshot = makeProgressSnapshot(
+                transport: trustedDesktop.transport,
+                transferredCount: transferredCount,
+                totalCount: assets.count,
+                failedCount: failedCount
+            )
+            currentSnapshot = initialSnapshot
+            progress(initialSnapshot)
             for (index, asset) in assets.enumerated() {
                 if stopRequested {
                     TransferDebugLogger.info(
                         "Transfer paused session_id=\(trustedDesktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount)"
                     )
-                    return TransferSnapshot(
+                    let pausedSnapshot = TransferSnapshot(
                         transferredCount: transferredCount,
                         totalCount: assets.count,
                         failedCount: failedCount,
@@ -662,6 +683,8 @@ actor PhotoLibraryTransferService: TransferService {
                         guidanceMessage: "Resume to continue sending the remaining accessible items.",
                         isIncompleteLibrary: false
                     )
+                    currentSnapshot = pausedSnapshot
+                    return pausedSnapshot
                 }
 
                 let assetSummary = TransferDebugLogger.assetSummary(for: asset)
@@ -688,12 +711,23 @@ actor PhotoLibraryTransferService: TransferService {
                         "Transfer failed for \(assetSummary) error=\(TransferDebugLogger.describe(error))"
                     )
                 }
+                TransferDebugLogger.debug(
+                    "Updated transfer progress processed=\(index + 1) total=\(assets.count) transferred=\(transferredCount) failed=\(failedCount)"
+                )
+                let updatedSnapshot = makeProgressSnapshot(
+                    transport: trustedDesktop.transport,
+                    transferredCount: transferredCount,
+                    totalCount: assets.count,
+                    failedCount: failedCount
+                )
+                currentSnapshot = updatedSnapshot
+                progress(updatedSnapshot)
             }
 
             TransferDebugLogger.info(
                 "Transfer run finished session_id=\(trustedDesktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount) total=\(assets.count)"
             )
-            return TransferSnapshot(
+            let completedSnapshot = TransferSnapshot(
                 transferredCount: transferredCount,
                 totalCount: assets.count,
                 failedCount: failedCount,
@@ -705,11 +739,13 @@ actor PhotoLibraryTransferService: TransferService {
                     : "Some items could not be transferred. Retry Resume Backup to send any remaining items again, then inspect the MobileTransfer device logs for per-item errors.",
                 isIncompleteLibrary: false
             )
+            currentSnapshot = completedSnapshot
+            return completedSnapshot
         } catch let error as TransferClientError {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
-            return TransferSnapshot(
+            let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
                 failedCount: 1,
@@ -719,11 +755,13 @@ actor PhotoLibraryTransferService: TransferService {
                 guidanceMessage: "Retry the backup after confirming the paired desktop is reachable on the same local network.",
                 isIncompleteLibrary: false
             )
+            currentSnapshot = failedSnapshot
+            return failedSnapshot
         } catch {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
-            return TransferSnapshot(
+            let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
                 failedCount: 1,
@@ -733,7 +771,32 @@ actor PhotoLibraryTransferService: TransferService {
                 guidanceMessage: "Retry the backup after confirming photo-library access and desktop reachability.",
                 isIncompleteLibrary: false
             )
+            currentSnapshot = failedSnapshot
+            return failedSnapshot
         }
+    }
+
+    private func makeProgressSnapshot(
+        transport: TransferTransport,
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int
+    ) -> TransferSnapshot {
+        let processedCount = min(transferredCount + failedCount, totalCount)
+        return TransferSnapshot(
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount,
+            transport: transport,
+            etaDescription: nil,
+            statusMessage: totalCount == 0
+                ? "Preparing the local media backup with the paired desktop."
+                : "Processed \(processedCount) of \(totalCount) items for the paired desktop.",
+            guidanceMessage: failedCount == 0
+                ? "Keep the app in the foreground while the phone sends items to the desktop."
+                : "Some items have failed so far. Let the current run finish, then inspect the MobileTransfer device logs for per-item errors.",
+            isIncompleteLibrary: false
+        )
     }
 }
 
