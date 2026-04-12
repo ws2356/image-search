@@ -620,22 +620,10 @@ struct CompletionStateView: View {
                     color: Color(hex: 0x007AFF)
                 )
                 summaryCell(
-                    label: "Total transferred",
-                    value: summary.totalTransferredDescription ?? "—",
-                    icon: "arrow.up.circle",
-                    color: Color(hex: 0x30D158)
-                )
-                summaryCell(
                     label: "Duration",
                     value: summary.durationDescription ?? "—",
                     icon: "clock",
                     color: Color(hex: 0xFF9F0A)
-                )
-                summaryCell(
-                    label: "Completed at",
-                    value: summary.completedAtDescription ?? "—",
-                    icon: "calendar",
-                    color: Color(hex: 0x6E6E73)
                 )
             }
         }
