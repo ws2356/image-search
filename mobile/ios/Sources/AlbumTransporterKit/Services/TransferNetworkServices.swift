@@ -959,8 +959,8 @@ actor PhotoLibraryTransferService: TransferService {
                 etaDescription: nil,
                 statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
                 guidanceMessage: failedCount == 0
-                    ? "Tap Finish Backup after the desktop confirms the transfer session is complete."
-                    : "Some items could not be transferred. Retry Resume Backup to send any remaining items again, then inspect the MobileTransfer device logs for per-item errors.",
+                    ? "Backup completes automatically after the desktop confirms this transfer session."
+                    : "Some items could not be transferred. Start another backup session to retry remaining items, then inspect the MobileTransfer device logs for per-item errors.",
                 isIncompleteLibrary: false
             )
             currentSnapshot = completedSnapshot
@@ -1111,7 +1111,7 @@ actor PhotoLibraryTransferService: TransferService {
         sessionID: String
     ) -> TransferSnapshot {
         TransferDebugLogger.info(
-            "Transfer paused session_id=\(sessionID) transferred=\(transferredCount) failed=\(failedCount)"
+            "Transfer stop requested session_id=\(sessionID) transferred=\(transferredCount) failed=\(failedCount)"
         )
         return TransferSnapshot(
             transferredCount: transferredCount,
@@ -1119,8 +1119,8 @@ actor PhotoLibraryTransferService: TransferService {
             failedCount: failedCount,
             transport: transport,
             etaDescription: nil,
-            statusMessage: "Backup paused after finishing the current asset upload.",
-            guidanceMessage: "Resume to continue sending the remaining accessible items.",
+            statusMessage: "Backup stopped after finishing the current asset upload.",
+            guidanceMessage: "Start a new backup session to continue sending the remaining accessible items.",
             isIncompleteLibrary: false
         )
     }

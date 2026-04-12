@@ -402,7 +402,6 @@ struct PermissionsGateView: View {
 struct TransferSessionView: View {
     let snapshot: TransferSnapshot
     let onStop: () -> Void
-    let onSimulateCompletion: () -> Void
 
     private var progressPercent: Int {
         Int(snapshot.progress * 100)
@@ -463,13 +462,6 @@ struct TransferSessionView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
                     .buttonStyle(.plain)
-
-                    ActionButton(
-                        title: "Finish Backup",
-                        icon: "checkmark.circle",
-                        style: .secondary,
-                        action: onSimulateCompletion
-                    )
                 }
             }
             .padding(.horizontal, 20)
@@ -565,164 +557,6 @@ struct TransferSessionView: View {
 
     private var transportBackground: Color {
         snapshot.transport == .usb ? Color(hex: 0xE6F9ED) : Color(hex: 0xE8F4FD)
-    }
-}
-
-// MARK: - Interrupted Session
-
-struct InterruptedSessionView: View {
-    let reason: InterruptionReason
-    let onResume: () -> Void
-    let onReturnHome: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                VStack(spacing: 14) {
-                    heroCircle(icon: reason.systemImage, gradient: interruptionGradient)
-
-                    Text(reason.title)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x1C1C1E))
-
-                    Text(reason.message)
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color(hex: 0x6E6E73))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity)
-
-                progressCard
-
-                if reason == .wifiLost || reason == .desktopUnreachable {
-                    troubleshootingSection
-                }
-
-                if reason == .desktopUnreachable {
-                    desktopInfoCallout
-                }
-
-                buttonSection
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-    }
-
-    private var progressCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Progress (saved)")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x6E6E73))
-                .textCase(.uppercase)
-                .kerning(0.5)
-
-            HStack(spacing: 0) {
-                VStack(spacing: 2) {
-                    Text("—")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x30D158))
-                    Text("Sent")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0x6E6E73))
-                }
-                .frame(maxWidth: .infinity)
-                Divider().frame(height: 36)
-                VStack(spacing: 2) {
-                    Text("—")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x007AFF))
-                    Text("Remaining")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0x6E6E73))
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
-    }
-
-    private var troubleshootingSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Troubleshooting")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x7D0E00))
-
-            VStack(alignment: .leading, spacing: 8) {
-                tipRow("Make sure both devices are on the same Wi-Fi network.")
-                tipRow("Check that the desktop app is still running.")
-                tipRow("Try connecting via USB cable for a more stable transfer.")
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: 0xFDECEA))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var desktopInfoCallout: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "info.circle.fill")
-                .foregroundStyle(Color(hex: 0x007AFF))
-            Text("Make sure the desktop app is open and the mobile folder session is active. You may need to restart the session on the PC.")
-                .font(.system(size: 13))
-                .foregroundStyle(Color(hex: 0x6E6E73))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: 0xE8F4FD))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    @ViewBuilder
-    private var buttonSection: some View {
-        if reason == .desktopUnreachable {
-            HStack(spacing: 10) {
-                ActionButton(title: "Try Again", icon: "arrow.clockwise", style: .primary, action: onResume)
-                ActionButton(title: "Scan New QR", icon: "qrcode.viewfinder", style: .secondary, action: onReturnHome)
-            }
-        } else {
-            VStack(spacing: 10) {
-                ActionButton(title: resumeButtonTitle, icon: "arrow.clockwise", style: .primary, action: onResume)
-                ActionButton(title: "Return Home", icon: "house", style: .secondary, action: onReturnHome)
-            }
-        }
-    }
-
-    private var resumeButtonTitle: String {
-        switch reason {
-        case .wifiLost: return "Try Reconnecting"
-        default: return "Resume Transfer"
-        }
-    }
-
-    private func tipRow(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text("•")
-                .foregroundStyle(Color(hex: 0x7D0E00))
-            Text(text)
-                .font(.system(size: 13))
-                .foregroundStyle(Color(hex: 0x7D0E00))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var interruptionGradient: [Color] {
-        switch reason {
-        case .stoppedByUser, .pausedBySystem:
-            return [Color(hex: 0xFF9F0A), Color(hex: 0xE07800)]
-        case .wifiLost:
-            return [Color(hex: 0xFF453A), Color(hex: 0xC02020)]
-        case .desktopUnreachable, .reconnectRequired:
-            return [Color(hex: 0x636366), Color(hex: 0x3A3A3C)]
-        }
     }
 }
 

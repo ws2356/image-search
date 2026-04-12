@@ -5,7 +5,6 @@ enum AppRoute: String, Equatable, Sendable {
     case scanAndPair
     case permissions
     case transfer
-    case interrupted
     case completed
 }
 
@@ -19,7 +18,7 @@ enum HomePrimaryAction: Equatable, Sendable, Codable {
         case .scanDesktopQRCode:
             return "Scan Desktop QR"
         case .resumeBackup:
-            return "Resume Backup"
+            return "Scan Desktop QR"
         case .backupPendingItems(let count):
             return "Back Up \(count) New Items"
         }
@@ -30,7 +29,7 @@ enum HomePrimaryAction: Equatable, Sendable, Codable {
         case .scanDesktopQRCode:
             return "qrcode.viewfinder"
         case .resumeBackup:
-            return "arrow.clockwise.circle.fill"
+            return "qrcode.viewfinder"
         case .backupPendingItems:
             return "arrow.up.circle.fill"
         }
@@ -38,18 +37,11 @@ enum HomePrimaryAction: Equatable, Sendable, Codable {
 
     var showsSecondaryScanAction: Bool {
         switch self {
-        case .scanDesktopQRCode:
+        case .scanDesktopQRCode, .resumeBackup:
             return false
-        case .resumeBackup, .backupPendingItems:
+        case .backupPendingItems:
             return true
         }
-    }
-
-    var isResumeAction: Bool {
-        if case .resumeBackup = self {
-            return true
-        }
-        return false
     }
 }
 
@@ -285,21 +277,6 @@ struct HomeSummary: Equatable, Sendable, Codable {
         detailMessage: "Back up the full eligible local iPhone library to the desktop app. No account or cloud relay is required, and notification permission is requested only when backup is about to start."
     )
 
-    static func resumable(
-        desktopName: String?,
-        remainingItems: Int,
-        permissionScope: PermissionScope
-    ) -> HomeSummary {
-        HomeSummary(
-            desktopName: desktopName,
-            pendingItemCount: remainingItems,
-            lastBackupDescription: "The last backup did not finish.",
-            primaryAction: .resumeBackup,
-            permissionScope: permissionScope,
-            detailMessage: "Resume the last session when the desktop is reachable again. Only new or unfinished work should continue."
-        )
-    }
-
     static func completed(
         desktopName: String?,
         permissionScope: PermissionScope,
@@ -391,25 +368,11 @@ struct LaunchSnapshot: Equatable, Sendable, Codable {
     var permissionSummary: PermissionSummary
     var pairingStatus: PairingStatus
     var transferSnapshot: TransferSnapshot
-    var lastInterruptionReason: InterruptionReason?
 
     static let firstLaunch = LaunchSnapshot(
         homeSummary: .firstLaunch,
         permissionSummary: .demo,
         pairingStatus: .idle,
-        transferSnapshot: .demo,
-        lastInterruptionReason: nil
-    )
-
-    static let resumable = LaunchSnapshot(
-        homeSummary: .resumable(
-            desktopName: "Studio Mac",
-            remainingItems: 682,
-            permissionScope: .limited
-        ),
-        permissionSummary: .demo,
-        pairingStatus: .idle,
-        transferSnapshot: .demo,
-        lastInterruptionReason: .desktopUnreachable
+        transferSnapshot: .demo
     )
 }

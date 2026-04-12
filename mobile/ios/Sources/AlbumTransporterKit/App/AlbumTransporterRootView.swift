@@ -110,25 +110,6 @@ public struct AlbumTransporterRootView: View {
                 snapshot: model.transferSnapshot,
                 onStop: {
                     model.requestStopTransfer()
-                },
-                onSimulateCompletion: {
-                    Task {
-                        await model.completeTransfer()
-                    }
-                }
-            )
-        case .interrupted:
-            InterruptedSessionView(
-                reason: model.interruptionReason,
-                onResume: {
-                    Task {
-                        await model.resumeTransfer()
-                    }
-                },
-                onReturnHome: {
-                    Task {
-                        await model.returnHome()
-                    }
                 }
             )
         case .completed:

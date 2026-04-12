@@ -9,7 +9,6 @@ final class MobileAppModel {
     private(set) var permissionSummary = PermissionSummary.demo
     private(set) var pairingStatus = PairingStatus.idle
     private(set) var transferSnapshot = TransferSnapshot.demo
-    private(set) var interruptionReason = InterruptionReason.desktopUnreachable
     private(set) var completionSummary = CompletionSummary.demo
     var scannedQRCodeValue = ""
 
@@ -54,8 +53,6 @@ final class MobileAppModel {
             return "Permissions"
         case .transfer:
             return "Backup in Progress"
-        case .interrupted:
-            return "Backup Interrupted"
         case .completed:
             return "Backup Complete"
         }
@@ -77,7 +74,7 @@ final class MobileAppModel {
         case .scanDesktopQRCode:
             await openScanFlow()
         case .resumeBackup:
-            route = .interrupted
+            await openScanFlow()
         case .backupPendingItems:
             await startTransfer()
         }
@@ -161,29 +158,10 @@ final class MobileAppModel {
     func confirmStopTransfer() async {
         isShowingStopConfirmation = false
         stopTransferProgressPolling()
-        interruptionReason = await transferService.stopTransfer(current: transferSnapshot)
-        homeSummary = .resumable(
-            desktopName: homeSummary.desktopName,
-            remainingItems: max(transferSnapshot.totalCount - transferSnapshot.transferredCount, 0),
-            permissionScope: permissionSummary.mediaScope
-        )
-        route = .interrupted
+        _ = await transferService.stopTransfer(current: transferSnapshot)
+        route = .home
 
         await telemetryClient.record(event: .transferStopped)
-        await persistSnapshot()
-    }
-
-    func resumeTransfer() async {
-        route = .transfer
-        transferSnapshot.statusMessage = "Resuming the backup with the paired desktop."
-        startTransferProgressPolling()
-        transferSnapshot = await transferService.resumeTransfer(
-            from: transferSnapshot,
-            progress: { _ in }
-        )
-        stopTransferProgressPolling()
-
-        await telemetryClient.record(event: .resumeTapped)
         await persistSnapshot()
     }
 
@@ -228,7 +206,12 @@ final class MobileAppModel {
         startTransferProgressPolling()
         transferSnapshot = await transferService.startTransfer(progress: { _ in })
         stopTransferProgressPolling()
-        await persistSnapshot()
+        guard route == .transfer else {
+            await persistSnapshot()
+            return
+        }
+
+        await completeTransfer()
     }
 
     private func startTransferProgressPolling() {
@@ -258,7 +241,6 @@ final class MobileAppModel {
         permissionSummary = snapshot.permissionSummary
         pairingStatus = snapshot.pairingStatus
         transferSnapshot = snapshot.transferSnapshot
-        interruptionReason = snapshot.lastInterruptionReason ?? .desktopUnreachable
         route = .home
     }
 
@@ -267,8 +249,7 @@ final class MobileAppModel {
             homeSummary: homeSummary,
             permissionSummary: permissionSummary,
             pairingStatus: pairingStatus,
-            transferSnapshot: transferSnapshot,
-            lastInterruptionReason: homeSummary.primaryAction.isResumeAction ? interruptionReason : nil
+            transferSnapshot: transferSnapshot
         )
         await stateStore.saveLaunchSnapshot(snapshot)
     }

@@ -40,27 +40,58 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertTrue(model.isShowingLowBatteryWarning)
     }
 
-    func test_stop_transfer_moves_to_resumable_state() async {
+    func test_stop_transfer_returns_home_without_interrupted_page() async {
+        let inFlightSnapshot = TransferSnapshot(
+            transferredCount: 2,
+            totalCount: 5,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Processed 2 of 5 items for the paired desktop.",
+            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
+            isIncompleteLibrary: false
+        )
+        let finalSnapshot = TransferSnapshot(
+            transferredCount: 5,
+            totalCount: 5,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
+            guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
+            isIncompleteLibrary: false
+        )
         let model = MobileAppModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
             permissionService: StaticPermissionService(summary: .allClear),
-            transferService: StaticTransferService(),
-            telemetryClient: RecordingTelemetryClient()
+            transferService: PollingTransferService(
+                inFlightSnapshot: inFlightSnapshot,
+                finalSnapshot: finalSnapshot
+            ),
+            telemetryClient: RecordingTelemetryClient(),
+            transferProgressPollingInterval: .milliseconds(10)
         )
 
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
+
+        let transferTask = Task {
+            await model.startBackup()
+        }
+        try? await Task.sleep(for: .milliseconds(30))
         model.requestStopTransfer()
         await model.confirmStopTransfer()
 
-        XCTAssertEqual(model.route, .interrupted)
-        XCTAssertEqual(model.interruptionReason, .stoppedByUser)
-        XCTAssertEqual(model.homeSummary.primaryAction, .resumeBackup)
+        XCTAssertEqual(model.route, .home)
+        XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
+        XCTAssertFalse(model.isShowingStopConfirmation)
+
+        await transferTask.value
+        XCTAssertEqual(model.route, .home)
     }
 
     func test_start_backup_polls_transfer_progress_while_session_is_running() async {
@@ -81,7 +112,7 @@ final class MobileAppModelTests: XCTestCase {
             transport: .lan,
             etaDescription: nil,
             statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
-            guidanceMessage: "Tap Finish Backup after the desktop confirms the transfer session is complete.",
+            guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
         )
         let model = MobileAppModel(
@@ -112,6 +143,7 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.transferSnapshot.transferredCount, 2)
 
         await transferTask.value
+        XCTAssertEqual(model.route, .completed)
         XCTAssertEqual(model.transferSnapshot.transferredCount, 5)
     }
 
