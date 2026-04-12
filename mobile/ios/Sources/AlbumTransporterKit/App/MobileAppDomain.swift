@@ -225,11 +225,11 @@ enum InterruptionReason: String, Equatable, Sendable, Codable {
         case .stoppedByUser:
             return "Backup paused"
         case .pausedBySystem:
-            return "Backup paused by iOS"
+            return "Transfer Paused"
         case .wifiLost:
-            return "Wi-Fi connection lost"
+            return "Connection Lost"
         case .desktopUnreachable:
-            return "Desktop unavailable"
+            return "Desktop Unreachable"
         case .reconnectRequired:
             return "Reconnect required"
         }
@@ -240,11 +240,11 @@ enum InterruptionReason: String, Equatable, Sendable, Codable {
         case .stoppedByUser:
             return "No additional items will be sent. The desktop may continue indexing media that already arrived."
         case .pausedBySystem:
-            return "The app was backgrounded or suspended. Resume when the device and desktop are ready again."
+            return "The app was moved to the background. Return to Album Transporter to continue."
         case .wifiLost:
-            return "The local network path dropped during transfer. Resume when both devices are reachable again."
+            return "Wi-Fi disconnected. Your progress is saved — reconnect or plug in USB to continue."
         case .desktopUnreachable:
-            return "The paired desktop could not be reached. You may need to resume from the desktop-driven flow."
+            return "The paired desktop is not reachable. Make sure it's on and running the app, then try again."
         case .reconnectRequired:
             return "Trust or session state expired. Resume from desktop so the session can be validated again."
         }
@@ -273,6 +273,8 @@ struct HomeSummary: Equatable, Sendable, Codable {
     var primaryAction: HomePrimaryAction
     var permissionScope: PermissionScope
     var detailMessage: String
+    var previouslyTransferredDescription: String? = nil
+    var interruptionWarning: String? = nil
 
     static let firstLaunch = HomeSummary(
         desktopName: nil,
@@ -373,9 +375,13 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
 struct CompletionSummary: Equatable, Sendable, Codable {
     var title: String
     var message: String
+    var itemsBackedUp: Int? = nil
+    var totalTransferredDescription: String? = nil
+    var durationDescription: String? = nil
+    var completedAtDescription: String? = nil
 
     static let demo = CompletionSummary(
-        title: "Backup complete",
+        title: "Backup Complete!",
         message: "Desktop confirmed this mobile backup session is complete. Already transferred items may still be finishing desktop indexing."
     )
 }

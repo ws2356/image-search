@@ -14,8 +14,16 @@ struct PairingFlowView: View {
             VStack(spacing: 20) {
                 pairingHero
 
+                if status.phase == .pairing {
+                    pairingStepStatus
+                }
+
                 if status.phase == .paired {
                     destinationCard
+                }
+
+                if status.phase == .expired {
+                    recoveryStepsCard
                 }
 
 #if os(iOS)
@@ -28,27 +36,38 @@ struct PairingFlowView: View {
                 }
 #endif
 
-                pasteSection
+                if status.phase == .instructions || status.phase == .scanning || status.phase == .failed {
+                    pasteSection
+                }
 
                 VStack(spacing: 10) {
-                    ActionButton(
-                        title: pairingButtonTitle,
-                        icon: pairingButtonIcon,
-                        style: .primary,
-                        action: onStartPairing
-                    )
-                    .disabled(isPairingActionDisabled)
-
-                    if status.phase != .paired {
+                    if status.phase == .pairing {
+                        Button(action: onBack) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "xmark")
+                                Text("Cancel")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .foregroundStyle(Color(hex: 0xFF453A))
+                            .background(Color(hex: 0xFFF1F0))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
                         ActionButton(
-                            title: "Preview Expired QR",
-                            icon: "clock.badge.xmark",
-                            style: .secondary,
-                            action: onShowExpired
+                            title: pairingButtonTitle,
+                            icon: pairingButtonIcon,
+                            style: .primary,
+                            action: onStartPairing
                         )
-                    }
+                        .disabled(isPairingActionDisabled)
 
-                    ActionButton(title: "Back", icon: "chevron.left", style: .plain, action: onBack)
+                        if status.phase != .paired {
+                            ActionButton(title: "Back", icon: "chevron.left", style: .plain, action: onBack)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 20)
@@ -65,7 +84,7 @@ struct PairingFlowView: View {
                     ForEach(0..<3, id: \.self) { ring in
                         Circle()
                             .stroke(Color(hex: 0x007AFF).opacity(0.15 + Double(ring) * 0.05), lineWidth: 2)
-                            .frame(width: 100 + CGFloat(ring) * 24, height: 100 + CGFloat(ring) * 24)
+                            .frame(width: 120 + CGFloat(ring) * 24, height: 120 + CGFloat(ring) * 24)
                     }
                 }
 
@@ -76,7 +95,7 @@ struct PairingFlowView: View {
             }
 
             Text(pairingTitle)
-                .font(.system(size: 24, weight: .bold))
+                .font(.system(size: pairingTitleSize, weight: .bold))
                 .foregroundStyle(Color(hex: 0x1C1C1E))
 
             Text(status.message)
@@ -88,23 +107,105 @@ struct PairingFlowView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var destinationCard: some View {
+    private var pairingStepStatus: some View {
         VStack(spacing: 0) {
-            if let desktopName = status.desktopName {
-                infoRow(icon: "desktopcomputer", label: "Desktop", value: desktopName)
-                Divider().padding(.leading, 42)
+            stepStatusRow(icon: "checkmark.circle.fill", iconColor: Color(hex: 0x30D158), text: "QR code scanned")
+            Divider().padding(.leading, 42)
+            stepStatusRow(icon: "checkmark.circle.fill", iconColor: Color(hex: 0x30D158), text: "Desktop reached")
+            Divider().padding(.leading, 42)
+            HStack(spacing: 12) {
+                ProgressView()
+                    .frame(width: 20, height: 20)
+                Text("Verifying trust material…")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color(hex: 0x1C1C1E))
+                Spacer()
             }
-            if let sessionID = status.sessionID {
-                infoRow(icon: "number", label: "Session", value: sessionID)
-                Divider().padding(.leading, 42)
-            }
-            if let transport = status.transport {
-                infoRow(icon: transport.systemImage, label: "Transport", value: transport.title)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+
+    private func stepStatusRow(icon: String, iconColor: Color, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(iconColor)
+                .frame(width: 20)
+            Text(text)
+                .font(.system(size: 15))
+                .foregroundStyle(Color(hex: 0x1C1C1E))
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var destinationCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Backup destination")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .textCase(.uppercase)
+                .kerning(0.5)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            VStack(spacing: 0) {
+                if let desktopName = status.desktopName {
+                    infoRow(icon: "desktopcomputer", label: "PC", value: desktopName)
+                    Divider().padding(.leading, 42)
+                }
+                if let sessionID = status.sessionID {
+                    infoRow(icon: "folder", label: "Folder", value: sessionID)
+                    Divider().padding(.leading, 42)
+                }
+                if let transport = status.transport {
+                    infoRow(icon: transport.systemImage, label: "Transport", value: transport.title)
+                }
             }
         }
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
         .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+
+    private var recoveryStepsCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            numberedRecoveryStep(number: "1", title: "Refresh on PC", detail: "Generate a new QR code from the desktop app")
+            Divider().padding(.leading, 56)
+            numberedRecoveryStep(number: "2", title: "Scan Again", detail: "Use the button below to scan the new code")
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+
+    private func numberedRecoveryStep(number: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color(hex: 0x007AFF))
+                    .frame(width: 28, height: 28)
+                Text(number)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x1C1C1E))
+                Text(detail)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: 0x6E6E73))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
     }
 
     private func infoRow(icon: String, label: String, value: String) -> some View {
@@ -161,10 +262,18 @@ struct PairingFlowView: View {
         switch status.phase {
         case .instructions: return "Scan the desktop QR"
         case .scanning: return "Ready to scan"
-        case .pairing: return "Pairing…"
-        case .paired: return "Paired successfully"
-        case .expired: return "QR expired"
+        case .pairing: return "Connecting…"
+        case .paired: return "Paired!"
+        case .expired: return "QR Code Expired"
         case .failed: return "Pairing failed"
+        }
+    }
+
+    private var pairingTitleSize: CGFloat {
+        switch status.phase {
+        case .paired: return 28
+        case .expired: return 26
+        default: return 24
         }
     }
 
@@ -184,19 +293,25 @@ struct PairingFlowView: View {
             return [Color(hex: 0x007AFF), Color(hex: 0x0055D4)]
         case .paired:
             return [Color(hex: 0x30D158), Color(hex: 0x1A9E3D)]
-        case .expired:
-            return [Color(hex: 0xFF9F0A), Color(hex: 0xE07800)]
-        case .failed:
+        case .expired, .failed:
             return [Color(hex: 0xFF453A), Color(hex: 0xC02020)]
         }
     }
 
     private var pairingButtonTitle: String {
-        status.phase == .paired ? "Pair Again" : "Start Pairing"
+        switch status.phase {
+        case .paired: return "Start Backup"
+        case .expired: return "Scan Again"
+        default: return "Start Pairing"
+        }
     }
 
     private var pairingButtonIcon: String {
-        status.phase == .paired ? "arrow.clockwise" : "link"
+        switch status.phase {
+        case .paired: return "arrow.up.circle.fill"
+        case .expired: return "qrcode.viewfinder"
+        default: return "link"
+        }
     }
 
     private var isPairingActionDisabled: Bool {
@@ -312,10 +427,19 @@ struct TransferSessionView: View {
                 statsGrid
 
                 if let eta = snapshot.etaDescription {
-                    Text(eta)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0x1C1C1E))
-                        .frame(maxWidth: .infinity)
+                    VStack(spacing: 4) {
+                        Text("Estimated time")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(hex: 0x6E6E73))
+                        Text(eta)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color(hex: 0x1C1C1E))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
                 }
 
                 guidanceHint
@@ -405,11 +529,11 @@ struct TransferSessionView: View {
 
     private var statsGrid: some View {
         HStack(spacing: 0) {
-            statColumn(label: "Transferred", value: "\(snapshot.transferredCount)", color: Color(hex: 0x30D158))
+            statColumn(label: "Sent", value: "\(snapshot.transferredCount)", color: Color(hex: 0x30D158))
+            Divider().frame(height: 40)
+            statColumn(label: "Remaining", value: "\(snapshot.totalCount - snapshot.transferredCount)", color: Color(hex: 0x007AFF))
             Divider().frame(height: 40)
             statColumn(label: "Failed", value: "\(snapshot.failedCount)", color: Color(hex: 0xFF453A))
-            Divider().frame(height: 40)
-            statColumn(label: "Transport", value: snapshot.transport.title, color: transportColor)
         }
         .padding(.vertical, 14)
         .background(Color.white)
@@ -478,19 +602,59 @@ struct InterruptedSessionView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                if reason == .wifiLost {
+                progressCard
+
+                if reason == .wifiLost || reason == .desktopUnreachable {
                     troubleshootingSection
                 }
 
-                VStack(spacing: 10) {
-                    ActionButton(title: "Resume Backup", icon: "arrow.clockwise", style: .primary, action: onResume)
-                    ActionButton(title: "Return Home", icon: "house", style: .secondary, action: onReturnHome)
+                if reason == .desktopUnreachable {
+                    desktopInfoCallout
                 }
+
+                buttonSection
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
         .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private var progressCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Progress (saved)")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .textCase(.uppercase)
+                .kerning(0.5)
+
+            HStack(spacing: 0) {
+                VStack(spacing: 2) {
+                    Text("—")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x30D158))
+                    Text("Sent")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x6E6E73))
+                }
+                .frame(maxWidth: .infinity)
+                Divider().frame(height: 36)
+                VStack(spacing: 2) {
+                    Text("—")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x007AFF))
+                    Text("Remaining")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x6E6E73))
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
     }
 
     private var troubleshootingSection: some View {
@@ -509,6 +673,43 @@ struct InterruptedSessionView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(hex: 0xFDECEA))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var desktopInfoCallout: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(Color(hex: 0x007AFF))
+            Text("Make sure the desktop app is open and the mobile folder session is active. You may need to restart the session on the PC.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: 0xE8F4FD))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private var buttonSection: some View {
+        if reason == .desktopUnreachable {
+            HStack(spacing: 10) {
+                ActionButton(title: "Try Again", icon: "arrow.clockwise", style: .primary, action: onResume)
+                ActionButton(title: "Scan New QR", icon: "qrcode.viewfinder", style: .secondary, action: onReturnHome)
+            }
+        } else {
+            VStack(spacing: 10) {
+                ActionButton(title: resumeButtonTitle, icon: "arrow.clockwise", style: .primary, action: onResume)
+                ActionButton(title: "Return Home", icon: "house", style: .secondary, action: onReturnHome)
+            }
+        }
+    }
+
+    private var resumeButtonTitle: String {
+        switch reason {
+        case .wifiLost: return "Try Reconnecting"
+        default: return "Resume Transfer"
+        }
     }
 
     private func tipRow(_ text: String) -> some View {
@@ -550,7 +751,7 @@ struct CompletionStateView: View {
                     )
 
                     Text(summary.title)
-                        .font(.system(size: 26, weight: .bold))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(Color(hex: 0x1C1C1E))
 
                     Text(summary.message)
@@ -561,12 +762,91 @@ struct CompletionStateView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                ActionButton(title: "Done", icon: "house", style: .primary, action: onReturnHome)
+                sessionSummaryCard
+
+                greenInfoCallout
+
+                ActionButton(title: "Back to Home", icon: "house", style: .primary, action: onReturnHome)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
         .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private var sessionSummaryCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Session Summary")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .textCase(.uppercase)
+                .kerning(0.5)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 0) {
+                summaryCell(
+                    label: "Items backed up",
+                    value: summary.itemsBackedUp.map(String.init) ?? "—",
+                    icon: "photo.on.rectangle",
+                    color: Color(hex: 0x007AFF)
+                )
+                summaryCell(
+                    label: "Total transferred",
+                    value: summary.totalTransferredDescription ?? "—",
+                    icon: "arrow.up.circle",
+                    color: Color(hex: 0x30D158)
+                )
+                summaryCell(
+                    label: "Duration",
+                    value: summary.durationDescription ?? "—",
+                    icon: "clock",
+                    color: Color(hex: 0xFF9F0A)
+                )
+                summaryCell(
+                    label: "Completed at",
+                    value: summary.completedAtDescription ?? "—",
+                    icon: "calendar",
+                    color: Color(hex: 0x6E6E73)
+                )
+            }
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+
+    private func summaryCell(label: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(color)
+            Text(value)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x1C1C1E))
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var greenInfoCallout: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(Color(hex: 0x30D158))
+            Text("The desktop is now indexing your backed-up photos and videos. They'll appear in search results shortly.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: 0x166534))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: 0xE6F9ED))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -576,11 +856,11 @@ private func heroCircle(icon: String, gradient: [Color]) -> some View {
     ZStack {
         Circle()
             .fill(.linearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
-            .frame(width: 80, height: 80)
+            .frame(width: 100, height: 100)
             .shadow(color: gradient.first?.opacity(0.4) ?? .clear, radius: 16, y: 8)
 
         Image(systemName: icon)
-            .font(.system(size: 32, weight: .semibold))
+            .font(.system(size: 40, weight: .semibold))
             .foregroundStyle(.white)
     }
 }

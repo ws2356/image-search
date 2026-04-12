@@ -152,8 +152,7 @@ class SourceSelectionDialog(QDialog):
         card_layout.addWidget(desc_label)
         card_layout.addStretch()
 
-        card.mousePressEvent = lambda _event, s=source, c=card, t=title_label: self._select_card(s, c, t)
-        card.mouseDoubleClickEvent = lambda _event, s=source: self._confirm_source(s)
+        card.mousePressEvent = lambda _event, s=source: self._confirm_source(s)
         self._source_buttons.append(card)
         card._title_label = title_label  # type: ignore[attr-defined]
         return card

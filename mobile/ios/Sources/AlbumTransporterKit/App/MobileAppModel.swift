@@ -201,7 +201,7 @@ final class MobileAppModel {
         stopTransferProgressPolling()
         transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
         completionSummary = CompletionSummary(
-            title: "Backup complete",
+            title: "Backup Complete!",
             message: "Desktop confirmed \(transferSnapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop."
         )
         homeSummary = .completed(

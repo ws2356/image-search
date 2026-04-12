@@ -6,18 +6,156 @@ struct HomeView: View {
     let onScanDesktop: () -> Void
 
     private let setupSteps = [
-        SetupStep(id: "open-desktop", number: 1, title: "Open the desktop app", detail: "Install or launch Image Search on your computer."),
-        SetupStep(id: "start-add-folder", number: 2, title: "Start Add Folder", detail: "Choose Mobile Device in the desktop flow."),
-        SetupStep(id: "show-qr-page", number: 3, title: "Show the QR page", detail: "Keep the desktop pairing screen visible while you scan."),
-        SetupStep(id: "backup-full-library", number: 4, title: "Back up the library", detail: "v1 supports the full eligible library, not album selection."),
+        SetupStep(id: "open-desktop", number: 1, title: "Open DTImageSearch", detail: "Install or open the desktop app on your PC"),
+        SetupStep(id: "add-mobile-folder", number: 2, title: "Add a Mobile Folder", detail: "Click Add Folder → Mobile Device in the PC app"),
+        SetupStep(id: "scan-qr", number: 3, title: "Scan the QR code", detail: "A QR code appears on screen — scan it below to pair"),
     ]
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                heroSection
-                setupSection
-                actionSection
+            if summary.desktopName == nil {
+                firstTimeContent
+            } else {
+                returningContent
+            }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    // MARK: - First-time user
+
+    private var firstTimeContent: some View {
+        VStack(spacing: 24) {
+            heroSection
+            setupSection
+            disclaimerCard
+
+            Button(action: onPrimaryAction) {
+                HStack(spacing: 8) {
+                    Image(systemName: "qrcode.viewfinder")
+                    Text("Scan QR Code")
+                        .font(.system(size: 17, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(Color(hex: 0x007AFF))
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+
+            if summary.permissionScope.isIncomplete {
+                warningBanner(
+                    icon: "exclamationmark.triangle.fill",
+                    title: "Backup may be incomplete",
+                    message: summary.permissionScope.detail,
+                    tint: .orange
+                )
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Returning user
+
+    private var returningContent: some View {
+        VStack(spacing: 0) {
+            Text(summary.desktopName ?? "")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(Color(hex: 0x1C1C1E))
+                .tracking(-0.5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+
+            if summary.primaryAction != .scanDesktopQRCode {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(hex: 0x30D158))
+                        .frame(width: 9, height: 9)
+                    Text("Connected")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x166534))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Color(hex: 0xE6F9ED))
+                .clipShape(Capsule())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+            }
+
+            VStack(spacing: 12) {
+                if let warning = summary.interruptionWarning {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color(hex: 0xFF9F0A))
+                            .font(.system(size: 18))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Backup was interrupted")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Color(hex: 0x1C1C1E))
+                            Text(warning)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color(hex: 0x555555))
+                                .lineSpacing(2)
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(hex: 0xFFF3CD))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+
+                statsCard
+
+                Button(action: onPrimaryAction) {
+                    HStack(spacing: 8) {
+                        Image(systemName: summary.primaryAction.systemImage)
+                        Text(summary.primaryAction.title)
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(Color(hex: 0x007AFF))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+
+                if summary.primaryAction.showsSecondaryScanAction {
+                    Button(action: onScanDesktop) {
+                        Text("Reconnect")
+                            .font(.system(size: 17, weight: .medium))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .foregroundStyle(Color(hex: 0x007AFF))
+                            .background(Color.white)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color(hex: 0xE5E5EA), lineWidth: 1.5)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "bolt.horizontal.fill")
+                        .foregroundStyle(Color(hex: 0x3B5FC0))
+                        .font(.system(size: 13))
+                    Text("USB auto-detected — plug in for faster Wi-Fi-independent transfer.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0x3B5FC0))
+                        .lineSpacing(2)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(hex: 0xEEF2FF))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 if summary.permissionScope.isIncomplete {
                     warningBanner(
@@ -29,31 +167,36 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .padding(.top, 16)
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
+
+    // MARK: - Components
 
     private var heroSection: some View {
         VStack(spacing: 12) {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 44, weight: .medium))
-                .foregroundStyle(.linearGradient(
-                    colors: [Color(hex: 0x007AFF), Color(hex: 0x0055D4)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-                .frame(width: 88, height: 88)
-                .background(
-                    Circle()
-                        .fill(Color(hex: 0x007AFF).opacity(0.1))
-                )
+            ZStack {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(
+                        .linearGradient(
+                            colors: [Color(hex: 0x0A84FF), Color(hex: 0x0040CC)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 88, height: 88)
+                    .shadow(color: Color(hex: 0x007AFF).opacity(0.45), radius: 12, y: 6)
+
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.system(size: 40, weight: .medium))
+                    .foregroundStyle(.white)
+            }
 
             Text("Album Transporter")
-                .font(.system(size: 28, weight: .bold))
+                .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(Color(hex: 0x1C1C1E))
 
-            Text("Back up your iPhone photos & videos to Image Search on desktop. Local only — no cloud, no account.")
+            Text("Back up your photos & videos to your PC securely over Wi-Fi or USB")
                 .font(.subheadline)
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .multilineTextAlignment(.center)
@@ -65,16 +208,17 @@ struct HomeView: View {
 
     private var setupSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("SETUP STEPS")
-                .font(.system(size: 11, weight: .bold))
+            Text("Start on your PC first")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color(hex: 0x6E6E73))
-                .kerning(0.7)
+                .textCase(.uppercase)
+                .kerning(0.5)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 12)
+                .padding(.bottom, 6)
 
             VStack(spacing: 0) {
                 ForEach(Array(setupSteps.enumerated()), id: \.element.id) { index, step in
-                    HStack(alignment: .top, spacing: 14) {
+                    HStack(alignment: .top, spacing: 12) {
                         ZStack {
                             Circle()
                                 .fill(Color(hex: 0x007AFF))
@@ -96,116 +240,105 @@ struct HomeView: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 13)
 
                     if index < setupSteps.count - 1 {
                         Divider()
-                            .padding(.leading, 58)
+                            .padding(.leading, 56)
                     }
                 }
             }
             .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
         }
     }
 
-    private var actionSection: some View {
-        VStack(spacing: 12) {
-            if let desktopName = summary.desktopName {
-                HStack(spacing: 8) {
-                    Image(systemName: "desktopcomputer")
-                        .foregroundStyle(Color(hex: 0x6E6E73))
-                    Text(desktopName)
+    private var disclaimerCard: some View {
+        Text("v1 backs up your complete eligible photo & video library. Album selection is not available. Interrupted sessions resume safely — already-transferred items won't be resent.")
+            .font(.system(size: 14))
+            .foregroundStyle(Color(hex: 0x6E6E73))
+            .lineSpacing(3)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+
+    private var statsCard: some View {
+        VStack(spacing: 0) {
+            if let lastBackup = summary.lastBackupDescription {
+                statsRow(
+                    iconColor: Color(hex: 0x007AFF),
+                    iconBg: Color(hex: 0xE8F4FD),
+                    iconName: "clock",
+                    title: "Last backup",
+                    subtitle: lastBackup
+                )
+                Divider().padding(.leading, 50)
+            }
+
+            if let pending = summary.pendingItemCount, pending > 0 {
+                statsRow(
+                    iconColor: Color(hex: 0x007AFF),
+                    iconBg: Color(hex: 0xEEF4FF),
+                    iconName: "photo.on.rectangle",
+                    title: "\(pending) new items detected",
+                    subtitle: nil,
+                    titleBold: true
+                )
+                Divider().padding(.leading, 50)
+            }
+
+            if let transferred = summary.previouslyTransferredDescription {
+                statsRow(
+                    iconColor: Color(hex: 0x30D158),
+                    iconBg: Color(hex: 0xE6F9ED),
+                    iconName: "checkmark.circle",
+                    title: "Previously transferred",
+                    subtitle: transferred
+                )
+            }
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+
+    private func statsRow(
+        iconColor: Color,
+        iconBg: Color,
+        iconName: String,
+        title: String,
+        subtitle: String?,
+        titleBold: Bool = false
+    ) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(iconBg)
+                    .frame(width: 34, height: 34)
+                Image(systemName: iconName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(iconColor)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 17, weight: titleBold ? .semibold : .regular))
+                    .foregroundStyle(Color(hex: 0x1C1C1E))
+                if let subtitle {
+                    Text(subtitle)
                         .font(.system(size: 14))
                         .foregroundStyle(Color(hex: 0x6E6E73))
-                    Spacer()
-                    if summary.primaryAction != .scanDesktopQRCode {
-                        badgePill("Connected", color: Color(hex: 0x30D158))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
-            }
-
-            HStack(spacing: 10) {
-                metricCard(title: "Pending", value: summary.pendingItemCount.map(String.init) ?? "—")
-
-                if let lastBackupDescription = summary.lastBackupDescription {
-                    metricCard(title: "Last backup", value: lastBackupDescription)
                 }
             }
-
-            Button(action: onPrimaryAction) {
-                HStack(spacing: 8) {
-                    Image(systemName: summary.primaryAction.systemImage)
-                    Text(summary.primaryAction.title)
-                        .font(.system(size: 17, weight: .semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 56)
-                .background(Color(hex: 0x007AFF))
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .buttonStyle(.plain)
-
-            if summary.primaryAction.showsSecondaryScanAction {
-                Button(action: onScanDesktop) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "qrcode.viewfinder")
-                        Text("Scan Desktop QR")
-                            .font(.system(size: 15, weight: .medium))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .foregroundStyle(Color(hex: 0x007AFF))
-                    .background(Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(hex: 0xE5E5EA), lineWidth: 1.5)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .buttonStyle(.plain)
-            }
+            Spacer()
         }
-    }
-
-    private func metricCard(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x6E6E73))
-            Text(value)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x1C1C1E))
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
-    }
-
-    private func badgePill(_ text: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-            Text(text)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(color)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(color.opacity(0.12))
-        .clipShape(Capsule())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
     private func warningBanner(icon: String, title: String, message: String, tint: Color) -> some View {
