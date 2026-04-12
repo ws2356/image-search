@@ -73,7 +73,7 @@ struct PairingFlowView: View {
                         .disabled(isPrimaryActionDisabled)
 
                         if status.phase == .failed {
-                            ActionButton(title: "Cancel", style: .secondary, action: onBack)
+                            ActionButton(title: "Cancel", style: .cancelSecondary, action: onBack)
                         } else if status.phase != .paired {
                             ActionButton(title: "Back", icon: "chevron.left", style: .plain, action: onBack)
                         }
@@ -359,7 +359,7 @@ struct PermissionsGateView: View {
 
                 VStack(spacing: 10) {
                     ActionButton(title: "Start Backup", icon: "arrow.up.circle.fill", style: .primary, action: onContinue)
-                    ActionButton(title: "Back", icon: "chevron.left", style: .secondary, action: onBack)
+                    ActionButton(title: "Cancel", style: .secondary, action: onBack)
                 }
             }
             .padding(.horizontal, 20)
@@ -699,7 +699,7 @@ struct ActionButton: View {
     let action: () -> Void
 
     enum ActionButtonStyle {
-        case primary, secondary, destructive, plain
+        case primary, secondary, cancelSecondary, destructive, plain
     }
 
     var body: some View {
@@ -725,6 +725,7 @@ struct ActionButton: View {
         switch style {
         case .primary: return .white
         case .secondary: return Color(hex: 0x007AFF)
+        case .cancelSecondary: return Color(hex: 0xFF453A)
         case .destructive: return Color(hex: 0xFF453A)
         case .plain: return Color(hex: 0x007AFF)
         }
@@ -734,6 +735,7 @@ struct ActionButton: View {
         switch style {
         case .primary: return Color(hex: 0x007AFF)
         case .secondary: return Color.white
+        case .cancelSecondary: return Color.white
         case .destructive: return Color(hex: 0xFFF1F0)
         case .plain: return .clear
         }
@@ -741,7 +743,7 @@ struct ActionButton: View {
 
     @ViewBuilder
     private var borderOverlay: some View {
-        if style == .secondary {
+        if style == .secondary || style == .cancelSecondary {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(Color(hex: 0xE5E5EA), lineWidth: 1.5)
         }

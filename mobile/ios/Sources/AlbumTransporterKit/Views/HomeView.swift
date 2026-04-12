@@ -13,13 +13,17 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            if summary.desktopName == nil {
-                firstTimeContent
-            } else {
+            if hasSessionHistory {
                 returningContent
+            } else {
+                firstTimeContent
             }
         }
         .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private var hasSessionHistory: Bool {
+        summary.lastBackupDescription != nil || summary.previouslyTransferredDescription != nil
     }
 
     // MARK: - First-time user

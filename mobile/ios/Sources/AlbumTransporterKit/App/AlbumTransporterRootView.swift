@@ -52,7 +52,7 @@ public struct AlbumTransporterRootView: View {
         } message: {
             Text("Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.")
         }
-        .alert("Full media access required", isPresented: $model.isShowingMediaAccessAlert) {
+        .alert("Full media access recommended", isPresented: $model.isShowingMediaAccessAlert) {
 #if os(iOS)
             Button("Open Settings") {
                 guard let url = URL(string: UIApplication.openSettingsURLString) else {
@@ -61,7 +61,11 @@ public struct AlbumTransporterRootView: View {
                 UIApplication.shared.open(url)
             }
 #endif
-            Button("Not Now", role: .cancel) {}
+            Button("Not now", role: .cancel) {
+                Task {
+                    await model.continueBackupWithCurrentMediaAccess()
+                }
+            }
         } message: {
             Text(model.mediaAccessAlertMessage)
         }

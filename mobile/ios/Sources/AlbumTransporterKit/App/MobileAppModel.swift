@@ -15,12 +15,13 @@ final class MobileAppModel {
     var isShowingStopConfirmation = false
     var isShowingLowBatteryWarning = false
     var isShowingMediaAccessAlert = false
-    var mediaAccessAlertMessage = "Album Transporter needs Full Library Access before backup can start."
+    var mediaAccessAlertMessage = "Full Library Access is recommended so Album Transporter can include all local photos and videos."
 
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var transferProgressPollingTask: Task<Void, Never>?
     @ObservationIgnored private let transferProgressPollingInterval: Duration
     @ObservationIgnored private var transferStartedAt: Date?
+    @ObservationIgnored private var isAwaitingMediaAccessDecision = false
     @ObservationIgnored private let stateStore: AppStateStore
     @ObservationIgnored private let qrCodePayloadDecoder: QRCodePayloadDecoding
     @ObservationIgnored private let pairingService: PairingService
@@ -146,14 +147,29 @@ final class MobileAppModel {
 
     func startBackup() async {
         isShowingMediaAccessAlert = false
+        isAwaitingMediaAccessDecision = false
         permissionSummary = await permissionService.loadPermissionSummary()
         guard permissionSummary.mediaScope == .full else {
             mediaAccessAlertMessage = mediaAccessAlertMessage(for: permissionSummary.mediaScope)
             isShowingMediaAccessAlert = true
+            isAwaitingMediaAccessDecision = true
             await persistSnapshot()
             return
         }
 
+        await beginTransferAfterPreflightChecks()
+    }
+
+    func continueBackupWithCurrentMediaAccess() async {
+        guard isAwaitingMediaAccessDecision else {
+            return
+        }
+        isAwaitingMediaAccessDecision = false
+        isShowingMediaAccessAlert = false
+        await beginTransferAfterPreflightChecks()
+    }
+
+    private func beginTransferAfterPreflightChecks() async {
         if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
             await persistSnapshot()
@@ -176,6 +192,7 @@ final class MobileAppModel {
         isShowingStopConfirmation = false
         stopTransferProgressPolling()
         _ = await transferService.stopTransfer(current: transferSnapshot)
+        updateHomeSummaryAfterStoppedTransfer()
         transferStartedAt = nil
         route = .home
 
@@ -293,10 +310,33 @@ final class MobileAppModel {
         case .full:
             return "Album Transporter already has Full Library Access."
         case .limited:
-            return "Album Transporter needs Full Library Access before backup can start. Open Settings and change Photos access to Full Access."
+            return "Full Library Access is recommended so Album Transporter can include your complete library. You can continue now, or open Settings to upgrade Photos access."
         case .photosOnly, .videosOnly, .denied:
-            return "Album Transporter needs Full Library Access before backup can start. Open Settings and allow full Photos access."
+            return "Full Library Access is recommended so Album Transporter can include all local photos and videos. You can continue now, or open Settings to grant broader access."
         }
+    }
+
+    private func updateHomeSummaryAfterStoppedTransfer() {
+        let totalAttempted = max(
+            transferSnapshot.totalCount,
+            transferSnapshot.transferredCount + transferSnapshot.failedCount
+        )
+
+        if totalAttempted > 0 {
+            homeSummary.lastBackupDescription = "Stopped after \(transferSnapshot.transferredCount) of \(totalAttempted) items."
+            homeSummary.previouslyTransferredDescription = "\(transferSnapshot.transferredCount) items sent in the most recent session."
+        } else {
+            homeSummary.lastBackupDescription = "Backup session started, then canceled before any items were sent."
+            homeSummary.previouslyTransferredDescription = "0 items sent in the most recent session."
+        }
+
+        homeSummary.primaryAction = .scanDesktopQRCode
+        homeSummary.pendingItemCount = nil
+        homeSummary.interruptionWarning = nil
+        if let desktopName = pairingStatus.desktopName, !desktopName.isEmpty {
+            homeSummary.desktopName = desktopName
+        }
+        homeSummary.detailMessage = "Scan again when you are ready to start another backup session."
     }
 
     private func formattedDuration(_ duration: TimeInterval?) -> String {

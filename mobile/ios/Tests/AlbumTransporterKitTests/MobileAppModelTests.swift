@@ -48,7 +48,7 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertTrue(model.isShowingLowBatteryWarning)
     }
 
-    func test_start_backup_requires_full_media_library_access() async {
+    func test_start_backup_shows_full_media_access_reminder_before_continuing() async {
         let limitedAccessSummary = PermissionSummary(
             cameraGranted: true,
             notificationsGranted: true,
@@ -75,6 +75,9 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .permissions)
         XCTAssertTrue(model.isShowingMediaAccessAlert)
         XCTAssertFalse(model.mediaAccessAlertMessage.isEmpty)
+
+        await model.continueBackupWithCurrentMediaAccess()
+        XCTAssertEqual(model.route, .completed)
     }
 
     func test_stop_transfer_returns_home_without_interrupted_page() async {
@@ -126,6 +129,8 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .home)
         XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
         XCTAssertFalse(model.isShowingStopConfirmation)
+        XCTAssertNotNil(model.homeSummary.lastBackupDescription)
+        XCTAssertNotNil(model.homeSummary.previouslyTransferredDescription)
 
         await transferTask.value
         XCTAssertEqual(model.route, .home)

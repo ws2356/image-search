@@ -23,7 +23,8 @@ struct LiveQRCodeScannerScreen: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let scanRect = scannerRect(in: geometry)
+            let safeAreaInsets = resolvedSafeAreaInsets(from: geometry)
+            let scanRect = scannerRect(in: geometry, safeAreaInsets: safeAreaInsets)
 
             ZStack {
                 scannerBackground
@@ -31,9 +32,9 @@ struct LiveQRCodeScannerScreen: View {
                 ScannerMaskOverlay(size: geometry.size, scanRect: scanRect)
 
                 VStack(spacing: 0) {
-                    topBar(topInset: geometry.safeAreaInsets.top)
+                    topBar(topInset: safeAreaInsets.top)
                     Spacer()
-                    instructionBanner(bottomInset: geometry.safeAreaInsets.bottom)
+                    instructionBanner(bottomInset: safeAreaInsets.bottom)
                 }
 
                 switch accessState {
@@ -165,11 +166,26 @@ struct LiveQRCodeScannerScreen: View {
         .padding(.horizontal, 28)
     }
 
-    private func scannerRect(in geometry: GeometryProxy) -> CGRect {
+    private func scannerRect(in geometry: GeometryProxy, safeAreaInsets: UIEdgeInsets) -> CGRect {
         let frameWidth = min(geometry.size.width * 0.62, 240)
         let originX = (geometry.size.width - frameWidth) / 2
-        let originY = max(geometry.safeAreaInsets.top + 120, geometry.size.height * 0.24)
+        let originY = max(safeAreaInsets.top + 120, geometry.size.height * 0.24)
         return CGRect(x: originX, y: originY, width: frameWidth, height: frameWidth)
+    }
+
+    private func resolvedSafeAreaInsets(from geometry: GeometryProxy) -> UIEdgeInsets {
+        let geometryInsets = geometry.safeAreaInsets
+        let keyWindowInsets = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
+        return UIEdgeInsets(
+            top: max(geometryInsets.top, keyWindowInsets.top),
+            left: max(geometryInsets.leading, keyWindowInsets.left),
+            bottom: max(geometryInsets.bottom, keyWindowInsets.bottom),
+            right: max(geometryInsets.trailing, keyWindowInsets.right)
+        )
     }
 
     private func handleScannedValue(_ value: String) {
