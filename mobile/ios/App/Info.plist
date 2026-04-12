@@ -31,5 +31,7 @@
 	<string>Album Transporter uses the camera to scan the desktop pairing QR code and start a local backup session.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Album Transporter reads your local photos and videos so it can transfer them directly to your paired desktop.</string>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 </dict>
 </plist>

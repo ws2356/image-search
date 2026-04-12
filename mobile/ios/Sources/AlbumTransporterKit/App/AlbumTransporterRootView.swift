@@ -13,12 +13,15 @@ public struct AlbumTransporterRootView: View {
         NavigationStack {
             currentScreen
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(backgroundGradient)
                 .navigationTitle(model.navigationTitle)
 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarBackground(navigationBarBackground, for: .navigationBar)
+                .toolbarColorScheme(.light, for: .navigationBar)
 #endif
         }
+        .background(backgroundGradient)
         .task {
             await model.load()
         }
@@ -149,5 +152,16 @@ public struct AlbumTransporterRootView: View {
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
+    }
+
+    private var navigationBarBackground: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                Color(red: 0.95, green: 0.97, blue: 1.0),
+                Color.white,
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
