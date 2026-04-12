@@ -131,9 +131,8 @@ class TestAppFlow(unittest.TestCase):
             subfolder="test",
             model_name="ViT-B-32",
             pretrained_model="laion2b_s34b_b79k",
-            model_download_url="http://example.com/model.bin",
             offline_mode=True,
-            cache_file_md5="dummy_md5"
+            model_file_info_url="http://example.com/model.bin"
         )
         
         # Patch get_app_data_path in dts_fs and modules that imported it

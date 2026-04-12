@@ -50,10 +50,15 @@ $python_bin -m pytest -s --log-cli-level=$level tests/unit/test_search_controlle
 $python_bin -m pytest -s --log-cli-level=$level tests/functional/test_app_flow.py
 $python_bin -m pytest -s --log-cli-level=$level tests/functional/test_mobile_backup_flow.py
 
-if [ "$need_build" = true ]; then
-    echo "Building app with PyInstaller..."
-    pyinstaller dt_image_search/DTImageSearch.spec --noconfirm --clean
-fi
+# Run UI tests only on Windows os
+if [[ "$OSTYPE" == "msys" ]]; then
+  if [ "$need_build" = true ]; then
+      echo "Building app with PyInstaller..."
+      pyinstaller dt_image_search/DTImageSearch.spec --noconfirm --clean
+  fi
 
-bash "$this_dir/uitest_bootstrap.sh"
-bash "$this_dir/uitest_start.sh"
+  bash "$this_dir/uitest_bootstrap.sh"
+  bash "$this_dir/uitest_start.sh"
+else
+    echo "Skipping UI tests on non-Windows OS"
+fi

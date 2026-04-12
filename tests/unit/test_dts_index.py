@@ -4,6 +4,9 @@ import numpy as np
 import os
 import sys
 
+def noop_decorator(func):
+    return func
+
 # Mocking dependencies before importing the module under test
 # This is necessary because dts_index.py has top-level code that might fail if dependencies are missing or if it tries to load models.
 mock_faiss = MagicMock()
@@ -52,8 +55,9 @@ sys.modules['PIL.Image'] = MagicMock()
 sys.modules['PIL.ImageFile'] = MagicMock()
 sys.modules['dt_image_search.telemetry.telemetry_client'] = MagicMock()
 mock_perf = MagicMock()
-mock_perf.perffunc = lambda x: x
+mock_perf.perffunc = noop_decorator
 sys.modules['dt_image_search.tools.dts_perf'] = mock_perf
+sys.modules['dt_image_search.telemetry.telemetry_client'].with_trace = lambda _: noop_decorator
 
 # Now we can import the module
 from dt_image_search.index import dts_index
