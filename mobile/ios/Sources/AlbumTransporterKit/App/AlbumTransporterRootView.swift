@@ -80,8 +80,10 @@ public struct AlbumTransporterRootView: View {
                         await model.beginPairing()
                     }
                 },
-                onShowExpired: {
-                    model.showExpiredQRCode()
+                onScanAgain: {
+                    Task {
+                        await model.openScanFlow()
+                    }
                 },
                 onBack: {
                     Task {

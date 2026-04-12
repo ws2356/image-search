@@ -180,7 +180,7 @@ enum QRCodePayloadDecoderError: Error, Equatable, Sendable {
     var message: String {
         switch self {
         case .emptyPayload:
-            return "Paste or scan the desktop pairing link to continue."
+            return "Scan the desktop pairing QR code to continue."
         case .invalidURL:
             return "The QR code is not a valid deep link."
         case .invalidHost:

@@ -6,10 +6,32 @@ struct PairingFlowView: View {
     let status: PairingStatus
     @Binding var scannedQRCodeValue: String
     let onStartPairing: () -> Void
-    let onShowExpired: () -> Void
+    let onScanAgain: () -> Void
     let onBack: () -> Void
 
     var body: some View {
+        #if os(iOS)
+        if isLiveScanPhase {
+            LiveQRCodeScannerScreen(
+                status: status,
+                scannedQRCodeValue: $scannedQRCodeValue,
+                onStartPairing: onStartPairing,
+                onBack: onBack
+            )
+            .toolbar(.hidden, for: .navigationBar)
+        } else {
+            pairingStateContent
+        }
+        #else
+        pairingStateContent
+        #endif
+    }
+
+    private var isLiveScanPhase: Bool {
+        status.phase == .instructions || status.phase == .scanning
+    }
+
+    private var pairingStateContent: some View {
         ScrollView {
             VStack(spacing: 20) {
                 pairingHero
@@ -24,20 +46,6 @@ struct PairingFlowView: View {
 
                 if status.phase == .expired {
                     recoveryStepsCard
-                }
-
-#if os(iOS)
-                if status.phase == .instructions || status.phase == .scanning {
-                    LiveQRCodeScannerCard(
-                        status: status,
-                        scannedQRCodeValue: $scannedQRCodeValue,
-                        onStartPairing: onStartPairing
-                    )
-                }
-#endif
-
-                if status.phase == .instructions || status.phase == .scanning || status.phase == .failed {
-                    pasteSection
                 }
 
                 VStack(spacing: 10) {
@@ -60,9 +68,9 @@ struct PairingFlowView: View {
                             title: pairingButtonTitle,
                             icon: pairingButtonIcon,
                             style: .primary,
-                            action: onStartPairing
+                            action: primaryAction
                         )
-                        .disabled(isPairingActionDisabled)
+                        .disabled(isPrimaryActionDisabled)
 
                         if status.phase != .paired {
                             ActionButton(title: "Back", icon: "chevron.left", style: .plain, action: onBack)
@@ -225,39 +233,6 @@ struct PairingFlowView: View {
         .padding(.vertical, 12)
     }
 
-    private var pasteSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Or paste the pairing link:", systemImage: "doc.on.clipboard")
-                .font(.system(size: 14))
-                .foregroundStyle(Color(hex: 0x6E6E73))
-
-            TextField("Paste the desktop pairing link", text: $scannedQRCodeValue, axis: .vertical)
-                .lineLimit(2...4)
-                .padding(12)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(hex: 0xE5E5EA), lineWidth: 1)
-                )
-#if os(iOS)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-#endif
-
-            PasteButton(payloadType: String.self) { strings in
-                if let firstValue = strings.first {
-                    scannedQRCodeValue = firstValue
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(Color(hex: 0x007AFF))
-        }
-        .padding(16)
-        .background(Color(hex: 0xF2F2F7))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-    }
-
     private var pairingTitle: String {
         switch status.phase {
         case .instructions: return "Scan the desktop QR"
@@ -302,6 +277,7 @@ struct PairingFlowView: View {
         switch status.phase {
         case .paired: return "Start Backup"
         case .expired: return "Scan Again"
+        case .failed: return "Scan Again"
         default: return "Start Pairing"
         }
     }
@@ -310,12 +286,27 @@ struct PairingFlowView: View {
         switch status.phase {
         case .paired: return "arrow.up.circle.fill"
         case .expired: return "qrcode.viewfinder"
+        case .failed: return "qrcode.viewfinder"
         default: return "link"
         }
     }
 
-    private var isPairingActionDisabled: Bool {
-        status.phase == .pairing || scannedQRCodeValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var primaryAction: () -> Void {
+        if status.phase == .expired || status.phase == .failed {
+            return onScanAgain
+        }
+        return onStartPairing
+    }
+
+    private var isPrimaryActionDisabled: Bool {
+        switch status.phase {
+        case .pairing:
+            return true
+        case .paired, .expired, .failed:
+            return false
+        case .instructions, .scanning:
+            return scannedQRCodeValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 }
 

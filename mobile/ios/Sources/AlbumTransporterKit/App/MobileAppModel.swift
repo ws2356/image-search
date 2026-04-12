@@ -89,7 +89,7 @@ final class MobileAppModel {
             desktopName: homeSummary.desktopName,
             sessionID: nil,
             transport: nil,
-            message: "Point the camera at the desktop QR code, or paste the pairing link if you need a fallback."
+            message: "Point the camera at the desktop QR code shown in the PC app."
         )
         route = .scanAndPair
         await telemetryClient.record(event: .scanStarted)
@@ -138,16 +138,6 @@ final class MobileAppModel {
 
         await telemetryClient.record(event: .pairingSucceeded)
         await persistSnapshot()
-    }
-
-    func showExpiredQRCode() {
-        pairingStatus = PairingStatus(
-            phase: .expired,
-            desktopName: homeSummary.desktopName,
-            sessionID: nil,
-            transport: nil,
-            message: "This QR code has expired. Refresh it on desktop and scan again to continue."
-        )
     }
 
     func startBackup() async {
