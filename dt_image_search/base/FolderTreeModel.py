@@ -19,7 +19,6 @@ class FolderTreeModel(QStandardItemModel):
 
     def __init__(self, parent=None, folder_predicate=DefaultFolderPredicate):
         super().__init__(parent)
-        # self.setHorizontalHeaderLabels(["Folders"])
         self.folder_predicate = folder_predicate
         self._mobile_transfer_states_by_path: dict[str, str] = {}
         self._mobile_folder_summaries_by_path: dict[str, dict[str, object]] = {}

@@ -177,6 +177,7 @@ class MainWindow(QMainWindow):
         self.controller.is_active = True  # Set the controller to active state
 
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
+        self.ui.browsePageFolderTreeView.setHeaderHidden(True)
         self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
         self.ui.browsePageFolderTreeView.setItemDelegate(FolderTreeItemDelegate(self.ui.browsePageFolderTreeView))
         self.ui.browsePageFolderTreeView.setRootIsDecorated(False)
