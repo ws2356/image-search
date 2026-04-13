@@ -20,7 +20,7 @@ from dt_image_search.mobile.mobile_pairing_service import (
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
-from dt_image_search.model.dts_db import create_db_conn
+from dt_image_search.model.dts_db import create_db_conn, delete_folders
 
 
 class TestMobilePairingService(unittest.TestCase):
@@ -191,6 +191,70 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(status_code, 500)
         self.assertEqual(response_payload["status"], "rejected")
         self.assertIn("Desktop failed while processing the pairing request.", response_payload["message"])
+
+    def test_pairing_succeeds_after_mobile_folder_row_is_removed(self):
+        now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)
+        first_session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        first_token = first_session.token_for(MobilePlatform.IOS)
+        first_status, first_response = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": first_session.session_id,
+                "opt": first_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-001",
+                "device_name": "Alice iPhone",
+                "client_nonce": "client-nonce-001",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(first_status, 200)
+        self.assertEqual(first_response["status"], "accepted")
+
+        with create_db_conn(self._ctx) as conn:
+            conn.execute(
+                """
+                INSERT INTO mobile_assets (
+                    device_uuid,
+                    remote_asset_id,
+                    local_relative_path,
+                    last_transferred_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                ("ios-device-001", "ph://asset-001", "2026-04/IMG_0001.JPG", now.isoformat()),
+            )
+            conn.commit()
+            delete_folders(conn, [first_response["folder_path"]])
+
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM mobile_devices WHERE device_uuid = ?", ("ios-device-001",)).fetchone()
+            )
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM mobile_folders WHERE device_uuid = ?", ("ios-device-001",)).fetchone()
+            )
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM mobile_backup_sessions WHERE device_uuid = ?", ("ios-device-001",)).fetchone()
+            )
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM mobile_assets WHERE device_uuid = ?", ("ios-device-001",)).fetchone()
+            )
+
+        second_session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now + timedelta(minutes=1))
+        second_token = second_session.token_for(MobilePlatform.IOS)
+        second_status, second_response = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": second_session.session_id,
+                "opt": second_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-001",
+                "device_name": "Alice iPhone",
+                "client_nonce": "client-nonce-002",
+            },
+            now=now + timedelta(minutes=1, seconds=5),
+        )
+        self.assertEqual(second_status, 200)
+        self.assertEqual(second_response["status"], "accepted")
 
     def test_start_pairing_session_includes_all_advertised_endpoints_in_qr_payload(self):
         pairing_service = MobilePairingService(

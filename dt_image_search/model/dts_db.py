@@ -141,6 +141,16 @@ def delete_folders(conn, folder_paths: list):
     if not folder_paths:
         return
     placeholders = ', '.join('?' for _ in folder_paths)
+
+    folder_rows = conn.execute(
+        f"SELECT id FROM folders WHERE path IN ({placeholders})",
+        folder_paths,
+    ).fetchall()
+    folder_ids = [int(row["id"]) if isinstance(row, sqlite3.Row) else int(row[0]) for row in folder_rows]
+    if folder_ids:
+        from dt_image_search.mobile.mobile_pairing_store import delete_mobile_device_data_for_folder_ids
+        delete_mobile_device_data_for_folder_ids(conn, folder_ids)
+
     conn.execute(f"DELETE FROM folders WHERE path IN ({placeholders})", folder_paths)
     conn.commit()
 

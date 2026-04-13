@@ -168,6 +168,18 @@ def get_or_create_mobile_folder(
     device_name: str,
     updated_at: datetime,
 ) -> MobileFolderRecord:
+    stale_folder_rows = conn.execute(
+        """
+        SELECT folder_id
+        FROM mobile_folders
+        WHERE device_uuid = ?
+          AND folder_id NOT IN (SELECT id FROM folders)
+        """,
+        (device_uuid,),
+    ).fetchall()
+    if stale_folder_rows:
+        delete_mobile_device_data_for_folder_ids(conn, [int(row["folder_id"]) for row in stale_folder_rows])
+
     existing_folder = conn.execute(
         """
         SELECT folders.id AS folder_id, folders.path AS folder_path
@@ -449,6 +461,55 @@ def get_mobile_folder_transfer_states(conn: sqlite3.Connection) -> dict[str, str
         """
     ).fetchall()
     return {_normalized_folder_key(row["folder_path"]): row["transfer_state"] for row in rows}
+
+
+def delete_mobile_device_data_for_folder_ids(conn: sqlite3.Connection, folder_ids: list[int]) -> None:
+    unique_folder_ids = sorted({int(folder_id) for folder_id in folder_ids if folder_id is not None})
+    if not unique_folder_ids:
+        return
+
+    folder_id_placeholders = ", ".join("?" for _ in unique_folder_ids)
+    folder_id_parameters = tuple(unique_folder_ids)
+    device_rows = conn.execute(
+        f"""
+        SELECT DISTINCT device_uuid
+        FROM mobile_folders
+        WHERE folder_id IN ({folder_id_placeholders})
+        """,
+        folder_id_parameters,
+    ).fetchall()
+    device_uuids = [str(row["device_uuid"]) for row in device_rows if row["device_uuid"]]
+
+    conn.execute(
+        f"DELETE FROM mobile_backup_sessions WHERE folder_id IN ({folder_id_placeholders})",
+        folder_id_parameters,
+    )
+    conn.execute(
+        f"DELETE FROM mobile_folders WHERE folder_id IN ({folder_id_placeholders})",
+        folder_id_parameters,
+    )
+
+    if device_uuids:
+        device_uuid_placeholders = ", ".join("?" for _ in device_uuids)
+        device_uuid_parameters = tuple(device_uuids)
+        conn.execute(
+            f"DELETE FROM mobile_assets WHERE device_uuid IN ({device_uuid_placeholders})",
+            device_uuid_parameters,
+        )
+        conn.execute(
+            f"DELETE FROM mobile_backup_sessions WHERE device_uuid IN ({device_uuid_placeholders})",
+            device_uuid_parameters,
+        )
+        conn.execute(
+            f"DELETE FROM mobile_folders WHERE device_uuid IN ({device_uuid_placeholders})",
+            device_uuid_parameters,
+        )
+        conn.execute(
+            f"DELETE FROM mobile_devices WHERE device_uuid IN ({device_uuid_placeholders})",
+            device_uuid_parameters,
+        )
+
+    conn.commit()
 
 
 def mobile_asset_signature_key(
