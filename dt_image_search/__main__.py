@@ -53,6 +53,7 @@ from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
+from dt_image_search.view.folder_tree_item_delegate import FolderTreeItemDelegate
 from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch, remove_folder
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers, deinit_incremental_index_workers
 from dt_image_search.index.dts_index import init as index_init
@@ -177,6 +178,7 @@ class MainWindow(QMainWindow):
 
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
         self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
+        self.ui.browsePageFolderTreeView.setItemDelegate(FolderTreeItemDelegate(self.ui.browsePageFolderTreeView))
         self.ui.browsePageFolderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
         self.ui.browsePageFolderTreeView.expanded.connect(self.controller.on_item_expanded)
         self.ui.browsePageFolderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -302,8 +304,9 @@ class MainWindow(QMainWindow):
     def show_tree_context_menu(self, pos):
         index = self.ui.browsePageFolderTreeView.indexAt(pos)
         p_index = QPersistentModelIndex(index)
-        item = self.ui.browsePageFolderTreeView.model().itemFromIndex(index)
-        is_root_folder = item and not item.parent()
+        model = self.ui.browsePageFolderTreeView.model()
+        item = model.itemFromIndex(index) if model else None
+        is_root_folder = bool(item and hasattr(model, "is_top_level_folder_item") and model.is_top_level_folder_item(item))
         if not is_root_folder:
             return
         folder_path = item.data(Qt.UserRole) if item else None

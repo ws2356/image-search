@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS mobile_backup_sessions (
     device_uuid TEXT NOT NULL REFERENCES mobile_devices(device_uuid),
     folder_id INTEGER NOT NULL REFERENCES folders(id),
     status TEXT NOT NULL,
+    transferred_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
     started_at TEXT NOT NULL,
     paired_at TEXT,
     ended_at TEXT
@@ -84,6 +86,7 @@ class MobileTransferContext:
 def ensure_mobile_pairing_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_MOBILE_PAIRING_SCHEMA_SQL)
     _ensure_mobile_asset_signature_columns(conn)
+    _ensure_mobile_backup_session_columns(conn)
     conn.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_mobile_assets_device_signature
@@ -245,11 +248,22 @@ def insert_mobile_backup_session(
             device_uuid,
             folder_id,
             status,
+            transferred_count,
+            failed_count,
             started_at,
             paired_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (session_id, device_uuid, folder_id, status, started_at.isoformat(), paired_at.isoformat()),
+        (
+            session_id,
+            device_uuid,
+            folder_id,
+            status,
+            0,
+            0,
+            started_at.isoformat(),
+            paired_at.isoformat(),
+        ),
     )
     conn.commit()
 
@@ -427,16 +441,23 @@ def update_mobile_transfer_state(
     folder_transfer_state: str,
     updated_at: datetime,
     ended_at: datetime | None = None,
+    transferred_count: int | None = None,
+    failed_count: int | None = None,
 ) -> None:
     conn.execute(
         """
         UPDATE mobile_backup_sessions
-        SET status = ?, ended_at = COALESCE(?, ended_at)
+        SET status = ?,
+            ended_at = COALESCE(?, ended_at),
+            transferred_count = COALESCE(?, transferred_count),
+            failed_count = COALESCE(?, failed_count)
         WHERE session_id = ? AND device_uuid = ?
         """,
         (
             session_status,
             ended_at.isoformat() if ended_at is not None else None,
+            transferred_count,
+            failed_count,
             session_id,
             device_uuid,
         ),
@@ -452,6 +473,26 @@ def update_mobile_transfer_state(
     conn.commit()
 
 
+def increment_mobile_backup_session_transferred_count(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    device_uuid: str,
+    delta: int = 1,
+) -> None:
+    if delta <= 0:
+        return
+    conn.execute(
+        """
+        UPDATE mobile_backup_sessions
+        SET transferred_count = COALESCE(transferred_count, 0) + ?
+        WHERE session_id = ? AND device_uuid = ?
+        """,
+        (int(delta), session_id, device_uuid),
+    )
+    conn.commit()
+
+
 def get_mobile_folder_transfer_states(conn: sqlite3.Connection) -> dict[str, str]:
     rows = conn.execute(
         """
@@ -461,6 +502,52 @@ def get_mobile_folder_transfer_states(conn: sqlite3.Connection) -> dict[str, str
         """
     ).fetchall()
     return {_normalized_folder_key(row["folder_path"]): row["transfer_state"] for row in rows}
+
+
+def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, dict[str, object]]:
+    folder_rows = conn.execute(
+        """
+        SELECT folders.path AS folder_path, mobile_folders.device_uuid AS device_uuid
+        FROM mobile_folders
+        JOIN folders ON folders.id = mobile_folders.folder_id
+        """
+    ).fetchall()
+
+    summaries_by_path: dict[str, dict[str, object]] = {}
+    for folder_row in folder_rows:
+        device_uuid = folder_row["device_uuid"]
+        latest_session_row = conn.execute(
+            """
+            SELECT transferred_count
+            FROM mobile_backup_sessions
+            WHERE device_uuid = ?
+            ORDER BY started_at DESC
+            LIMIT 1
+            """,
+            (device_uuid,),
+        ).fetchone()
+        transferred_count = int(latest_session_row["transferred_count"]) if latest_session_row is not None else 0
+
+        latest_successful_backup_row = conn.execute(
+            """
+            SELECT COALESCE(ended_at, paired_at, started_at) AS last_backup_at
+            FROM mobile_backup_sessions
+            WHERE device_uuid = ? AND status = ?
+            ORDER BY COALESCE(ended_at, paired_at, started_at) DESC
+            LIMIT 1
+            """,
+            (device_uuid, MOBILE_BACKUP_SESSION_STATUS_COMPLETED),
+        ).fetchone()
+        last_backup_at = None
+        if latest_successful_backup_row is not None:
+            last_backup_at = latest_successful_backup_row["last_backup_at"]
+
+        summaries_by_path[_normalized_folder_key(folder_row["folder_path"])] = {
+            "transferred_count": transferred_count,
+            "last_backup_at": last_backup_at,
+        }
+
+    return summaries_by_path
 
 
 def delete_mobile_device_data_for_folder_ids(conn: sqlite3.Connection, folder_ids: list[int]) -> None:
@@ -581,6 +668,14 @@ def _ensure_mobile_asset_signature_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE mobile_assets ADD COLUMN file_size_bytes INTEGER")
     if "asset_created_at" not in existing_columns:
         conn.execute("ALTER TABLE mobile_assets ADD COLUMN asset_created_at TEXT")
+
+
+def _ensure_mobile_backup_session_columns(conn: sqlite3.Connection) -> None:
+    existing_columns = _table_columns(conn, "mobile_backup_sessions")
+    if "transferred_count" not in existing_columns:
+        conn.execute("ALTER TABLE mobile_backup_sessions ADD COLUMN transferred_count INTEGER NOT NULL DEFAULT 0")
+    if "failed_count" not in existing_columns:
+        conn.execute("ALTER TABLE mobile_backup_sessions ADD COLUMN failed_count INTEGER NOT NULL DEFAULT 0")
 
 
 def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:

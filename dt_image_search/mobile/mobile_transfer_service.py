@@ -23,6 +23,7 @@ from dt_image_search.mobile.mobile_pairing_store import (
     get_mobile_asset_record_by_signature,
     get_mobile_asset_records_by_signatures,
     get_mobile_transfer_context,
+    increment_mobile_backup_session_transferred_count,
     mobile_asset_signature_key,
     update_mobile_transfer_state,
     upsert_mobile_asset_record,
@@ -127,6 +128,8 @@ class MobileTransferService:
                 session_status=MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
                 folder_transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
                 updated_at=current_time,
+                transferred_count=0,
+                failed_count=0,
             )
 
         default_bus.publish(
@@ -272,6 +275,12 @@ class MobileTransferService:
                     asset_created_at=metadata.created_at,
                 )
             if existing_signature_asset is not None:
+                increment_mobile_backup_session_transferred_count(
+                    conn,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    delta=1,
+                )
                 return (
                     200,
                     {
@@ -292,6 +301,12 @@ class MobileTransferService:
                 and existing_asset["remote_asset_version"] == metadata.asset_version
                 and (Path(transfer_context.folder_path) / existing_asset["local_relative_path"]).exists()
             ):
+                increment_mobile_backup_session_transferred_count(
+                    conn,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    delta=1,
+                )
                 return (
                     200,
                     {
@@ -345,6 +360,12 @@ class MobileTransferService:
                 local_relative_path=stored_asset.local_relative_path,
                 last_transferred_at=current_time,
             )
+            increment_mobile_backup_session_transferred_count(
+                conn,
+                session_id=metadata.session_id,
+                device_uuid=metadata.device_uuid,
+                delta=1,
+            )
 
         return (
             200,
@@ -390,6 +411,8 @@ class MobileTransferService:
                 folder_transfer_state=MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED,
                 updated_at=current_time,
                 ended_at=current_time,
+                transferred_count=request.transferred_count or 0,
+                failed_count=failed_count,
             )
             transfer_state = MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED
             default_bus.publish(
