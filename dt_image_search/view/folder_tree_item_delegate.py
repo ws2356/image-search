@@ -4,9 +4,12 @@ from datetime import datetime, timezone
 
 from PySide6.QtCore import QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
-from PySide6.QtWidgets import QAbstractItemView, QStyle, QStyleOptionViewItem, QStyledItemDelegate
+from PySide6.QtWidgets import QAbstractItemView, QStyleOptionViewItem, QStyledItemDelegate
 
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
+
+_TREE_ROW_BACKGROUND_COLOR = QColor("#E8F0FD")
+_TREE_ROW_DIVIDER_COLOR = QColor("#D8E6FB")
 
 
 class FolderTreeItemDelegate(QStyledItemDelegate):
@@ -58,15 +61,10 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         return QSize(super().sizeHint(option, index).width(), 54 if transfer_state == "transferring" else 40)
 
     def _paint_section_row(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        section_kind = index.data(FolderTreeModel.SECTION_KIND_ROLE)
-        background_color = QColor("#F8F8F8") if section_kind == FolderTreeModel._LOCAL_SECTION_KIND else QColor("#F5F5F5")
-
         painter.save()
-        painter.fillRect(option.rect, background_color)
-        painter.setPen(QColor("#E8E8E8") if section_kind == FolderTreeModel._MOBILE_SECTION_KIND else QColor("#EEEEEE"))
+        painter.fillRect(option.rect, _TREE_ROW_BACKGROUND_COLOR)
+        painter.setPen(_TREE_ROW_DIVIDER_COLOR)
         painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
-        if section_kind == FolderTreeModel._MOBILE_SECTION_KIND:
-            painter.drawLine(option.rect.topLeft(), option.rect.topRight())
         painter.restore()
 
         painter.save()
@@ -87,13 +85,8 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         platform = str(index.data(FolderTreeModel.MOBILE_PLATFORM_ROLE) or "")
 
         painter.save()
-        if option.state & QStyle.State_Selected:
-            painter.fillRect(option.rect, QColor("#E8F0FD"))
-        elif option.state & QStyle.State_MouseOver:
-            painter.fillRect(option.rect, QColor("#F5F5F5"))
-        else:
-            painter.fillRect(option.rect, QColor("#FFFFFF"))
-        painter.setPen(QColor("#F0F0F0"))
+        painter.fillRect(option.rect, _TREE_ROW_BACKGROUND_COLOR)
+        painter.setPen(_TREE_ROW_DIVIDER_COLOR)
         painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
 
         content_rect = option.rect.adjusted(8, 3, -8, -4)

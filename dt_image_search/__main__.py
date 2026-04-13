@@ -30,7 +30,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
-from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QLockFile
+from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 QCoreApplication.setOrganizationName("net.boldman")
@@ -182,19 +182,29 @@ class MainWindow(QMainWindow):
         self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
         self.ui.browsePageFolderTreeView.setItemDelegate(FolderTreeItemDelegate(self.ui.browsePageFolderTreeView))
         self.ui.browsePageFolderTreeView.setRootIsDecorated(False)
+        self.ui.browsePageFolderTreeView.setIndentation(12)
+        self.ui.browsePageFolderTreeView.setExpandsOnDoubleClick(False)
+        self.ui.browsePageFolderTreeView.clicked.connect(self._on_folder_tree_item_clicked)
         self.ui.browsePageFolderTreeView.collapsed.connect(self._on_folder_tree_item_collapsed)
         self.browse_controller.folder_list_model().rowsInserted.connect(lambda *_: self._expand_section_headers())
         self._expand_section_headers()
         existing_tree_style = self.ui.browsePageFolderTreeView.styleSheet()
-        branch_selected_style = (
-            "QTreeView { show-decoration-selected: 0; }\n"
-            "QTreeView::branch { background: transparent; }\n"
-            "QTreeView::branch:selected,\n"
-            "QTreeView::branch:selected:active,\n"
-            "QTreeView::branch:selected:!active { background: transparent; }"
+        tree_style = (
+            "QTreeView { show-decoration-selected: 0; background-color: #E8F0FD; }\n"
+            "QTreeView::item { background-color: #E8F0FD; }\n"
+            "QTreeView::item:selected,\n"
+            "QTreeView::item:selected:active,\n"
+            "QTreeView::item:selected:!active,\n"
+            "QTreeView::item:hover { background-color: #E8F0FD; color: #111827; }\n"
+            "QTreeView::branch { width: 0px; background: transparent; border: none; image: none; }\n"
+            "QTreeView::branch:has-children,\n"
+            "QTreeView::branch:open,\n"
+            "QTreeView::branch:closed,\n"
+            "QTreeView::branch:has-siblings,\n"
+            "QTreeView::branch:adjoins-item { image: none; }"
         )
-        if branch_selected_style not in existing_tree_style:
-            merged_style = f"{existing_tree_style}\n{branch_selected_style}" if existing_tree_style else branch_selected_style
+        if tree_style not in existing_tree_style:
+            merged_style = f"{existing_tree_style}\n{tree_style}" if existing_tree_style else tree_style
             self.ui.browsePageFolderTreeView.setStyleSheet(merged_style)
         self.ui.browsePageFolderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
         self.ui.browsePageFolderTreeView.expanded.connect(self.controller.on_item_expanded)
@@ -393,6 +403,22 @@ class MainWindow(QMainWindow):
 
     def _expand_section_if_valid(self, index: QPersistentModelIndex):
         if not index.isValid():
+            return
+        self.ui.browsePageFolderTreeView.expand(index)
+
+    def _on_folder_tree_item_clicked(self, index: QModelIndex):
+        if not index.isValid():
+            return
+        model = self.ui.browsePageFolderTreeView.model()
+        if model is None:
+            return
+        item = model.itemFromIndex(index)
+        if item is None or item.data(FolderTreeModel.SECTION_ROLE):
+            return
+        if model.rowCount(index) <= 0:
+            return
+        if self.ui.browsePageFolderTreeView.isExpanded(index):
+            self.ui.browsePageFolderTreeView.collapse(index)
             return
         self.ui.browsePageFolderTreeView.expand(index)
 
