@@ -559,5 +559,15 @@ if __name__ == '__main__':
     from PySide6.QtCore import qInstallMessageHandler
     qInstallMessageHandler(qt_message_handler)
 
+    if os.getenv('UI_INSPECT', '0') == '1':
+        try:
+            import PyQtInspect
+            # 在窗口显示后或直接在这里初始化
+            # 它会自动寻找当前运行的 QApplication 实例
+            inspector = PyQtInspect.Inspector()
+            inspector.show()
+        except ImportError:
+            print("PyQtInspect not installed, skipping...")
+
     window.show()
     sys.exit(app.exec())

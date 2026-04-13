@@ -13,6 +13,17 @@
       "logToFile": true
     },
     {
+      "name": "Python Debugger: Inspect",
+      "type": "debugpy",
+      "request": "launch",
+      "env": {
+        "UI_INSPECT": "1"
+      },
+      "module": "dt_image_search.__main__",
+      "justMyCode": false,
+      "logToFile": true
+    },
+    {
       "name": "Debug Unit Test: test_dts_index",
       "type": "debugpy",
       "request": "launch",

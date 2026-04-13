@@ -4,3 +4,4 @@ pyinstaller
 profilehooks
 Nuitka
 pytest
+PyQtInspect
