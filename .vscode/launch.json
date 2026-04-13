@@ -16,10 +16,8 @@
       "name": "Python Debugger: Inspect",
       "type": "debugpy",
       "request": "launch",
-      "env": {
-        "UI_INSPECT": "1"
-      },
-      "module": "dt_image_search.__main__",
+      "module": "PyQtInspect",
+      "args": ["--direct", "--qt-support=pyside6", "--file", "${workspaceFolder}/inspect_main.py"],
       "justMyCode": false,
       "logToFile": true
     },
