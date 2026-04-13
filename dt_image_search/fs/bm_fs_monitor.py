@@ -138,14 +138,17 @@ def _on_fs_changed(event):
         return  # Ignore synthetic moved events
     event = WrappedWatchdogEvent(event)
 
-    log("debug", message=f"Directory changed: {event.event_type}")
-
     # filter out events that are not relevant to root folders
+    is_relevant_event = False
     with _lock:
         for root_folder in _folder_watch_map.keys():
             if normalized_folder_path(event.src_path).startswith(root_folder):
+                is_relevant_event = True
                 default_bus.publish("fs_changed", event=event)
                 break
+
+    if is_relevant_event:
+        log("debug", message=f"Directory changed: {event.event_type}")
 
     # the deleted file may be a root folder. We can not be sure of a directory deletion because is_directory may be False even for directory deletion events.
     if event.event_type == 'deleted':
