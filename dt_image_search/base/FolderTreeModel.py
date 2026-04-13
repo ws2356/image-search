@@ -13,6 +13,7 @@ class FolderTreeModel(QStandardItemModel):
     MOBILE_TRANSFER_STATE_ROLE = Qt.UserRole + 1
     MOBILE_TRANSFERRED_COUNT_ROLE = Qt.UserRole + 2
     MOBILE_LAST_BACKUP_AT_ROLE = Qt.UserRole + 3
+    MOBILE_PLATFORM_ROLE = Qt.UserRole + 4
     _LOCAL_SECTION_KIND = "local"
     _MOBILE_SECTION_KIND = "mobile"
 
@@ -206,10 +207,12 @@ class FolderTreeModel(QStandardItemModel):
         summary = self._mobile_folder_summaries_by_path.get(normalized_path, {})
         transferred_count = int(summary.get("transferred_count", 0))
         last_backup_at = summary.get("last_backup_at")
+        platform = summary.get("platform")
 
         item.setData(transfer_state, self.MOBILE_TRANSFER_STATE_ROLE)
         item.setData(transferred_count, self.MOBILE_TRANSFERRED_COUNT_ROLE)
         item.setData(last_backup_at, self.MOBILE_LAST_BACKUP_AT_ROLE)
+        item.setData(platform, self.MOBILE_PLATFORM_ROLE)
 
         base_name = Path(item_path).name or item_path
         item.setText(base_name)
@@ -228,13 +231,13 @@ class FolderTreeModel(QStandardItemModel):
             return
 
         root_item = self.invisibleRootItem()
-        local_section_item = QStandardItem("Local")
+        local_section_item = QStandardItem("LOCAL")
         local_section_item.setEditable(False)
         local_section_item.setSelectable(False)
         local_section_item.setData(True, self.SECTION_ROLE)
         local_section_item.setData(self._LOCAL_SECTION_KIND, self.SECTION_KIND_ROLE)
 
-        mobile_section_item = QStandardItem("Mobile")
+        mobile_section_item = QStandardItem("MOBILE")
         mobile_section_item.setEditable(False)
         mobile_section_item.setSelectable(False)
         mobile_section_item.setData(True, self.SECTION_ROLE)

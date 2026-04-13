@@ -507,9 +507,13 @@ def get_mobile_folder_transfer_states(conn: sqlite3.Connection) -> dict[str, str
 def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, dict[str, object]]:
     folder_rows = conn.execute(
         """
-        SELECT folders.path AS folder_path, mobile_folders.device_uuid AS device_uuid
+        SELECT
+            folders.path AS folder_path,
+            mobile_folders.device_uuid AS device_uuid,
+            mobile_devices.platform AS platform
         FROM mobile_folders
         JOIN folders ON folders.id = mobile_folders.folder_id
+        JOIN mobile_devices ON mobile_devices.device_uuid = mobile_folders.device_uuid
         """
     ).fetchall()
 
@@ -545,6 +549,7 @@ def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, d
         summaries_by_path[_normalized_folder_key(folder_row["folder_path"])] = {
             "transferred_count": transferred_count,
             "last_backup_at": last_backup_at,
+            "platform": folder_row["platform"],
         }
 
     return summaries_by_path

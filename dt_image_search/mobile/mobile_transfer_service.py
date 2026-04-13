@@ -281,6 +281,13 @@ class MobileTransferService:
                     device_uuid=metadata.device_uuid,
                     delta=1,
                 )
+                default_bus.publish(
+                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    folder_path=transfer_context.folder_path,
+                    transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
+                )
                 return (
                     200,
                     {
@@ -306,6 +313,13 @@ class MobileTransferService:
                     session_id=metadata.session_id,
                     device_uuid=metadata.device_uuid,
                     delta=1,
+                )
+                default_bus.publish(
+                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    folder_path=transfer_context.folder_path,
+                    transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
                 )
                 return (
                     200,
@@ -365,6 +379,13 @@ class MobileTransferService:
                 session_id=metadata.session_id,
                 device_uuid=metadata.device_uuid,
                 delta=1,
+            )
+            default_bus.publish(
+                MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                session_id=metadata.session_id,
+                device_uuid=metadata.device_uuid,
+                folder_path=transfer_context.folder_path,
+                transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
             )
 
         return (

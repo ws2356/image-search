@@ -179,6 +179,7 @@ class MainWindow(QMainWindow):
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
         self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
         self.ui.browsePageFolderTreeView.setItemDelegate(FolderTreeItemDelegate(self.ui.browsePageFolderTreeView))
+        self.ui.browsePageFolderTreeView.setRootIsDecorated(False)
         self.ui.browsePageFolderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
         self.ui.browsePageFolderTreeView.expanded.connect(self.controller.on_item_expanded)
         self.ui.browsePageFolderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)

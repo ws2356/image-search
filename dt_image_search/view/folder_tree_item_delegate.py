@@ -44,7 +44,16 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         return QSize(super().sizeHint(option, index).width(), 54 if transfer_state == "transferring" else 40)
 
     def _paint_section_row(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        self._draw_item_background(painter, option, index)
+        section_kind = index.data(FolderTreeModel.SECTION_KIND_ROLE)
+        background_color = QColor("#F8F8F8") if section_kind == FolderTreeModel._LOCAL_SECTION_KIND else QColor("#F5F5F5")
+
+        painter.save()
+        painter.fillRect(option.rect, background_color)
+        painter.setPen(QColor("#E8E8E8") if section_kind == FolderTreeModel._MOBILE_SECTION_KIND else QColor("#EEEEEE"))
+        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+        if section_kind == FolderTreeModel._MOBILE_SECTION_KIND:
+            painter.drawLine(option.rect.topLeft(), option.rect.topRight())
+        painter.restore()
 
         painter.save()
         text_rect = option.rect.adjusted(8, 2, -8, -2)
@@ -53,19 +62,34 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         section_font.setBold(True)
         painter.setFont(section_font)
         painter.setPen(QColor("#6B7280"))
-        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, str(index.data(Qt.DisplayRole) or ""))
+        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, str(index.data(Qt.DisplayRole) or "").upper())
         painter.restore()
 
     def _paint_mobile_row(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        self._draw_item_background(painter, option, index)
-
         title_text = str(index.data(Qt.DisplayRole) or "")
         transfer_state = str(index.data(FolderTreeModel.MOBILE_TRANSFER_STATE_ROLE) or "")
         transferred_count = int(index.data(FolderTreeModel.MOBILE_TRANSFERRED_COUNT_ROLE) or 0)
         last_backup_at = index.data(FolderTreeModel.MOBILE_LAST_BACKUP_AT_ROLE)
+        platform = str(index.data(FolderTreeModel.MOBILE_PLATFORM_ROLE) or "")
 
         painter.save()
+        if option.state & QStyle.State_Selected:
+            painter.fillRect(option.rect, QColor("#E8F0FD"))
+        elif option.state & QStyle.State_MouseOver:
+            painter.fillRect(option.rect, QColor("#F5F5F5"))
+        else:
+            painter.fillRect(option.rect, QColor("#FFFFFF"))
+        painter.setPen(QColor("#F0F0F0"))
+        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+
         content_rect = option.rect.adjusted(8, 3, -8, -4)
+        icon_text = _platform_icon(platform)
+        icon_rect = QRect(content_rect.left(), content_rect.top(), 14, 14)
+        icon_font = QFont(option.font)
+        icon_font.setPointSize(max(icon_font.pointSize(), 10))
+        painter.setFont(icon_font)
+        painter.setPen(QColor("#374151"))
+        painter.drawText(icon_rect, Qt.AlignCenter, icon_text)
 
         title_font = QFont(option.font)
         title_font.setPointSize(max(title_font.pointSize(), 10))
@@ -73,7 +97,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         painter.setFont(title_font)
         painter.setPen(QColor("#111827"))
 
-        title_rect = QRect(content_rect.left(), content_rect.top(), content_rect.width(), 18)
+        title_rect = QRect(icon_rect.right() + 6, content_rect.top(), content_rect.width() - 20, 18)
         if transfer_state == "transferring":
             badge_rect = self._draw_transferring_badge(painter, content_rect)
             title_rect.setRight(badge_rect.left() - 6)
@@ -91,7 +115,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
             last_backup_at=last_backup_at,
         )
         subtitle_top = title_rect.bottom() + 1
-        subtitle_rect = QRect(content_rect.left(), subtitle_top, content_rect.width(), 14)
+        subtitle_rect = QRect(icon_rect.right() + 6, subtitle_top, content_rect.width() - 20, 14)
         subtitle_metrics = QFontMetrics(subtitle_font)
         subtitle = subtitle_metrics.elidedText(subtitle_text, Qt.ElideRight, max(subtitle_rect.width(), 0))
         painter.drawText(subtitle_rect, Qt.AlignLeft | Qt.AlignVCenter, subtitle)
@@ -116,7 +140,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         badge_font.setBold(True)
         painter.setFont(badge_font)
 
-        badge_text = "Transferring"
+        badge_text = "\u21bb Transferring"
         text_metrics = QFontMetrics(badge_font)
         badge_height = 18
         badge_width = text_metrics.horizontalAdvance(badge_text) + 12
@@ -161,22 +185,7 @@ def _last_backup_subtitle(last_backup_at: object) -> str:
     parsed_time = _parse_iso_datetime(last_backup_at)
     if parsed_time is None:
         return "Not backup yet"
-
-    now = datetime.now(timezone.utc)
-    delta_seconds = max(0, int((now - parsed_time).total_seconds()))
-    if delta_seconds < 60:
-        return f"Last backup: {_unit_label(delta_seconds, 'second')} ago"
-
-    delta_minutes = delta_seconds // 60
-    if delta_minutes < 60:
-        return f"Last backup: {_unit_label(delta_minutes, 'minute')} ago"
-
-    delta_hours = delta_minutes // 60
-    if delta_hours < 24:
-        return f"Last backup: {_unit_label(delta_hours, 'hour')} ago"
-
-    delta_days = delta_hours // 24
-    return f"Last backup: {_unit_label(delta_days, 'day')} ago"
+    return f"Last backup: {parsed_time.strftime('%Y-%m-%d %H:%M:%S')}"
 
 
 def _parse_iso_datetime(iso_value: str) -> datetime | None:
@@ -194,7 +203,10 @@ def _parse_iso_datetime(iso_value: str) -> datetime | None:
     return parsed_time.astimezone(timezone.utc)
 
 
-def _unit_label(value: int, unit_name: str) -> str:
-    if value == 1:
-        return f"1 {unit_name}"
-    return f"{value} {unit_name}s"
+def _platform_icon(platform: str) -> str:
+    normalized_platform = platform.strip().lower()
+    if normalized_platform == "ios":
+        return "\U0001F34E"
+    if normalized_platform == "android":
+        return "\U0001F916"
+    return "\U0001F4F1"
