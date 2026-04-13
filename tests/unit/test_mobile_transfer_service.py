@@ -23,6 +23,7 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_COMPLETE_PATH,
     MOBILE_TRANSFER_EXISTENCE_PATH,
     MOBILE_TRANSFER_SCHEMA,
+    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
     MOBILE_TRANSFER_STARTED_EVENT,
     MOBILE_TRANSFER_START_PATH,
 )
@@ -163,11 +164,17 @@ class TestMobileTransferService(unittest.TestCase):
     def test_start_request_publishes_transfer_started_event(self):
         pairing_context = self._pair_device()
         received_events: list[dict[str, object]] = []
+        transfer_state_events: list[dict[str, object]] = []
         subscription = default_bus.subscribe(
             MOBILE_TRANSFER_STARTED_EVENT,
             lambda **event: received_events.append(event),
         )
         self.addCleanup(subscription.dispose)
+        transfer_state_subscription = default_bus.subscribe(
+            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+            lambda **event: transfer_state_events.append(event),
+        )
+        self.addCleanup(transfer_state_subscription.dispose)
 
         start_status, start_response = self._post_json(
             MOBILE_TRANSFER_START_PATH,
@@ -190,6 +197,70 @@ class TestMobileTransferService(unittest.TestCase):
                     "device_uuid": pairing_context["device_uuid"],
                     "folder_path": pairing_context["folder_path"],
                 }
+            ],
+        )
+        self.assertEqual(
+            transfer_state_events,
+            [
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "transfer_state": "transferring",
+                }
+            ],
+        )
+
+    def test_complete_request_publishes_transfer_state_updated_event(self):
+        pairing_context = self._pair_device()
+        transfer_state_events: list[dict[str, object]] = []
+        transfer_state_subscription = default_bus.subscribe(
+            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+            lambda **event: transfer_state_events.append(event),
+        )
+        self.addCleanup(transfer_state_subscription.dispose)
+
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "total_assets": 0,
+            },
+        )
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+
+        complete_status, complete_response = self._post_json(
+            MOBILE_TRANSFER_COMPLETE_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "transferred_count": 0,
+                "failed_count": 0,
+            },
+        )
+        self.assertEqual(complete_status, 200)
+        self.assertEqual(complete_response["status"], "completed")
+        self.assertEqual(
+            transfer_state_events,
+            [
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "transfer_state": "transferring",
+                },
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "transfer_state": "transfer_completed",
+                },
             ],
         )
 

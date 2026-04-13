@@ -8,10 +8,13 @@ from dt_image_search.tools.dts_util import normalized_folder_path
 
 
 class FolderTreeModel(QStandardItemModel):
+    MOBILE_TRANSFER_STATE_ROLE = Qt.UserRole + 1
+
     def __init__(self, parent=None, folder_predicate=DefaultFolderPredicate):
         super().__init__(parent)
         self.setHorizontalHeaderLabels(["Folders"])
         self.folder_predicate = folder_predicate
+        self._mobile_transfer_states_by_path: dict[str, str] = {}
 
     def add_root_folder(self, path_strs: typing.List[str]):
         log("debug", message=f"FolderTreeModel/add_root_folder: adding {len(path_strs)} folders")
@@ -29,6 +32,7 @@ class FolderTreeModel(QStandardItemModel):
             root_item.setEditable(False)
             root_item.setCheckable(False)
             root_item.setSelectable(True)
+            self._apply_mobile_transfer_state_to_item(root_item)
 
             self.appendRow(root_item)
 
@@ -117,9 +121,17 @@ class FolderTreeModel(QStandardItemModel):
                     child_item = QStandardItem(child.name)
                     child_item.setData(str(child.resolve()), Qt.UserRole)
                     child_item.setEditable(False)
+                    self._apply_mobile_transfer_state_to_item(child_item)
                     parent_item.appendRow(child_item)
         except Exception as e:
             log("error", message=f"Could not read subfolders of {parent_path}: {e}")
+
+    def set_mobile_transfer_states(self, states_by_path: dict[str, str]) -> None:
+        self._mobile_transfer_states_by_path = {
+            normalized_folder_path(path).replace('\\', '/'): state
+            for path, state in states_by_path.items()
+        }
+        self._apply_mobile_transfer_states_to_model()
 
     def _refresh_item(self, item: QStandardItem):
         """Force refresh of a specific item and its children."""
@@ -140,3 +152,29 @@ class FolderTreeModel(QStandardItemModel):
             if matched_item is not None:
                 return matched_item
         return None
+
+    def _apply_mobile_transfer_states_to_model(self) -> None:
+        for row in range(self.rowCount()):
+            root_item = self.item(row, 0)
+            self._apply_mobile_transfer_state_recursive(root_item)
+
+    def _apply_mobile_transfer_state_recursive(self, item: QStandardItem | None) -> None:
+        if item is None:
+            return
+        self._apply_mobile_transfer_state_to_item(item)
+        for row in range(item.rowCount()):
+            self._apply_mobile_transfer_state_recursive(item.child(row))
+
+    def _apply_mobile_transfer_state_to_item(self, item: QStandardItem) -> None:
+        item_path = item.data(Qt.UserRole)
+        if not item_path:
+            return
+        normalized_path = normalized_folder_path(item_path).replace('\\', '/')
+        transfer_state = self._mobile_transfer_states_by_path.get(normalized_path)
+        item.setData(transfer_state, self.MOBILE_TRANSFER_STATE_ROLE)
+
+        base_name = Path(item_path).name or item_path
+        if transfer_state == "transferring":
+            item.setText(f"{base_name}   [Transferring]")
+        else:
+            item.setText(base_name)

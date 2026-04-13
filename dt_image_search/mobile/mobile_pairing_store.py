@@ -440,6 +440,17 @@ def update_mobile_transfer_state(
     conn.commit()
 
 
+def get_mobile_folder_transfer_states(conn: sqlite3.Connection) -> dict[str, str]:
+    rows = conn.execute(
+        """
+        SELECT folders.path AS folder_path, mobile_folders.transfer_state AS transfer_state
+        FROM mobile_folders
+        JOIN folders ON folders.id = mobile_folders.folder_id
+        """
+    ).fetchall()
+    return {_normalized_folder_key(row["folder_path"]): row["transfer_state"] for row in rows}
+
+
 def mobile_asset_signature_key(
     *,
     content_sha1: str,
@@ -519,3 +530,10 @@ def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
         else:
             columns.add(str(row[1]))
     return columns
+
+
+def _normalized_folder_key(folder_path: str) -> str:
+    normalized_path = folder_path.replace("\\", "/")
+    if normalized_path.endswith("/"):
+        return normalized_path
+    return normalized_path + "/"

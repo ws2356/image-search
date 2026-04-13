@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -16,6 +17,10 @@ from PySide6.QtWidgets import QApplication
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.browse.BrowseController import BrowseController
+from dt_image_search.mobile.mobile_pairing_store import (
+    MOBILE_TRANSFER_STATE_COMPLETED,
+    MOBILE_TRANSFER_STATE_TRANSFERRING,
+)
 from dt_image_search.model.dts_db import create_db_conn, insert_folder
 
 
@@ -93,6 +98,51 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertEqual(selected_paths, [folder_path.as_posix()])
             add_folder_mock.assert_not_called()
             add_index_worker_mock.assert_not_called()
+
+    def test_mobile_folder_badge_is_visible_only_for_transferring_state(self):
+        folder_path = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
+        folder_path.mkdir(parents=True, exist_ok=True)
+        updated_at = datetime.now(timezone.utc).isoformat()
+
+        with create_db_conn(ctx=self._ctx) as conn:
+            folder = insert_folder(conn, folder_path.as_posix())
+            self.assertIsNotNone(folder)
+            conn.execute(
+                """
+                INSERT INTO mobile_devices (
+                    device_uuid,
+                    platform,
+                    device_name,
+                    trust_key_b64,
+                    paired_at,
+                    last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("device-001", "ios", "Alice iPhone", "trust-key", updated_at, updated_at),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_folders (folder_id, device_uuid, transfer_state, transfer_state_updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (folder.id, "device-001", MOBILE_TRANSFER_STATE_TRANSFERRING, updated_at),
+            )
+            conn.commit()
+
+        with self._controller_context() as (controller, _add_folder_mock, _add_index_worker_mock):
+            folder_item = controller.folder_list_model().find_folder_item(folder_path.as_posix())
+            self.assertIsNotNone(folder_item)
+            self.assertEqual(folder_item.text(), "Alice iPhone   [Transferring]")
+
+            with create_db_conn(ctx=self._ctx) as conn:
+                conn.execute(
+                    "UPDATE mobile_folders SET transfer_state = ? WHERE device_uuid = ?",
+                    (MOBILE_TRANSFER_STATE_COMPLETED, "device-001"),
+                )
+                conn.commit()
+
+            controller._refresh_mobile_transfer_states()
+            self.assertEqual(folder_item.text(), "Alice iPhone")
 
     def _controller_context(self):
         return _ControllerContext(self._ctx)

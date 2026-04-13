@@ -37,6 +37,7 @@ MOBILE_TRANSFER_EXISTENCE_PATH = "/api/mobile/transfer/existence"
 MOBILE_TRANSFER_ASSET_PATH = "/api/mobile/transfer/asset"
 MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
+MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,13 @@ class MobileTransferService:
             session_id=request.session_id,
             device_uuid=request.device_uuid,
             folder_path=transfer_context.folder_path,
+        )
+        default_bus.publish(
+            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+            session_id=request.session_id,
+            device_uuid=request.device_uuid,
+            folder_path=transfer_context.folder_path,
+            transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
         )
         log(
             "info",
@@ -313,6 +321,13 @@ class MobileTransferService:
                     updated_at=current_time,
                     ended_at=current_time,
                 )
+                default_bus.publish(
+                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    folder_path=transfer_context.folder_path,
+                    transfer_state=MOBILE_TRANSFER_STATE_FAILED,
+                )
                 return _response(
                     status_code=500,
                     status="rejected",
@@ -375,6 +390,14 @@ class MobileTransferService:
                 folder_transfer_state=MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED,
                 updated_at=current_time,
                 ended_at=current_time,
+            )
+            transfer_state = MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED
+            default_bus.publish(
+                MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
+                folder_path=transfer_context.folder_path,
+                transfer_state=transfer_state,
             )
 
         return (
