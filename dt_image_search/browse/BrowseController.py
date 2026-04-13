@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
 from dt_image_search.mobile.mobile_pairing_store import (
+    MOBILE_TRANSFER_STATE_TRANSFERRING,
     get_mobile_folder_summaries_by_path,
     get_mobile_folder_transfer_states,
 )
@@ -38,6 +39,7 @@ class BrowseController(BaseController):
         self.folderListModel = None
         self.ctx = ctx
         self.imageListModel = None
+        self._runtime_mobile_transfer_states_by_path: dict[str, str] = {}
         self._init_folders()
         self._fs_changed = False
         self._fs_changed_signal = self.FSChangedSignal()
@@ -287,6 +289,11 @@ class BrowseController(BaseController):
                 f"folder_path={folder_path}, transfer_state={transfer_state}"
             ),
         )
+        normalized_folder = normalized_folder_path(folder_path).replace('\\', '/')
+        if transfer_state == MOBILE_TRANSFER_STATE_TRANSFERRING:
+            self._runtime_mobile_transfer_states_by_path[normalized_folder] = transfer_state
+        else:
+            self._runtime_mobile_transfer_states_by_path.pop(normalized_folder, None)
         self._refresh_mobile_transfer_states()
 
     def on_active_change(self, old_value: bool, new_value: bool):
@@ -314,7 +321,19 @@ class BrowseController(BaseController):
 
     def _refresh_mobile_transfer_states(self) -> None:
         with create_db_conn(ctx=self.ctx) as conn:
-            states_by_path = get_mobile_folder_transfer_states(conn)
+            persisted_states_by_path = get_mobile_folder_transfer_states(conn)
             summaries_by_path = get_mobile_folder_summaries_by_path(conn)
-        self.folder_list_model().set_mobile_transfer_states(states_by_path)
+        mobile_folder_paths = {
+            normalized_folder_path(path).replace('\\', '/')
+            for path in persisted_states_by_path.keys()
+        }
+        runtime_states_by_path = {
+            path: state
+            for path, state in self._runtime_mobile_transfer_states_by_path.items()
+            if path in mobile_folder_paths and state == MOBILE_TRANSFER_STATE_TRANSFERRING
+        }
+        self._runtime_mobile_transfer_states_by_path = runtime_states_by_path
+
+        self.folder_list_model().set_mobile_folder_paths(mobile_folder_paths)
+        self.folder_list_model().set_mobile_transfer_states(runtime_states_by_path)
         self.folder_list_model().set_mobile_folder_summaries(summaries_by_path)

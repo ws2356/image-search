@@ -187,6 +187,7 @@ class MainWindow(QMainWindow):
         self._expand_section_headers()
         existing_tree_style = self.ui.browsePageFolderTreeView.styleSheet()
         branch_selected_style = (
+            "QTreeView { show-decoration-selected: 0; }\n"
             "QTreeView::branch { background: transparent; }\n"
             "QTreeView::branch:selected,\n"
             "QTreeView::branch:selected:active,\n"

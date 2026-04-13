@@ -20,6 +20,7 @@ class FolderTreeModel(QStandardItemModel):
     def __init__(self, parent=None, folder_predicate=DefaultFolderPredicate):
         super().__init__(parent)
         self.folder_predicate = folder_predicate
+        self._mobile_folder_paths: set[str] = set()
         self._mobile_transfer_states_by_path: dict[str, str] = {}
         self._mobile_folder_summaries_by_path: dict[str, dict[str, object]] = {}
         self._local_section_item: QStandardItem | None = None
@@ -158,6 +159,14 @@ class FolderTreeModel(QStandardItemModel):
         self._sync_top_level_folder_sections()
         self._apply_mobile_transfer_states_to_model()
 
+    def set_mobile_folder_paths(self, folder_paths: typing.Iterable[str]) -> None:
+        self._mobile_folder_paths = {
+            normalized_folder_path(path).replace('\\', '/')
+            for path in folder_paths
+        }
+        self._sync_top_level_folder_sections()
+        self._apply_mobile_transfer_states_to_model()
+
     def set_mobile_folder_summaries(self, summaries_by_path: dict[str, dict[str, object]]) -> None:
         self._mobile_folder_summaries_by_path = {
             normalized_folder_path(path).replace('\\', '/'): summary
@@ -261,7 +270,7 @@ class FolderTreeModel(QStandardItemModel):
 
     def _is_mobile_folder_path(self, folder_path: str) -> bool:
         normalized_path = normalized_folder_path(folder_path).replace('\\', '/')
-        return normalized_path in self._mobile_transfer_states_by_path
+        return normalized_path in self._mobile_folder_paths
 
     def _is_section_item(self, item: QStandardItem) -> bool:
         return bool(item.data(self.SECTION_ROLE))

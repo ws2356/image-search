@@ -149,25 +149,32 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         badge_text = "Transferring"
         text_metrics = QFontMetrics(badge_font)
         badge_height = 18
-        icon_width = 10
-        badge_width = text_metrics.horizontalAdvance(badge_text) + icon_width + 14
+        icon_box_size = 14
+        icon_spacing = 4
+        badge_width = text_metrics.horizontalAdvance(badge_text) + icon_box_size + icon_spacing + 12
         badge_rect = QRect(content_rect.right() - badge_width, content_rect.top(), badge_width, badge_height)
 
         painter.setPen(QColor("#93C5FD"))
         painter.setBrush(QColor("#DBEAFE"))
         painter.drawRoundedRect(badge_rect, 9, 9)
 
-        icon_center_x = badge_rect.left() + 7
+        icon_center_x = badge_rect.left() + 4 + icon_box_size // 2
         icon_center_y = badge_rect.center().y()
         painter.save()
         painter.translate(icon_center_x, icon_center_y)
         painter.rotate(self._spinner_angle)
         painter.setPen(QColor("#1D4ED8"))
-        painter.drawText(QRect(-4, -4, 8, 8), Qt.AlignCenter, "\u21bb")
+        icon_font = QFont(badge_font)
+        icon_font.setBold(False)
+        icon_font.setPointSize(max(icon_font.pointSize(), 10))
+        painter.setFont(icon_font)
+        half_icon_box = icon_box_size // 2
+        painter.drawText(QRect(-half_icon_box, -half_icon_box, icon_box_size, icon_box_size), Qt.AlignCenter, "\u21bb")
         painter.restore()
 
+        painter.setFont(badge_font)
         painter.setPen(QColor("#1D4ED8"))
-        text_rect = badge_rect.adjusted(icon_width + 6, 0, -6, 0)
+        text_rect = badge_rect.adjusted(icon_box_size + icon_spacing + 2, 0, -6, 0)
         painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, badge_text)
         return badge_rect
 
