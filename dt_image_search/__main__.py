@@ -191,10 +191,10 @@ class MainWindow(QMainWindow):
         existing_tree_style = self.ui.browsePageFolderTreeView.styleSheet()
         tree_style = (
             "QTreeView { show-decoration-selected: 1; background-color: #FFFFFF; }\n"
-            "QTreeView::item { background-color: #FFFFFF; }\n"
+            "QTreeView::item { background-color: #FFFFFF; color: #333333; }\n"
             "QTreeView::item:selected,\n"
             "QTreeView::item:selected:active,\n"
-            "QTreeView::item:selected:!active { background-color: #E8F0FD; color: #111827; }\n"
+            "QTreeView::item:selected:!active { background-color: #E8F0FD; color: #1A1A1A; }\n"
             "QTreeView::branch { width: 0px; background: transparent; border: none; image: none; }\n"
             "QTreeView::branch:selected,\n"
             "QTreeView::branch:selected:active,\n"

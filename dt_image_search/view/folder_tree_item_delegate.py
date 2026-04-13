@@ -80,7 +80,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         section_font.setPointSize(max(section_font.pointSize() - 1, 9))
         section_font.setBold(True)
         painter.setFont(section_font)
-        painter.setPen(QColor("#6B7280"))
+        painter.setPen(QColor("#888888"))
         painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, str(index.data(Qt.DisplayRole) or "").upper())
         painter.restore()
 
@@ -104,7 +104,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         title_font.setPointSize(max(title_font.pointSize(), 10))
         title_font.setBold(False)
         painter.setFont(title_font)
-        painter.setPen(QColor("#111827"))
+        painter.setPen(QColor("#1A1A1A"))
 
         title_rect = QRect(content_rect.left(), content_rect.top(), content_rect.width(), 18)
         if transfer_state == "transferring":
@@ -117,7 +117,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         subtitle_font = QFont(option.font)
         subtitle_font.setPointSize(max(subtitle_font.pointSize() - 1, 9))
         painter.setFont(subtitle_font)
-        painter.setPen(QColor("#6B7280"))
+        painter.setPen(QColor("#888888"))
 
         subtitle_text = self._subtitle_text(
             transfer_state=transfer_state,
@@ -149,7 +149,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         title_font.setPointSize(max(title_font.pointSize(), 10))
         title_font.setBold(False)
         painter.setFont(title_font)
-        painter.setPen(QColor("#111827"))
+        painter.setPen(QColor("#333333"))
 
         content_rect = option.rect.adjusted(0, 2, -8, -2)
         title_with_icon = f"{_local_folder_icon()} {title_text}".strip()
@@ -241,8 +241,11 @@ def _parse_iso_datetime(iso_value: str) -> datetime | None:
     except ValueError:
         return None
     if parsed_time.tzinfo is None:
-        return parsed_time.replace(tzinfo=timezone.utc)
-    return parsed_time.astimezone(timezone.utc)
+        parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+    local_timezone = datetime.now().astimezone().tzinfo
+    if local_timezone is None:
+        return parsed_time
+    return parsed_time.astimezone(local_timezone)
 
 
 def _platform_icon(platform: str) -> str:
