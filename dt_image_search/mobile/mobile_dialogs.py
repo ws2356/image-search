@@ -565,6 +565,7 @@ class MobilePairingDialog(QDialog):
         self._clock_timer = QTimer(self)
         self._clock_timer.setInterval(1000)
         self._clock_timer.timeout.connect(self._update_clock)
+        self._auto_accept_requested = False
         self._clock_timer.start()
         self._update_clock()
 
@@ -579,6 +580,15 @@ class MobilePairingDialog(QDialog):
         self._update_pairing_result()
 
     def _refresh_platform_token(self, platform: MobilePlatform) -> MobilePairingToken:
+        if self._pairing_service.current_result().state == PairingResultState.ACCEPTED:
+            log(
+                "info",
+                message=(
+                    "MobilePairingDialog/_refresh_platform_token: refresh ignored because pairing "
+                    f"was already accepted for session {self._pairing_session.session_id}"
+                ),
+            )
+            return self._pairing_session.token_for(platform)
         token = self._pairing_service.refresh_token(platform)
         log(
             "info",
@@ -612,6 +622,13 @@ class MobilePairingDialog(QDialog):
                 QPushButton:hover { background: #0070ef; }
                 """
             )
+            self.android_card.refresh_button.setEnabled(False)
+            self.android_card.refresh_button.hide()
+            self.ios_card.refresh_button.setEnabled(False)
+            self.ios_card.refresh_button.hide()
+            if not self._auto_accept_requested:
+                self._auto_accept_requested = True
+                QTimer.singleShot(0, self.accept)
             return
 
         if pairing_result.state == PairingResultState.EXPIRED:

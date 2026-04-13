@@ -6,6 +6,7 @@
 - **Phase 2**
   - Initial USB transport support after QR/bootstrap pairing, with Wi-Fi LAN retained as fallback
   - Reconnect path that depends on the desktop-driven reconnect workflow
+  - Replace immediate post-claim QR dialog dismissal with a pending-transfer state (spinner + waiting message), then dismiss once transfer start is confirmed
   - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
   - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
   - Device mismatch handling during reconnect flows, with user-friendly error messaging and clear recovery paths
