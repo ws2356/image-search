@@ -34,13 +34,20 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
             return
 
         parent_index = index.parent()
-        is_mobile_top_level = bool(
+        is_top_level_folder = bool(
             parent_index.isValid()
             and parent_index.data(FolderTreeModel.SECTION_ROLE)
-            and parent_index.data(FolderTreeModel.SECTION_KIND_ROLE) == FolderTreeModel._MOBILE_SECTION_KIND
         )
-        if is_mobile_top_level:
+        if not is_top_level_folder:
+            super().paint(painter, option, index)
+            return
+
+        section_kind = parent_index.data(FolderTreeModel.SECTION_KIND_ROLE)
+        if section_kind == FolderTreeModel._MOBILE_SECTION_KIND:
             self._paint_mobile_row(painter, option, index)
+            return
+        if section_kind == FolderTreeModel._LOCAL_SECTION_KIND:
+            self._paint_local_root_row(painter, option, index)
             return
 
         super().paint(painter, option, index)
@@ -50,12 +57,11 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
             return QSize(super().sizeHint(option, index).width(), 22)
 
         parent_index = index.parent()
-        is_mobile_top_level = bool(
+        is_top_level_folder = bool(
             parent_index.isValid()
             and parent_index.data(FolderTreeModel.SECTION_ROLE)
-            and parent_index.data(FolderTreeModel.SECTION_KIND_ROLE) == FolderTreeModel._MOBILE_SECTION_KIND
         )
-        if not is_mobile_top_level:
+        if not is_top_level_folder or parent_index.data(FolderTreeModel.SECTION_KIND_ROLE) != FolderTreeModel._MOBILE_SECTION_KIND:
             return super().sizeHint(option, index)
 
         transfer_state = index.data(FolderTreeModel.MOBILE_TRANSFER_STATE_ROLE)
@@ -91,14 +97,8 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         painter.setPen(_TREE_ROW_DIVIDER_COLOR)
         painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
 
-        content_rect = option.rect.adjusted(8, 3, -8, -4)
+        content_rect = option.rect.adjusted(0, 3, -8, -4)
         icon_text = _platform_icon(platform)
-        icon_rect = QRect(content_rect.left(), content_rect.top(), 14, 14)
-        icon_font = QFont(option.font)
-        icon_font.setPointSize(max(icon_font.pointSize(), 10))
-        painter.setFont(icon_font)
-        painter.setPen(QColor("#374151"))
-        painter.drawText(icon_rect, Qt.AlignCenter, icon_text)
 
         title_font = QFont(option.font)
         title_font.setPointSize(max(title_font.pointSize(), 10))
@@ -106,11 +106,12 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         painter.setFont(title_font)
         painter.setPen(QColor("#111827"))
 
-        title_rect = QRect(icon_rect.right() + 6, content_rect.top(), content_rect.width() - 20, 18)
+        title_rect = QRect(content_rect.left(), content_rect.top(), content_rect.width(), 18)
         if transfer_state == "transferring":
             badge_rect = self._draw_transferring_badge(painter, content_rect)
             title_rect.setRight(badge_rect.left() - 6)
-        elided_title = QFontMetrics(title_font).elidedText(title_text, Qt.ElideRight, max(title_rect.width(), 0))
+        title_with_icon = f"{icon_text} {title_text}".strip()
+        elided_title = QFontMetrics(title_font).elidedText(title_with_icon, Qt.ElideRight, max(title_rect.width(), 0))
         painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignVCenter, elided_title)
 
         subtitle_font = QFont(option.font)
@@ -124,7 +125,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
             last_backup_at=last_backup_at,
         )
         subtitle_top = title_rect.bottom() + 1
-        subtitle_rect = QRect(icon_rect.right() + 6, subtitle_top, content_rect.width() - 20, 14)
+        subtitle_rect = QRect(content_rect.left(), subtitle_top, content_rect.width(), 14)
         subtitle_metrics = QFontMetrics(subtitle_font)
         subtitle = subtitle_metrics.elidedText(subtitle_text, Qt.ElideRight, max(subtitle_rect.width(), 0))
         painter.drawText(subtitle_rect, Qt.AlignLeft | Qt.AlignVCenter, subtitle)
@@ -132,6 +133,28 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         if transfer_state == "transferring":
             bar_rect = QRect(content_rect.left(), subtitle_rect.bottom() + 2, content_rect.width(), 4)
             self._draw_progress_bar(painter, bar_rect, transferred_count=transferred_count)
+
+        painter.restore()
+
+    def _paint_local_root_row(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
+        title_text = str(index.data(Qt.DisplayRole) or "")
+
+        painter.save()
+        row_background = _TREE_SELECTED_ROW_BACKGROUND_COLOR if option.state & QStyle.State_Selected else _TREE_DEFAULT_ROW_BACKGROUND_COLOR
+        painter.fillRect(option.rect, row_background)
+        painter.setPen(_TREE_ROW_DIVIDER_COLOR)
+        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+
+        title_font = QFont(option.font)
+        title_font.setPointSize(max(title_font.pointSize(), 10))
+        title_font.setBold(False)
+        painter.setFont(title_font)
+        painter.setPen(QColor("#111827"))
+
+        content_rect = option.rect.adjusted(0, 2, -8, -2)
+        title_with_icon = f"{_local_folder_icon()} {title_text}".strip()
+        elided_title = QFontMetrics(title_font).elidedText(title_with_icon, Qt.ElideRight, max(content_rect.width(), 0))
+        painter.drawText(content_rect, Qt.AlignLeft | Qt.AlignVCenter, elided_title)
 
         painter.restore()
 
@@ -229,3 +252,7 @@ def _platform_icon(platform: str) -> str:
     if normalized_platform == "android":
         return "\U0001F916"
     return "\U0001F4F1"
+
+
+def _local_folder_icon() -> str:
+    return "\U0001F4C1"

@@ -29,7 +29,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
@@ -42,7 +42,7 @@ from dt_image_search.model.dts_fs import get_app_data_path
 ctx = get_context()
 setup_model_cache(ctx=ctx)
 
-from PySide6.QtGui import QDesktopServices, QStandardItem
+from PySide6.QtGui import QAction, QDesktopServices, QIcon, QStandardItem
 import subprocess
 
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
@@ -218,6 +218,7 @@ class MainWindow(QMainWindow):
 
         self.image_list_view.setModel(self.controller.image_list_model())
 
+        self._configure_search_field_ui()
         self.ui.searchInputField.textChanged.connect(self.handle_search)
         self.ui.searchInputField.setClearButtonEnabled(True)
 
@@ -253,6 +254,15 @@ class MainWindow(QMainWindow):
         self.image_list_view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.image_list_view.customContextMenuRequested.disconnect(self.on_image_list_context_menu)
         self.image_list_view.customContextMenuRequested.connect(self.on_image_list_context_menu)
+
+    def _configure_search_field_ui(self):
+        search_icon = QIcon.fromTheme("edit-find")
+        if search_icon.isNull():
+            search_icon = self.style().standardIcon(QStyle.SP_FileDialogContentsView)
+        self._search_field_icon_action = QAction(self.ui.searchInputField)
+        self._search_field_icon_action.setIcon(search_icon)
+        self.ui.searchInputField.addAction(self._search_field_icon_action, QLineEdit.LeadingPosition)
+        self.ui.searchInputField.setTextMargins(0, 0, 0, 0)
 
     def _register_image_list_double_click_handler(self):
         self.image_list_view.doubleClicked.connect(self.controller.on_image_double_clicked)
