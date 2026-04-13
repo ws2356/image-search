@@ -182,7 +182,7 @@ class MainWindow(QMainWindow):
         self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
         self.ui.browsePageFolderTreeView.setItemDelegate(FolderTreeItemDelegate(self.ui.browsePageFolderTreeView))
         self.ui.browsePageFolderTreeView.setRootIsDecorated(False)
-        self.ui.browsePageFolderTreeView.setIndentation(12)
+        self.ui.browsePageFolderTreeView.setIndentation(8)
         self.ui.browsePageFolderTreeView.setExpandsOnDoubleClick(False)
         self.ui.browsePageFolderTreeView.clicked.connect(self._on_folder_tree_item_clicked)
         self.ui.browsePageFolderTreeView.collapsed.connect(self._on_folder_tree_item_collapsed)
@@ -190,13 +190,15 @@ class MainWindow(QMainWindow):
         self._expand_section_headers()
         existing_tree_style = self.ui.browsePageFolderTreeView.styleSheet()
         tree_style = (
-            "QTreeView { show-decoration-selected: 0; background-color: #E8F0FD; }\n"
-            "QTreeView::item { background-color: #E8F0FD; }\n"
+            "QTreeView { show-decoration-selected: 1; background-color: #FFFFFF; }\n"
+            "QTreeView::item { background-color: #FFFFFF; }\n"
             "QTreeView::item:selected,\n"
             "QTreeView::item:selected:active,\n"
-            "QTreeView::item:selected:!active,\n"
-            "QTreeView::item:hover { background-color: #E8F0FD; color: #111827; }\n"
+            "QTreeView::item:selected:!active { background-color: #E8F0FD; color: #111827; }\n"
             "QTreeView::branch { width: 0px; background: transparent; border: none; image: none; }\n"
+            "QTreeView::branch:selected,\n"
+            "QTreeView::branch:selected:active,\n"
+            "QTreeView::branch:selected:!active { background: #E8F0FD; }\n"
             "QTreeView::branch:has-children,\n"
             "QTreeView::branch:open,\n"
             "QTreeView::branch:closed,\n"

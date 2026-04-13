@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 
 from PySide6.QtCore import QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
-from PySide6.QtWidgets import QAbstractItemView, QStyleOptionViewItem, QStyledItemDelegate
+from PySide6.QtWidgets import QAbstractItemView, QStyle, QStyleOptionViewItem, QStyledItemDelegate
 
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 
-_TREE_ROW_BACKGROUND_COLOR = QColor("#E8F0FD")
+_TREE_DEFAULT_ROW_BACKGROUND_COLOR = QColor("#FFFFFF")
+_TREE_SELECTED_ROW_BACKGROUND_COLOR = QColor("#E8F0FD")
 _TREE_ROW_DIVIDER_COLOR = QColor("#D8E6FB")
 
 
@@ -62,7 +63,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
 
     def _paint_section_row(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         painter.save()
-        painter.fillRect(option.rect, _TREE_ROW_BACKGROUND_COLOR)
+        painter.fillRect(option.rect, _TREE_DEFAULT_ROW_BACKGROUND_COLOR)
         painter.setPen(_TREE_ROW_DIVIDER_COLOR)
         painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
         painter.restore()
@@ -85,7 +86,8 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         platform = str(index.data(FolderTreeModel.MOBILE_PLATFORM_ROLE) or "")
 
         painter.save()
-        painter.fillRect(option.rect, _TREE_ROW_BACKGROUND_COLOR)
+        row_background = _TREE_SELECTED_ROW_BACKGROUND_COLOR if option.state & QStyle.State_Selected else _TREE_DEFAULT_ROW_BACKGROUND_COLOR
+        painter.fillRect(option.rect, row_background)
         painter.setPen(_TREE_ROW_DIVIDER_COLOR)
         painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
 
