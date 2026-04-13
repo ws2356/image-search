@@ -2,14 +2,28 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from PySide6.QtCore import QRect, QSize, Qt
+from PySide6.QtCore import QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
-from PySide6.QtWidgets import QApplication, QStyle, QStyleOptionViewItem, QStyledItemDelegate
+from PySide6.QtWidgets import QAbstractItemView, QStyle, QStyleOptionViewItem, QStyledItemDelegate
 
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 
 
 class FolderTreeItemDelegate(QStyledItemDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._spinner_angle = 0
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(120)
+        self._spinner_timer.timeout.connect(self._advance_spinner)
+        self._spinner_timer.start()
+
+    def _advance_spinner(self) -> None:
+        self._spinner_angle = (self._spinner_angle + 24) % 360
+        parent_view = self.parent()
+        if isinstance(parent_view, QAbstractItemView):
+            parent_view.viewport().update()
+
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         if bool(index.data(FolderTreeModel.SECTION_ROLE)):
             self._paint_section_row(painter, option, index)
@@ -126,32 +140,35 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
 
         painter.restore()
 
-    def _draw_item_background(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        style_option = QStyleOptionViewItem(option)
-        self.initStyleOption(style_option, index)
-        style_option.text = ""
-        style = style_option.widget.style() if style_option.widget else QApplication.style()
-        style.drawControl(QStyle.CE_ItemViewItem, style_option, painter, style_option.widget)
-
-    @staticmethod
-    def _draw_transferring_badge(painter: QPainter, content_rect: QRect) -> QRect:
+    def _draw_transferring_badge(self, painter: QPainter, content_rect: QRect) -> QRect:
         badge_font = painter.font()
         badge_font.setPointSize(max(badge_font.pointSize() - 1, 9))
         badge_font.setBold(True)
         painter.setFont(badge_font)
 
-        badge_text = "\u21bb Transferring"
+        badge_text = "Transferring"
         text_metrics = QFontMetrics(badge_font)
         badge_height = 18
-        badge_width = text_metrics.horizontalAdvance(badge_text) + 12
+        icon_width = 10
+        badge_width = text_metrics.horizontalAdvance(badge_text) + icon_width + 14
         badge_rect = QRect(content_rect.right() - badge_width, content_rect.top(), badge_width, badge_height)
 
         painter.setPen(QColor("#93C5FD"))
         painter.setBrush(QColor("#DBEAFE"))
         painter.drawRoundedRect(badge_rect, 9, 9)
 
+        icon_center_x = badge_rect.left() + 7
+        icon_center_y = badge_rect.center().y()
+        painter.save()
+        painter.translate(icon_center_x, icon_center_y)
+        painter.rotate(self._spinner_angle)
         painter.setPen(QColor("#1D4ED8"))
-        painter.drawText(badge_rect, Qt.AlignCenter, badge_text)
+        painter.drawText(QRect(-4, -4, 8, 8), Qt.AlignCenter, "\u21bb")
+        painter.restore()
+
+        painter.setPen(QColor("#1D4ED8"))
+        text_rect = badge_rect.adjusted(icon_width + 6, 0, -6, 0)
+        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignVCenter, badge_text)
         return badge_rect
 
     @staticmethod

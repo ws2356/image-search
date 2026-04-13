@@ -186,7 +186,12 @@ class MainWindow(QMainWindow):
         self.browse_controller.folder_list_model().rowsInserted.connect(lambda *_: self._expand_section_headers())
         self._expand_section_headers()
         existing_tree_style = self.ui.browsePageFolderTreeView.styleSheet()
-        branch_selected_style = "QTreeView::branch:selected { background: transparent; }"
+        branch_selected_style = (
+            "QTreeView::branch { background: transparent; }\n"
+            "QTreeView::branch:selected,\n"
+            "QTreeView::branch:selected:active,\n"
+            "QTreeView::branch:selected:!active { background: transparent; }"
+        )
         if branch_selected_style not in existing_tree_style:
             merged_style = f"{existing_tree_style}\n{branch_selected_style}" if existing_tree_style else branch_selected_style
             self.ui.browsePageFolderTreeView.setStyleSheet(merged_style)
