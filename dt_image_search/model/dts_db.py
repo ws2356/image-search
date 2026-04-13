@@ -75,7 +75,22 @@ def get_all_folders(conn):
 
 def get_subfolders(conn, folder_path: str) -> list[Folder]:
     folder_path = folder_path.replace('\\', '/')
-    cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE path LIKE ?", (folder_path + '%',))
+    if folder_path == "/":
+        cursor = conn.execute(
+            "SELECT id, path, status, added_at FROM folders WHERE path = '/' OR path LIKE '/%'"
+        )
+        return [Folder(id=row[0], path=row[1], status=row[2], added_at=row[3]) for row in cursor.fetchall()]
+
+    normalized_prefix = folder_path.rstrip('/')
+    with_trailing_slash = normalized_prefix + '/'
+    cursor = conn.execute(
+        """
+        SELECT id, path, status, added_at
+        FROM folders
+        WHERE path = ? OR path = ? OR path LIKE ?
+        """,
+        (normalized_prefix, with_trailing_slash, with_trailing_slash + '%'),
+    )
     return [Folder(id = row[0], path = row[1], status = row[2], added_at= row[3]) for row in cursor.fetchall()]  # Ensure the query is executed
 
 def get_folder_by_path(conn, folder_path: str) -> Folder:
@@ -117,7 +132,12 @@ def match_parent_folder(conn, path: str) -> Folder:
 
 def delete_folders(conn, folder_paths: list):
     # Replace '\' with '/' for consistency
-    folder_paths = [path.replace('\\', '/') for path in folder_paths]
+    normalized_paths = [path.replace('\\', '/') for path in folder_paths]
+    folder_paths = []
+    for path in normalized_paths:
+        for variant in _folder_path_variants(path):
+            if variant not in folder_paths:
+                folder_paths.append(variant)
     if not folder_paths:
         return
     placeholders = ', '.join('?' for _ in folder_paths)
