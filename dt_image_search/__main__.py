@@ -50,6 +50,7 @@ from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
 from dt_image_search.index.index_worker import init_index_workers, deinit_index_workers
 from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
+from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
@@ -181,9 +182,14 @@ class MainWindow(QMainWindow):
         self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
         self.ui.browsePageFolderTreeView.setItemDelegate(FolderTreeItemDelegate(self.ui.browsePageFolderTreeView))
         self.ui.browsePageFolderTreeView.setRootIsDecorated(False)
-        self.ui.browsePageFolderTreeView.setItemsExpandable(False)
-        self.ui.browsePageFolderTreeView.expandAll()
-        self.browse_controller.folder_list_model().rowsInserted.connect(lambda *_: self.ui.browsePageFolderTreeView.expandAll())
+        self.ui.browsePageFolderTreeView.collapsed.connect(self._on_folder_tree_item_collapsed)
+        self.browse_controller.folder_list_model().rowsInserted.connect(lambda *_: self._expand_section_headers())
+        self._expand_section_headers()
+        existing_tree_style = self.ui.browsePageFolderTreeView.styleSheet()
+        branch_selected_style = "QTreeView::branch:selected { background: transparent; }"
+        if branch_selected_style not in existing_tree_style:
+            merged_style = f"{existing_tree_style}\n{branch_selected_style}" if existing_tree_style else branch_selected_style
+            self.ui.browsePageFolderTreeView.setStyleSheet(merged_style)
         self.ui.browsePageFolderTreeView.selectionModel().currentChanged.connect(self.controller.on_folder_selected)
         self.ui.browsePageFolderTreeView.expanded.connect(self.controller.on_item_expanded)
         self.ui.browsePageFolderTreeView.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -356,6 +362,33 @@ class MainWindow(QMainWindow):
         
         from dt_image_search.telemetry.telemetry_client import log
         log("debug", message=f"Auto-selected folder in tree: {folder_item.data(Qt.UserRole)}")
+
+    def _expand_section_headers(self):
+        model = self.ui.browsePageFolderTreeView.model()
+        if model is None:
+            return
+        for row in range(model.rowCount()):
+            index = model.index(row, 0)
+            if not index.isValid():
+                continue
+            item = model.itemFromIndex(index)
+            if item is not None and item.data(FolderTreeModel.SECTION_ROLE):
+                self.ui.browsePageFolderTreeView.expand(index)
+
+    def _on_folder_tree_item_collapsed(self, index):
+        model = self.ui.browsePageFolderTreeView.model()
+        if model is None:
+            return
+        item = model.itemFromIndex(index)
+        if item is None or not item.data(FolderTreeModel.SECTION_ROLE):
+            return
+        persistent_index = QPersistentModelIndex(index)
+        QTimer.singleShot(0, lambda: self._expand_section_if_valid(persistent_index))
+
+    def _expand_section_if_valid(self, index: QPersistentModelIndex):
+        if not index.isValid():
+            return
+        self.ui.browsePageFolderTreeView.expand(index)
 
     def _on_mobile_transfer_folder_ready(self, folder_path: str):
         self.browse_controller.ensure_folder_registered(normalized_folder_path(folder_path))
