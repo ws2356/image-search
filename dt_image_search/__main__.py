@@ -352,6 +352,9 @@ class MainWindow(QMainWindow):
         if not folder_path:
             return
         menu = QMenu(self)
+        open_action = menu.addAction("Open Folder")
+        open_action.triggered.connect(lambda: self._open_folder_in_explorer(folder_path))
+        menu.addSeparator()
         remove_action = menu.addAction("Remove Folder")
         remove_action.triggered.connect(lambda: QTimer.singleShot(200, lambda: self.safe_execute_delete(p_index, folder_path)))
         menu.exec(self.ui.browsePageFolderTreeView.mapToGlobal(pos))
@@ -362,6 +365,14 @@ class MainWindow(QMainWindow):
         if self.ui.browsePageFolderTreeView.isExpanded(p_index):
             self.ui.browsePageFolderTreeView.collapse(p_index)
         self.controller.on_delete_folder(p_index, normalized_folder_path(folder_path))
+
+    def _open_folder_in_explorer(self, folder_path: str) -> None:
+        target_path = normalized_folder_path(folder_path)
+        if not os.path.isdir(target_path):
+            from dt_image_search.telemetry.telemetry_client import log
+            log("warning", message=f"MainWindow/_open_folder_in_explorer: path does not exist: {target_path}")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(target_path))
 
     def select_folder_in_tree(self, folder_item: QStandardItem):
         """Select and expand to show the specified folder in the tree view."""
