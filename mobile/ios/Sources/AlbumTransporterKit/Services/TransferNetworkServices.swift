@@ -218,7 +218,7 @@ enum TransferClientError: Error, Sendable {
     }
 }
 
-private protocol TransferSchemaResponse: Decodable {
+protocol TransferSchemaResponse: Decodable {
     var schema: String { get }
     var message: String { get }
 }

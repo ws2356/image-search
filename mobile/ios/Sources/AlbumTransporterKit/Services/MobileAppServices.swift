@@ -15,6 +15,10 @@ protocol PairingBootstrapClient: Sendable {
     func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse
 }
 
+protocol PairingUSBBootstrapClient: Sendable {
+    func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse
+}
+
 protocol LocalDeviceIdentityProviding: Sendable {
     func currentIdentity() async -> LocalDeviceIdentity
 }

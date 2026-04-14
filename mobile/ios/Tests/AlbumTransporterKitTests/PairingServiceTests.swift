@@ -171,6 +171,100 @@ final class PairingServiceTests: XCTestCase {
             "http://10.0.0.5:38933/api/mobile/pairing/claim"
         )
     }
+
+    func test_desktop_bootstrap_pairing_service_prefers_usb_when_available() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let lanClient = RetryingPairingBootstrapClient(scriptedResults: [:])
+        let usbClient = StaticUSBPairingBootstrapClient(
+            result: .success(
+                PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .accepted,
+                    message: "Pairing accepted over USB.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: "desktop-device-001",
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: 1,
+                    folderPath: "/Users/demo/Alice iPhone",
+                    transport: "usb",
+                    pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    serverNonce: "server-nonce-usb"
+                )
+            )
+        )
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: lanClient,
+            usbBootstrapClient: usbClient,
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentity(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let result = await service.startPairing(using: .demo)
+        let lanRequestedEndpoints = await lanClient.requestedEndpoints()
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+
+        XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(result.transport, .usb)
+        XCTAssertEqual(lanRequestedEndpoints, [])
+        XCTAssertEqual(trustedDesktop?.transport, .usb)
+    }
+
+    func test_desktop_bootstrap_pairing_service_falls_back_to_lan_after_usb_transport_failure() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let lanClient = RetryingPairingBootstrapClient(
+            scriptedResults: [
+                "http://127.0.0.1:38933/api/mobile/pairing/claim": .success(
+                    PairingClaimResponse(
+                        schema: PairingProtocol.schema,
+                        status: .accepted,
+                        message: "Pairing accepted over LAN fallback.",
+                        sessionID: "pairing-demo-001",
+                        desktopDeviceID: "desktop-device-001",
+                        desktopName: "Studio Mac",
+                        deviceUUID: "ios-device-001",
+                        folderID: 1,
+                        folderPath: "/Users/demo/Alice iPhone",
+                        transport: "lan",
+                        pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                        serverNonce: "server-nonce-lan"
+                    )
+                ),
+            ]
+        )
+        let usbClient = StaticUSBPairingBootstrapClient(
+            result: .failure(.transport(message: "USB websocket did not connect in time."))
+        )
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: lanClient,
+            usbBootstrapClient: usbClient,
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentity(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let result = await service.startPairing(using: .demo)
+        let lanRequestedEndpoints = await lanClient.requestedEndpoints()
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+
+        XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(result.transport, .lan)
+        XCTAssertEqual(lanRequestedEndpoints, ["http://127.0.0.1:38933/api/mobile/pairing/claim"])
+        XCTAssertEqual(trustedDesktop?.transport, .lan)
+    }
 }
 
 private struct StaticPairingBootstrapClient: PairingBootstrapClient {
@@ -182,6 +276,20 @@ private struct StaticPairingBootstrapClient: PairingBootstrapClient {
         XCTAssertEqual(request.oneTimePasscode, PairingQRCodePayload.demo.oneTimePasscode)
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
         return response
+    }
+}
+
+private struct StaticUSBPairingBootstrapClient: PairingUSBBootstrapClient {
+    let result: Result<PairingClaimResponse, PairingServiceError>
+
+    func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+        XCTAssertEqual(payload.sessionID, request.sessionID)
+        switch result {
+        case .success(let response):
+            return response
+        case .failure(let error):
+            throw error
+        }
     }
 }
 

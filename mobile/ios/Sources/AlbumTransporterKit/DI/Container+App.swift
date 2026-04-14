@@ -21,10 +21,21 @@ extension Container {
             .singleton
     }
 
+    var usbTransportRuntime: Factory<USBWebSocketTransportRuntime> {
+        self { USBWebSocketTransportRuntime() }
+            .singleton
+    }
+
+    var pairingUSBBootstrapClient: Factory<PairingUSBBootstrapClient> {
+        self { WebSocketPairingUSBBootstrapClient(runtime: self.usbTransportRuntime()) }
+            .singleton
+    }
+
     var pairingService: Factory<PairingService> {
         self {
             DesktopBootstrapPairingService(
                 bootstrapClient: self.pairingBootstrapClient(),
+                usbBootstrapClient: self.pairingUSBBootstrapClient(),
                 identityProvider: self.localDeviceIdentityProvider(),
                 trustedDesktopStore: self.trustedDesktopStore()
             )
@@ -46,7 +57,10 @@ extension Container {
         self {
             PhotoLibraryTransferService(
                 assetSource: PhotoLibraryAssetSource(),
-                transferClient: URLSessionMobileTransferClient(),
+                transferClient: AdaptiveMobileTransferClient(
+                    lanClient: URLSessionMobileTransferClient(),
+                    usbClient: WebSocketMobileTransferClient(runtime: self.usbTransportRuntime())
+                ),
                 trustedDesktopStore: self.trustedDesktopStore()
             )
         }

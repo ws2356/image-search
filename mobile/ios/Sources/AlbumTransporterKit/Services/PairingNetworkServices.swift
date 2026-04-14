@@ -119,15 +119,18 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
 
 struct DesktopBootstrapPairingService: PairingService {
     let bootstrapClient: PairingBootstrapClient
+    let usbBootstrapClient: PairingUSBBootstrapClient?
     let identityProvider: LocalDeviceIdentityProviding
     let trustedDesktopStore: TrustedDesktopStore
 
     init(
         bootstrapClient: PairingBootstrapClient,
+        usbBootstrapClient: PairingUSBBootstrapClient? = nil,
         identityProvider: LocalDeviceIdentityProviding,
         trustedDesktopStore: TrustedDesktopStore
     ) {
         self.bootstrapClient = bootstrapClient
+        self.usbBootstrapClient = usbBootstrapClient
         self.identityProvider = identityProvider
         self.trustedDesktopStore = trustedDesktopStore
     }
@@ -221,6 +224,22 @@ struct DesktopBootstrapPairingService: PairingService {
         request: PairingClaimRequest
     ) async throws -> PairingBootstrapAttempt {
         var retryableError: PairingServiceError?
+
+        if let usbBootstrapClient, payload.suggestedUSBPort != nil {
+            do {
+                let response = try await usbBootstrapClient.claimPairing(using: payload, request: request)
+                return PairingBootstrapAttempt(endpoint: payload.bootstrapURL, response: response)
+            } catch let error as PairingServiceError {
+                switch error {
+                case .expired, .rejected:
+                    throw error
+                default:
+                    retryableError = error
+                }
+            } catch {
+                retryableError = .transport(message: error.localizedDescription)
+            }
+        }
 
         // Try each advertised endpoint because desktops may be reachable on only one LAN.
         for endpoint in payload.bootstrapURLs {

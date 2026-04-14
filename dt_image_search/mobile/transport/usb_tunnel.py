@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import importlib
+import inspect
 import socket
 from typing import Any, Protocol
 
@@ -214,6 +215,8 @@ class Pymobiledevice3UsbTunnelProvider:
 
     @staticmethod
     def _run_async(awaitable: Any) -> Any:
+        if not inspect.isawaitable(awaitable):
+            return awaitable
         try:
             return asyncio.run(awaitable)
         except RuntimeError as exc:
