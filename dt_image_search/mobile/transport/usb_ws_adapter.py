@@ -17,6 +17,13 @@ from dt_image_search.mobile.transport.router import (
     MobileTransportRouteNotFoundError,
     MobileTransportRouter,
 )
+from dt_image_search.mobile.transport.usb_tunnel import (
+    Pymobiledevice3UsbTunnelProvider,
+    UsbConnectedDevice,
+    UsbTunnelConnectError,
+    UsbTunnelProvider,
+    UsbTunnelUnavailableError,
+)
 
 MOBILE_TRANSPORT_ENVELOPE_SCHEMA = "dtis.mobile-transport.v1"
 
@@ -46,18 +53,49 @@ class UsbBootstrapConfig:
             raise ValueError("USB bootstrap fallback_port_window must be non-negative.")
 
 
+@dataclass(frozen=True)
+class UsbTunnelTarget:
+    device_udid: str
+    remote_port: int
+
+
+def iter_usb_probe_ports(
+    *,
+    suggested_port: int,
+    fallback_port_window: int,
+) -> tuple[int, ...]:
+    if suggested_port <= 0 or suggested_port > 65535:
+        raise ValueError("USB suggested port must be in range 1..65535.")
+    if fallback_port_window < 0:
+        raise ValueError("USB fallback port window must be non-negative.")
+
+    candidate_ports: list[int] = [suggested_port]
+    for offset in range(1, fallback_port_window + 1):
+        higher_port = suggested_port + offset
+        if higher_port <= 65535:
+            candidate_ports.append(higher_port)
+        lower_port = suggested_port - offset
+        if lower_port >= 1:
+            candidate_ports.append(lower_port)
+    return tuple(candidate_ports)
+
+
 class UsbWebSocketTransportAdapter:
     def __init__(
         self,
         *,
         router: MobileTransportRouter,
         log_handler: Callable[..., None],
+        tunnel_provider: UsbTunnelProvider | None = None,
     ):
         self._router = router
         self._log_handler = log_handler
+        self._tunnel_provider = tunnel_provider or Pymobiledevice3UsbTunnelProvider()
         self._lock = threading.RLock()
         self._state = UsbTransportState.STOPPED
         self._bootstrap_config: UsbBootstrapConfig | None = None
+        self._active_tunnel_target: UsbTunnelTarget | None = None
+        self._last_probe_error: str | None = None
 
     @property
     def state(self) -> UsbTransportState:
@@ -69,10 +107,22 @@ class UsbWebSocketTransportAdapter:
         with self._lock:
             return self._bootstrap_config
 
+    @property
+    def active_tunnel_target(self) -> UsbTunnelTarget | None:
+        with self._lock:
+            return self._active_tunnel_target
+
+    @property
+    def last_probe_error(self) -> str | None:
+        with self._lock:
+            return self._last_probe_error
+
     def configure_bootstrap(self, config: UsbBootstrapConfig) -> None:
         with self._lock:
             self._bootstrap_config = config
             self._state = UsbTransportState.CONFIGURED
+            self._active_tunnel_target = None
+            self._last_probe_error = None
         self._safe_log(
             "info",
             message=(
@@ -83,10 +133,12 @@ class UsbWebSocketTransportAdapter:
         )
 
     def start(self) -> None:
+        config = self._require_bootstrap_config()
         with self._lock:
-            if self._bootstrap_config is None:
-                raise RuntimeError("USB transport cannot start before bootstrap config is provided.")
             self._state = UsbTransportState.READY
+            self._active_tunnel_target = None
+            self._last_probe_error = None
+        self._probe_usb_tunnel(config)
 
     def mark_connected(self) -> None:
         with self._lock:
@@ -97,6 +149,8 @@ class UsbWebSocketTransportAdapter:
     def stop(self) -> None:
         with self._lock:
             self._state = UsbTransportState.STOPPED
+            self._active_tunnel_target = None
+            self._last_probe_error = None
 
     def build_auth_digest(self, rand: str) -> str:
         config = self._require_bootstrap_config()
@@ -182,6 +236,79 @@ class UsbWebSocketTransportAdapter:
             if self._bootstrap_config is None:
                 raise RuntimeError("USB bootstrap config is not available.")
             return self._bootstrap_config
+
+    def _probe_usb_tunnel(self, config: UsbBootstrapConfig) -> None:
+        try:
+            usb_devices = self._tunnel_provider.list_usb_devices()
+        except (UsbTunnelUnavailableError, UsbTunnelConnectError) as exc:
+            self._set_probe_error(str(exc))
+            self._safe_log(
+                "warning",
+                message=f"UsbWebSocketTransportAdapter/start: USB probing unavailable: {exc}",
+            )
+            return
+
+        if not usb_devices:
+            self._safe_log(
+                "debug",
+                message=(
+                    "UsbWebSocketTransportAdapter/start: no USB device detected; "
+                    "keeping LAN as active fallback transport."
+                ),
+            )
+            return
+
+        candidate_ports = iter_usb_probe_ports(
+            suggested_port=config.suggested_port,
+            fallback_port_window=config.fallback_port_window,
+        )
+        for usb_device in usb_devices:
+            connected_target = self._probe_device_for_ports(
+                usb_device=usb_device,
+                candidate_ports=candidate_ports,
+            )
+            if connected_target is None:
+                continue
+
+            with self._lock:
+                self._state = UsbTransportState.CONNECTED
+                self._active_tunnel_target = connected_target
+                self._last_probe_error = None
+            self._safe_log(
+                "info",
+                message=(
+                    "UsbWebSocketTransportAdapter/start: connected USB tunnel candidate "
+                    f"device={connected_target.device_udid} port={connected_target.remote_port}"
+                ),
+            )
+            return
+
+        self._set_probe_error("Desktop could not connect to any USB bootstrap port candidates.")
+        self._safe_log(
+            "debug",
+            message=(
+                "UsbWebSocketTransportAdapter/start: USB devices detected but none accepted "
+                "the bootstrap probe; keeping LAN fallback active."
+            ),
+        )
+
+    def _probe_device_for_ports(
+        self,
+        *,
+        usb_device: UsbConnectedDevice,
+        candidate_ports: tuple[int, ...],
+    ) -> UsbTunnelTarget | None:
+        for port in candidate_ports:
+            if self._tunnel_provider.probe_device_port(udid=usb_device.udid, port=port):
+                return UsbTunnelTarget(
+                    device_udid=usb_device.udid,
+                    remote_port=port,
+                )
+        return None
+
+    def _set_probe_error(self, message: str) -> None:
+        with self._lock:
+            self._last_probe_error = message
 
     def _safe_log(
         self,

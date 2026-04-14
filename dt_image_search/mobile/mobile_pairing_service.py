@@ -46,12 +46,17 @@ from dt_image_search.mobile.transport.lan_http_adapter import (
 )
 from dt_image_search.mobile.transport.router import MobileTransportRouter
 from dt_image_search.mobile.transport.transport_manager import MobileTransportManager
-from dt_image_search.mobile.transport.usb_ws_adapter import UsbWebSocketTransportAdapter
+from dt_image_search.mobile.transport.usb_ws_adapter import (
+    UsbBootstrapConfig,
+    UsbTransportState,
+    UsbWebSocketTransportAdapter,
+)
 from dt_image_search.model.dts_db import create_db_conn
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
 PAIRING_CLAIM_PATH = "/api/mobile/pairing/claim"
-PAIRING_TRANSPORT = "lan"
+PAIRING_TRANSPORT_LAN = "lan"
+PAIRING_TRANSPORT_USB = "usb"
 
 
 class PairingResultState(str, Enum):
@@ -125,19 +130,21 @@ class MobilePairingService:
                 desktop_endpoint_urls=self.endpoint_urls,
                 now=now,
             )
+            active_session = self._active_session
             self._pairing_result = MobilePairingResult(
                 state=PairingResultState.WAITING,
                 message="Waiting for the mobile app to claim this pairing session.",
-                session_id=self._active_session.session_id,
+                session_id=active_session.session_id,
             )
-            _log(
-                "info",
-                message=(
-                    "MobilePairingService/start_pairing_session: created pairing session "
-                    f"{self._active_session.session_id} on {self.endpoint_url}"
-                ),
-            )
-            return self._active_session
+        self._configure_usb_bootstrap_for_session(active_session)
+        _log(
+            "info",
+            message=(
+                "MobilePairingService/start_pairing_session: created pairing session "
+                f"{active_session.session_id} on {self.endpoint_url}"
+            ),
+        )
+        return active_session
 
     def refresh_token(self, platform: MobilePlatform, now: datetime | None = None) -> MobilePairingToken:
         with self._lock:
@@ -145,7 +152,14 @@ class MobilePairingService:
                 raise RuntimeError("No active pairing session is available.")
             if self._pairing_result.state == PairingResultState.ACCEPTED:
                 raise RuntimeError("Cannot refresh QR tokens after pairing is already accepted.")
-            return self._active_session.refresh_token(platform, now=now)
+            refreshed_token = self._active_session.refresh_token(platform, now=now)
+            session_id = self._active_session.session_id
+        if platform == MobilePlatform.IOS:
+            self._configure_usb_bootstrap_for_token(
+                session_id=session_id,
+                token=refreshed_token,
+            )
+        return refreshed_token
 
     def current_result(self) -> MobilePairingResult:
         with self._lock:
@@ -158,6 +172,7 @@ class MobilePairingService:
                 state=PairingResultState.WAITING,
                 message="Scan the QR code from the mobile app to begin pairing.",
             )
+        self._transport_manager.stop_usb()
 
     def shutdown(self) -> None:
         with self._lock:
@@ -265,7 +280,11 @@ class MobilePairingService:
                     paired_at=current_time,
                 )
 
-            acceptance_message = f"Pairing accepted for {device_name}. Desktop is ready for LAN transfer."
+            selected_transport = self._resolve_pairing_transport(requested_platform)
+            if selected_transport == PAIRING_TRANSPORT_USB:
+                acceptance_message = f"Pairing accepted for {device_name}. Desktop is ready for USB transfer."
+            else:
+                acceptance_message = f"Pairing accepted for {device_name}. Desktop is ready for LAN transfer."
             self._pairing_result = MobilePairingResult(
                 state=PairingResultState.ACCEPTED,
                 message=acceptance_message,
@@ -273,13 +292,14 @@ class MobilePairingService:
                 device_uuid=device_uuid,
                 folder_path=folder_record.folder_path,
                 session_id=active_session.session_id,
-                transport=PAIRING_TRANSPORT,
+                transport=selected_transport,
             )
             _log(
                 "info",
                 message=(
                     "MobilePairingService/handle_pairing_request: accepted pairing session "
-                    f"{active_session.session_id} for {requested_platform.value} device {device_uuid}"
+                    f"{active_session.session_id} for {requested_platform.value} device {device_uuid} "
+                    f"transport={selected_transport}"
                 ),
             )
             return (
@@ -294,7 +314,7 @@ class MobilePairingService:
                     "device_uuid": device_uuid,
                     "folder_id": folder_record.folder_id,
                     "folder_path": folder_record.folder_path,
-                    "transport": PAIRING_TRANSPORT,
+                    "transport": selected_transport,
                     "paired_at": current_time.isoformat(timespec="seconds"),
                     "server_nonce": server_nonce,
                 },
@@ -394,6 +414,42 @@ class MobilePairingService:
             lan_transport=lan_transport,
             usb_transport=usb_transport,
         )
+
+    def _configure_usb_bootstrap_for_session(self, session: MobilePairingSessionDraft) -> None:
+        self._configure_usb_bootstrap_for_token(
+            session_id=session.session_id,
+            token=session.token_for(MobilePlatform.IOS),
+        )
+
+    def _configure_usb_bootstrap_for_token(
+        self,
+        *,
+        session_id: str,
+        token: MobilePairingToken,
+    ) -> None:
+        bootstrap_config = UsbBootstrapConfig(
+            session_id=session_id,
+            one_time_passcode=token.one_time_passcode,
+            suggested_port=token.suggested_usb_port,
+            fallback_port_window=20,
+        )
+        self._transport_manager.configure_usb_bootstrap(bootstrap_config)
+        usb_state = self._transport_manager.start_usb()
+        probe_error = self._transport_manager.usb_last_probe_error
+        probe_error_message = probe_error or "none"
+        _log(
+            "info",
+            message=(
+                "MobilePairingService/_configure_usb_bootstrap_for_token: "
+                f"session_id={session_id} suggested_port={token.suggested_usb_port} "
+                f"state={usb_state.value} probe_error={probe_error_message}"
+            ),
+        )
+
+    def _resolve_pairing_transport(self, platform: MobilePlatform) -> str:
+        if platform == MobilePlatform.IOS and self._transport_manager.usb_state == UsbTransportState.CONNECTED:
+            return PAIRING_TRANSPORT_USB
+        return PAIRING_TRANSPORT_LAN
 
 
 def _response(

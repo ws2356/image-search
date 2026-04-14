@@ -17,10 +17,20 @@ from dt_image_search.mobile.transport.router import (
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
     UsbBootstrapConfig,
+    UsbTunnelTarget,
     UsbTransportState,
     UsbWebSocketTransportAdapter,
+    iter_usb_probe_ports,
 )
 from dt_image_search.mobile.transport.transport_manager import MobileTransportManager
+from dt_image_search.mobile.transport.usb_tunnel import (
+    Pymobiledevice3UsbTunnelProvider,
+    UsbConnectedDevice,
+    UsbTunnelConnectError,
+    UsbTunnelDeviceNotFoundError,
+    UsbTunnelProvider,
+    UsbTunnelUnavailableError,
+)
 
 __all__ = [
     "PAIRING_CLAIM_OPERATION",
@@ -37,7 +47,15 @@ __all__ = [
     "MobileTransportRouter",
     "MOBILE_TRANSPORT_ENVELOPE_SCHEMA",
     "UsbBootstrapConfig",
+    "UsbTunnelTarget",
     "UsbTransportState",
     "UsbWebSocketTransportAdapter",
+    "iter_usb_probe_ports",
+    "UsbConnectedDevice",
+    "UsbTunnelProvider",
+    "UsbTunnelUnavailableError",
+    "UsbTunnelDeviceNotFoundError",
+    "UsbTunnelConnectError",
+    "Pymobiledevice3UsbTunnelProvider",
     "MobileTransportManager",
 ]

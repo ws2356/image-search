@@ -9,12 +9,46 @@ from dt_image_search.mobile.transport.contracts import (
     MobileTransportResponse,
 )
 from dt_image_search.mobile.transport.router import MobileTransportRouter
+from dt_image_search.mobile.transport.usb_tunnel import (
+    UsbConnectedDevice,
+    UsbTunnelUnavailableError,
+)
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
     UsbBootstrapConfig,
     UsbTransportState,
     UsbWebSocketTransportAdapter,
+    iter_usb_probe_ports,
 )
+
+
+class _FakeUsbTunnelProvider:
+    def __init__(
+        self,
+        *,
+        devices: tuple[UsbConnectedDevice, ...] = tuple(),
+        connectable_ports: set[tuple[str, int]] | None = None,
+        unavailable_error: str | None = None,
+    ):
+        self._devices = devices
+        self._connectable_ports = connectable_ports or set()
+        self._unavailable_error = unavailable_error
+        self.probe_calls: list[tuple[str, int]] = []
+
+    def list_usb_devices(self) -> tuple[UsbConnectedDevice, ...]:
+        if self._unavailable_error is not None:
+            raise UsbTunnelUnavailableError(self._unavailable_error)
+        return self._devices
+
+    def probe_device_port(
+        self,
+        *,
+        udid: str,
+        port: int,
+        timeout_seconds: float = 1.0,
+    ) -> bool:
+        self.probe_calls.append((udid, port))
+        return (udid, port) in self._connectable_ports
 
 
 class TestUsbWebSocketTransportAdapter(unittest.TestCase):
@@ -93,6 +127,98 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertEqual(self._adapter.state, UsbTransportState.CONNECTED)
         self._adapter.stop()
         self.assertEqual(self._adapter.state, UsbTransportState.STOPPED)
+
+    def test_start_marks_connected_when_usb_probe_succeeds(self):
+        provider = _FakeUsbTunnelProvider(
+            devices=(UsbConnectedDevice(udid="ios-001"),),
+            connectable_ports={("ios-001", 50213)},
+        )
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="session-001",
+                one_time_passcode="482913",
+                suggested_port=50211,
+                fallback_port_window=3,
+            )
+        )
+
+        adapter.start()
+
+        self.assertEqual(adapter.state, UsbTransportState.CONNECTED)
+        self.assertIsNotNone(adapter.active_tunnel_target)
+        self.assertEqual(adapter.active_tunnel_target.device_udid, "ios-001")
+        self.assertEqual(adapter.active_tunnel_target.remote_port, 50213)
+        self.assertEqual(
+            provider.probe_calls,
+            [
+                ("ios-001", 50211),
+                ("ios-001", 50212),
+                ("ios-001", 50210),
+                ("ios-001", 50213),
+            ],
+        )
+
+    def test_start_records_probe_error_when_no_port_is_reachable(self):
+        provider = _FakeUsbTunnelProvider(
+            devices=(UsbConnectedDevice(udid="ios-001"),),
+        )
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="session-001",
+                one_time_passcode="482913",
+                suggested_port=50211,
+                fallback_port_window=1,
+            )
+        )
+
+        adapter.start()
+
+        self.assertEqual(adapter.state, UsbTransportState.READY)
+        self.assertIsNone(adapter.active_tunnel_target)
+        self.assertEqual(
+            adapter.last_probe_error,
+            "Desktop could not connect to any USB bootstrap port candidates.",
+        )
+
+    def test_start_records_probe_error_when_provider_is_unavailable(self):
+        provider = _FakeUsbTunnelProvider(unavailable_error="pymobiledevice3 not installed")
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="session-001",
+                one_time_passcode="482913",
+                suggested_port=50211,
+                fallback_port_window=1,
+            )
+        )
+
+        adapter.start()
+
+        self.assertEqual(adapter.state, UsbTransportState.READY)
+        self.assertEqual(adapter.last_probe_error, "pymobiledevice3 not installed")
+
+    def test_iter_usb_probe_ports_generates_symmetric_candidates(self):
+        self.assertEqual(
+            iter_usb_probe_ports(
+                suggested_port=47000,
+                fallback_port_window=3,
+            ),
+            (47000, 47001, 46999, 47002, 46998, 47003, 46997),
+        )
 
     @staticmethod
     def _noop_log(*args, **kwargs):

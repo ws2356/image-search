@@ -20,7 +20,63 @@ from dt_image_search.mobile.mobile_pairing_service import (
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
+from dt_image_search.mobile.transport.lan_http_adapter import LanHttpEndpointInfo
+from dt_image_search.mobile.transport.usb_ws_adapter import (
+    UsbBootstrapConfig,
+    UsbTransportState,
+)
 from dt_image_search.model.dts_db import create_db_conn, delete_folders
+
+
+class _StubTransportManager:
+    def __init__(self, *, usb_state_after_start: UsbTransportState = UsbTransportState.READY):
+        self._endpoint_info = LanHttpEndpointInfo(
+            endpoint_url="http://127.0.0.1:50123/api/mobile/pairing/claim",
+            endpoint_urls=("http://127.0.0.1:50123/api/mobile/pairing/claim",),
+        )
+        self._usb_state_after_start = usb_state_after_start
+        self._usb_state = UsbTransportState.STOPPED
+        self._usb_last_probe_error = None
+        self._usb_bootstrap_config = None
+        self.start_lan_calls = 0
+        self.configure_usb_calls: list[UsbBootstrapConfig] = []
+        self.start_usb_calls = 0
+        self.stop_usb_calls = 0
+        self.stop_all_calls = 0
+
+    def start_lan(self) -> LanHttpEndpointInfo:
+        self.start_lan_calls += 1
+        return self._endpoint_info
+
+    def configure_usb_bootstrap(self, config: UsbBootstrapConfig) -> None:
+        self.configure_usb_calls.append(config)
+        self._usb_bootstrap_config = config
+        self._usb_state = UsbTransportState.CONFIGURED
+
+    def start_usb(self) -> UsbTransportState:
+        self.start_usb_calls += 1
+        self._usb_state = self._usb_state_after_start
+        return self._usb_state
+
+    def stop_usb(self) -> None:
+        self.stop_usb_calls += 1
+        self._usb_state = UsbTransportState.STOPPED
+
+    def stop_all(self) -> None:
+        self.stop_all_calls += 1
+        self._usb_state = UsbTransportState.STOPPED
+
+    @property
+    def usb_state(self) -> UsbTransportState:
+        return self._usb_state
+
+    @property
+    def usb_last_probe_error(self) -> str | None:
+        return self._usb_last_probe_error
+
+    @property
+    def usb_bootstrap_config(self) -> UsbBootstrapConfig | None:
+        return self._usb_bootstrap_config
 
 
 class TestMobilePairingService(unittest.TestCase):
@@ -276,6 +332,83 @@ class TestMobilePairingService(unittest.TestCase):
             ios_token.endpoint_targets,
             tuple(urlsplit(endpoint_url).netloc for endpoint_url in pairing_service.endpoint_urls),
         )
+
+    def test_start_pairing_session_configures_usb_bootstrap_from_ios_token(self):
+        pairing_service = MobilePairingService(
+            self._ctx,
+            listen_host="127.0.0.1",
+            desktop_name="Studio Mac",
+        )
+        self.addCleanup(pairing_service.shutdown)
+        transport_manager = _StubTransportManager()
+        pairing_service._transport_manager = transport_manager
+
+        session = pairing_service.start_pairing_session(self._temp_dir.name)
+        ios_token = session.token_for(MobilePlatform.IOS)
+
+        self.assertEqual(len(transport_manager.configure_usb_calls), 1)
+        bootstrap_config = transport_manager.configure_usb_calls[0]
+        self.assertEqual(bootstrap_config.session_id, session.session_id)
+        self.assertEqual(bootstrap_config.one_time_passcode, ios_token.one_time_passcode)
+        self.assertEqual(bootstrap_config.suggested_port, ios_token.suggested_usb_port)
+        self.assertEqual(bootstrap_config.fallback_port_window, 20)
+        self.assertEqual(transport_manager.start_usb_calls, 1)
+
+    def test_refresh_ios_token_reconfigures_usb_bootstrap(self):
+        pairing_service = MobilePairingService(
+            self._ctx,
+            listen_host="127.0.0.1",
+            desktop_name="Studio Mac",
+        )
+        self.addCleanup(pairing_service.shutdown)
+        transport_manager = _StubTransportManager()
+        pairing_service._transport_manager = transport_manager
+
+        now = datetime(2026, 4, 10, 8, 0, tzinfo=timezone.utc)
+        session = pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        refreshed_ios_token = pairing_service.refresh_token(
+            MobilePlatform.IOS,
+            now=now + timedelta(seconds=30),
+        )
+
+        self.assertEqual(len(transport_manager.configure_usb_calls), 2)
+        refreshed_config = transport_manager.configure_usb_calls[1]
+        self.assertEqual(refreshed_config.session_id, session.session_id)
+        self.assertEqual(refreshed_config.one_time_passcode, refreshed_ios_token.one_time_passcode)
+        self.assertEqual(refreshed_config.suggested_port, refreshed_ios_token.suggested_usb_port)
+        self.assertEqual(transport_manager.start_usb_calls, 2)
+
+    def test_handle_pairing_request_prefers_usb_transport_when_connected(self):
+        pairing_service = MobilePairingService(
+            self._ctx,
+            listen_host="127.0.0.1",
+            desktop_name="Studio Mac",
+        )
+        self.addCleanup(pairing_service.shutdown)
+        transport_manager = _StubTransportManager(usb_state_after_start=UsbTransportState.CONNECTED)
+        pairing_service._transport_manager = transport_manager
+
+        now = datetime(2026, 4, 10, 9, 0, tzinfo=timezone.utc)
+        session = pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+
+        status_code, response_payload = pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-usb-001",
+                "device_name": "USB iPhone",
+                "client_nonce": "usb-client-nonce-123",
+            },
+            now=now + timedelta(seconds=5),
+        )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(response_payload["transport"], "usb")
+        self.assertIn("USB transfer", response_payload["message"])
+        self.assertEqual(pairing_service.current_result().transport, "usb")
 
     def _post_pairing_request(self, payload: dict[str, str]) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)

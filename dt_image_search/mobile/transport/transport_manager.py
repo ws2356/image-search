@@ -6,6 +6,7 @@ from dt_image_search.mobile.transport.lan_http_adapter import (
 )
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbBootstrapConfig,
+    UsbTunnelTarget,
     UsbTransportState,
     UsbWebSocketTransportAdapter,
 )
@@ -31,8 +32,9 @@ class MobileTransportManager:
     def configure_usb_bootstrap(self, config: UsbBootstrapConfig) -> None:
         self._usb_transport.configure_bootstrap(config)
 
-    def start_usb(self) -> None:
+    def start_usb(self) -> UsbTransportState:
         self._usb_transport.start()
+        return self._usb_transport.state
 
     def stop_usb(self) -> None:
         self._usb_transport.stop()
@@ -44,3 +46,11 @@ class MobileTransportManager:
     @property
     def usb_bootstrap_config(self) -> UsbBootstrapConfig | None:
         return self._usb_transport.bootstrap_config
+
+    @property
+    def usb_active_tunnel_target(self) -> UsbTunnelTarget | None:
+        return self._usb_transport.active_tunnel_target
+
+    @property
+    def usb_last_probe_error(self) -> str | None:
+        return self._usb_transport.last_probe_error
