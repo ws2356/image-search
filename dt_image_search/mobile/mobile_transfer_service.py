@@ -39,6 +39,7 @@ MOBILE_TRANSFER_ASSET_PATH = "/api/mobile/transfer/asset"
 MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
 MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
+TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES = 2 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -570,7 +571,9 @@ def _write_asset_to_folder(
         remaining_bytes = content_length
         with temp_path.open("wb") as destination_file:
             while remaining_bytes > 0:
-                chunk = body_stream.read(min(1024 * 1024, remaining_bytes))
+                chunk = body_stream.read(
+                    min(TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES, remaining_bytes)
+                )
                 if not chunk:
                     raise OSError("Desktop received an incomplete asset body.")
                 destination_file.write(chunk)

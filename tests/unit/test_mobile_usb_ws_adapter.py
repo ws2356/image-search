@@ -1,5 +1,8 @@
+import json
 import os
+import socket
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -7,10 +10,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from dt_image_search.mobile.transport.contracts import (
     MobileTransportKind,
     MobileTransportResponse,
+    TransferAssetUploadPayload,
 )
 from dt_image_search.mobile.transport.router import MobileTransportRouter
 from dt_image_search.mobile.transport.usb_tunnel import (
     UsbConnectedDevice,
+    UsbTunnelConnectError,
     UsbTunnelUnavailableError,
 )
 from dt_image_search.mobile.transport.usb_ws_adapter import (
@@ -34,6 +39,7 @@ class _FakeUsbTunnelProvider:
         self._connectable_ports = connectable_ports or set()
         self._unavailable_error = unavailable_error
         self.probe_calls: list[tuple[str, int]] = []
+        self.connect_calls: list[tuple[str, int]] = []
 
     def list_usb_devices(self) -> tuple[UsbConnectedDevice, ...]:
         if self._unavailable_error is not None:
@@ -49,6 +55,50 @@ class _FakeUsbTunnelProvider:
     ) -> bool:
         self.probe_calls.append((udid, port))
         return (udid, port) in self._connectable_ports
+
+    def connect_device_port(
+        self,
+        *,
+        udid: str,
+        port: int,
+        timeout_seconds: float = 1.0,
+    ) -> socket.socket:
+        self.connect_calls.append((udid, port))
+        if (udid, port) not in self._connectable_ports:
+            raise UsbTunnelConnectError(f"Unable to connect to {udid}:{port}")
+        return socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+
+class _FakeWebSocketConnection:
+    def __init__(self, incoming_messages: list[str | bytes] | None = None):
+        self._incoming_messages = list(incoming_messages or [])
+        self.sent_messages: list[str] = []
+        self.closed = False
+
+    def recv(self, timeout: float | None = None) -> str | bytes:
+        if self.closed:
+            raise RuntimeError("WebSocket connection closed.")
+        if self._incoming_messages:
+            return self._incoming_messages.pop(0)
+        raise TimeoutError()
+
+    def send(self, message: str) -> None:
+        if self.closed:
+            raise RuntimeError("WebSocket connection closed.")
+        self.sent_messages.append(message)
+
+    def close(self, code: int = 1000, reason: str = "") -> None:
+        self.closed = True
+
+
+class _FakeWebSocketConnector:
+    def __init__(self, connection: _FakeWebSocketConnection):
+        self._connection = connection
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, **kwargs: object) -> _FakeWebSocketConnection:
+        self.calls.append(kwargs)
+        return self._connection
 
 
 class TestUsbWebSocketTransportAdapter(unittest.TestCase):
@@ -103,7 +153,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
 
     def test_dispatch_text_envelope_rejects_unknown_operation(self):
         response = self._adapter.dispatch_text_envelope(
-            '{"schema":"dtis.mobile-transport.v1","operation":"transfer.unknown","body":{}}'
+            '{"schema":"dtis.mobile-transport.v1","operation":"transfer.unknown","request_id":"req-unknown","body":{}}'
         )
 
         self.assertEqual(response.status_code, 400)
@@ -111,8 +161,40 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertEqual(response.payload["status"], "rejected")
         self.assertIn("does not support", response.payload["message"])
 
+    def test_dispatch_text_envelope_rejects_transfer_asset_without_stream_state(self):
+        response = self._adapter.dispatch_text_envelope(
+            json.dumps(
+                {
+                    "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                    "operation": "transfer.asset",
+                    "request_id": "req-asset-001",
+                    "body": {
+                        "schema": "dtis.mobile-transfer.v1",
+                        "session_id": "session-001",
+                        "asset_id": "asset-001",
+                    },
+                }
+            ),
+            remote_address="usb://ios-001",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.payload["status"], "rejected")
+        self.assertIn("stream_state", response.payload["message"])
+
     def test_state_transitions(self):
-        self._adapter.configure_bootstrap(
+        provider = _FakeUsbTunnelProvider()
+        websocket_connection = _FakeWebSocketConnection()
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+        )
+        adapter.configure_bootstrap(
             UsbBootstrapConfig(
                 session_id="session-001",
                 one_time_passcode="482913",
@@ -120,23 +202,31 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
                 fallback_port_window=20,
             )
         )
-        self.assertEqual(self._adapter.state, UsbTransportState.CONFIGURED)
-        self._adapter.start()
-        self.assertEqual(self._adapter.state, UsbTransportState.READY)
-        self._adapter.mark_connected()
-        self.assertEqual(self._adapter.state, UsbTransportState.CONNECTED)
-        self._adapter.stop()
-        self.assertEqual(self._adapter.state, UsbTransportState.STOPPED)
+        self.assertEqual(adapter.state, UsbTransportState.CONFIGURED)
+        adapter.start()
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.state == UsbTransportState.READY,
+                timeout_seconds=0.6,
+            )
+        )
+        adapter.stop()
+        self.assertEqual(adapter.state, UsbTransportState.STOPPED)
 
     def test_start_marks_connected_when_usb_probe_succeeds(self):
         provider = _FakeUsbTunnelProvider(
             devices=(UsbConnectedDevice(udid="ios-001"),),
             connectable_ports={("ios-001", 50213)},
         )
+        websocket_connection = _FakeWebSocketConnection()
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
         adapter = UsbWebSocketTransportAdapter(
             router=self._router,
             log_handler=self._noop_log,
             tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
         )
         adapter.configure_bootstrap(
             UsbBootstrapConfig(
@@ -149,10 +239,18 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
 
         adapter.start()
 
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.state == UsbTransportState.CONNECTED,
+                timeout_seconds=1.2,
+            )
+        )
         self.assertEqual(adapter.state, UsbTransportState.CONNECTED)
         self.assertIsNotNone(adapter.active_tunnel_target)
         self.assertEqual(adapter.active_tunnel_target.device_udid, "ios-001")
         self.assertEqual(adapter.active_tunnel_target.remote_port, 50213)
+        self.assertEqual(provider.connect_calls, [("ios-001", 50213)])
+        self.assertEqual(len(websocket_connector.calls), 1)
         self.assertEqual(
             provider.probe_calls,
             [
@@ -162,15 +260,21 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
                 ("ios-001", 50213),
             ],
         )
+        adapter.stop()
 
     def test_start_records_probe_error_when_no_port_is_reachable(self):
         provider = _FakeUsbTunnelProvider(
             devices=(UsbConnectedDevice(udid="ios-001"),),
         )
+        websocket_connection = _FakeWebSocketConnection()
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
         adapter = UsbWebSocketTransportAdapter(
             router=self._router,
             log_handler=self._noop_log,
             tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
         )
         adapter.configure_bootstrap(
             UsbBootstrapConfig(
@@ -182,6 +286,12 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         )
 
         adapter.start()
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.last_probe_error is not None,
+                timeout_seconds=1.0,
+            )
+        )
 
         self.assertEqual(adapter.state, UsbTransportState.READY)
         self.assertIsNone(adapter.active_tunnel_target)
@@ -189,13 +299,19 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
             adapter.last_probe_error,
             "Desktop could not connect to any USB bootstrap port candidates.",
         )
+        adapter.stop()
 
     def test_start_records_probe_error_when_provider_is_unavailable(self):
         provider = _FakeUsbTunnelProvider(unavailable_error="pymobiledevice3 not installed")
+        websocket_connection = _FakeWebSocketConnection()
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
         adapter = UsbWebSocketTransportAdapter(
             router=self._router,
             log_handler=self._noop_log,
             tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
         )
         adapter.configure_bootstrap(
             UsbBootstrapConfig(
@@ -207,9 +323,170 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         )
 
         adapter.start()
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.last_probe_error is not None,
+                timeout_seconds=1.0,
+            )
+        )
 
         self.assertEqual(adapter.state, UsbTransportState.READY)
         self.assertEqual(adapter.last_probe_error, "pymobiledevice3 not installed")
+        adapter.stop()
+
+    def test_usb_websocket_loop_sends_correlated_response_envelopes(self):
+        observed_contexts = []
+
+        def handler(request):
+            observed_contexts.append(request.context)
+            return MobileTransportResponse(
+                status_code=200,
+                payload={"schema": "dtis.mobile-transfer.v1", "status": "accepted"},
+            )
+
+        self._router.register("transfer.start", handler)
+        request_envelope = json.dumps(
+            {
+                "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                "operation": "transfer.start",
+                "request_id": "req-001",
+                "body_schema": "dtis.mobile-transfer.v1",
+                "body": {"total_assets": 3},
+            }
+        )
+        websocket_connection = _FakeWebSocketConnection(incoming_messages=[request_envelope])
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
+        provider = _FakeUsbTunnelProvider(
+            devices=(UsbConnectedDevice(udid="ios-001"),),
+            connectable_ports={("ios-001", 50211)},
+        )
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="session-001",
+                one_time_passcode="482913",
+                suggested_port=50211,
+            )
+        )
+
+        adapter.start()
+        self.assertTrue(
+            self._wait_until(
+                lambda: len(websocket_connection.sent_messages) == 1,
+                timeout_seconds=1.2,
+            )
+        )
+        adapter.stop()
+
+        self.assertEqual(len(observed_contexts), 1)
+        self.assertEqual(observed_contexts[0].transport, MobileTransportKind.USB_WEBSOCKET)
+        response_envelope = json.loads(websocket_connection.sent_messages[0])
+        self.assertEqual(response_envelope["schema"], MOBILE_TRANSPORT_ENVELOPE_SCHEMA)
+        self.assertEqual(response_envelope["request_id"], "req-001")
+        self.assertEqual(response_envelope["status_code"], 200)
+        self.assertEqual(response_envelope["body"]["status"], "accepted")
+
+    def test_usb_websocket_loop_streams_transfer_asset_binary_frames(self):
+        observed_upload: dict[str, object] = {}
+
+        def handler(request):
+            self.assertIsInstance(request.payload, TransferAssetUploadPayload)
+            upload_payload = request.payload
+            observed_upload["metadata"] = dict(upload_payload.metadata_payload)
+            observed_upload["content_length"] = upload_payload.content_length
+            observed_upload["body"] = upload_payload.body_stream.read()
+            return MobileTransportResponse(
+                status_code=200,
+                payload={"schema": "dtis.mobile-transfer.v1", "status": "stored"},
+            )
+
+        self._router.register("transfer.asset", handler)
+        stream_start_envelope = json.dumps(
+            {
+                "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                "operation": "transfer.asset",
+                "request_id": "req-asset-001",
+                "body_schema": "dtis.mobile-transfer.v1",
+                "body": {
+                    "stream_state": "start",
+                    "chunk_size": 2 * 1024 * 1024,
+                    "schema": "dtis.mobile-transfer.v1",
+                    "session_id": "session-001",
+                    "device_uuid": "ios-device-001",
+                    "trust_key": "trust-key",
+                    "asset_id": "asset-001",
+                    "asset_version": "v1",
+                    "sha1": "0123456789abcdef0123456789abcdef01234567",
+                    "file_size": 11,
+                    "filename": "asset.jpg",
+                    "media_type": "image/jpeg",
+                },
+            }
+        )
+        stream_complete_envelope = json.dumps(
+            {
+                "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                "operation": "transfer.asset",
+                "request_id": "req-asset-001",
+                "body_schema": "dtis.mobile-transfer.v1",
+                "body": {
+                    "stream_state": "complete",
+                },
+            }
+        )
+        websocket_connection = _FakeWebSocketConnection(
+            incoming_messages=[
+                stream_start_envelope,
+                b"hello ",
+                b"world",
+                stream_complete_envelope,
+            ]
+        )
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
+        provider = _FakeUsbTunnelProvider(
+            devices=(UsbConnectedDevice(udid="ios-001"),),
+            connectable_ports={("ios-001", 50211)},
+        )
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="session-001",
+                one_time_passcode="482913",
+                suggested_port=50211,
+            )
+        )
+
+        adapter.start()
+        self.assertTrue(
+            self._wait_until(
+                lambda: len(websocket_connection.sent_messages) == 1,
+                timeout_seconds=1.2,
+            )
+        )
+        adapter.stop()
+
+        self.assertEqual(observed_upload["content_length"], 11)
+        self.assertEqual(observed_upload["body"], b"hello world")
+        self.assertEqual(observed_upload["metadata"]["asset_id"], "asset-001")
+        self.assertNotIn("chunk_size", observed_upload["metadata"])
+        response_envelope = json.loads(websocket_connection.sent_messages[0])
+        self.assertEqual(response_envelope["request_id"], "req-asset-001")
+        self.assertEqual(response_envelope["status_code"], 200)
+        self.assertEqual(response_envelope["body"]["status"], "stored")
 
     def test_iter_usb_probe_ports_generates_symmetric_candidates(self):
         self.assertEqual(
@@ -223,6 +500,15 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
     @staticmethod
     def _noop_log(*args, **kwargs):
         return None
+
+    @staticmethod
+    def _wait_until(predicate, *, timeout_seconds: float) -> bool:
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.01)
+        return False
 
 
 if __name__ == "__main__":

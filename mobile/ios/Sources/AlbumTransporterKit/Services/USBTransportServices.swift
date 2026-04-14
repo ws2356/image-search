@@ -8,6 +8,10 @@ enum MobileTransportProtocol {
     static let transferExistenceOperation = "transfer.existence"
     static let transferAssetOperation = "transfer.asset"
     static let transferCompleteOperation = "transfer.complete"
+    static let transferAssetChunkSizeBytes = 2 * 1024 * 1024
+    static let transferAssetStreamStateField = "stream_state"
+    static let transferAssetStreamStateStart = "start"
+    static let transferAssetStreamStateComplete = "complete"
 }
 
 enum USBTransportRuntimeError: Error, Sendable {
@@ -58,6 +62,7 @@ actor USBWebSocketTransportRuntime {
     private var bootstrapOneTimePasscode: String?
     private var bootstrapPort: Int?
     private var pendingResponses: [String: CheckedContinuation<USBTransportRuntimeResponse, Error>] = [:]
+    private var activeStreamingRequestID: String?
     private let queue = DispatchQueue(label: "AlbumTransporterKit.USBTransportRuntime")
 
     deinit {
@@ -111,6 +116,79 @@ actor USBWebSocketTransportRuntime {
         )
     }
 
+    func beginStreamingRequest<Request: Encodable & Sendable>(
+        operation: String,
+        bodySchema: String,
+        request: Request,
+        chunkSizeBytes: Int,
+        timeout: Duration = .seconds(3)
+    ) async throws -> String {
+        guard activeStreamingRequestID == nil else {
+            throw USBTransportRuntimeError.sendFailed(message: "A streaming request is already active.")
+        }
+        let connection = try await waitForReadyConnection(timeout: timeout)
+        let requestID = UUID().uuidString.lowercased()
+        let envelopeData = try encodeEnvelope(
+            operation: operation,
+            requestID: requestID,
+            bodySchema: bodySchema,
+            request: request,
+            additionalBodyFields: [
+                MobileTransportProtocol.transferAssetStreamStateField: MobileTransportProtocol.transferAssetStreamStateStart,
+                "chunk_size": chunkSizeBytes,
+            ]
+        )
+        try await sendText(envelopeData, on: connection)
+        activeStreamingRequestID = requestID
+        return requestID
+    }
+
+    func sendStreamingBinaryChunk(
+        requestID: String,
+        chunk: Data,
+        timeout: Duration = .seconds(3)
+    ) async throws {
+        guard activeStreamingRequestID == requestID else {
+            throw USBTransportRuntimeError.invalidEnvelope
+        }
+        let connection = try await waitForReadyConnection(timeout: timeout)
+        try await sendBinary(chunk, on: connection)
+    }
+
+    func finishStreamingRequest(
+        operation: String,
+        requestID: String,
+        timeout: Duration = .seconds(3)
+    ) async throws -> USBTransportRuntimeResponse {
+        guard activeStreamingRequestID == requestID else {
+            throw USBTransportRuntimeError.invalidEnvelope
+        }
+        let connection = try await waitForReadyConnection(timeout: timeout)
+        let completionEnvelopeData = try encodeEnvelope(
+            operation: operation,
+            requestID: requestID,
+            bodySchema: TransferProtocol.schema,
+            rawBody: [
+                MobileTransportProtocol.transferAssetStreamStateField: MobileTransportProtocol.transferAssetStreamStateComplete,
+            ]
+        )
+        try await sendText(completionEnvelopeData, on: connection)
+        defer {
+            activeStreamingRequestID = nil
+        }
+        return try await awaitResponse(
+            requestID: requestID,
+            operation: operation,
+            timeout: timeout
+        )
+    }
+
+    func abortStreamingRequest(requestID: String) {
+        if activeStreamingRequestID == requestID {
+            activeStreamingRequestID = nil
+        }
+    }
+
     func reset() {
         resetRuntimeState()
     }
@@ -121,6 +199,7 @@ actor USBWebSocketTransportRuntime {
         activeConnection?.cancel()
         activeConnection = nil
         isActiveConnectionReady = false
+        activeStreamingRequestID = nil
         bootstrapSessionID = nil
         bootstrapOneTimePasscode = nil
         bootstrapPort = nil
@@ -195,10 +274,12 @@ actor USBWebSocketTransportRuntime {
         case .failed(let error):
             isActiveConnectionReady = false
             activeConnection = nil
+            activeStreamingRequestID = nil
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
         case .cancelled:
             isActiveConnectionReady = false
             activeConnection = nil
+            activeStreamingRequestID = nil
             failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
         default:
             break
@@ -229,6 +310,7 @@ actor USBWebSocketTransportRuntime {
         if let error {
             isActiveConnectionReady = false
             activeConnection = nil
+            activeStreamingRequestID = nil
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
             return
         }
@@ -288,6 +370,30 @@ actor USBWebSocketTransportRuntime {
         }
     }
 
+    private func sendBinary(_ data: Data, on connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
+            let context = NWConnection.ContentContext(
+                identifier: "mobile-transport-binary-\(UUID().uuidString.lowercased())",
+                metadata: [metadata]
+            )
+            connection.send(
+                content: data,
+                contentContext: context,
+                isComplete: true,
+                completion: .contentProcessed { error in
+                    if let error {
+                        continuation.resume(
+                            throwing: USBTransportRuntimeError.sendFailed(message: error.localizedDescription)
+                        )
+                    } else {
+                        continuation.resume(returning: ())
+                    }
+                }
+            )
+        }
+    }
+
     private func awaitResponse(
         requestID: String,
         operation: String,
@@ -324,16 +430,36 @@ actor USBWebSocketTransportRuntime {
         operation: String,
         requestID: String,
         bodySchema: String,
-        request: Request
+        request: Request,
+        additionalBodyFields: [String: Any] = [:]
     ) throws -> Data {
         let encodedBody = try JSONEncoder.pairingEncoder.encode(request)
-        let bodyValue = try JSONSerialization.jsonObject(with: encodedBody)
+        guard var bodyValue = try JSONSerialization.jsonObject(with: encodedBody) as? [String: Any] else {
+            throw USBTransportRuntimeError.invalidEnvelope
+        }
+        for (key, value) in additionalBodyFields {
+            bodyValue[key] = value
+        }
+        return try encodeEnvelope(
+            operation: operation,
+            requestID: requestID,
+            bodySchema: bodySchema,
+            rawBody: bodyValue
+        )
+    }
+
+    private func encodeEnvelope(
+        operation: String,
+        requestID: String,
+        bodySchema: String,
+        rawBody: [String: Any]
+    ) throws -> Data {
         let envelope: [String: Any] = [
             "schema": MobileTransportProtocol.schema,
             "operation": operation,
             "request_id": requestID,
             "body_schema": bodySchema,
-            "body": bodyValue,
+            "body": rawBody,
         ]
         guard JSONSerialization.isValidJSONObject(envelope) else {
             throw USBTransportRuntimeError.invalidEnvelope
@@ -440,7 +566,6 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
     var mediaType: String
     var createdAt: Date?
     var updatedAt: Date?
-    var fileDataBase64: String
 
     enum CodingKeys: String, CodingKey {
         case schema
@@ -455,7 +580,6 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
         case mediaType = "media_type"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
-        case fileDataBase64 = "file_data_base64"
     }
 }
 
@@ -520,13 +644,6 @@ struct WebSocketMobileTransferClient: MobileTransferClient {
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
-        let fileData: Data
-        do {
-            fileData = try Data(contentsOf: asset.fileURL, options: [.mappedIfSafe])
-        } catch {
-            throw TransferClientError.transport(message: error.localizedDescription)
-        }
-
         let request = USBTransferAssetUploadRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -538,21 +655,99 @@ struct WebSocketMobileTransferClient: MobileTransferClient {
             filename: asset.descriptor.filename,
             mediaType: asset.descriptor.mediaType,
             createdAt: asset.descriptor.createdAt,
-            updatedAt: asset.descriptor.updatedAt,
-            fileDataBase64: fileData.base64EncodedString()
+            updatedAt: asset.descriptor.updatedAt
         )
-        let response = try await sendTransferEnvelope(
-            operation: MobileTransportProtocol.transferAssetOperation,
-            request: request,
-            responseType: TransferServerResponse.self
+        do {
+            let requestID = try await runtime.beginStreamingRequest(
+                operation: MobileTransportProtocol.transferAssetOperation,
+                bodySchema: TransferProtocol.schema,
+                request: request,
+                chunkSizeBytes: MobileTransportProtocol.transferAssetChunkSizeBytes,
+                timeout: responseTimeout
+            )
+            do {
+                try await streamAssetFileChunks(
+                    fileURL: asset.fileURL,
+                    expectedSizeBytes: asset.fileSize,
+                    requestID: requestID
+                )
+                let runtimeResponse = try await runtime.finishStreamingRequest(
+                    operation: MobileTransportProtocol.transferAssetOperation,
+                    requestID: requestID,
+                    timeout: responseTimeout
+                )
+                let decodedResponse = try JSONDecoder.pairingDecoder.decode(
+                    TransferServerResponse.self,
+                    from: runtimeResponse.bodyData
+                )
+                guard decodedResponse.schema == TransferProtocol.schema else {
+                    throw TransferClientError.unsupportedResponseSchema
+                }
+                guard (200 ..< 300).contains(runtimeResponse.statusCode) else {
+                    throw TransferClientError.rejected(message: decodedResponse.message)
+                }
+                switch decodedResponse.status {
+                case .stored, .skipped:
+                    return decodedResponse
+                case .rejected:
+                    throw TransferClientError.rejected(message: decodedResponse.message)
+                case .accepted, .completed:
+                    throw TransferClientError.rejected(message: "Desktop returned an unexpected transfer asset response.")
+                }
+            } catch {
+                await runtime.abortStreamingRequest(requestID: requestID)
+                throw error
+            }
+        } catch let error as TransferClientError {
+            throw error
+        } catch let error as USBTransportRuntimeError {
+            throw TransferClientError.transport(message: error.localizedDescription)
+        } catch {
+            throw TransferClientError.transport(message: error.localizedDescription)
+        }
+    }
+
+    private func streamAssetFileChunks(
+        fileURL: URL,
+        expectedSizeBytes: Int,
+        requestID: String
+    ) async throws {
+        guard let inputStream = InputStream(url: fileURL) else {
+            throw TransferClientError.transport(message: "Desktop transfer could not open the asset stream.")
+        }
+        inputStream.open()
+        defer {
+            inputStream.close()
+        }
+
+        var totalBytesRead = 0
+        var readBuffer = [UInt8](
+            repeating: 0,
+            count: MobileTransportProtocol.transferAssetChunkSizeBytes
         )
-        switch response.status {
-        case .stored, .skipped:
-            return response
-        case .rejected:
-            throw TransferClientError.rejected(message: response.message)
-        case .accepted, .completed:
-            throw TransferClientError.rejected(message: "Desktop returned an unexpected transfer asset response.")
+
+        while true {
+            let bytesRead = inputStream.read(&readBuffer, maxLength: readBuffer.count)
+            if bytesRead < 0 {
+                let streamError = inputStream.streamError?.localizedDescription ?? "unknown stream error"
+                throw TransferClientError.transport(message: streamError)
+            }
+            if bytesRead == 0 {
+                break
+            }
+            totalBytesRead += bytesRead
+            let chunkData = Data(readBuffer[0 ..< bytesRead])
+            try await runtime.sendStreamingBinaryChunk(
+                requestID: requestID,
+                chunk: chunkData,
+                timeout: responseTimeout
+            )
+        }
+
+        guard totalBytesRead == expectedSizeBytes else {
+            throw TransferClientError.transport(
+                message: "Desktop transfer stream size did not match expected asset size."
+            )
         }
     }
 

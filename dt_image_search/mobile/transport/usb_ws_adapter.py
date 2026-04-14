@@ -5,13 +5,18 @@ from enum import Enum
 import hashlib
 import hmac
 import json
+import secrets
+import socket
+import tempfile
 import threading
-from typing import Callable
+from typing import Callable, Protocol
 
 from dt_image_search.mobile.transport.contracts import (
+    TRANSFER_ASSET_OPERATION,
     MobileTransportContext,
     MobileTransportKind,
     MobileTransportResponse,
+    TransferAssetUploadPayload,
 )
 from dt_image_search.mobile.transport.router import (
     MobileTransportRouteNotFoundError,
@@ -26,6 +31,19 @@ from dt_image_search.mobile.transport.usb_tunnel import (
 )
 
 MOBILE_TRANSPORT_ENVELOPE_SCHEMA = "dtis.mobile-transport.v1"
+USB_TRANSPORT_REJECTED_STATUS = "rejected"
+USB_TRANSFER_STREAM_STATE_FIELD = "stream_state"
+USB_TRANSFER_STREAM_STATE_START = "start"
+USB_TRANSFER_STREAM_STATE_COMPLETE = "complete"
+USB_TRANSFER_STREAM_CHUNK_SIZE_BYTES = 2 * 1024 * 1024
+
+try:
+    from websockets.exceptions import ConnectionClosed, WebSocketException
+    from websockets.sync.client import connect as websocket_connect
+except ImportError:  # pragma: no cover - exercised in environments without websockets.
+    ConnectionClosed = RuntimeError  # type: ignore[assignment]
+    WebSocketException = RuntimeError  # type: ignore[assignment]
+    websocket_connect = None
 
 
 class UsbTransportState(str, Enum):
@@ -59,6 +77,49 @@ class UsbTunnelTarget:
     remote_port: int
 
 
+@dataclass
+class _PendingUsbAssetUpload:
+    request_id: str
+    metadata_payload: dict[str, object]
+    body_stream: tempfile.SpooledTemporaryFile
+    content_length: int = 0
+
+    def append_chunk(self, chunk: bytes) -> None:
+        self.body_stream.write(chunk)
+        self.content_length += len(chunk)
+
+    def to_payload(self) -> TransferAssetUploadPayload:
+        self.body_stream.seek(0)
+        return TransferAssetUploadPayload(
+            metadata_payload=self.metadata_payload,
+            body_stream=self.body_stream,
+            content_length=self.content_length,
+        )
+
+    def close(self) -> None:
+        self.body_stream.close()
+
+
+class UsbWebSocketConnection(Protocol):
+    def recv(self, timeout: float | None = None) -> str | bytes:
+        ...
+
+    def send(self, message: str) -> None:
+        ...
+
+    def close(self, code: int = 1000, reason: str = "") -> None:
+        ...
+
+
+def _default_websocket_connect(**kwargs: object) -> UsbWebSocketConnection:
+    if websocket_connect is None:
+        raise RuntimeError(
+            "Desktop USB transport requires the websockets package "
+            "(install with `python3 -m pip install websockets`)."
+        )
+    return websocket_connect(**kwargs)
+
+
 def iter_usb_probe_ports(
     *,
     suggested_port: int,
@@ -87,11 +148,26 @@ class UsbWebSocketTransportAdapter:
         router: MobileTransportRouter,
         log_handler: Callable[..., None],
         tunnel_provider: UsbTunnelProvider | None = None,
+        websocket_connect_fn: Callable[..., UsbWebSocketConnection] | None = None,
+        probe_interval_seconds: float = 0.6,
+        response_poll_timeout_seconds: float = 0.6,
     ):
+        if probe_interval_seconds <= 0:
+            raise ValueError("USB probe_interval_seconds must be greater than zero.")
+        if response_poll_timeout_seconds <= 0:
+            raise ValueError("USB response_poll_timeout_seconds must be greater than zero.")
         self._router = router
         self._log_handler = log_handler
         self._tunnel_provider = tunnel_provider or Pymobiledevice3UsbTunnelProvider()
+        self._websocket_connect = websocket_connect_fn or _default_websocket_connect
+        self._probe_interval_seconds = probe_interval_seconds
+        self._response_poll_timeout_seconds = response_poll_timeout_seconds
         self._lock = threading.RLock()
+        self._stop_event = threading.Event()
+        self._worker_thread: threading.Thread | None = None
+        self._active_websocket_connection: UsbWebSocketConnection | None = None
+        self._active_tunnel_socket: socket.socket | None = None
+        self._pending_asset_upload: _PendingUsbAssetUpload | None = None
         self._state = UsbTransportState.STOPPED
         self._bootstrap_config: UsbBootstrapConfig | None = None
         self._active_tunnel_target: UsbTunnelTarget | None = None
@@ -123,6 +199,7 @@ class UsbWebSocketTransportAdapter:
             self._state = UsbTransportState.CONFIGURED
             self._active_tunnel_target = None
             self._last_probe_error = None
+            self._close_active_connection_locked()
         self._safe_log(
             "info",
             message=(
@@ -134,11 +211,28 @@ class UsbWebSocketTransportAdapter:
 
     def start(self) -> None:
         config = self._require_bootstrap_config()
+        worker_thread: threading.Thread | None = None
         with self._lock:
             self._state = UsbTransportState.READY
             self._active_tunnel_target = None
             self._last_probe_error = None
-        self._probe_usb_tunnel(config)
+            self._stop_event.clear()
+            if self._worker_thread is None or not self._worker_thread.is_alive():
+                worker_thread = threading.Thread(
+                    target=self._run_transport_loop,
+                    name="mobile-usb-transport",
+                    daemon=True,
+                )
+                self._worker_thread = worker_thread
+        if worker_thread is not None:
+            worker_thread.start()
+        self._safe_log(
+            "debug",
+            message=(
+                "UsbWebSocketTransportAdapter/start: started USB probe loop "
+                f"for session_id={config.session_id}"
+            ),
+        )
 
     def mark_connected(self) -> None:
         with self._lock:
@@ -147,10 +241,17 @@ class UsbWebSocketTransportAdapter:
             self._state = UsbTransportState.CONNECTED
 
     def stop(self) -> None:
+        worker_thread: threading.Thread | None
         with self._lock:
+            self._stop_event.set()
+            worker_thread = self._worker_thread
+            self._worker_thread = None
+            self._close_active_connection_locked()
             self._state = UsbTransportState.STOPPED
             self._active_tunnel_target = None
             self._last_probe_error = None
+        if worker_thread is not None and worker_thread.is_alive():
+            worker_thread.join(timeout=2.0)
 
     def build_auth_digest(self, rand: str) -> str:
         config = self._require_bootstrap_config()
@@ -167,15 +268,208 @@ class UsbWebSocketTransportAdapter:
         *,
         remote_address: str | None = None,
     ) -> MobileTransportResponse:
+        _, response = self._dispatch_envelope_request(
+            raw_message,
+            remote_address=remote_address,
+        )
+        if response is None:
+            return MobileTransportResponse(
+                status_code=202,
+                payload={
+                    "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                    "status": "accepted",
+                    "message": "Desktop accepted the transfer asset stream metadata.",
+                },
+            )
+        return response
+
+    def _run_transport_loop(self) -> None:
+        while not self._stop_event.is_set():
+            config = self.bootstrap_config
+            if config is None:
+                self._wait_for_retry_interval()
+                continue
+
+            tunnel_target = self._probe_usb_tunnel(config)
+            if tunnel_target is None:
+                self._set_ready_state()
+                self._wait_for_retry_interval()
+                continue
+
+            try:
+                self._run_websocket_session(
+                    tunnel_target=tunnel_target,
+                    config=config,
+                )
+            except (
+                UsbTunnelUnavailableError,
+                UsbTunnelConnectError,
+                OSError,
+                RuntimeError,
+                TimeoutError,
+                WebSocketException,
+            ) as exc:
+                self._set_probe_error(str(exc))
+                self._safe_log(
+                    "debug",
+                    message=(
+                        "UsbWebSocketTransportAdapter/_run_transport_loop: USB websocket connection "
+                        f"failed for device={tunnel_target.device_udid} port={tunnel_target.remote_port}: {exc}"
+                    ),
+                )
+            finally:
+                self._set_ready_state()
+
+            self._wait_for_retry_interval()
+
+    def _run_websocket_session(
+        self,
+        *,
+        tunnel_target: UsbTunnelTarget,
+        config: UsbBootstrapConfig,
+    ) -> None:
+        connected_socket = self._tunnel_provider.connect_device_port(
+            udid=tunnel_target.device_udid,
+            port=tunnel_target.remote_port,
+            timeout_seconds=1.2,
+        )
+        rand = secrets.token_hex(16)
+        auth_digest = hashlib.sha256(
+            f"{config.one_time_passcode}{rand}".encode("utf-8")
+        ).hexdigest()
+        try:
+            websocket_connection = self._websocket_connect(
+                uri=f"ws://127.0.0.1:{tunnel_target.remote_port}",
+                sock=connected_socket,
+                additional_headers=(
+                    ("x-dtis-session-id", config.session_id),
+                    ("x-dtis-rand", rand),
+                    ("x-dtis-auth", auth_digest),
+                ),
+                open_timeout=2.0,
+                ping_interval=20.0,
+                ping_timeout=20.0,
+                proxy=None,
+            )
+        except (OSError, RuntimeError, TimeoutError, WebSocketException):
+            connected_socket.close()
+            raise
+        remote_address = f"usb://{tunnel_target.device_udid}:{tunnel_target.remote_port}"
+        with self._lock:
+            self._state = UsbTransportState.CONNECTED
+            self._active_tunnel_target = tunnel_target
+            self._last_probe_error = None
+            self._active_tunnel_socket = connected_socket
+            self._active_websocket_connection = websocket_connection
+        self._safe_log(
+            "info",
+            message=(
+                "UsbWebSocketTransportAdapter/_run_websocket_session: USB websocket connected "
+                f"device={tunnel_target.device_udid} port={tunnel_target.remote_port}"
+            ),
+        )
+
+        while not self._stop_event.is_set():
+            try:
+                incoming_message = websocket_connection.recv(
+                    timeout=self._response_poll_timeout_seconds
+                )
+            except TimeoutError:
+                continue
+            except ConnectionClosed:
+                return
+            try:
+                self._handle_incoming_message(
+                    incoming_message=incoming_message,
+                    websocket_connection=websocket_connection,
+                    remote_address=remote_address,
+                )
+            except UnicodeDecodeError:
+                self._safe_log(
+                    "debug",
+                    message=(
+                        "UsbWebSocketTransportAdapter/_run_websocket_session: "
+                        "ignored non-UTF8 websocket frame from mobile runtime."
+                    ),
+                )
+
+    def _handle_incoming_message(
+        self,
+        *,
+        incoming_message: str | bytes,
+        websocket_connection: UsbWebSocketConnection,
+        remote_address: str,
+    ) -> None:
+        if isinstance(incoming_message, bytes):
+            self._append_pending_asset_chunk(incoming_message)
+            return
+
+        raw_message = incoming_message
+
+        request_id, response = self._dispatch_envelope_request(
+            raw_message,
+            remote_address=remote_address,
+        )
+        if response is None:
+            return
+        if request_id is None:
+            self._safe_log(
+                "warning",
+                message=(
+                    "UsbWebSocketTransportAdapter/_handle_incoming_message: "
+                    "skipping USB response because request_id is missing."
+                ),
+            )
+            return
+
+        websocket_connection.send(
+            self._encode_response_envelope(
+                request_id=request_id,
+                response=response,
+            )
+        )
+
+    def _dispatch_envelope_request(
+        self,
+        raw_message: str,
+        *,
+        remote_address: str | None,
+    ) -> tuple[str | None, MobileTransportResponse | None]:
         parsed_envelope = self._parse_envelope(raw_message)
         if isinstance(parsed_envelope, MobileTransportResponse):
-            return parsed_envelope
+            return self._extract_request_id(raw_message), parsed_envelope
 
         operation = parsed_envelope["operation"]
         request_id = parsed_envelope.get("request_id")
-        body = parsed_envelope.get("body")
-        if body is None:
-            body = {}
+        if not isinstance(request_id, str) or not request_id.strip():
+            return None, self._transport_error_response(
+                message="Desktop rejected a USB transport message with a missing request id.",
+            )
+        request_id = request_id.strip()
+
+        if operation == TRANSFER_ASSET_OPERATION:
+            payload_or_error = self._dispatch_transfer_asset_stream_payload(
+                request_id=request_id,
+                raw_body=parsed_envelope.get("body"),
+            )
+            if payload_or_error is None:
+                return request_id, None
+            if isinstance(payload_or_error, MobileTransportResponse):
+                return request_id, payload_or_error
+        else:
+            raw_body = parsed_envelope.get("body")
+            if raw_body is None:
+                payload_or_error = {}
+            elif isinstance(raw_body, dict):
+                payload_or_error = raw_body
+            else:
+                return request_id, self._transport_error_response(
+                    message=(
+                        "Desktop requires JSON object payloads for "
+                        f"USB transport operation '{operation}'."
+                    ),
+                )
+
         context = MobileTransportContext(
             transport=MobileTransportKind.USB_WEBSOCKET,
             operation=operation,
@@ -184,15 +478,145 @@ class UsbWebSocketTransportAdapter:
         )
 
         try:
-            return self._router.dispatch(
+            response = self._router.dispatch(
                 operation=operation,
-                payload=body,
+                payload=payload_or_error,
                 context=context,
             )
         except MobileTransportRouteNotFoundError:
-            return self._transport_error_response(
+            response = self._transport_error_response(
                 message=f"Desktop does not support USB transport operation '{operation}'.",
             )
+        finally:
+            if (
+                operation == TRANSFER_ASSET_OPERATION
+                and isinstance(payload_or_error, TransferAssetUploadPayload)
+            ):
+                payload_or_error.body_stream.close()
+        return request_id, response
+
+    def _dispatch_transfer_asset_stream_payload(
+        self,
+        *,
+        request_id: str,
+        raw_body: object,
+    ) -> TransferAssetUploadPayload | MobileTransportResponse | None:
+        if not isinstance(raw_body, dict):
+            return self._transport_error_response(
+                message="Desktop requires JSON object payloads for transfer asset requests.",
+            )
+
+        stream_state = raw_body.get(USB_TRANSFER_STREAM_STATE_FIELD)
+        if stream_state == USB_TRANSFER_STREAM_STATE_START:
+            metadata_payload = dict(raw_body)
+            metadata_payload.pop(USB_TRANSFER_STREAM_STATE_FIELD, None)
+            metadata_payload.pop("chunk_size", None)
+            self._start_pending_asset_upload(
+                request_id=request_id,
+                metadata_payload=metadata_payload,
+            )
+            return None
+        if stream_state == USB_TRANSFER_STREAM_STATE_COMPLETE:
+            return self._complete_pending_asset_upload(request_id=request_id)
+
+        return self._transport_error_response(
+            message=(
+                "Desktop rejected transfer asset stream message with an unsupported "
+                f"'{USB_TRANSFER_STREAM_STATE_FIELD}' value."
+            )
+        )
+
+    def _start_pending_asset_upload(
+        self,
+        *,
+        request_id: str,
+        metadata_payload: dict[str, object],
+    ) -> None:
+        pending_upload = _PendingUsbAssetUpload(
+            request_id=request_id,
+            metadata_payload=metadata_payload,
+            body_stream=tempfile.SpooledTemporaryFile(
+                max_size=USB_TRANSFER_STREAM_CHUNK_SIZE_BYTES * 4,
+                mode="w+b",
+            ),
+            content_length=0,
+        )
+        with self._lock:
+            if self._pending_asset_upload is not None:
+                self._pending_asset_upload.close()
+            self._pending_asset_upload = pending_upload
+
+    def _append_pending_asset_chunk(self, chunk: bytes) -> None:
+        if not chunk:
+            return
+        should_log_missing_stream = False
+        with self._lock:
+            pending_upload = self._pending_asset_upload
+            if pending_upload is None:
+                should_log_missing_stream = True
+            else:
+                pending_upload.append_chunk(chunk)
+        if should_log_missing_stream:
+            self._safe_log(
+                "warning",
+                message=(
+                    "UsbWebSocketTransportAdapter/_append_pending_asset_chunk: "
+                    "ignoring binary frame without a matching transfer asset start envelope."
+                ),
+            )
+
+    def _complete_pending_asset_upload(
+        self,
+        *,
+        request_id: str,
+    ) -> TransferAssetUploadPayload | MobileTransportResponse:
+        with self._lock:
+            pending_upload = self._pending_asset_upload
+            self._pending_asset_upload = None
+        if pending_upload is None:
+            return self._transport_error_response(
+                message=(
+                    "Desktop did not receive transfer asset stream metadata before completion."
+                ),
+            )
+        if pending_upload.request_id != request_id:
+            pending_upload.close()
+            return self._transport_error_response(
+                message=(
+                    "Desktop rejected transfer asset completion because request ids do not match "
+                    "the active binary stream."
+                ),
+            )
+        return pending_upload.to_payload()
+
+    def _encode_response_envelope(
+        self,
+        *,
+        request_id: str,
+        response: MobileTransportResponse,
+    ) -> str:
+        return json.dumps(
+            {
+                "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                "request_id": request_id,
+                "status_code": response.status_code,
+                "body": response.payload,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+    def _extract_request_id(self, raw_message: str) -> str | None:
+        try:
+            parsed_value = json.loads(raw_message)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed_value, dict):
+            return None
+        request_id = parsed_value.get("request_id")
+        if not isinstance(request_id, str) or not request_id.strip():
+            return None
+        return request_id.strip()
 
     def _parse_envelope(self, raw_message: str) -> dict[str, object] | MobileTransportResponse:
         try:
@@ -226,7 +650,7 @@ class UsbWebSocketTransportAdapter:
             status_code=400,
             payload={
                 "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
-                "status": "rejected",
+                "status": USB_TRANSPORT_REJECTED_STATUS,
                 "message": message,
             },
         )
@@ -237,7 +661,10 @@ class UsbWebSocketTransportAdapter:
                 raise RuntimeError("USB bootstrap config is not available.")
             return self._bootstrap_config
 
-    def _probe_usb_tunnel(self, config: UsbBootstrapConfig) -> None:
+    def _probe_usb_tunnel(
+        self,
+        config: UsbBootstrapConfig,
+    ) -> UsbTunnelTarget | None:
         try:
             usb_devices = self._tunnel_provider.list_usb_devices()
         except (UsbTunnelUnavailableError, UsbTunnelConnectError) as exc:
@@ -249,13 +676,7 @@ class UsbWebSocketTransportAdapter:
             return
 
         if not usb_devices:
-            self._safe_log(
-                "debug",
-                message=(
-                    "UsbWebSocketTransportAdapter/start: no USB device detected; "
-                    "keeping LAN as active fallback transport."
-                ),
-            )
+            self._set_probe_error(None)
             return
 
         candidate_ports = iter_usb_probe_ports(
@@ -270,27 +691,18 @@ class UsbWebSocketTransportAdapter:
             if connected_target is None:
                 continue
 
-            with self._lock:
-                self._state = UsbTransportState.CONNECTED
-                self._active_tunnel_target = connected_target
-                self._last_probe_error = None
+            self._set_probe_error(None)
             self._safe_log(
                 "info",
                 message=(
-                    "UsbWebSocketTransportAdapter/start: connected USB tunnel candidate "
+                    "UsbWebSocketTransportAdapter/_probe_usb_tunnel: found USB tunnel candidate "
                     f"device={connected_target.device_udid} port={connected_target.remote_port}"
                 ),
             )
-            return
+            return connected_target
 
         self._set_probe_error("Desktop could not connect to any USB bootstrap port candidates.")
-        self._safe_log(
-            "debug",
-            message=(
-                "UsbWebSocketTransportAdapter/start: USB devices detected but none accepted "
-                "the bootstrap probe; keeping LAN fallback active."
-            ),
-        )
+        return None
 
     def _probe_device_for_ports(
         self,
@@ -306,9 +718,42 @@ class UsbWebSocketTransportAdapter:
                 )
         return None
 
-    def _set_probe_error(self, message: str) -> None:
+    def _set_probe_error(self, message: str | None) -> None:
         with self._lock:
             self._last_probe_error = message
+
+    def _set_ready_state(self) -> None:
+        with self._lock:
+            if self._state != UsbTransportState.STOPPED:
+                self._state = UsbTransportState.READY
+            self._active_tunnel_target = None
+            self._close_active_connection_locked()
+
+    def _wait_for_retry_interval(self) -> None:
+        self._stop_event.wait(timeout=self._probe_interval_seconds)
+
+    def _close_active_connection_locked(self) -> None:
+        websocket_connection = self._active_websocket_connection
+        tunnel_socket = self._active_tunnel_socket
+        pending_upload = self._pending_asset_upload
+        self._active_websocket_connection = None
+        self._active_tunnel_socket = None
+        self._pending_asset_upload = None
+
+        if websocket_connection is not None:
+            try:
+                websocket_connection.close()
+            except (OSError, RuntimeError, WebSocketException):
+                pass
+
+        if tunnel_socket is not None:
+            try:
+                tunnel_socket.close()
+            except OSError:
+                pass
+
+        if pending_upload is not None:
+            pending_upload.close()
 
     def _safe_log(
         self,
