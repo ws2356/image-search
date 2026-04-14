@@ -1,8 +1,11 @@
+import CryptoKit
 import Foundation
 @preconcurrency import Network
 
 enum MobileTransportProtocol {
     static let schema = "dtis.mobile-transport.v1"
+    static let authChallengeOperation = "transport.auth.challenge"
+    static let authChallengeBodySchema = "dtis.mobile-pairing.v1"
     static let pairingClaimOperation = "pairing.claim"
     static let transferStartOperation = "transfer.start"
     static let transferExistenceOperation = "transfer.existence"
@@ -12,6 +15,11 @@ enum MobileTransportProtocol {
     static let transferAssetStreamStateField = "stream_state"
     static let transferAssetStreamStateStart = "start"
     static let transferAssetStreamStateComplete = "complete"
+}
+
+func buildDesktopUSBAuthDigest(oneTimePasscode: String, rand: String) -> String {
+    let digest = SHA256.hash(data: Data((oneTimePasscode + rand).utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
 }
 
 enum USBTransportRuntimeError: Error, Sendable {
@@ -58,6 +66,7 @@ actor USBWebSocketTransportRuntime {
     private var listener: NWListener?
     private var activeConnection: NWConnection?
     private var isActiveConnectionReady = false
+    private var isConnectionAuthenticated = false
     private var bootstrapSessionID: String?
     private var bootstrapOneTimePasscode: String?
     private var bootstrapPort: Int?
@@ -199,6 +208,7 @@ actor USBWebSocketTransportRuntime {
         activeConnection?.cancel()
         activeConnection = nil
         isActiveConnectionReady = false
+        isConnectionAuthenticated = false
         activeStreamingRequestID = nil
         bootstrapSessionID = nil
         bootstrapOneTimePasscode = nil
@@ -254,6 +264,7 @@ actor USBWebSocketTransportRuntime {
         activeConnection?.cancel()
         activeConnection = connection
         isActiveConnectionReady = false
+        isConnectionAuthenticated = false
         connection.stateUpdateHandler = { [weak self] state in
             Task {
                 await self?.handleConnectionState(state, for: connection)
@@ -273,11 +284,13 @@ actor USBWebSocketTransportRuntime {
             isActiveConnectionReady = true
         case .failed(let error):
             isActiveConnectionReady = false
+            isConnectionAuthenticated = false
             activeConnection = nil
             activeStreamingRequestID = nil
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
         case .cancelled:
             isActiveConnectionReady = false
+            isConnectionAuthenticated = false
             activeConnection = nil
             activeStreamingRequestID = nil
             failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
@@ -302,13 +315,14 @@ actor USBWebSocketTransportRuntime {
         on connection: NWConnection,
         data: Data?,
         error: NWError?
-    ) {
+    ) async {
         guard activeConnection === connection else {
             return
         }
 
         if let error {
             isActiveConnectionReady = false
+            isConnectionAuthenticated = false
             activeConnection = nil
             activeStreamingRequestID = nil
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
@@ -316,6 +330,18 @@ actor USBWebSocketTransportRuntime {
         }
 
         if let data, !data.isEmpty {
+            do {
+                if try await handleDesktopAuthChallengeIfNeeded(
+                    on: connection,
+                    data: data
+                ) {
+                    receiveNextMessage(from: connection)
+                    return
+                }
+            } catch {
+                isConnectionAuthenticated = false
+                activeStreamingRequestID = nil
+            }
             do {
                 let envelopeResponse = try parseEnvelopeResponse(data)
                 if let continuation = pendingResponses.removeValue(forKey: envelopeResponse.requestID) {
@@ -334,11 +360,119 @@ actor USBWebSocketTransportRuntime {
         receiveNextMessage(from: connection)
     }
 
+    private func handleDesktopAuthChallengeIfNeeded(
+        on connection: NWConnection,
+        data: Data
+    ) async throws -> Bool {
+        guard let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        guard envelope["schema"] as? String == MobileTransportProtocol.schema else {
+            return false
+        }
+        guard envelope["operation"] as? String == MobileTransportProtocol.authChallengeOperation else {
+            return false
+        }
+        guard let requestID = envelope["request_id"] as? String, !requestID.isEmpty else {
+            return false
+        }
+        guard let body = envelope["body"] as? [String: Any] else {
+            return false
+        }
+
+        let challengeResult = evaluateDesktopAuthChallenge(body: body)
+        let responseBody: [String: Any]
+        let statusCode: Int
+        if challengeResult.accepted {
+            statusCode = 200
+            responseBody = [
+                "schema": MobileTransportProtocol.schema,
+                "status": "accepted",
+                "proof": challengeResult.proof,
+            ]
+            isConnectionAuthenticated = true
+        } else {
+            statusCode = 401
+            responseBody = [
+                "schema": MobileTransportProtocol.schema,
+                "status": "rejected",
+                "message": challengeResult.message,
+            ]
+            isConnectionAuthenticated = false
+            activeStreamingRequestID = nil
+            failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
+        }
+
+        let responseEnvelope = [
+            "schema": MobileTransportProtocol.schema,
+            "request_id": requestID,
+            "status_code": statusCode,
+            "body": responseBody,
+        ] as [String: Any]
+        guard JSONSerialization.isValidJSONObject(responseEnvelope) else {
+            throw USBTransportRuntimeError.invalidEnvelope
+        }
+        let responseData = try JSONSerialization.data(withJSONObject: responseEnvelope, options: [])
+        try await sendText(responseData, on: connection)
+        return true
+    }
+
+    private func evaluateDesktopAuthChallenge(
+        body: [String: Any]
+    ) -> (accepted: Bool, proof: String, message: String) {
+        guard
+            let sid = body["sid"] as? String,
+            !sid.isEmpty,
+            let rand = body["rand"] as? String,
+            !rand.isEmpty,
+            let providedDigest = body["auth"] as? String,
+            !providedDigest.isEmpty
+        else {
+            return (
+                accepted: false,
+                proof: "",
+                message: "Desktop challenge payload is missing required fields."
+            )
+        }
+        guard let bootstrapSessionID, sid == bootstrapSessionID else {
+            return (
+                accepted: false,
+                proof: "",
+                message: "Desktop challenge session id does not match the active QR bootstrap session."
+            )
+        }
+        guard let bootstrapOneTimePasscode else {
+            return (
+                accepted: false,
+                proof: "",
+                message: "Mobile runtime is missing bootstrap auth material."
+            )
+        }
+
+        let expectedDigest = buildDesktopUSBAuthDigest(
+            oneTimePasscode: bootstrapOneTimePasscode,
+            rand: rand
+        )
+        guard expectedDigest == providedDigest else {
+            return (
+                accepted: false,
+                proof: "",
+                message: "Desktop challenge digest verification failed."
+            )
+        }
+
+        return (
+            accepted: true,
+            proof: expectedDigest,
+            message: "accepted"
+        )
+    }
+
     private func waitForReadyConnection(timeout: Duration) async throws -> NWConnection {
         let clock = ContinuousClock()
         let deadline = clock.now + timeout
         while clock.now < deadline {
-            if let activeConnection, isActiveConnectionReady {
+            if let activeConnection, isActiveConnectionReady, isConnectionAuthenticated {
                 return activeConnection
             }
             try await Task.sleep(for: .milliseconds(100))

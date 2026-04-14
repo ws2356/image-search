@@ -9,6 +9,7 @@ import secrets
 import socket
 import tempfile
 import threading
+import time
 from typing import Callable, Protocol
 
 from dt_image_search.mobile.transport.contracts import (
@@ -36,6 +37,10 @@ USB_TRANSFER_STREAM_STATE_FIELD = "stream_state"
 USB_TRANSFER_STREAM_STATE_START = "start"
 USB_TRANSFER_STREAM_STATE_COMPLETE = "complete"
 USB_TRANSFER_STREAM_CHUNK_SIZE_BYTES = 2 * 1024 * 1024
+USB_AUTH_CHALLENGE_OPERATION = "transport.auth.challenge"
+USB_AUTH_CHALLENGE_BODY_SCHEMA = "dtis.mobile-pairing.v1"
+USB_AUTH_CHALLENGE_REQUEST_ID = "auth-challenge"
+USB_AUTH_CHALLENGE_TIMEOUT_SECONDS = 2.0
 
 try:
     from websockets.exceptions import ConnectionClosed, WebSocketException
@@ -356,15 +361,23 @@ class UsbWebSocketTransportAdapter:
             raise
         remote_address = f"usb://{tunnel_target.device_udid}:{tunnel_target.remote_port}"
         with self._lock:
-            self._state = UsbTransportState.CONNECTED
+            self._state = UsbTransportState.READY
             self._active_tunnel_target = tunnel_target
             self._last_probe_error = None
             self._active_tunnel_socket = connected_socket
             self._active_websocket_connection = websocket_connection
+        self._perform_auth_challenge(
+            websocket_connection=websocket_connection,
+            config=config,
+        )
+        with self._lock:
+            if self._state != UsbTransportState.STOPPED:
+                self._state = UsbTransportState.CONNECTED
         self._safe_log(
             "info",
             message=(
                 "UsbWebSocketTransportAdapter/_run_websocket_session: USB websocket connected "
+                "and authenticated "
                 f"device={tunnel_target.device_udid} port={tunnel_target.remote_port}"
             ),
         )
@@ -392,6 +405,89 @@ class UsbWebSocketTransportAdapter:
                         "ignored non-UTF8 websocket frame from mobile runtime."
                     ),
                 )
+
+    def _perform_auth_challenge(
+        self,
+        *,
+        websocket_connection: UsbWebSocketConnection,
+        config: UsbBootstrapConfig,
+    ) -> None:
+        challenge_rand = secrets.token_hex(16)
+        challenge_digest = hashlib.sha256(
+            f"{config.one_time_passcode}{challenge_rand}".encode("utf-8")
+        ).hexdigest()
+        websocket_connection.send(
+            json.dumps(
+                {
+                    "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                    "operation": USB_AUTH_CHALLENGE_OPERATION,
+                    "request_id": USB_AUTH_CHALLENGE_REQUEST_ID,
+                    "body_schema": USB_AUTH_CHALLENGE_BODY_SCHEMA,
+                    "body": {
+                        "schema": USB_AUTH_CHALLENGE_BODY_SCHEMA,
+                        "sid": config.session_id,
+                        "rand": challenge_rand,
+                        "auth": challenge_digest,
+                    },
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+
+        challenge_deadline = time.monotonic() + USB_AUTH_CHALLENGE_TIMEOUT_SECONDS
+        while not self._stop_event.is_set() and time.monotonic() < challenge_deadline:
+            remaining_timeout = challenge_deadline - time.monotonic()
+            recv_timeout = min(self._response_poll_timeout_seconds, max(remaining_timeout, 0.01))
+            try:
+                incoming_message = websocket_connection.recv(timeout=recv_timeout)
+            except TimeoutError:
+                continue
+            except ConnectionClosed as exc:
+                raise RuntimeError("Desktop USB auth challenge connection closed.") from exc
+
+            if isinstance(incoming_message, bytes):
+                continue
+
+            try:
+                challenge_response = json.loads(incoming_message)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(challenge_response, dict):
+                continue
+            if challenge_response.get("schema") != MOBILE_TRANSPORT_ENVELOPE_SCHEMA:
+                continue
+            if challenge_response.get("request_id") != USB_AUTH_CHALLENGE_REQUEST_ID:
+                continue
+
+            status_code = challenge_response.get("status_code")
+            if not isinstance(status_code, int):
+                raise RuntimeError("Desktop USB auth challenge returned an invalid status code.")
+            response_body = challenge_response.get("body")
+            if not isinstance(response_body, dict):
+                raise RuntimeError("Desktop USB auth challenge returned an invalid response body.")
+            if not (200 <= status_code < 300):
+                rejection_message = response_body.get("message")
+                if isinstance(rejection_message, str) and rejection_message.strip():
+                    raise RuntimeError(
+                        "Desktop USB auth challenge was rejected by mobile runtime: "
+                        f"{rejection_message.strip()}"
+                    )
+                raise RuntimeError("Desktop USB auth challenge was rejected by mobile runtime.")
+
+            challenge_proof = response_body.get("proof")
+            if not isinstance(challenge_proof, str) or not challenge_proof.strip():
+                raise RuntimeError("Desktop USB auth challenge response did not include a proof digest.")
+            if not self.verify_auth_digest(
+                rand=challenge_rand,
+                provided_digest=challenge_proof.strip(),
+            ):
+                raise RuntimeError("Desktop USB auth challenge proof digest verification failed.")
+            return
+
+        if self._stop_event.is_set():
+            raise RuntimeError("Desktop stopped while waiting for USB auth challenge response.")
+        raise RuntimeError("Desktop USB auth challenge timed out.")
 
     def _handle_incoming_message(
         self,

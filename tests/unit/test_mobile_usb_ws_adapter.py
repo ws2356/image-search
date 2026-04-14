@@ -85,7 +85,39 @@ class _FakeWebSocketConnection:
     def send(self, message: str) -> None:
         if self.closed:
             raise RuntimeError("WebSocket connection closed.")
-        self.sent_messages.append(message)
+        try:
+            parsed_message = json.loads(message)
+        except json.JSONDecodeError:
+            self.sent_messages.append(message)
+            return
+        if not isinstance(parsed_message, dict):
+            self.sent_messages.append(message)
+            return
+        if parsed_message.get("operation") != "transport.auth.challenge":
+            self.sent_messages.append(message)
+            return
+        request_id = parsed_message.get("request_id")
+        body = parsed_message.get("body")
+        if not isinstance(request_id, str) or not isinstance(body, dict):
+            self.sent_messages.append(message)
+            return
+        challenge_digest = body.get("auth")
+        if not isinstance(challenge_digest, str):
+            self.sent_messages.append(message)
+            return
+        challenge_response = json.dumps(
+            {
+                "schema": "dtis.mobile-transport.v1",
+                "request_id": request_id,
+                "status_code": 200,
+                "body": {
+                    "schema": "dtis.mobile-transport.v1",
+                    "status": "accepted",
+                    "proof": challenge_digest,
+                },
+            }
+        )
+        self._incoming_messages.insert(0, challenge_response)
 
     def close(self, code: int = 1000, reason: str = "") -> None:
         self.closed = True

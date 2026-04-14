@@ -3,6 +3,18 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class USBTransportServicesTests: XCTestCase {
+    func test_build_desktop_usb_auth_digest_matches_sha256_material() {
+        let digest = buildDesktopUSBAuthDigest(
+            oneTimePasscode: "482913",
+            rand: "rand-001"
+        )
+
+        XCTAssertEqual(
+            digest,
+            "4d0e4431843a8a654a39e4eaba0f2dc841ddd9407984ec86db4806c0e60ed0ce"
+        )
+    }
+
     func test_adaptive_mobile_transfer_client_prefers_usb_for_usb_transport() async throws {
         let lanClient = RecordingTransferClient()
         let usbClient = RecordingTransferClient()
