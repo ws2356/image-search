@@ -3,6 +3,32 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class USBTransportServicesTests: XCTestCase {
+    func test_usb_runtime_accepts_python_desktop_auth_challenge() async throws {
+        let runtime = USBWebSocketTransportRuntime()
+        let sessionID = "mobile-functional-session-001"
+        let oneTimePasscode = "482913"
+        let challengeRand = "functional-rand-001"
+
+        let port = try await prepareRuntimeForFunctionalChallenge(
+            runtime: runtime,
+            sessionID: sessionID,
+            oneTimePasscode: oneTimePasscode
+        )
+        defer {
+            Task {
+                await runtime.reset()
+            }
+        }
+
+        let result = try runPythonDesktopChallengeScript(
+            port: port,
+            sessionID: sessionID,
+            oneTimePasscode: oneTimePasscode,
+            challengeRand: challengeRand
+        )
+        XCTAssertEqual(result.terminationStatus, 0, result.outputSummary)
+    }
+
     func test_build_desktop_usb_auth_digest_matches_sha256_material() {
         let digest = buildDesktopUSBAuthDigest(
             oneTimePasscode: "482913",
@@ -80,6 +106,125 @@ final class USBTransportServicesTests: XCTestCase {
             pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
         )
     }
+
+    private func prepareRuntimeForFunctionalChallenge(
+        runtime: USBWebSocketTransportRuntime,
+        sessionID: String,
+        oneTimePasscode: String
+    ) async throws -> Int {
+        for _ in 0 ..< 20 {
+            let candidatePort = Int.random(in: 45_000 ... 60_000)
+            do {
+                try await runtime.prepareBootstrap(
+                    sessionID: sessionID,
+                    oneTimePasscode: oneTimePasscode,
+                    suggestedPort: candidatePort
+                )
+                return candidatePort
+            } catch let error as USBTransportRuntimeError {
+                switch error {
+                case .listenerStartFailed:
+                    continue
+                default:
+                    throw error
+                }
+            }
+        }
+        throw TransferClientError.transport(
+            message: "Failed to allocate a USB runtime listener port for functional testing."
+        )
+    }
+
+    private func runPythonDesktopChallengeScript(
+        port: Int,
+        sessionID: String,
+        oneTimePasscode: String,
+        challengeRand: String
+    ) throws -> ProcessResult {
+        let script = """
+import hashlib
+import json
+import sys
+import time
+
+from websockets.sync.client import connect
+
+port = int(sys.argv[1])
+session_id = sys.argv[2]
+one_time_passcode = sys.argv[3]
+challenge_rand = sys.argv[4]
+
+expected_proof = hashlib.sha256(f"{one_time_passcode}{challenge_rand}".encode("utf-8")).hexdigest()
+envelope = {
+    "schema": "dtis.mobile-transport.v1",
+    "operation": "transport.auth.challenge",
+    "request_id": "pc-functional-challenge-001",
+    "body_schema": "dtis.mobile-pairing.v1",
+    "body": {
+        "schema": "dtis.mobile-pairing.v1",
+        "sid": session_id,
+        "rand": challenge_rand,
+    },
+}
+
+last_error = None
+for _ in range(40):
+    try:
+        with connect(f"ws://127.0.0.1:{port}") as websocket:
+            websocket.send(json.dumps(envelope, separators=(",", ":"), sort_keys=True))
+            response = json.loads(websocket.recv())
+            if response.get("status_code") != 200:
+                raise RuntimeError(f"unexpected status: {response}")
+            body = response.get("body")
+            if not isinstance(body, dict):
+                raise RuntimeError(f"missing body: {response}")
+            if body.get("status") != "accepted":
+                raise RuntimeError(f"unexpected body status: {response}")
+            if body.get("proof") != expected_proof:
+                raise RuntimeError(f"proof mismatch: expected {expected_proof}, got {body.get('proof')}")
+            print("handshake-ok")
+            sys.exit(0)
+    except Exception as exc:
+        last_error = exc
+        time.sleep(0.05)
+
+raise SystemExit(f"handshake failed: {last_error}")
+"""
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [
+            "python3.10",
+            "-c",
+            script,
+            String(port),
+            sessionID,
+            oneTimePasscode,
+            challengeRand,
+        ]
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        try process.run()
+        process.waitUntilExit()
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        return ProcessResult(
+            terminationStatus: process.terminationStatus,
+            outputSummary: """
+stdout:
+\(String(decoding: stdoutData, as: UTF8.self))
+stderr:
+\(String(decoding: stderrData, as: UTF8.self))
+"""
+        )
+    }
+}
+
+private struct ProcessResult {
+    let terminationStatus: Int32
+    let outputSummary: String
 }
 
 private actor RecordingTransferClient: MobileTransferClient {
