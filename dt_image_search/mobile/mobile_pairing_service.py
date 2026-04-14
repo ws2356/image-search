@@ -171,6 +171,7 @@ class MobilePairingService:
                 state=PairingResultState.WAITING,
                 message="Scan the QR code from the mobile app to begin pairing.",
             )
+        # TODO: verify the logic - Close usb before transfer completed???
         self._transport_manager.stop_usb()
 
     def shutdown(self) -> None:
