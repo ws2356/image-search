@@ -75,8 +75,9 @@ class TestMobilePairingSession(unittest.TestCase):
             session = MobilePairingSessionDraft.create(temp_dir, desktop_endpoint_url="http://127.0.0.1:38933/api/mobile/pairing/claim")
 
         session.set_destination_parent(".")
-
-        self.assertTrue(session.destination_parent.endswith("/image-search"))
+        # repo root folder name
+        repo_root_folder_name = os.path.basename(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+        self.assertTrue(session.destination_parent.endswith(f"/{repo_root_folder_name}"))
 
     def test_create_limits_endpoint_targets_to_five(self):
         endpoint_urls = [
