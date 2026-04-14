@@ -14,6 +14,12 @@ from dt_image_search.mobile.transport.router import (
     MobileTransportRouteNotFoundError,
     MobileTransportRouter,
 )
+from dt_image_search.mobile.transport.usb_ws_adapter import (
+    MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+    UsbBootstrapConfig,
+    UsbTransportState,
+    UsbWebSocketTransportAdapter,
+)
 
 __all__ = [
     "PAIRING_CLAIM_OPERATION",
@@ -28,4 +34,8 @@ __all__ = [
     "TransferAssetUploadPayload",
     "MobileTransportRouteNotFoundError",
     "MobileTransportRouter",
+    "MOBILE_TRANSPORT_ENVELOPE_SCHEMA",
+    "UsbBootstrapConfig",
+    "UsbTransportState",
+    "UsbWebSocketTransportAdapter",
 ]
