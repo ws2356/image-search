@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+from pathlib import Path
 import tempfile
+from typing import BinaryIO, Protocol
 
 from dt_image_search.mobile.transport.contracts import TransferAssetUploadPayload
 
@@ -12,27 +15,47 @@ TRANSFER_ASSET_STREAM_STATE_COMPLETE = "complete"
 TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES = 2 * 1024 * 1024
 
 
+class _Digest(Protocol):
+    def update(self, data: bytes) -> object:
+        ...
+
+    def hexdigest(self) -> str:
+        ...
+
+
 @dataclass
 class _PendingTransferAssetUpload:
     request_id: str
     metadata_payload: dict[str, object]
-    body_stream: tempfile.SpooledTemporaryFile
+    temp_file_path: Path
+    temp_file_handle: BinaryIO
+    content_sha1: _Digest
     content_length: int = 0
 
     def append_chunk(self, chunk: bytes) -> None:
-        self.body_stream.write(chunk)
+        self.temp_file_handle.write(chunk)
+        self.content_sha1.update(chunk)
         self.content_length += len(chunk)
 
     def to_payload(self) -> TransferAssetUploadPayload:
-        self.body_stream.seek(0)
+        self.temp_file_handle.flush()
+        self.temp_file_handle.close()
         return TransferAssetUploadPayload(
             metadata_payload=self.metadata_payload,
-            body_stream=self.body_stream,
+            body_stream=None,
             content_length=self.content_length,
+            temp_file_path=str(self.temp_file_path),
+            content_sha1=self.content_sha1.hexdigest(),
         )
 
     def close(self) -> None:
-        self.body_stream.close()
+        try:
+            self.temp_file_handle.close()
+        finally:
+            try:
+                self.temp_file_path.unlink(missing_ok=True)
+            except OSError:
+                return
 
 
 class TransferAssetUploadStream:
@@ -47,13 +70,18 @@ class TransferAssetUploadStream:
         return pending_upload.request_id
 
     def start(self, *, request_id: str, metadata_payload: dict[str, object]) -> None:
+        staged_file = tempfile.NamedTemporaryFile(
+            mode="w+b",
+            prefix="dtis-transfer-asset-",
+            suffix=".part",
+            delete=False,
+        )
         pending_upload = _PendingTransferAssetUpload(
             request_id=request_id,
             metadata_payload=metadata_payload,
-            body_stream=tempfile.SpooledTemporaryFile(
-                max_size=TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES * 4,
-                mode="w+b",
-            ),
+            temp_file_path=Path(staged_file.name),
+            temp_file_handle=staged_file,
+            content_sha1=hashlib.sha1(),
             content_length=0,
         )
         if self._pending is not None:

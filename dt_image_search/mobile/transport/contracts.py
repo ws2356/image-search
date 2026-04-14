@@ -27,8 +27,10 @@ class MobileTransportContext:
 @dataclass(frozen=True)
 class TransferAssetUploadPayload:
     metadata_payload: dict[str, object]
-    body_stream: BinaryIO
+    body_stream: BinaryIO | None
     content_length: int
+    temp_file_path: str | None = None
+    content_sha1: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+from pathlib import Path
 import socket
 import sys
 import time
@@ -453,7 +454,12 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
             upload_payload = request.payload
             observed_upload["metadata"] = dict(upload_payload.metadata_payload)
             observed_upload["content_length"] = upload_payload.content_length
-            observed_upload["body"] = upload_payload.body_stream.read()
+            self.assertIsNone(upload_payload.body_stream)
+            self.assertIsNotNone(upload_payload.temp_file_path)
+            observed_upload["content_sha1"] = upload_payload.content_sha1
+            staged_path = Path(upload_payload.temp_file_path or "")
+            observed_upload["body"] = staged_path.read_bytes()
+            staged_path.unlink(missing_ok=True)
             return MobileTransportResponse(
                 status_code=200,
                 payload={"schema": "dtis.mobile-transfer.v1", "status": "stored"},
@@ -533,6 +539,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
 
         self.assertEqual(observed_upload["content_length"], 11)
         self.assertEqual(observed_upload["body"], b"hello world")
+        self.assertEqual(observed_upload["content_sha1"], hashlib.sha1(b"hello world").hexdigest())
         self.assertEqual(observed_upload["metadata"]["asset_id"], "asset-001")
         self.assertNotIn("chunk_size", observed_upload["metadata"])
         response_envelope = json.loads(websocket_connection.sent_messages[0])

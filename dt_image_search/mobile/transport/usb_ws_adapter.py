@@ -558,6 +558,7 @@ class UsbWebSocketTransportAdapter:
             if (
                 operation == TRANSFER_ASSET_OPERATION
                 and isinstance(payload_or_error, TransferAssetUploadPayload)
+                and payload_or_error.body_stream is not None
             ):
                 payload_or_error.body_stream.close()
         return request_id, response

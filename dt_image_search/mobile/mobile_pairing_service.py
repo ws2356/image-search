@@ -370,6 +370,8 @@ class MobilePairingService:
             metadata_payload=request.payload.metadata_payload,
             body_stream=request.payload.body_stream,
             content_length=request.payload.content_length,
+            temp_file_path=request.payload.temp_file_path,
+            content_sha1=request.payload.content_sha1,
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 

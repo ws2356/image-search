@@ -3,11 +3,13 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import errno
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 from typing import BinaryIO
 import uuid
 
@@ -237,21 +239,34 @@ class MobileTransferService:
         self,
         *,
         metadata_payload: dict[str, object],
-        body_stream: BinaryIO,
+        body_stream: BinaryIO | None,
         content_length: int,
+        temp_file_path: str | None = None,
+        content_sha1: str | None = None,
         now: datetime | None = None,
     ) -> tuple[int, dict[str, object]]:
         current_time = _utc_now(now)
+        staged_temp_file_path = temp_file_path
+        if body_stream is None and staged_temp_file_path is None:
+            return _response(
+                status_code=400,
+                status="rejected",
+                message="Desktop did not receive transfer asset content.",
+            )
         try:
             metadata = _parse_transfer_asset_metadata(metadata_payload)
         except ValueError as exc:
+            _cleanup_temp_upload_file(staged_temp_file_path)
             return _response(status_code=400, status="rejected", message=str(exc))
 
         if metadata.schema != MOBILE_TRANSFER_SCHEMA:
+            _cleanup_temp_upload_file(staged_temp_file_path)
             return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
         if content_length < 0:
+            _cleanup_temp_upload_file(staged_temp_file_path)
             return _response(status_code=400, status="rejected", message="Desktop received an invalid transfer content length.")
         if metadata.file_size_bytes is not None and metadata.file_size_bytes != content_length:
+            _cleanup_temp_upload_file(staged_temp_file_path)
             return _response(
                 status_code=400,
                 status="rejected",
@@ -266,6 +281,7 @@ class MobileTransferService:
                 trust_key_b64=metadata.trust_key_b64,
             )
             if transfer_context is None:
+                _cleanup_temp_upload_file(staged_temp_file_path)
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
             existing_signature_asset = None
@@ -278,6 +294,7 @@ class MobileTransferService:
                     asset_created_at=metadata.created_at,
                 )
             if existing_signature_asset is not None:
+                _cleanup_temp_upload_file(staged_temp_file_path)
                 increment_mobile_backup_session_transferred_count(
                     conn,
                     session_id=metadata.session_id,
@@ -311,6 +328,7 @@ class MobileTransferService:
                 and existing_asset["remote_asset_version"] == metadata.asset_version
                 and (Path(transfer_context.folder_path) / existing_asset["local_relative_path"]).exists()
             ):
+                _cleanup_temp_upload_file(staged_temp_file_path)
                 increment_mobile_backup_session_transferred_count(
                     conn,
                     session_id=metadata.session_id,
@@ -335,15 +353,31 @@ class MobileTransferService:
                 )
 
             try:
-                stored_asset = _write_asset_to_folder(
-                    folder_path=transfer_context.folder_path,
-                    filename=metadata.filename,
-                    created_at=metadata.created_at,
-                    updated_at=metadata.updated_at,
-                    body_stream=body_stream,
-                    content_length=content_length,
-                )
+                if staged_temp_file_path is not None:
+                    stored_asset = _move_staged_asset_to_folder(
+                        folder_path=transfer_context.folder_path,
+                        filename=metadata.filename,
+                        created_at=metadata.created_at,
+                        updated_at=metadata.updated_at,
+                        staged_file_path=staged_temp_file_path,
+                        content_length=content_length,
+                        provided_content_sha1=content_sha1,
+                        expected_content_sha1=metadata.content_sha1,
+                    )
+                    staged_temp_file_path = None
+                else:
+                    if body_stream is None:
+                        raise OSError("Desktop did not receive transfer asset stream content.")
+                    stored_asset = _write_asset_to_folder(
+                        folder_path=transfer_context.folder_path,
+                        filename=metadata.filename,
+                        created_at=metadata.created_at,
+                        updated_at=metadata.updated_at,
+                        body_stream=body_stream,
+                        content_length=content_length,
+                    )
             except OSError as exc:
+                _cleanup_temp_upload_file(staged_temp_file_path)
                 update_mobile_transfer_state(
                     conn,
                     session_id=metadata.session_id,
@@ -597,6 +631,78 @@ def _write_asset_to_folder(
         content_sha1=content_sha1.hexdigest(),
         file_size_bytes=written_bytes,
     )
+
+
+def _move_staged_asset_to_folder(
+    *,
+    folder_path: str,
+    filename: str,
+    created_at: datetime | None,
+    updated_at: datetime | None,
+    staged_file_path: str,
+    content_length: int,
+    provided_content_sha1: str | None,
+    expected_content_sha1: str | None,
+) -> StoredMobileTransferAsset:
+    root_path = Path(folder_path)
+    month_directory_name = _target_month_directory(created_at=created_at, updated_at=updated_at)
+    month_directory = root_path / month_directory_name
+    month_directory.mkdir(parents=True, exist_ok=True)
+
+    safe_filename = _sanitize_filename(filename)
+    final_path = _resolve_conflict_safe_path(month_directory, safe_filename)
+    staged_path = Path(staged_file_path)
+    if not staged_path.exists():
+        raise OSError("Desktop transfer staged file is missing.")
+
+    actual_size_bytes = staged_path.stat().st_size
+    if actual_size_bytes != content_length:
+        raise OSError("Desktop received a staged asset file with a mismatched byte length.")
+
+    content_sha1 = (provided_content_sha1 or "").strip().lower()
+    if not content_sha1:
+        content_sha1 = _compute_file_sha1(staged_path)
+    if expected_content_sha1 is not None and content_sha1 != expected_content_sha1.lower():
+        raise OSError("Desktop received a staged asset file with a mismatched SHA-1 digest.")
+
+    try:
+        staged_path.replace(final_path)
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+
+        shutil.move(str(staged_path), str(final_path))
+
+    timestamp_source = updated_at or created_at
+    if timestamp_source is not None:
+        timestamp_value = timestamp_source.timestamp()
+        os.utime(final_path, (timestamp_value, timestamp_value))
+
+    return StoredMobileTransferAsset(
+        local_relative_path=final_path.relative_to(root_path).as_posix(),
+        content_sha1=content_sha1,
+        file_size_bytes=actual_size_bytes,
+    )
+
+
+def _compute_file_sha1(file_path: Path) -> str:
+    hasher = hashlib.sha1()
+    with file_path.open("rb") as source_file:
+        while True:
+            chunk = source_file.read(TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _cleanup_temp_upload_file(temp_file_path: str | None) -> None:
+    if temp_file_path is None:
+        return
+    try:
+        Path(temp_file_path).unlink(missing_ok=True)
+    except OSError:
+        return
 
 
 def _target_month_directory(*, created_at: datetime | None, updated_at: datetime | None) -> str:
