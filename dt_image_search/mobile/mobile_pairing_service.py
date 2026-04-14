@@ -45,6 +45,8 @@ from dt_image_search.mobile.transport.lan_http_adapter import (
     is_ignorable_socket_disconnect as _transport_is_ignorable_socket_disconnect,
 )
 from dt_image_search.mobile.transport.router import MobileTransportRouter
+from dt_image_search.mobile.transport.transport_manager import MobileTransportManager
+from dt_image_search.mobile.transport.usb_ws_adapter import UsbWebSocketTransportAdapter
 from dt_image_search.model.dts_db import create_db_conn
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
@@ -95,7 +97,7 @@ class MobilePairingService:
 
         self._transport_router = MobileTransportRouter()
         self._register_transport_routes()
-        self._lan_transport: LanHttpTransportAdapter | None = None
+        self._transport_manager = self._build_transport_manager()
 
     @property
     def endpoint_url(self) -> str:
@@ -158,16 +160,12 @@ class MobilePairingService:
             )
 
     def shutdown(self) -> None:
-        transport_to_stop: LanHttpTransportAdapter | None
         with self._lock:
-            transport_to_stop = self._lan_transport
-            self._lan_transport = None
             self._endpoint_url = None
             self._endpoint_urls = tuple()
             self._active_session = None
 
-        if transport_to_stop is not None:
-            transport_to_stop.stop()
+        self._transport_manager.stop_all()
 
     def handle_pairing_request(
         self,
@@ -366,14 +364,12 @@ class MobilePairingService:
 
     def _ensure_server_started(self) -> None:
         with self._lock:
-            if self._lan_transport is None:
-                self._lan_transport = self._build_lan_transport()
-            endpoint_info = self._lan_transport.start()
+            endpoint_info = self._transport_manager.start_lan()
             self._endpoint_url = endpoint_info.endpoint_url
             self._endpoint_urls = endpoint_info.endpoint_urls
 
-    def _build_lan_transport(self) -> LanHttpTransportAdapter:
-        return LanHttpTransportAdapter(
+    def _build_transport_manager(self) -> MobileTransportManager:
+        lan_transport = LanHttpTransportAdapter(
             listen_host=self._listen_host,
             advertised_host=self._advertised_host,
             router=self._transport_router,
@@ -389,6 +385,14 @@ class MobilePairingService:
             transfer_asset_path=MOBILE_TRANSFER_ASSET_PATH,
             transfer_complete_path=MOBILE_TRANSFER_COMPLETE_PATH,
             log_handler=_log,
+        )
+        usb_transport = UsbWebSocketTransportAdapter(
+            router=self._transport_router,
+            log_handler=_log,
+        )
+        return MobileTransportManager(
+            lan_transport=lan_transport,
+            usb_transport=usb_transport,
         )
 
 

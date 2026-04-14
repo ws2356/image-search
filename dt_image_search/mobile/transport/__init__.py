@@ -20,6 +20,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbTransportState,
     UsbWebSocketTransportAdapter,
 )
+from dt_image_search.mobile.transport.transport_manager import MobileTransportManager
 
 __all__ = [
     "PAIRING_CLAIM_OPERATION",
@@ -38,4 +39,5 @@ __all__ = [
     "UsbBootstrapConfig",
     "UsbTransportState",
     "UsbWebSocketTransportAdapter",
+    "MobileTransportManager",
 ]
