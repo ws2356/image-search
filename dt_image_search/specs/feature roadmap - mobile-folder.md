@@ -21,3 +21,6 @@
   - Android companion app with similar capabilities to iOS version, with platform-specific adjustments as needed
   - ETA calculation and display based on transfer speed and remaining data
   - Automatic USB preference and in-session handoff when a supported mobile device is connected via USB during backup
+
+- **Future Considerations**
+  - File integrity verification with checksums or hashes, with user-friendly error handling and retry options for failed transfers
