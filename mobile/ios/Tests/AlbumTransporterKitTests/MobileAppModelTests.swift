@@ -195,16 +195,17 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_qr_payload_decoder_uses_url_query_format() {
         let decoder = URLQueryQRCodePayloadDecoder()
-        let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=1&ept=desktop.local:38933,192.168.50.17:38933&sid=pairing-demo-123&opt=482913")
+        let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=2&ept=desktop.local:38933,192.168.50.17:38933&sid=pairing-demo-123&opt=482913&usp=50211")
 
         guard case .success(let decoded) = result else {
             return XCTFail("Expected successful payload decoding")
         }
 
-        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertEqual(decoded.schemaVersion, 2)
         XCTAssertEqual(decoded.endpointTargets, ["desktop.local:38933", "192.168.50.17:38933"])
         XCTAssertEqual(decoded.sessionID, "pairing-demo-123")
         XCTAssertEqual(decoded.oneTimePasscode, "482913")
+        XCTAssertEqual(decoded.suggestedUSBPort, 50211)
         XCTAssertEqual(
             decoded.bootstrapURLs.map(\.absoluteString),
             [
@@ -212,6 +213,23 @@ final class MobileAppModelTests: XCTestCase {
                 "http://192.168.50.17:38933/api/mobile/pairing/claim",
             ]
         )
+    }
+
+    func test_qr_payload_decoder_keeps_v1_backward_compatibility() {
+        let decoder = URLQueryQRCodePayloadDecoder()
+        let result = decoder.decode(
+            scannedValue: "https://dl.boldman.net?v=1&ept=desktop.local:38933&sid=pairing-demo-legacy&opt=123456"
+        )
+
+        guard case .success(let decoded) = result else {
+            return XCTFail("Expected successful payload decoding for v1 payload")
+        }
+
+        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertEqual(decoded.endpointTargets, ["desktop.local:38933"])
+        XCTAssertEqual(decoded.sessionID, "pairing-demo-legacy")
+        XCTAssertEqual(decoded.oneTimePasscode, "123456")
+        XCTAssertNil(decoded.suggestedUSBPort)
     }
 }
 

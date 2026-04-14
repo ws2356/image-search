@@ -185,6 +185,7 @@ enum QRCodePayloadDecoderError: Error, Equatable, Sendable {
     case invalidHost
     case invalidSchemaVersion
     case invalidEndpoint
+    case invalidSuggestedUSBPort
     case missingField(String)
 
     var message: String {
@@ -199,6 +200,8 @@ enum QRCodePayloadDecoderError: Error, Equatable, Sendable {
             return "The QR payload uses an unsupported schema version."
         case .invalidEndpoint:
             return "The QR payload contains an invalid desktop endpoint target."
+        case .invalidSuggestedUSBPort:
+            return "The QR payload contains an invalid USB bootstrap port."
         case .missingField(let field):
             return "The QR payload is missing the required field '\(field)'."
         }
@@ -234,7 +237,7 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
             return .failure(.missingField("v"))
         }
 
-        guard schemaVersion == 1 else {
+        guard schemaVersion == 1 || schemaVersion == 2 else {
             return .failure(.invalidSchemaVersion)
         }
 
@@ -262,12 +265,24 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
             return .failure(.missingField("opt"))
         }
 
+        var suggestedUSBPort: Int? = nil
+        if let suggestedUSBPortValue = item(named: "usp") {
+            guard let parsedPort = Int(suggestedUSBPortValue), (1 ... 65535).contains(parsedPort) else {
+                return .failure(.invalidSuggestedUSBPort)
+            }
+            suggestedUSBPort = parsedPort
+        }
+        if schemaVersion >= 2, suggestedUSBPort == nil {
+            return .failure(.missingField("usp"))
+        }
+
         return .success(
             PairingQRCodePayload(
                 schemaVersion: schemaVersion,
                 endpointTargets: endpointTargets,
                 sessionID: sessionID,
-                oneTimePasscode: oneTimePasscode
+                oneTimePasscode: oneTimePasscode,
+                suggestedUSBPort: suggestedUSBPort
             )
         )
     }

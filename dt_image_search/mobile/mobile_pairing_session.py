@@ -11,8 +11,10 @@ import uuid
 from dt_image_search.mobile.mobile_pairing_discovery import PAIRING_ADVERTISED_HOST_LIMIT
 
 PAIRING_TOKEN_TTL = timedelta(minutes=15)
-PAIRING_QR_SCHEMA_VERSION = 1
+PAIRING_QR_SCHEMA_VERSION = 2
 PAIRING_QR_HOST = "dl.boldman.net"
+USB_SUGGESTED_PORT_MIN = 47000
+USB_SUGGESTED_PORT_MAX = 57000
 
 
 class MobileSourceType(str, Enum):
@@ -55,6 +57,7 @@ def _normalize_directory_path(directory_path: str) -> str:
 class MobilePairingToken:
     platform: MobilePlatform
     one_time_passcode: str
+    suggested_usb_port: int
     payload: str
     endpoint_targets: tuple[str, ...]
     expires_at: datetime
@@ -145,6 +148,9 @@ def _new_pairing_token(
     metadata = _PLATFORM_METADATA[platform]
     endpoint_targets = tuple(_endpoint_target_from_url(endpoint_url) for endpoint_url in desktop_endpoint_urls)
     one_time_passcode = f"{secrets.randbelow(1_000_000):06d}"
+    suggested_usb_port = USB_SUGGESTED_PORT_MIN + secrets.randbelow(
+        USB_SUGGESTED_PORT_MAX - USB_SUGGESTED_PORT_MIN + 1
+    )
     expires_at = current_time + PAIRING_TOKEN_TTL
     payload_query = urlencode(
         {
@@ -152,12 +158,14 @@ def _new_pairing_token(
             "ept": ",".join(endpoint_targets),
             "sid": session_id,
             "opt": one_time_passcode,
+            "usp": str(suggested_usb_port),
         }
     )
     payload = urlunsplit(("https", PAIRING_QR_HOST, "", payload_query, ""))
     return MobilePairingToken(
         platform=platform,
         one_time_passcode=one_time_passcode,
+        suggested_usb_port=suggested_usb_port,
         payload=payload,
         endpoint_targets=endpoint_targets,
         expires_at=expires_at,

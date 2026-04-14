@@ -142,6 +142,7 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
     var endpointTargets: [String]
     var sessionID: String
     var oneTimePasscode: String
+    var suggestedUSBPort: Int? = nil
 
     var endpointTarget: String {
         guard let target = endpointTargets.first else {
@@ -166,22 +167,27 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
     }
 
     static let demo = PairingQRCodePayload(
-        schemaVersion: 1,
+        schemaVersion: 2,
         endpointTargets: ["127.0.0.1:38933"],
         sessionID: "pairing-demo-001",
-        oneTimePasscode: "482913"
+        oneTimePasscode: "482913",
+        suggestedUSBPort: 50211
     )
 
     static var demoScanValue: String {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "dl.boldman.net"
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "v", value: String(demo.schemaVersion)),
             URLQueryItem(name: "ept", value: demo.endpointTargets.joined(separator: ",")),
             URLQueryItem(name: "sid", value: demo.sessionID),
             URLQueryItem(name: "opt", value: demo.oneTimePasscode),
         ]
+        if let suggestedUSBPort = demo.suggestedUSBPort {
+            queryItems.append(URLQueryItem(name: "usp", value: String(suggestedUSBPort)))
+        }
+        components.queryItems = queryItems
         return components.string ?? "https://dl.boldman.net"
     }
 

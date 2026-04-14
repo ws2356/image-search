@@ -7,7 +7,12 @@ from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobilePlatform
+from dt_image_search.mobile.mobile_pairing_session import (
+    USB_SUGGESTED_PORT_MAX,
+    USB_SUGGESTED_PORT_MIN,
+    MobilePairingSessionDraft,
+    MobilePlatform,
+)
 
 
 class TestMobilePairingSession(unittest.TestCase):
@@ -37,10 +42,15 @@ class TestMobilePairingSession(unittest.TestCase):
 
         self.assertEqual(payload_components.scheme, "https")
         self.assertEqual(payload_components.netloc, "dl.boldman.net")
-        self.assertEqual(payload_query["v"][0], "1")
+        self.assertEqual(payload_query["v"][0], "2")
         self.assertEqual(payload_query["ept"][0], "192.168.50.12:38933,10.0.0.5:38933")
         self.assertEqual(payload_query["sid"][0], session.session_id)
         self.assertEqual(payload_query["opt"][0], android_token.one_time_passcode)
+        self.assertEqual(payload_query["usp"][0], str(android_token.suggested_usb_port))
+        self.assertGreaterEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MIN)
+        self.assertLessEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MAX)
+        self.assertGreaterEqual(ios_token.suggested_usb_port, USB_SUGGESTED_PORT_MIN)
+        self.assertLessEqual(ios_token.suggested_usb_port, USB_SUGGESTED_PORT_MAX)
 
     def test_refresh_replaces_only_requested_platform_token(self):
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
