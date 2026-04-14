@@ -4,6 +4,33 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class TransferServiceTests: XCTestCase {
+    func test_transfer_asset_chunk_streamer_splits_chunks_at_two_mb() async throws {
+        let totalSize = TransferAssetStreamProtocol.chunkSizeBytes + 257
+        let payload = Data(
+            (0 ..< totalSize).map { index in
+                UInt8(index % 251)
+            }
+        )
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString.lowercased())
+            .appendingPathExtension("bin")
+        try payload.write(to: fileURL)
+        defer {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+
+        let recorder = ChunkSizeRecorder()
+        try await TransferAssetChunkStreamer.streamFile(
+            fileURL: fileURL,
+            expectedSizeBytes: totalSize
+        ) { chunk in
+            await recorder.append(chunk.count)
+        }
+
+        let chunkSizes = await recorder.snapshot()
+        XCTAssertEqual(chunkSizes, [TransferAssetStreamProtocol.chunkSizeBytes, 257])
+    }
+
     func test_photo_library_transfer_service_uploads_assets_and_completes_session() async throws {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -304,6 +331,18 @@ private actor InMemoryTransferTrustedDesktopStore: TrustedDesktopStore {
 
     func saveTrustedDesktop(_ record: TrustedDesktopRecord) async {
         self.record = record
+    }
+}
+
+private actor ChunkSizeRecorder {
+    private var sizes: [Int] = []
+
+    func append(_ size: Int) {
+        sizes.append(size)
+    }
+
+    func snapshot() -> [Int] {
+        sizes
     }
 }
 

@@ -28,7 +28,6 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_SCHEMA,
     MOBILE_TRANSFER_START_PATH,
     MobileTransferService,
-    decode_transfer_asset_metadata,
 )
 from dt_image_search.mobile.transport.contracts import (
     PAIRING_CLAIM_OPERATION,
@@ -395,7 +394,6 @@ class MobilePairingService:
             router=self._transport_router,
             resolve_advertised_hosts=_resolve_advertised_hosts,
             format_pairing_endpoint_url=_format_pairing_endpoint_url,
-            decode_transfer_asset_metadata=decode_transfer_asset_metadata,
             pairing_claim_path=PAIRING_CLAIM_PATH,
             pairing_protocol_schema=PAIRING_PROTOCOL_SCHEMA,
             pairing_rejected_status=PairingResultState.REJECTED.value,

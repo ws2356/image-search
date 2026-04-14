@@ -8,6 +8,14 @@ import threading
 from typing import Callable
 from urllib.parse import parse_qs, urlparse
 
+from dt_image_search.mobile.transport.asset_upload_stream import (
+    TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+    TRANSFER_ASSET_STREAM_STATE_CHUNK,
+    TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+    TRANSFER_ASSET_STREAM_STATE_FIELD,
+    TRANSFER_ASSET_STREAM_STATE_START,
+    TransferAssetUploadStream,
+)
 from dt_image_search.mobile.transport.contracts import (
     PAIRING_CLAIM_OPERATION,
     TRANSFER_ASSET_OPERATION,
@@ -16,7 +24,6 @@ from dt_image_search.mobile.transport.contracts import (
     TRANSFER_START_OPERATION,
     MobileTransportContext,
     MobileTransportKind,
-    TransferAssetUploadPayload,
 )
 from dt_image_search.mobile.transport.router import MobileTransportRouter
 
@@ -51,7 +58,6 @@ class LanHttpTransportAdapter:
         router: MobileTransportRouter,
         resolve_advertised_hosts: Callable[[str | None], tuple[str, ...]],
         format_pairing_endpoint_url: Callable[[str, int], str],
-        decode_transfer_asset_metadata: Callable[[str], dict[str, object]],
         pairing_claim_path: str,
         pairing_protocol_schema: str,
         pairing_rejected_status: str,
@@ -67,7 +73,6 @@ class LanHttpTransportAdapter:
         self._router = router
         self._resolve_advertised_hosts = resolve_advertised_hosts
         self._format_pairing_endpoint_url = format_pairing_endpoint_url
-        self._decode_transfer_asset_metadata = decode_transfer_asset_metadata
         self._pairing_claim_path = pairing_claim_path
         self._pairing_protocol_schema = pairing_protocol_schema
         self._pairing_rejected_status = pairing_rejected_status
@@ -79,6 +84,7 @@ class LanHttpTransportAdapter:
         self._log_handler = log_handler
 
         self._lock = threading.RLock()
+        self._asset_upload_stream = TransferAssetUploadStream()
         self._server: _LanHttpServer | None = None
         self._server_thread: threading.Thread | None = None
         self._endpoint_info: LanHttpEndpointInfo | None = None
@@ -123,6 +129,7 @@ class LanHttpTransportAdapter:
             self._server = None
             self._server_thread = None
             self._endpoint_info = None
+            self._asset_upload_stream.clear()
 
         if server_to_stop is not None:
             server_to_stop.shutdown()
@@ -200,38 +207,154 @@ class LanHttpTransportAdapter:
 
                     if parsed_path.path == adapter._transfer_asset_path:
                         query_parameters = parse_qs(parsed_path.query, keep_blank_values=False)
-                        encoded_metadata = query_parameters.get("meta", [None])[0]
-                        if not encoded_metadata:
+                        request_id = query_parameters.get("request_id", [None])[0]
+                        if not isinstance(request_id, str) or not request_id.strip():
                             self._write_json_response(
                                 400,
                                 {
                                     "schema": adapter._transfer_schema,
                                     "status": "rejected",
-                                    "message": "Desktop did not receive the transfer asset metadata.",
+                                    "message": "Desktop did not receive a transfer asset request id.",
                                 },
                             )
                             return
-                        try:
-                            metadata_payload = adapter._decode_transfer_asset_metadata(encoded_metadata)
-                        except (OSError, ValueError, json.JSONDecodeError):
+                        request_id = request_id.strip()
+
+                        stream_state = query_parameters.get(TRANSFER_ASSET_STREAM_STATE_FIELD, [None])[0]
+                        if stream_state == TRANSFER_ASSET_STREAM_STATE_START:
+                            request_payload = self._read_json_payload(
+                                schema=adapter._transfer_schema,
+                                status="rejected",
+                                parse_error_message="Desktop could not parse the transfer asset stream start payload.",
+                                object_error_message=(
+                                    "Desktop requires JSON object payloads for transfer asset stream start requests."
+                                ),
+                            )
+                            if request_payload is None:
+                                return
+                            metadata_payload = dict(request_payload)
+                            metadata_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
+                            metadata_payload.pop("chunk_size", None)
+                            with adapter._lock:
+                                adapter._asset_upload_stream.start(
+                                    request_id=request_id,
+                                    metadata_payload=metadata_payload,
+                                )
                             self._write_json_response(
-                                400,
+                                200,
                                 {
                                     "schema": adapter._transfer_schema,
-                                    "status": "rejected",
-                                    "message": "Desktop could not parse the transfer asset metadata.",
+                                    "status": "accepted",
+                                    "message": "Desktop accepted transfer asset stream metadata.",
+                                    "request_id": request_id,
                                 },
                             )
                             return
 
-                        content_length = int(self.headers.get("Content-Length", "0"))
-                        self._dispatch_operation(
-                            TRANSFER_ASSET_OPERATION,
-                            TransferAssetUploadPayload(
-                                metadata_payload=metadata_payload,
-                                body_stream=self.rfile,
-                                content_length=content_length,
-                            ),
+                        if stream_state == TRANSFER_ASSET_STREAM_STATE_CHUNK:
+                            try:
+                                content_length = int(self.headers.get("Content-Length", "0"))
+                            except ValueError:
+                                self._write_json_response(
+                                    400,
+                                    {
+                                        "schema": adapter._transfer_schema,
+                                        "status": "rejected",
+                                        "message": "Desktop received an invalid transfer asset stream chunk length.",
+                                    },
+                                )
+                                return
+                            if content_length <= 0:
+                                self._write_json_response(
+                                    400,
+                                    {
+                                        "schema": adapter._transfer_schema,
+                                        "status": "rejected",
+                                        "message": "Desktop received an invalid transfer asset stream chunk length.",
+                                    },
+                                )
+                                return
+                            if content_length > TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES:
+                                self._write_json_response(
+                                    400,
+                                    {
+                                        "schema": adapter._transfer_schema,
+                                        "status": "rejected",
+                                        "message": (
+                                            "Desktop rejected transfer asset stream chunk because "
+                                            f"it exceeded {TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES} bytes."
+                                        ),
+                                    },
+                                )
+                                return
+                            chunk = self.rfile.read(content_length)
+                            if len(chunk) != content_length:
+                                self._write_json_response(
+                                    400,
+                                    {
+                                        "schema": adapter._transfer_schema,
+                                        "status": "rejected",
+                                        "message": "Desktop received an incomplete transfer asset stream chunk.",
+                                    },
+                                )
+                                return
+                            with adapter._lock:
+                                append_error = adapter._asset_upload_stream.append_chunk(
+                                    chunk=chunk,
+                                    request_id=request_id,
+                                )
+                            if append_error is not None:
+                                self._write_json_response(
+                                    400,
+                                    {
+                                        "schema": adapter._transfer_schema,
+                                        "status": "rejected",
+                                        "message": append_error,
+                                    },
+                                )
+                                return
+                            self._write_json_response(
+                                200,
+                                {
+                                    "schema": adapter._transfer_schema,
+                                    "status": "accepted",
+                                    "message": "Desktop accepted transfer asset stream chunk.",
+                                    "request_id": request_id,
+                                },
+                            )
+                            return
+
+                        if stream_state == TRANSFER_ASSET_STREAM_STATE_COMPLETE:
+                            with adapter._lock:
+                                payload_or_error = adapter._asset_upload_stream.complete(
+                                    request_id=request_id,
+                                )
+                            if isinstance(payload_or_error, str):
+                                self._write_json_response(
+                                    400,
+                                    {
+                                        "schema": adapter._transfer_schema,
+                                        "status": "rejected",
+                                        "message": payload_or_error,
+                                    },
+                                )
+                                return
+                            self._dispatch_operation(
+                                TRANSFER_ASSET_OPERATION,
+                                payload_or_error,
+                            )
+                            return
+
+                        self._write_json_response(
+                            400,
+                            {
+                                "schema": adapter._transfer_schema,
+                                "status": "rejected",
+                                "message": (
+                                    "Desktop rejected transfer asset stream request with an unsupported "
+                                    f"'{TRANSFER_ASSET_STREAM_STATE_FIELD}' value."
+                                ),
+                            },
                         )
                         return
 

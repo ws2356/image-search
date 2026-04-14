@@ -12,6 +12,15 @@ enum TransferProtocol {
     static let completePath = "/api/mobile/transfer/complete"
 }
 
+enum TransferAssetStreamProtocol {
+    static let chunkSizeBytes = 2 * 1024 * 1024
+    static let requestIDQueryField = "request_id"
+    static let streamStateQueryField = "stream_state"
+    static let streamStateStart = "start"
+    static let streamStateChunk = "chunk"
+    static let streamStateComplete = "complete"
+}
+
 struct TransferStartRequest: Codable, Sendable {
     var schema = TransferProtocol.schema
     var sessionID: String
@@ -181,6 +190,126 @@ private struct TransferAssetUploadMetadata: Codable, Sendable {
         case mediaType = "media_type"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+private struct TransferAssetStreamStartRequest: Codable, Sendable {
+    var schema = TransferProtocol.schema
+    var sessionID: String
+    var deviceUUID: String
+    var trustKey: String
+    var assetID: String
+    var assetVersion: String
+    var contentSHA1: String
+    var fileSize: Int
+    var filename: String
+    var mediaType: String
+    var createdAt: Date?
+    var updatedAt: Date?
+    var streamState = TransferAssetStreamProtocol.streamStateStart
+    var chunkSize: Int
+
+    init(metadata: TransferAssetUploadMetadata, chunkSize: Int) {
+        sessionID = metadata.sessionID
+        deviceUUID = metadata.deviceUUID
+        trustKey = metadata.trustKey
+        assetID = metadata.assetID
+        assetVersion = metadata.assetVersion
+        contentSHA1 = metadata.contentSHA1
+        fileSize = metadata.fileSize
+        filename = metadata.filename
+        mediaType = metadata.mediaType
+        createdAt = metadata.createdAt
+        updatedAt = metadata.updatedAt
+        self.chunkSize = chunkSize
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+        case trustKey = "trust_key"
+        case assetID = "asset_id"
+        case assetVersion = "asset_version"
+        case contentSHA1 = "sha1"
+        case fileSize = "file_size"
+        case filename
+        case mediaType = "media_type"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case streamState = "stream_state"
+        case chunkSize = "chunk_size"
+    }
+}
+
+private struct TransferAssetStreamCompleteRequest: Codable, Sendable {
+    var schema = TransferProtocol.schema
+    var streamState = TransferAssetStreamProtocol.streamStateComplete
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case streamState = "stream_state"
+    }
+}
+
+enum TransferAssetChunkStreamError: Error, Sendable {
+    case invalidChunkSize
+    case streamReadFailed(message: String)
+    case sizeMismatch(expected: Int, actual: Int)
+
+    var message: String {
+        switch self {
+        case .invalidChunkSize:
+            return "Desktop transfer requires a positive stream chunk size."
+        case .streamReadFailed(let message):
+            return "Desktop transfer failed while reading an asset stream chunk: \(message)"
+        case .sizeMismatch(let expected, let actual):
+            return "Desktop transfer stream size did not match expected asset size (expected \(expected), got \(actual))."
+        }
+    }
+}
+
+enum TransferAssetChunkStreamer {
+    static func streamFile(
+        fileURL: URL,
+        expectedSizeBytes: Int,
+        chunkSizeBytes: Int = TransferAssetStreamProtocol.chunkSizeBytes,
+        onChunk: @Sendable (Data) async throws -> Void
+    ) async throws {
+        guard chunkSizeBytes > 0 else {
+            throw TransferAssetChunkStreamError.invalidChunkSize
+        }
+        guard let inputStream = InputStream(url: fileURL) else {
+            throw TransferAssetChunkStreamError.streamReadFailed(
+                message: "Desktop transfer could not open the asset stream."
+            )
+        }
+        inputStream.open()
+        defer {
+            inputStream.close()
+        }
+
+        var totalBytesRead = 0
+        var readBuffer = [UInt8](repeating: 0, count: chunkSizeBytes)
+        while true {
+            let bytesRead = inputStream.read(&readBuffer, maxLength: readBuffer.count)
+            if bytesRead < 0 {
+                let streamError = inputStream.streamError?.localizedDescription ?? "unknown stream error"
+                throw TransferAssetChunkStreamError.streamReadFailed(message: streamError)
+            }
+            if bytesRead == 0 {
+                break
+            }
+            totalBytesRead += bytesRead
+            try await onChunk(Data(readBuffer[0 ..< bytesRead]))
+        }
+
+        guard totalBytesRead == expectedSizeBytes else {
+            throw TransferAssetChunkStreamError.sizeMismatch(
+                expected: expectedSizeBytes,
+                actual: totalBytesRead
+            )
+        }
     }
 }
 
@@ -382,26 +511,30 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             createdAt: asset.descriptor.createdAt,
             updatedAt: asset.descriptor.updatedAt
         )
-        let encodedMetadata = try JSONEncoder.pairingEncoder.encode(metadata).base64URLEncodedString()
-        var components = URLComponents(
-            url: transferURL(for: desktop, path: TransferProtocol.assetPath),
-            resolvingAgainstBaseURL: false
-        )
-        components?.queryItems = [URLQueryItem(name: "meta", value: encodedMetadata)]
-        guard let endpoint = components?.url else {
-            throw TransferClientError.transport(message: "Desktop transfer could not build the asset upload URL.")
-        }
-
-        var urlRequest = URLRequest(url: endpoint)
-        urlRequest.httpMethod = "POST"
-        urlRequest.timeoutInterval = 60
-        urlRequest.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-
+        let requestID = UUID().uuidString.lowercased()
         let assetSummary = TransferDebugLogger.assetSummary(for: asset.descriptor)
-        TransferDebugLogger.debug("Uploading asset \(assetSummary) endpoint=\(endpoint.absoluteString)")
+        TransferDebugLogger.debug("Uploading asset \(assetSummary) request_id=\(requestID)")
         do {
-            let response = try await uploadFile(using: urlRequest, fileURL: asset.fileURL)
+            try await startChunkedAssetUpload(
+                metadata: metadata,
+                desktop: desktop,
+                requestID: requestID
+            )
+            try await TransferAssetChunkStreamer.streamFile(
+                fileURL: asset.fileURL,
+                expectedSizeBytes: asset.fileSize,
+                chunkSizeBytes: TransferAssetStreamProtocol.chunkSizeBytes
+            ) { chunkData in
+                try await uploadChunkedAssetBytes(
+                    chunkData,
+                    desktop: desktop,
+                    requestID: requestID
+                )
+            }
+            let response = try await finishChunkedAssetUpload(
+                desktop: desktop,
+                requestID: requestID
+            )
             TransferDebugLogger.debug(
                 "Upload response for \(assetSummary) \(TransferDebugLogger.responseSummary(response))"
             )
@@ -413,12 +546,105 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             case .rejected:
                 throw TransferClientError.rejected(message: response.message)
             }
+        } catch let chunkError as TransferAssetChunkStreamError {
+            throw TransferClientError.transport(message: chunkError.message)
         } catch {
             TransferDebugLogger.error(
                 "Asset upload failed \(assetSummary) error=\(TransferDebugLogger.describe(error))"
             )
             throw error
         }
+    }
+
+    private func transferAssetStreamEndpoint(
+        desktop: TrustedDesktopRecord,
+        requestID: String,
+        streamState: String
+    ) throws -> URL {
+        var components = URLComponents(
+            url: transferURL(for: desktop, path: TransferProtocol.assetPath),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: TransferAssetStreamProtocol.requestIDQueryField, value: requestID),
+            URLQueryItem(name: TransferAssetStreamProtocol.streamStateQueryField, value: streamState),
+        ]
+        guard let endpoint = components?.url else {
+            throw TransferClientError.transport(message: "Desktop transfer could not build the asset upload URL.")
+        }
+        return endpoint
+    }
+
+    private func startChunkedAssetUpload(
+        metadata: TransferAssetUploadMetadata,
+        desktop: TrustedDesktopRecord,
+        requestID: String
+    ) async throws {
+        let endpoint = try transferAssetStreamEndpoint(
+            desktop: desktop,
+            requestID: requestID,
+            streamState: TransferAssetStreamProtocol.streamStateStart
+        )
+        let startRequest = TransferAssetStreamStartRequest(
+            metadata: metadata,
+            chunkSize: TransferAssetStreamProtocol.chunkSizeBytes
+        )
+        let response = try await postJSON(
+            to: endpoint,
+            body: startRequest,
+            responseType: TransferServerResponse.self
+        )
+        guard response.status == .accepted else {
+            throw TransferClientError.rejected(message: response.message)
+        }
+    }
+
+    private func uploadChunkedAssetBytes(
+        _ chunkData: Data,
+        desktop: TrustedDesktopRecord,
+        requestID: String
+    ) async throws {
+        guard !chunkData.isEmpty else {
+            return
+        }
+        guard chunkData.count <= TransferAssetStreamProtocol.chunkSizeBytes else {
+            throw TransferClientError.transport(
+                message: "Desktop transfer chunk exceeded the maximum \(TransferAssetStreamProtocol.chunkSizeBytes)-byte limit."
+            )
+        }
+        let endpoint = try transferAssetStreamEndpoint(
+            desktop: desktop,
+            requestID: requestID,
+            streamState: TransferAssetStreamProtocol.streamStateChunk
+        )
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let response = try await uploadData(
+            using: request,
+            bodyData: chunkData
+        )
+        guard response.status == .accepted else {
+            throw TransferClientError.rejected(message: response.message)
+        }
+    }
+
+    private func finishChunkedAssetUpload(
+        desktop: TrustedDesktopRecord,
+        requestID: String
+    ) async throws -> TransferServerResponse {
+        let endpoint = try transferAssetStreamEndpoint(
+            desktop: desktop,
+            requestID: requestID,
+            streamState: TransferAssetStreamProtocol.streamStateComplete
+        )
+        return try await postJSON(
+            to: endpoint,
+            body: TransferAssetStreamCompleteRequest(),
+            responseType: TransferServerResponse.self
+        )
     }
 
     func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse {
@@ -459,11 +685,11 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         return try await execute(request: urlRequest, responseType: responseType)
     }
 
-    private func uploadFile(using request: URLRequest, fileURL: URL) async throws -> TransferServerResponse {
+    private func uploadData(using request: URLRequest, bodyData: Data) async throws -> TransferServerResponse {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.upload(for: request, fromFile: fileURL)
+            (data, response) = try await session.upload(for: request, from: bodyData)
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
         }

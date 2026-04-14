@@ -28,6 +28,9 @@ from dt_image_search.mobile.mobile_pairing_store import (
     update_mobile_transfer_state,
     upsert_mobile_asset_record,
 )
+from dt_image_search.mobile.transport.asset_upload_stream import (
+    TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+)
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_event_bus import default_bus
@@ -39,7 +42,6 @@ MOBILE_TRANSFER_ASSET_PATH = "/api/mobile/transfer/asset"
 MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
 MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
-TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES = 2 * 1024 * 1024
 
 
 @dataclass(frozen=True)

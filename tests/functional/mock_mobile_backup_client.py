@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -8,6 +7,7 @@ import http.client
 import json
 import logging
 from pathlib import Path
+import uuid
 from urllib.parse import parse_qs, urlsplit
 
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
@@ -18,6 +18,13 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_EXISTENCE_PATH,
     MOBILE_TRANSFER_SCHEMA,
     MOBILE_TRANSFER_START_PATH,
+)
+from dt_image_search.mobile.transport.asset_upload_stream import (
+    TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+    TRANSFER_ASSET_STREAM_STATE_CHUNK,
+    TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+    TRANSFER_ASSET_STREAM_STATE_FIELD,
+    TRANSFER_ASSET_STREAM_STATE_START,
 )
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
@@ -188,28 +195,113 @@ class MockMobileBackupClient:
     ) -> dict[str, object]:
         from dt_image_search.telemetry.telemetry_client import log
         endpoint = urlsplit(pairing_record.endpoint_url)
+        request_id = uuid.uuid4().hex
+        metadata = self._upload_metadata(pairing_record=pairing_record, asset=asset)
+        start_payload = dict(metadata)
+        start_payload[TRANSFER_ASSET_STREAM_STATE_FIELD] = TRANSFER_ASSET_STREAM_STATE_START
+        start_payload["chunk_size"] = TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES
+        self._post_asset_json(
+            endpoint=endpoint,
+            request_id=request_id,
+            stream_state=TRANSFER_ASSET_STREAM_STATE_START,
+            payload=start_payload,
+        )
+
+        with asset.file_path.open("rb") as file_handle:
+            while True:
+                chunk = file_handle.read(TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES)
+                if not chunk:
+                    break
+                self._post_asset_chunk(
+                    endpoint=endpoint,
+                    request_id=request_id,
+                    chunk=chunk,
+                )
+
+        response_payload = self._post_asset_json(
+            endpoint=endpoint,
+            request_id=request_id,
+            stream_state=TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+            payload={
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                TRANSFER_ASSET_STREAM_STATE_FIELD: TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+            },
+        )
+        log(
+            "info",
+            message=(
+                f"Uploaded asset {asset.asset_id} to {pairing_record.endpoint_url}{MOBILE_TRANSFER_ASSET_PATH} "
+                f"with metadata: {metadata}"
+            ),
+        )
+        return response_payload
+
+    def _post_asset_json(
+        self,
+        *,
+        endpoint,
+        request_id: str,
+        stream_state: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            metadata = self._upload_metadata(pairing_record=pairing_record, asset=asset)
-            encoded_metadata = _urlsafe_b64encode_json(metadata)
+            encoded_payload = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             connection.request(
                 "POST",
-                f"{MOBILE_TRANSFER_ASSET_PATH}?meta={encoded_metadata}",
-                body=asset.file_path.read_bytes(),
+                (
+                    f"{MOBILE_TRANSFER_ASSET_PATH}?request_id={request_id}"
+                    f"&{TRANSFER_ASSET_STREAM_STATE_FIELD}={stream_state}"
+                ),
+                body=encoded_payload,
                 headers={
-                    "Content-Type": "application/octet-stream",
+                    "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
             )
-            log("info", message=f"Uploaded asset {asset.asset_id} to {pairing_record.endpoint_url}{MOBILE_TRANSFER_ASSET_PATH} with metadata: {metadata}")
             response = connection.getresponse()
             response_payload = json.loads(response.read().decode("utf-8"))
         finally:
             connection.close()
 
         if response.status != 200:
-            raise RuntimeError(f"Desktop rejected asset upload for {asset.asset_id}: {response_payload}")
+            raise RuntimeError(
+                "Desktop rejected transfer asset stream request "
+                f"(state={stream_state}) for request_id={request_id}: {response_payload}"
+            )
         return response_payload
+
+    def _post_asset_chunk(
+        self,
+        *,
+        endpoint,
+        request_id: str,
+        chunk: bytes,
+    ) -> None:
+        connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
+        try:
+            connection.request(
+                "POST",
+                (
+                    f"{MOBILE_TRANSFER_ASSET_PATH}?request_id={request_id}"
+                    f"&{TRANSFER_ASSET_STREAM_STATE_FIELD}={TRANSFER_ASSET_STREAM_STATE_CHUNK}"
+                ),
+                body=chunk,
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "Accept": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            response_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            connection.close()
+
+        if response.status != 200:
+            raise RuntimeError(
+                "Desktop rejected transfer asset stream chunk "
+                f"for request_id={request_id}: {response_payload}"
+            )
 
     def _complete_transfer(
         self,
@@ -330,9 +422,3 @@ def _require_list(payload: dict[str, object], key: str) -> list[dict[str, object
             raise RuntimeError(f"The desktop response field '{key}' contains a non-object item.")
         normalized_items.append(item)
     return normalized_items
-
-
-def _urlsafe_b64encode_json(payload: dict[str, object]) -> str:
-    return base64.urlsafe_b64encode(
-        json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    ).decode("ascii").rstrip("=")

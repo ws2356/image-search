@@ -7,11 +7,17 @@ import hmac
 import json
 import secrets
 import socket
-import tempfile
 import threading
 import time
 from typing import Callable, Protocol
 
+from dt_image_search.mobile.transport.asset_upload_stream import (
+    TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+    TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+    TRANSFER_ASSET_STREAM_STATE_FIELD,
+    TRANSFER_ASSET_STREAM_STATE_START,
+    TransferAssetUploadStream,
+)
 from dt_image_search.mobile.transport.contracts import (
     TRANSFER_ASSET_OPERATION,
     MobileTransportContext,
@@ -33,10 +39,6 @@ from dt_image_search.mobile.transport.usb_tunnel import (
 
 MOBILE_TRANSPORT_ENVELOPE_SCHEMA = "dtis.mobile-transport.v1"
 USB_TRANSPORT_REJECTED_STATUS = "rejected"
-USB_TRANSFER_STREAM_STATE_FIELD = "stream_state"
-USB_TRANSFER_STREAM_STATE_START = "start"
-USB_TRANSFER_STREAM_STATE_COMPLETE = "complete"
-USB_TRANSFER_STREAM_CHUNK_SIZE_BYTES = 2 * 1024 * 1024
 USB_AUTH_CHALLENGE_OPERATION = "transport.auth.challenge"
 USB_AUTH_CHALLENGE_BODY_SCHEMA = "dtis.mobile-pairing.v1"
 USB_AUTH_CHALLENGE_REQUEST_ID = "auth-challenge"
@@ -80,29 +82,6 @@ class UsbBootstrapConfig:
 class UsbTunnelTarget:
     device_udid: str
     remote_port: int
-
-
-@dataclass
-class _PendingUsbAssetUpload:
-    request_id: str
-    metadata_payload: dict[str, object]
-    body_stream: tempfile.SpooledTemporaryFile
-    content_length: int = 0
-
-    def append_chunk(self, chunk: bytes) -> None:
-        self.body_stream.write(chunk)
-        self.content_length += len(chunk)
-
-    def to_payload(self) -> TransferAssetUploadPayload:
-        self.body_stream.seek(0)
-        return TransferAssetUploadPayload(
-            metadata_payload=self.metadata_payload,
-            body_stream=self.body_stream,
-            content_length=self.content_length,
-        )
-
-    def close(self) -> None:
-        self.body_stream.close()
 
 
 class UsbWebSocketConnection(Protocol):
@@ -172,7 +151,7 @@ class UsbWebSocketTransportAdapter:
         self._worker_thread: threading.Thread | None = None
         self._active_websocket_connection: UsbWebSocketConnection | None = None
         self._active_tunnel_socket: socket.socket | None = None
-        self._pending_asset_upload: _PendingUsbAssetUpload | None = None
+        self._asset_upload_stream = TransferAssetUploadStream()
         self._state = UsbTransportState.STOPPED
         self._bootstrap_config: UsbBootstrapConfig | None = None
         self._active_tunnel_target: UsbTunnelTarget | None = None
@@ -594,23 +573,23 @@ class UsbWebSocketTransportAdapter:
                 message="Desktop requires JSON object payloads for transfer asset requests.",
             )
 
-        stream_state = raw_body.get(USB_TRANSFER_STREAM_STATE_FIELD)
-        if stream_state == USB_TRANSFER_STREAM_STATE_START:
+        stream_state = raw_body.get(TRANSFER_ASSET_STREAM_STATE_FIELD)
+        if stream_state == TRANSFER_ASSET_STREAM_STATE_START:
             metadata_payload = dict(raw_body)
-            metadata_payload.pop(USB_TRANSFER_STREAM_STATE_FIELD, None)
+            metadata_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
             metadata_payload.pop("chunk_size", None)
             self._start_pending_asset_upload(
                 request_id=request_id,
                 metadata_payload=metadata_payload,
             )
             return None
-        if stream_state == USB_TRANSFER_STREAM_STATE_COMPLETE:
+        if stream_state == TRANSFER_ASSET_STREAM_STATE_COMPLETE:
             return self._complete_pending_asset_upload(request_id=request_id)
 
         return self._transport_error_response(
             message=(
                 "Desktop rejected transfer asset stream message with an unsupported "
-                f"'{USB_TRANSFER_STREAM_STATE_FIELD}' value."
+                f"'{TRANSFER_ASSET_STREAM_STATE_FIELD}' value."
             )
         )
 
@@ -620,31 +599,24 @@ class UsbWebSocketTransportAdapter:
         request_id: str,
         metadata_payload: dict[str, object],
     ) -> None:
-        pending_upload = _PendingUsbAssetUpload(
-            request_id=request_id,
-            metadata_payload=metadata_payload,
-            body_stream=tempfile.SpooledTemporaryFile(
-                max_size=USB_TRANSFER_STREAM_CHUNK_SIZE_BYTES * 4,
-                mode="w+b",
-            ),
-            content_length=0,
-        )
         with self._lock:
-            if self._pending_asset_upload is not None:
-                self._pending_asset_upload.close()
-            self._pending_asset_upload = pending_upload
+            self._asset_upload_stream.start(
+                request_id=request_id,
+                metadata_payload=metadata_payload,
+            )
 
     def _append_pending_asset_chunk(self, chunk: bytes) -> None:
+        append_error: str | None = None
+        with self._lock:
+            append_error = self._asset_upload_stream.append_chunk(chunk=chunk)
+            active_request_id = self._asset_upload_stream.active_request_id
+        if append_error is None:
+            return
         if not chunk:
             return
-        should_log_missing_stream = False
-        with self._lock:
-            pending_upload = self._pending_asset_upload
-            if pending_upload is None:
-                should_log_missing_stream = True
-            else:
-                pending_upload.append_chunk(chunk)
-        if should_log_missing_stream:
+        if len(chunk) > TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES:
+            raise RuntimeError(append_error)
+        if active_request_id is None:
             self._safe_log(
                 "warning",
                 message=(
@@ -652,6 +624,8 @@ class UsbWebSocketTransportAdapter:
                     "ignoring binary frame without a matching transfer asset start envelope."
                 ),
             )
+            return
+        raise RuntimeError(append_error)
 
     def _complete_pending_asset_upload(
         self,
@@ -659,23 +633,12 @@ class UsbWebSocketTransportAdapter:
         request_id: str,
     ) -> TransferAssetUploadPayload | MobileTransportResponse:
         with self._lock:
-            pending_upload = self._pending_asset_upload
-            self._pending_asset_upload = None
-        if pending_upload is None:
+            payload_or_error = self._asset_upload_stream.complete(request_id=request_id)
+        if isinstance(payload_or_error, str):
             return self._transport_error_response(
-                message=(
-                    "Desktop did not receive transfer asset stream metadata before completion."
-                ),
+                message=payload_or_error,
             )
-        if pending_upload.request_id != request_id:
-            pending_upload.close()
-            return self._transport_error_response(
-                message=(
-                    "Desktop rejected transfer asset completion because request ids do not match "
-                    "the active binary stream."
-                ),
-            )
-        return pending_upload.to_payload()
+        return payload_or_error
 
     def _encode_response_envelope(
         self,
@@ -823,10 +786,9 @@ class UsbWebSocketTransportAdapter:
     def _close_active_connection_locked(self) -> None:
         websocket_connection = self._active_websocket_connection
         tunnel_socket = self._active_tunnel_socket
-        pending_upload = self._pending_asset_upload
         self._active_websocket_connection = None
         self._active_tunnel_socket = None
-        self._pending_asset_upload = None
+        self._asset_upload_stream.clear()
 
         if websocket_connection is not None:
             try:
@@ -840,8 +802,6 @@ class UsbWebSocketTransportAdapter:
             except OSError:
                 pass
 
-        if pending_upload is not None:
-            pending_upload.close()
 
     def _safe_log(
         self,

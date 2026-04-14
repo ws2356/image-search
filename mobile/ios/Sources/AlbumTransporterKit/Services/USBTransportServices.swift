@@ -11,7 +11,7 @@ enum MobileTransportProtocol {
     static let transferExistenceOperation = "transfer.existence"
     static let transferAssetOperation = "transfer.asset"
     static let transferCompleteOperation = "transfer.complete"
-    static let transferAssetChunkSizeBytes = 2 * 1024 * 1024
+    static let transferAssetChunkSizeBytes = TransferAssetStreamProtocol.chunkSizeBytes
     static let transferAssetStreamStateField = "stream_state"
     static let transferAssetStreamStateStart = "start"
     static let transferAssetStreamStateComplete = "complete"
@@ -159,6 +159,11 @@ actor USBWebSocketTransportRuntime {
     ) async throws {
         guard activeStreamingRequestID == requestID else {
             throw USBTransportRuntimeError.invalidEnvelope
+        }
+        guard chunk.count <= MobileTransportProtocol.transferAssetChunkSizeBytes else {
+            throw USBTransportRuntimeError.sendFailed(
+                message: "Desktop USB transport chunk exceeded the maximum \(MobileTransportProtocol.transferAssetChunkSizeBytes)-byte limit."
+            )
         }
         let connection = try await waitForReadyConnection(timeout: timeout)
         try await sendBinary(chunk, on: connection)
@@ -790,11 +795,17 @@ struct WebSocketMobileTransferClient: MobileTransferClient {
                 timeout: responseTimeout
             )
             do {
-                try await streamAssetFileChunks(
+                try await TransferAssetChunkStreamer.streamFile(
                     fileURL: asset.fileURL,
                     expectedSizeBytes: asset.fileSize,
-                    requestID: requestID
-                )
+                    chunkSizeBytes: MobileTransportProtocol.transferAssetChunkSizeBytes
+                ) { chunkData in
+                    try await runtime.sendStreamingBinaryChunk(
+                        requestID: requestID,
+                        chunk: chunkData,
+                        timeout: responseTimeout
+                    )
+                }
                 let runtimeResponse = try await runtime.finishStreamingRequest(
                     operation: MobileTransportProtocol.transferAssetOperation,
                     requestID: requestID,
@@ -824,54 +835,12 @@ struct WebSocketMobileTransferClient: MobileTransferClient {
             }
         } catch let error as TransferClientError {
             throw error
+        } catch let error as TransferAssetChunkStreamError {
+            throw TransferClientError.transport(message: error.message)
         } catch let error as USBTransportRuntimeError {
             throw TransferClientError.transport(message: error.localizedDescription)
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
-        }
-    }
-
-    private func streamAssetFileChunks(
-        fileURL: URL,
-        expectedSizeBytes: Int,
-        requestID: String
-    ) async throws {
-        guard let inputStream = InputStream(url: fileURL) else {
-            throw TransferClientError.transport(message: "Desktop transfer could not open the asset stream.")
-        }
-        inputStream.open()
-        defer {
-            inputStream.close()
-        }
-
-        var totalBytesRead = 0
-        var readBuffer = [UInt8](
-            repeating: 0,
-            count: MobileTransportProtocol.transferAssetChunkSizeBytes
-        )
-
-        while true {
-            let bytesRead = inputStream.read(&readBuffer, maxLength: readBuffer.count)
-            if bytesRead < 0 {
-                let streamError = inputStream.streamError?.localizedDescription ?? "unknown stream error"
-                throw TransferClientError.transport(message: streamError)
-            }
-            if bytesRead == 0 {
-                break
-            }
-            totalBytesRead += bytesRead
-            let chunkData = Data(readBuffer[0 ..< bytesRead])
-            try await runtime.sendStreamingBinaryChunk(
-                requestID: requestID,
-                chunk: chunkData,
-                timeout: responseTimeout
-            )
-        }
-
-        guard totalBytesRead == expectedSizeBytes else {
-            throw TransferClientError.transport(
-                message: "Desktop transfer stream size did not match expected asset size."
-            )
         }
     }
 

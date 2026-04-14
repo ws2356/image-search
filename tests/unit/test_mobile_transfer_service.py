@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import http.client
 import json
@@ -26,6 +25,13 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_STATE_UPDATED_EVENT,
     MOBILE_TRANSFER_STARTED_EVENT,
     MOBILE_TRANSFER_START_PATH,
+)
+from dt_image_search.mobile.transport.asset_upload_stream import (
+    TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+    TRANSFER_ASSET_STREAM_STATE_CHUNK,
+    TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+    TRANSFER_ASSET_STREAM_STATE_FIELD,
+    TRANSFER_ASSET_STREAM_STATE_START,
 )
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.tools.dts_event_bus import default_bus
@@ -475,15 +481,88 @@ class TestMobileTransferService(unittest.TestCase):
 
     def _post_asset(self, *, asset_metadata: dict[str, object], asset_bytes: bytes) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)
+        request_id = uuid.uuid4().hex
+        start_payload = dict(asset_metadata)
+        start_payload[TRANSFER_ASSET_STREAM_STATE_FIELD] = TRANSFER_ASSET_STREAM_STATE_START
+        start_payload["chunk_size"] = TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES
+
+        start_status, _ = self._post_transfer_asset_json(
+            endpoint=endpoint,
+            request_id=request_id,
+            stream_state=TRANSFER_ASSET_STREAM_STATE_START,
+            payload=start_payload,
+        )
+        self.assertEqual(start_status, 200)
+
+        chunk_start = 0
+        while chunk_start < len(asset_bytes):
+            chunk_end = min(
+                chunk_start + TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+                len(asset_bytes),
+            )
+            chunk = asset_bytes[chunk_start:chunk_end]
+            chunk_start = chunk_end
+            chunk_status, _ = self._post_transfer_asset_binary_chunk(
+                endpoint=endpoint,
+                request_id=request_id,
+                chunk=chunk,
+            )
+            self.assertEqual(chunk_status, 200)
+
+        return self._post_transfer_asset_json(
+            endpoint=endpoint,
+            request_id=request_id,
+            stream_state=TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+            payload={
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                TRANSFER_ASSET_STREAM_STATE_FIELD: TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+            },
+        )
+
+    def _post_transfer_asset_json(
+        self,
+        *,
+        endpoint,
+        request_id: str,
+        stream_state: str,
+        payload: dict[str, object],
+    ) -> tuple[int, dict[str, object]]:
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            encoded_metadata = base64.urlsafe_b64encode(
-                json.dumps(asset_metadata, separators=(",", ":")).encode("utf-8")
-            ).decode("ascii").rstrip("=")
+            encoded_payload = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             connection.request(
                 "POST",
-                f"{MOBILE_TRANSFER_ASSET_PATH}?meta={encoded_metadata}",
-                body=asset_bytes,
+                (
+                    f"{MOBILE_TRANSFER_ASSET_PATH}?request_id={request_id}"
+                    f"&{TRANSFER_ASSET_STREAM_STATE_FIELD}={stream_state}"
+                ),
+                body=encoded_payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            return response.status, json.loads(response.read().decode("utf-8"))
+        finally:
+            connection.close()
+
+    def _post_transfer_asset_binary_chunk(
+        self,
+        *,
+        endpoint,
+        request_id: str,
+        chunk: bytes,
+    ) -> tuple[int, dict[str, object]]:
+        connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
+        try:
+            connection.request(
+                "POST",
+                (
+                    f"{MOBILE_TRANSFER_ASSET_PATH}?request_id={request_id}"
+                    f"&{TRANSFER_ASSET_STREAM_STATE_FIELD}={TRANSFER_ASSET_STREAM_STATE_CHUNK}"
+                ),
+                body=chunk,
                 headers={
                     "Content-Type": "application/octet-stream",
                     "Accept": "application/json",
