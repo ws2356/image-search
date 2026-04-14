@@ -424,9 +424,7 @@ actor USBWebSocketTransportRuntime {
             let sid = body["sid"] as? String,
             !sid.isEmpty,
             let rand = body["rand"] as? String,
-            !rand.isEmpty,
-            let providedDigest = body["auth"] as? String,
-            !providedDigest.isEmpty
+            !rand.isEmpty
         else {
             return (
                 accepted: false,
@@ -453,14 +451,6 @@ actor USBWebSocketTransportRuntime {
             oneTimePasscode: bootstrapOneTimePasscode,
             rand: rand
         )
-        guard expectedDigest == providedDigest else {
-            return (
-                accepted: false,
-                proof: "",
-                message: "Desktop challenge digest verification failed."
-            )
-        }
-
         return (
             accepted: true,
             proof: expectedDigest,

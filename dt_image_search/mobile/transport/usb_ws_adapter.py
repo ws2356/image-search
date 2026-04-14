@@ -339,9 +339,6 @@ class UsbWebSocketTransportAdapter:
             timeout_seconds=1.2,
         )
         rand = secrets.token_hex(16)
-        auth_digest = hashlib.sha256(
-            f"{config.one_time_passcode}{rand}".encode("utf-8")
-        ).hexdigest()
         try:
             websocket_connection = self._websocket_connect(
                 uri=f"ws://127.0.0.1:{tunnel_target.remote_port}",
@@ -349,7 +346,6 @@ class UsbWebSocketTransportAdapter:
                 additional_headers=(
                     ("x-dtis-session-id", config.session_id),
                     ("x-dtis-rand", rand),
-                    ("x-dtis-auth", auth_digest),
                 ),
                 open_timeout=2.0,
                 ping_interval=20.0,
@@ -413,9 +409,6 @@ class UsbWebSocketTransportAdapter:
         config: UsbBootstrapConfig,
     ) -> None:
         challenge_rand = secrets.token_hex(16)
-        challenge_digest = hashlib.sha256(
-            f"{config.one_time_passcode}{challenge_rand}".encode("utf-8")
-        ).hexdigest()
         websocket_connection.send(
             json.dumps(
                 {
@@ -427,7 +420,6 @@ class UsbWebSocketTransportAdapter:
                         "schema": USB_AUTH_CHALLENGE_BODY_SCHEMA,
                         "sid": config.session_id,
                         "rand": challenge_rand,
-                        "auth": challenge_digest,
                     },
                 },
                 separators=(",", ":"),

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import socket
@@ -70,9 +71,16 @@ class _FakeUsbTunnelProvider:
 
 
 class _FakeWebSocketConnection:
-    def __init__(self, incoming_messages: list[str | bytes] | None = None):
+    def __init__(
+        self,
+        incoming_messages: list[str | bytes] | None = None,
+        *,
+        one_time_passcode: str = "482913",
+    ):
         self._incoming_messages = list(incoming_messages or [])
+        self._one_time_passcode = one_time_passcode
         self.sent_messages: list[str] = []
+        self.challenge_requests: list[dict[str, object]] = []
         self.closed = False
 
     def recv(self, timeout: float | None = None) -> str | bytes:
@@ -101,10 +109,18 @@ class _FakeWebSocketConnection:
         if not isinstance(request_id, str) or not isinstance(body, dict):
             self.sent_messages.append(message)
             return
-        challenge_digest = body.get("auth")
-        if not isinstance(challenge_digest, str):
+        challenge_sid = body.get("sid")
+        challenge_rand = body.get("rand")
+        if not isinstance(challenge_sid, str) or not challenge_sid.strip():
             self.sent_messages.append(message)
             return
+        if not isinstance(challenge_rand, str) or not challenge_rand.strip():
+            self.sent_messages.append(message)
+            return
+        self.challenge_requests.append(dict(body))
+        challenge_digest = hashlib.sha256(
+            f"{self._one_time_passcode}{challenge_rand}".encode("utf-8")
+        ).hexdigest()
         challenge_response = json.dumps(
             {
                 "schema": "dtis.mobile-transport.v1",
@@ -281,6 +297,10 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertIsNotNone(adapter.active_tunnel_target)
         self.assertEqual(adapter.active_tunnel_target.device_udid, "ios-001")
         self.assertEqual(adapter.active_tunnel_target.remote_port, 50213)
+        self.assertEqual(len(websocket_connection.challenge_requests), 1)
+        self.assertEqual(websocket_connection.challenge_requests[0]["sid"], "session-001")
+        self.assertTrue(isinstance(websocket_connection.challenge_requests[0]["rand"], str))
+        self.assertNotIn("auth", websocket_connection.challenge_requests[0])
         self.assertEqual(provider.connect_calls, [("ios-001", 50213)])
         self.assertEqual(len(websocket_connector.calls), 1)
         self.assertEqual(
