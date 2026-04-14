@@ -3,17 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import errno
-import json
 import secrets
 import socket
 import threading
-from urllib.parse import parse_qs, urlparse
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_discovery import discover_advertised_hosts
-from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobilePairingToken, MobilePlatform
+from dt_image_search.mobile.mobile_pairing_session import (
+    MobilePairingSessionDraft,
+    MobilePairingToken,
+    MobilePlatform,
+)
 from dt_image_search.mobile.mobile_pairing_store import (
     derive_pairing_key_b64,
     get_or_create_desktop_device_id,
@@ -25,10 +25,26 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_ASSET_PATH,
     MOBILE_TRANSFER_COMPLETE_PATH,
     MOBILE_TRANSFER_EXISTENCE_PATH,
+    MOBILE_TRANSFER_SCHEMA,
     MOBILE_TRANSFER_START_PATH,
     MobileTransferService,
     decode_transfer_asset_metadata,
 )
+from dt_image_search.mobile.transport.contracts import (
+    PAIRING_CLAIM_OPERATION,
+    TRANSFER_ASSET_OPERATION,
+    TRANSFER_COMPLETE_OPERATION,
+    TRANSFER_EXISTENCE_OPERATION,
+    TRANSFER_START_OPERATION,
+    MobileTransportRequest,
+    MobileTransportResponse,
+    TransferAssetUploadPayload,
+)
+from dt_image_search.mobile.transport.lan_http_adapter import (
+    LanHttpTransportAdapter,
+    is_ignorable_socket_disconnect as _transport_is_ignorable_socket_disconnect,
+)
+from dt_image_search.mobile.transport.router import MobileTransportRouter
 from dt_image_search.model.dts_db import create_db_conn
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
@@ -54,10 +70,6 @@ class MobilePairingResult:
     transport: str | None = None
 
 
-class _MobilePairingHTTPServer(ThreadingHTTPServer):
-    daemon_threads = True
-
-
 class MobilePairingService:
     def __init__(
         self,
@@ -72,8 +84,6 @@ class MobilePairingService:
         self._advertised_host = advertised_host
         self._desktop_name = desktop_name or socket.gethostname()
         self._lock = threading.RLock()
-        self._server: _MobilePairingHTTPServer | None = None
-        self._server_thread: threading.Thread | None = None
         self._endpoint_url: str | None = None
         self._endpoint_urls: tuple[str, ...] = tuple()
         self._active_session: MobilePairingSessionDraft | None = None
@@ -82,6 +92,10 @@ class MobilePairingService:
             state=PairingResultState.WAITING,
             message="Scan the QR code from the mobile app to begin pairing.",
         )
+
+        self._transport_router = MobileTransportRouter()
+        self._register_transport_routes()
+        self._lan_transport: LanHttpTransportAdapter | None = None
 
     @property
     def endpoint_url(self) -> str:
@@ -144,22 +158,20 @@ class MobilePairingService:
             )
 
     def shutdown(self) -> None:
-        server_to_stop: _MobilePairingHTTPServer | None
+        transport_to_stop: LanHttpTransportAdapter | None
         with self._lock:
-            server_to_stop = self._server
-            self._server = None
-            self._server_thread = None
+            transport_to_stop = self._lan_transport
+            self._lan_transport = None
             self._endpoint_url = None
             self._endpoint_urls = tuple()
             self._active_session = None
 
-        if server_to_stop is not None:
-            server_to_stop.shutdown()
-            server_to_stop.server_close()
+        if transport_to_stop is not None:
+            transport_to_stop.stop()
 
     def handle_pairing_request(
         self,
-        request_payload: dict[str, str],
+        request_payload: dict[str, object],
         *,
         now: datetime | None = None,
     ) -> tuple[int, dict[str, object]]:
@@ -183,10 +195,18 @@ class MobilePairingService:
                     )
 
             if request_payload["schema"] != PAIRING_PROTOCOL_SCHEMA:
-                return _response(status_code=400, state=PairingResultState.REJECTED, message="The pairing request schema version is unsupported.")
+                return _response(
+                    status_code=400,
+                    state=PairingResultState.REJECTED,
+                    message="The pairing request schema version is unsupported.",
+                )
 
             if request_payload["sid"] != active_session.session_id:
-                return _response(status_code=404, state=PairingResultState.REJECTED, message="The pairing request does not match the active desktop session.")
+                return _response(
+                    status_code=404,
+                    state=PairingResultState.REJECTED,
+                    message="The pairing request does not match the active desktop session.",
+                )
 
             try:
                 requested_platform = MobilePlatform(request_payload["platform"])
@@ -282,212 +302,96 @@ class MobilePairingService:
                 },
             )
 
+    def _register_transport_routes(self) -> None:
+        self._transport_router.register(PAIRING_CLAIM_OPERATION, self._dispatch_pairing_claim_operation)
+        self._transport_router.register(TRANSFER_START_OPERATION, self._dispatch_transfer_start_operation)
+        self._transport_router.register(TRANSFER_EXISTENCE_OPERATION, self._dispatch_transfer_existence_operation)
+        self._transport_router.register(TRANSFER_ASSET_OPERATION, self._dispatch_transfer_asset_operation)
+        self._transport_router.register(TRANSFER_COMPLETE_OPERATION, self._dispatch_transfer_complete_operation)
+
+    def _dispatch_pairing_claim_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
+        if not isinstance(request.payload, dict):
+            return MobileTransportResponse(
+                status_code=400,
+                payload={
+                    "schema": PAIRING_PROTOCOL_SCHEMA,
+                    "status": PairingResultState.REJECTED.value,
+                    "message": "Desktop requires JSON object payloads for pairing requests.",
+                },
+            )
+        status_code, response_payload = self.handle_pairing_request(request.payload)
+        return MobileTransportResponse(status_code=status_code, payload=response_payload)
+
+    def _dispatch_transfer_start_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
+        if not isinstance(request.payload, dict):
+            return _transfer_object_payload_error(
+                message="Desktop requires JSON object payloads for transfer requests.",
+            )
+        status_code, response_payload = self._transfer_service.handle_start_request(request.payload)
+        return MobileTransportResponse(status_code=status_code, payload=response_payload)
+
+    def _dispatch_transfer_existence_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
+        if not isinstance(request.payload, dict):
+            return _transfer_object_payload_error(
+                message="Desktop requires JSON object payloads for transfer existence requests.",
+            )
+        status_code, response_payload = self._transfer_service.handle_asset_existence_request(request.payload)
+        return MobileTransportResponse(status_code=status_code, payload=response_payload)
+
+    def _dispatch_transfer_asset_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
+        if not isinstance(request.payload, TransferAssetUploadPayload):
+            return MobileTransportResponse(
+                status_code=400,
+                payload={
+                    "schema": MOBILE_TRANSFER_SCHEMA,
+                    "status": "rejected",
+                    "message": "Desktop did not receive the transfer asset metadata.",
+                },
+            )
+
+        status_code, response_payload = self._transfer_service.handle_asset_upload(
+            metadata_payload=request.payload.metadata_payload,
+            body_stream=request.payload.body_stream,
+            content_length=request.payload.content_length,
+        )
+        return MobileTransportResponse(status_code=status_code, payload=response_payload)
+
+    def _dispatch_transfer_complete_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
+        if not isinstance(request.payload, dict):
+            return _transfer_object_payload_error(
+                message="Desktop requires JSON object payloads for transfer completion requests.",
+            )
+        status_code, response_payload = self._transfer_service.handle_complete_request(request.payload)
+        return MobileTransportResponse(status_code=status_code, payload=response_payload)
+
     def _ensure_server_started(self) -> None:
         with self._lock:
-            if self._server is not None:
-                return
+            if self._lan_transport is None:
+                self._lan_transport = self._build_lan_transport()
+            endpoint_info = self._lan_transport.start()
+            self._endpoint_url = endpoint_info.endpoint_url
+            self._endpoint_urls = endpoint_info.endpoint_urls
 
-            handler_class = _build_handler(self)
-            self._server = _MobilePairingHTTPServer((self._listen_host, 0), handler_class)
-            port = self._server.server_address[1]
-            advertised_hosts = _resolve_advertised_hosts(self._advertised_host)
-            self._endpoint_urls = tuple(_format_pairing_endpoint_url(host, port) for host in advertised_hosts)
-            self._endpoint_url = self._endpoint_urls[0]
-            self._server_thread = threading.Thread(
-                target=self._server.serve_forever,
-                name="mobile-pairing-bootstrap",
-                daemon=True,
-            )
-            self._server_thread.start()
-            _log(
-                "info",
-                message=(
-                    "MobilePairingService/_ensure_server_started: listening for pairing requests on "
-                    f"{self._endpoint_url}"
-                ),
-            )
+    def _build_lan_transport(self) -> LanHttpTransportAdapter:
+        return LanHttpTransportAdapter(
+            listen_host=self._listen_host,
+            advertised_host=self._advertised_host,
+            router=self._transport_router,
+            resolve_advertised_hosts=_resolve_advertised_hosts,
+            format_pairing_endpoint_url=_format_pairing_endpoint_url,
+            decode_transfer_asset_metadata=decode_transfer_asset_metadata,
+            pairing_claim_path=PAIRING_CLAIM_PATH,
+            pairing_protocol_schema=PAIRING_PROTOCOL_SCHEMA,
+            pairing_rejected_status=PairingResultState.REJECTED.value,
+            transfer_schema=MOBILE_TRANSFER_SCHEMA,
+            transfer_start_path=MOBILE_TRANSFER_START_PATH,
+            transfer_existence_path=MOBILE_TRANSFER_EXISTENCE_PATH,
+            transfer_asset_path=MOBILE_TRANSFER_ASSET_PATH,
+            transfer_complete_path=MOBILE_TRANSFER_COMPLETE_PATH,
+            log_handler=_log,
+        )
 
 
-def _build_handler(service: MobilePairingService) -> type[BaseHTTPRequestHandler]:
-    class PairingHandler(BaseHTTPRequestHandler):
-        def handle_one_request(self) -> None:
-            try:
-                super().handle_one_request()
-            except OSError as exc:
-                if not _is_ignorable_socket_disconnect(exc):
-                    raise
-                self.close_connection = True
-                _try_log(
-                    "debug",
-                    message=(
-                        "MobilePairingService/http: ignoring disconnected client during HTTP request handling "
-                        f"from {self.client_address}: {exc}"
-                    ),
-                )
-
-        def do_POST(self) -> None:
-            try:
-                parsed_path = urlparse(self.path)
-                if parsed_path.path == PAIRING_CLAIM_PATH:
-                    request_payload = self._read_json_payload(
-                        schema=PAIRING_PROTOCOL_SCHEMA,
-                        status=PairingResultState.REJECTED.value,
-                        parse_error_message="Desktop could not parse the pairing request JSON payload.",
-                        object_error_message="Desktop requires JSON object payloads for pairing requests.",
-                    )
-                    if request_payload is None:
-                        return
-
-                    status_code, response_payload = service.handle_pairing_request(request_payload)
-                    self._write_json_response(status_code, response_payload)
-                    return
-
-                if parsed_path.path == MOBILE_TRANSFER_START_PATH:
-                    request_payload = self._read_json_payload(
-                        schema="dtis.mobile-transfer.v1",
-                        status="rejected",
-                        parse_error_message="Desktop could not parse the transfer request JSON payload.",
-                        object_error_message="Desktop requires JSON object payloads for transfer requests.",
-                    )
-                    if request_payload is None:
-                        return
-
-                    status_code, response_payload = service._transfer_service.handle_start_request(request_payload)
-                    self._write_json_response(status_code, response_payload)
-                    return
-
-                if parsed_path.path == MOBILE_TRANSFER_EXISTENCE_PATH:
-                    request_payload = self._read_json_payload(
-                        schema="dtis.mobile-transfer.v1",
-                        status="rejected",
-                        parse_error_message="Desktop could not parse the transfer existence JSON payload.",
-                        object_error_message="Desktop requires JSON object payloads for transfer existence requests.",
-                    )
-                    if request_payload is None:
-                        return
-
-                    status_code, response_payload = service._transfer_service.handle_asset_existence_request(request_payload)
-                    self._write_json_response(status_code, response_payload)
-                    return
-
-                if parsed_path.path == MOBILE_TRANSFER_COMPLETE_PATH:
-                    request_payload = self._read_json_payload(
-                        schema="dtis.mobile-transfer.v1",
-                        status="rejected",
-                        parse_error_message="Desktop could not parse the transfer completion JSON payload.",
-                        object_error_message="Desktop requires JSON object payloads for transfer completion requests.",
-                    )
-                    if request_payload is None:
-                        return
-
-                    status_code, response_payload = service._transfer_service.handle_complete_request(request_payload)
-                    self._write_json_response(status_code, response_payload)
-                    return
-
-                if parsed_path.path == MOBILE_TRANSFER_ASSET_PATH:
-                    query_parameters = parse_qs(parsed_path.query, keep_blank_values=False)
-                    encoded_metadata = query_parameters.get("meta", [None])[0]
-                    if not encoded_metadata:
-                        self._write_json_response(
-                            400,
-                            {
-                                "schema": "dtis.mobile-transfer.v1",
-                                "status": "rejected",
-                                "message": "Desktop did not receive the transfer asset metadata.",
-                            },
-                        )
-                        return
-                    try:
-                        metadata_payload = decode_transfer_asset_metadata(encoded_metadata)
-                    except (OSError, ValueError, json.JSONDecodeError):
-                        self._write_json_response(
-                            400,
-                            {
-                                "schema": "dtis.mobile-transfer.v1",
-                                "status": "rejected",
-                                "message": "Desktop could not parse the transfer asset metadata.",
-                            },
-                        )
-                        return
-
-                    content_length = int(self.headers.get("Content-Length", "0"))
-                    status_code, response_payload = service._transfer_service.handle_asset_upload(
-                        metadata_payload=metadata_payload,
-                        body_stream=self.rfile,
-                        content_length=content_length,
-                    )
-                    self._write_json_response(status_code, response_payload)
-                    return
-
-                if parsed_path.path != PAIRING_CLAIM_PATH:
-                    self._write_json_response(404, {"schema": PAIRING_PROTOCOL_SCHEMA, "status": PairingResultState.REJECTED.value, "message": "Unknown pairing endpoint."})
-                    return
-            except Exception as exc:
-                _try_log(
-                    "error",
-                    error_type=type(exc).__name__,
-                    where="mobile_pairing_service.PairingHandler.do_POST",
-                    message=f"Unhandled pairing request error: {exc}",
-                )
-                if not self.wfile.closed:
-                    self._write_json_response(
-                        500,
-                        {
-                            "schema": PAIRING_PROTOCOL_SCHEMA,
-                            "status": PairingResultState.REJECTED.value,
-                            "message": "Desktop failed while processing the pairing request. Retry pairing and check desktop logs if the issue persists.",
-                        },
-                    )
-
-        def log_message(self, format: str, *args: object) -> None:
-            _try_log("debug", message=f"MobilePairingService/http: {format % args}")
-
-        def _read_json_payload(
-            self,
-            *,
-            schema: str,
-            status: str,
-            parse_error_message: str,
-            object_error_message: str,
-        ) -> dict[str, object] | None:
-            content_length = int(self.headers.get("Content-Length", "0"))
-            raw_payload = self.rfile.read(content_length)
-            try:
-                request_payload = json.loads(raw_payload.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                self._write_json_response(
-                    400,
-                    {
-                        "schema": schema,
-                        "status": status,
-                        "message": parse_error_message,
-                    },
-                )
-                return None
-
-            if not isinstance(request_payload, dict):
-                self._write_json_response(
-                    400,
-                    {
-                        "schema": schema,
-                        "status": status,
-                        "message": object_error_message,
-                    },
-                )
-                return None
-            return request_payload
-
-        def _write_json_response(self, status_code: int, payload: dict[str, object]) -> None:
-            encoded_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-            self.close_connection = True
-            self.send_response(status_code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Connection", "close")
-            self.send_header("Content-Length", str(len(encoded_body)))
-            self.end_headers()
-            self.wfile.write(encoded_body)
-
-    return PairingHandler
 def _response(
     *,
     status_code: int,
@@ -499,6 +403,17 @@ def _response(
         {
             "schema": PAIRING_PROTOCOL_SCHEMA,
             "status": state.value,
+            "message": message,
+        },
+    )
+
+
+def _transfer_object_payload_error(*, message: str) -> MobileTransportResponse:
+    return MobileTransportResponse(
+        status_code=400,
+        payload={
+            "schema": MOBILE_TRANSFER_SCHEMA,
+            "status": "rejected",
             "message": message,
         },
     )
@@ -518,22 +433,7 @@ def _format_pairing_endpoint_url(host: str, port: int) -> str:
 
 
 def _is_ignorable_socket_disconnect(exc: BaseException) -> bool:
-    if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
-        return True
-    return isinstance(exc, OSError) and exc.errno in {
-        errno.EPIPE,
-        errno.ECONNABORTED,
-        errno.ECONNRESET,
-        errno.ENOTCONN,
-    }
-
-
-def _try_log(severity: str, *, message: str, error_type: str = "", where: str = "") -> None:
-    try:
-        _log(severity, message=message, error_type=error_type, where=where)
-    except Exception:
-        # Pairing HTTP request handling must not fail just because telemetry logging failed.
-        return
+    return _transport_is_ignorable_socket_disconnect(exc)
 
 
 def _utc_now(now: datetime | None = None) -> datetime:
