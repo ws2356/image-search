@@ -851,11 +851,25 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         }
 
         let hasAdjustmentData = resources.contains(where: { $0.type == .adjustmentData })
+        let sourceFilename = Self.preferredOriginalFilename(
+            from: resources,
+            fallback: descriptor.filename
+        )
         let preparedExport: PreparedExportFile
         if asset.mediaType == .image {
-            preparedExport = try await Self.exportCurrentImage(asset: asset, descriptor: descriptor)
+            preparedExport = try await Self.exportCurrentImage(
+                asset: asset,
+                descriptor: descriptor,
+                sourceFilename: sourceFilename,
+                renderedFilename: resource.originalFilename
+            )
         } else if asset.mediaType == .video, hasAdjustmentData {
-            preparedExport = try await Self.exportCurrentVideo(asset: asset, descriptor: descriptor)
+            preparedExport = try await Self.exportCurrentVideo(
+                asset: asset,
+                descriptor: descriptor,
+                sourceFilename: sourceFilename,
+                renderedFilename: resource.originalFilename
+            )
         } else {
             preparedExport = try await Self.exportResource(
                 resource: resource,
@@ -966,7 +980,9 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
 
     private static func exportCurrentImage(
         asset: PHAsset,
-        descriptor: TransferAssetDescriptor
+        descriptor: TransferAssetDescriptor,
+        sourceFilename: String,
+        renderedFilename: String
     ) async throws -> PreparedExportFile {
         let requestOptions = PHImageRequestOptions()
         requestOptions.deliveryMode = .highQualityFormat
@@ -1011,12 +1027,13 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         let outputExtension = renderedType?.preferredFilenameExtension ?? (descriptor.filename as NSString).pathExtension
         let exportURL = temporaryExportURL(pathExtension: outputExtension)
         try renderedImage.0.write(to: exportURL, options: .atomic)
-        let exportedFilename = filename(
-            for: descriptor.filename,
+        let exportedFilename = editedExportFilename(
+            sourceFilename: sourceFilename,
+            renderedFilename: renderedFilename,
             pathExtension: outputExtension
         )
         TransferDebugLogger.debug(
-            "Exported image with current edits \(TransferDebugLogger.assetSummary(for: descriptor)) data_uti=\(renderedImage.1 ?? "-")"
+            "Exported image with current edits \(TransferDebugLogger.assetSummary(for: descriptor)) source_filename=\(sourceFilename) rendered_filename=\(renderedFilename) data_uti=\(renderedImage.1 ?? "-")"
         )
         return PreparedExportFile(
             fileURL: exportURL,
@@ -1027,7 +1044,9 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
 
     private static func exportCurrentVideo(
         asset: PHAsset,
-        descriptor: TransferAssetDescriptor
+        descriptor: TransferAssetDescriptor,
+        sourceFilename: String,
+        renderedFilename: String
     ) async throws -> PreparedExportFile {
         let requestOptions = PHVideoRequestOptions()
         requestOptions.version = .current
@@ -1122,12 +1141,13 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         }
         let outputFileType = AVFileType(rawValue: exportOutput.1)
         let outputExtension = videoFilenameExtension(for: outputFileType) ?? (descriptor.filename as NSString).pathExtension
-        let exportedFilename = filename(
-            for: descriptor.filename,
+        let exportedFilename = editedExportFilename(
+            sourceFilename: sourceFilename,
+            renderedFilename: renderedFilename,
             pathExtension: outputExtension
         )
         TransferDebugLogger.debug(
-            "Exported edited video composition \(TransferDebugLogger.assetSummary(for: descriptor)) output_type=\(exportOutput.1)"
+            "Exported edited video composition \(TransferDebugLogger.assetSummary(for: descriptor)) source_filename=\(sourceFilename) rendered_filename=\(renderedFilename) output_type=\(exportOutput.1)"
         )
         return PreparedExportFile(
             fileURL: exportOutput.0,
@@ -1202,10 +1222,63 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         guard !cleanedExtension.isEmpty else {
             return sourceFilename
         }
-        let sourcePath = sourceFilename as NSString
-        let stem = sourcePath.deletingPathExtension
-        let normalizedStem = stem.isEmpty ? sourceFilename : stem
+        let normalizedStem = filenameStem(for: sourceFilename)
         return "\(normalizedStem).\(cleanedExtension)"
+    }
+
+    private static func editedExportFilename(
+        sourceFilename: String,
+        renderedFilename: String,
+        pathExtension: String
+    ) -> String {
+        let cleanedExtension = pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedExtension.isEmpty else {
+            return sourceFilename
+        }
+        let sourceStem = filenameStem(for: sourceFilename)
+        let renderedStem = filenameStem(for: renderedFilename)
+        guard !sourceStem.isEmpty else {
+            guard !renderedStem.isEmpty else {
+                return sourceFilename
+            }
+            return "\(renderedStem).\(cleanedExtension)"
+        }
+        guard !renderedStem.isEmpty, renderedStem.caseInsensitiveCompare(sourceStem) != .orderedSame else {
+            return "\(sourceStem).\(cleanedExtension)"
+        }
+        return "\(sourceStem).\(renderedStem).\(cleanedExtension)"
+    }
+
+    private static func preferredOriginalFilename(from resources: [PHAssetResource], fallback: String) -> String {
+        let preferredTypes: [PHAssetResourceType] = [
+            .photo,
+            .video,
+            .fullSizePhoto,
+            .fullSizeVideo,
+        ]
+        for resourceType in preferredTypes {
+            if let resource = resources.first(where: {
+                $0.type == resourceType && !isGenericRenderFilename($0.originalFilename)
+            }) {
+                return resource.originalFilename
+            }
+        }
+        for resourceType in preferredTypes {
+            if let resource = resources.first(where: { $0.type == resourceType }) {
+                return resource.originalFilename
+            }
+        }
+        return fallback
+    }
+
+    private static func isGenericRenderFilename(_ filename: String) -> Bool {
+        let stem = filenameStem(for: filename).lowercased()
+        return stem == "fullsizerender" || stem == "renderedvideo"
+    }
+
+    private static func filenameStem(for filename: String) -> String {
+        let stem = (filename as NSString).deletingPathExtension
+        return stem.isEmpty ? filename : stem
     }
 
     private static func sha1Hex(for fileURL: URL) throws -> String {
