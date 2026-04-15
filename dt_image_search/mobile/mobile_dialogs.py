@@ -26,7 +26,6 @@ from dt_image_search.mobile.mobile_pairing_session import (
     MobilePairingToken,
     MobilePlatform,
     MobileSourceType,
-    platform_display_name,
 )
 from dt_image_search.telemetry.telemetry_client import log
 
@@ -342,11 +341,6 @@ class ParentFolderSelectionDialog(QDialog):
 
 
 class PairingQrCard(QFrame):
-    _TIMER_GREEN = "#22c55e"
-    _TIMER_ORANGE = "#f59e0b"
-    _TIMER_RED = "#ef4444"
-    _WARNING_SECONDS = 120
-
     def __init__(
         self,
         platform: MobilePlatform,
@@ -367,16 +361,6 @@ class PairingQrCard(QFrame):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(10)
 
-        badge_row = QHBoxLayout()
-        badge_icon = "🍎" if platform == MobilePlatform.IOS else "🤖"
-        badge_label = QLabel(f" {badge_icon}  {platform_display_name(platform)}")
-        badge_label.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: #333; border: none; background: transparent;"
-        )
-        badge_row.addWidget(badge_label)
-        badge_row.addStretch()
-        layout.addLayout(badge_row)
-
         self.qr_label = QLabel()
         self.qr_label.setFixedSize(200, 200)
         self.qr_label.setAlignment(Qt.AlignCenter)
@@ -385,45 +369,29 @@ class PairingQrCard(QFrame):
         )
         layout.addWidget(self.qr_label, alignment=Qt.AlignCenter)
 
-        timer_row = QHBoxLayout()
-        timer_row.setSpacing(6)
-        self._timer_dot = QLabel("●")
-        self._timer_dot.setStyleSheet(f"color: {self._TIMER_GREEN}; font-size: 10px; border: none; background: transparent;")
-        timer_row.addWidget(self._timer_dot)
-        self.status_label = QLabel()
-        self.status_label.setStyleSheet(
-            "font-size: 13px; color: #1f2937; font-variant-numeric: tabular-nums; border: none; background: transparent;"
-        )
-        timer_row.addWidget(self.status_label)
-        timer_row.addStretch()
-        layout.addLayout(timer_row)
-
-        self.refresh_button = QPushButton("↻  Refresh QR")
-        self.refresh_button.setCursor(Qt.PointingHandCursor)
-        self.refresh_button.setStyleSheet(
+        self.refresh_overlay_button = QPushButton("Refresh", self.qr_label)
+        self.refresh_overlay_button.setCursor(Qt.PointingHandCursor)
+        self.refresh_overlay_button.setFixedSize(200, 200)
+        self.refresh_overlay_button.move(0, 0)
+        self.refresh_overlay_button.setStyleSheet(
             """
             QPushButton {
-                background: #007AFF; color: white; border: none; border-radius: 6px;
-                padding: 6px 14px; font-size: 13px; font-weight: 600;
+                background: rgba(244, 247, 255, 185);
+                color: #1f2937;
+                border: 1px solid rgba(148, 163, 184, 180);
+                border-radius: 8px;
+                font-size: 18px;
+                font-weight: 700;
             }
-            QPushButton:hover { background: #0070ef; }
+            QPushButton:hover {
+                background: rgba(244, 247, 255, 210);
+            }
             """
         )
-        self.refresh_button.clicked.connect(self._refresh_token)
-        self.refresh_button.hide()
-        layout.addWidget(self.refresh_button, alignment=Qt.AlignLeft)
-
-        instructions = QLabel(self._instructions_text(platform))
-        instructions.setWordWrap(True)
-        instructions.setStyleSheet("color: #666666; font-size: 12px; border: none; background: transparent;")
-        layout.addWidget(instructions)
+        self.refresh_overlay_button.clicked.connect(self._refresh_token)
+        self.refresh_overlay_button.hide()
 
         self.set_token(token)
-
-    def _instructions_text(self, platform: MobilePlatform) -> str:
-        if platform == MobilePlatform.ANDROID:
-            return "Scan from Album Transporter on Android.\nUSB preferred · Wi-Fi LAN fallback"
-        return "Scan from Album Transporter on iPhone / iPad.\nUSB preferred · Wi-Fi LAN fallback"
 
     def set_token(self, token: MobilePairingToken) -> None:
         self._token = token
@@ -434,35 +402,9 @@ class PairingQrCard(QFrame):
     def update_clock(self, now: datetime) -> None:
         expired = self._token.is_expired(now)
         if expired:
-            self.status_label.setText("Expired — refresh to generate a new code")
-            self.status_label.setStyleSheet(
-                f"color: {self._TIMER_RED}; font-size: 13px; font-weight: 600; border: none; background: transparent;"
-            )
-            self._timer_dot.setStyleSheet(f"color: {self._TIMER_RED}; font-size: 10px; border: none; background: transparent;")
-            self.refresh_button.show()
-            self.qr_label.setStyleSheet(
-                "background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; opacity: 0.45;"
-            )
+            self.refresh_overlay_button.show()
         else:
-            seconds_remaining = self._token.seconds_remaining(now)
-            minutes = seconds_remaining // 60
-            seconds = seconds_remaining % 60
-            self.status_label.setText(f"Expires in {minutes:02d}:{seconds:02d}")
-            self.refresh_button.hide()
-            self.qr_label.setStyleSheet(
-                "background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;"
-            )
-            if seconds_remaining <= self._WARNING_SECONDS:
-                color = self._TIMER_ORANGE
-                self.status_label.setStyleSheet(
-                    f"color: {color}; font-size: 13px; font-weight: 600; border: none; background: transparent;"
-                )
-            else:
-                color = self._TIMER_GREEN
-                self.status_label.setStyleSheet(
-                    f"color: #1f2937; font-size: 13px; border: none; background: transparent;"
-                )
-            self._timer_dot.setStyleSheet(f"color: {color}; font-size: 10px; border: none; background: transparent;")
+            self.refresh_overlay_button.hide()
 
     def _refresh_token(self) -> None:
         refreshed_token = self._on_refresh(self._platform)
@@ -502,7 +444,7 @@ class MobilePairingDialog(QDialog):
         title.setStyleSheet("color: #1f2937;")
         layout.addWidget(title)
 
-        subtitle = QLabel("Scan this QR code from Album Transporter on iPhone / iPad. The code is valid for 15 minutes.")
+        subtitle = QLabel("Scan this QR code from Album Transporter on your mobile device. The code is valid for 15 minutes.")
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 13px;")
         layout.addWidget(subtitle)
@@ -617,8 +559,8 @@ class MobilePairingDialog(QDialog):
                 QPushButton:hover { background: #0070ef; }
                 """
             )
-            self.qr_card.refresh_button.setEnabled(False)
-            self.qr_card.refresh_button.hide()
+            self.qr_card.refresh_overlay_button.setEnabled(False)
+            self.qr_card.refresh_overlay_button.hide()
             if not self._auto_accept_requested:
                 self._auto_accept_requested = True
                 QTimer.singleShot(0, self.accept)
