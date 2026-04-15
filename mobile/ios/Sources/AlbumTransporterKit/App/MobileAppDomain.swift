@@ -331,6 +331,7 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
     var totalCount: Int
     var failedCount: Int
     var transport: TransferTransport
+    var transferSpeedText: String? = nil
     var etaDescription: String?
     var statusMessage: String
     var guidanceMessage: String
@@ -348,6 +349,7 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
         totalCount: 930,
         failedCount: 3,
         transport: .lan,
+        transferSpeedText: "4.80 MB/s",
         etaDescription: "17 min remaining",
         statusMessage: "Backing up local photos and videos to the paired desktop.",
         guidanceMessage: "USB is generally faster and more stable than Wi-Fi LAN. Once desktop support lands, the app should prefer USB when it is available.",

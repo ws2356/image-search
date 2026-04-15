@@ -503,7 +503,7 @@ struct TransferSessionView: View {
                 Text("\(progressPercent)%")
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(Color(hex: 0x1C1C1E))
-                Text("\(snapshot.transferredCount) of \(snapshot.totalCount)")
+                Text(snapshot.transferSpeedText ?? "0.00 MB/s")
                     .font(.system(size: 13))
                     .foregroundStyle(Color(hex: 0x6E6E73))
             }

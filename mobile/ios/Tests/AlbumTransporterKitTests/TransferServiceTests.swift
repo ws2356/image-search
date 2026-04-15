@@ -241,6 +241,7 @@ final class TransferServiceTests: XCTestCase {
 
         XCTAssertEqual(recordedSnapshots.map(\.totalCount), [2, 2, 2])
         XCTAssertEqual(recordedSnapshots.map(\.transferredCount), [0, 1, 2])
+        XCTAssertTrue(recordedSnapshots.allSatisfy { $0.transferSpeedText != nil })
         XCTAssertEqual(finalSnapshot.transferredCount, 2)
         XCTAssertEqual(finalSnapshot.totalCount, 2)
     }

@@ -961,12 +961,19 @@ private struct PreparedTransferAsset: Sendable {
 }
 
 actor PhotoLibraryTransferService: TransferService {
+    private struct TransferSpeedSample {
+        let timestamp: Date
+        let bytes: Int
+    }
+
+    private static let transferSpeedWindowSeconds: TimeInterval = 10
     private let assetSource: TransferAssetSource
     private let transferClient: MobileTransferClient
     private let transportResolver: (any TransferTransportResolving)?
     private let trustedDesktopStore: TrustedDesktopStore
     private let lookupBatchSize: Int
     private let lookupBatchByteThresholdBytes: Int
+    private var transferSpeedSamples: [TransferSpeedSample] = []
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
 
@@ -1090,6 +1097,7 @@ actor PhotoLibraryTransferService: TransferService {
                 "Starting backup run desktop=\(trustedDesktop.desktopName) session_id=\(trustedDesktop.lastSessionID) asset_count=\(assets.count)"
             )
             try await transferClient.startSession(desktop: trustedDesktop, totalAssets: assets.count)
+            resetTransferSpeedWindow()
 
             var transferredCount = 0
             var failedCount = 0
@@ -1218,6 +1226,7 @@ actor PhotoLibraryTransferService: TransferService {
                 totalCount: assets.count,
                 failedCount: failedCount,
                 transport: completedTransport,
+                transferSpeedText: currentTransferSpeedText(),
                 etaDescription: nil,
                 statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
                 guidanceMessage: failedCount == 0
@@ -1339,10 +1348,21 @@ actor PhotoLibraryTransferService: TransferService {
                 let response = try await transferClient.uploadAsset(preparedAsset.exportedAsset, desktop: desktop)
                 switch response.status {
                 case .stored, .skipped:
-                    transferredCount += 1
-                    TransferDebugLogger.debug(
-                        "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                    )
+                    switch response.status {
+                    case .stored:
+                        transferredCount += 1
+                        recordTransferredBytes(preparedAsset.exportedAsset.fileSize)
+                        TransferDebugLogger.debug(
+                            "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                        )
+                    case .skipped:
+                        transferredCount += 1
+                        TransferDebugLogger.debug(
+                            "Skipped transfer after desktop confirmation \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                        )
+                    case .accepted, .completed, .rejected:
+                        break
+                    }
                 case .accepted, .completed, .rejected:
                     failedCount += 1
                     TransferDebugLogger.error(
@@ -1383,6 +1403,7 @@ actor PhotoLibraryTransferService: TransferService {
             totalCount: totalCount,
             failedCount: failedCount,
             transport: transport,
+            transferSpeedText: currentTransferSpeedText(),
             etaDescription: nil,
             statusMessage: "Backup stopped after finishing the current asset upload.",
             guidanceMessage: "Start a new backup session to continue sending the remaining accessible items.",
@@ -1431,6 +1452,7 @@ actor PhotoLibraryTransferService: TransferService {
             totalCount: totalCount,
             failedCount: failedCount,
             transport: transport,
+            transferSpeedText: currentTransferSpeedText(),
             etaDescription: nil,
             statusMessage: totalCount == 0
                 ? "Preparing the local media backup with the paired desktop."
@@ -1450,6 +1472,44 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func cleanupExportedAsset(_ asset: ExportedTransferAsset) {
         try? FileManager.default.removeItem(at: asset.fileURL)
+    }
+
+    private func resetTransferSpeedWindow() {
+        transferSpeedSamples.removeAll(keepingCapacity: true)
+    }
+
+    private func recordTransferredBytes(_ bytes: Int) {
+        let normalizedBytes = max(bytes, 0)
+        guard normalizedBytes > 0 else {
+            return
+        }
+        let now = Date()
+        transferSpeedSamples.append(
+            TransferSpeedSample(
+                timestamp: now,
+                bytes: normalizedBytes
+            )
+        )
+        pruneTransferSpeedSamples(now: now)
+    }
+
+    private func currentTransferSpeedText() -> String {
+        let now = Date()
+        pruneTransferSpeedSamples(now: now)
+        let totalBytes = transferSpeedSamples.reduce(0) { partial, sample in
+            partial + sample.bytes
+        }
+        let speedMBps =
+            (Double(totalBytes) / 1_048_576.0)
+            / Self.transferSpeedWindowSeconds
+        return String(format: "%.2f MB/s", speedMBps)
+    }
+
+    private func pruneTransferSpeedSamples(now: Date) {
+        let cutoff = now.addingTimeInterval(-Self.transferSpeedWindowSeconds)
+        transferSpeedSamples.removeAll { sample in
+            sample.timestamp < cutoff
+        }
     }
 }
 
