@@ -136,6 +136,9 @@ class Pymobiledevice3UsbTunnelProvider:
             raise UsbTunnelConnectError(
                 f"Desktop could not inspect USB device '{normalized_udid}' via usbmuxd.",
             ) from exc
+        except Exception as exc:
+            print(f"Unexpected error while selecting USB device '{normalized_udid}': {exc!r}")
+            raise
 
         if mux_device is None:
             raise UsbTunnelDeviceNotFoundError(

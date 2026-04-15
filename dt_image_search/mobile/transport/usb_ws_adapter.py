@@ -366,7 +366,8 @@ class UsbWebSocketTransportAdapter:
                 max_size=TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
                 proxy=None,
             )
-        except (OSError, RuntimeError, TimeoutError, WebSocketException):
+        except (OSError, RuntimeError, TimeoutError, WebSocketException) as exec:
+            print(f"Unexpected error while establishing USB websocket connection: {exec!r}")
             connected_socket.close()
             raise
         remote_address = f"usb://{tunnel_target.device_udid}:{tunnel_target.remote_port}"
