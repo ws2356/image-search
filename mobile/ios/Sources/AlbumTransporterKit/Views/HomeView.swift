@@ -147,10 +147,10 @@ struct HomeView: View {
                 }
 
                 HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "bolt.horizontal.fill")
+                    Image(systemName: "cable.connector")
                         .foregroundStyle(Color(hex: 0x3B5FC0))
                         .font(.system(size: 13))
-                    Text("USB auto-detected — plug in for faster Wi-Fi-independent transfer.")
+                    Text("USB backups are usually up to 5× faster than Wi-Fi. Plug in anytime—Album Transporter will switch to USB automatically.")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(hex: 0x3B5FC0))
                         .lineSpacing(2)
