@@ -353,6 +353,71 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(uploadedAssetIDs, ["ph://asset-001", "ph://asset-002", "ph://asset-003"])
         XCTAssertEqual(lookupBatchSizes, [2, 1])
     }
+
+    func test_photo_library_transfer_service_flushes_batch_when_byte_threshold_is_reached() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-002",
+                    assetVersion: "v2",
+                    filename: "IMG_0002.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_710),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_710)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-003",
+                    assetVersion: "v3",
+                    filename: "IMG_0003.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_810),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_810)
+                ),
+            ],
+            exportedSizeByAssetID: [
+                "ph://asset-001": 12,
+                "ph://asset-002": 12,
+                "ph://asset-003": 12,
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient()
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore,
+            lookupBatchSize: 32,
+            lookupBatchByteThresholdBytes: 24
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let uploadedAssetIDs = await transferClient.uploadedAssetIDs()
+        let lookupBatchSizes = await transferClient.lookupBatchSizes()
+
+        XCTAssertEqual(snapshot.transferredCount, 3)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(uploadedAssetIDs, ["ph://asset-001", "ph://asset-002", "ph://asset-003"])
+        XCTAssertEqual(lookupBatchSizes, [2, 1])
+    }
 }
 
 private actor InMemoryTransferTrustedDesktopStore: TrustedDesktopStore {
@@ -478,10 +543,16 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
 private actor StaticTransferAssetSource: TransferAssetSource {
     private let descriptors: [TransferAssetDescriptor]
     private let failingAssetIDs: Set<String>
+    private let exportedSizeByAssetID: [String: Int]
 
-    init(descriptors: [TransferAssetDescriptor], failingAssetIDs: Set<String> = []) {
+    init(
+        descriptors: [TransferAssetDescriptor],
+        failingAssetIDs: Set<String> = [],
+        exportedSizeByAssetID: [String: Int] = [:]
+    ) {
         self.descriptors = descriptors
         self.failingAssetIDs = failingAssetIDs
+        self.exportedSizeByAssetID = exportedSizeByAssetID
     }
 
     func fetchAssets() async throws -> [TransferAssetDescriptor] {
@@ -492,7 +563,8 @@ private actor StaticTransferAssetSource: TransferAssetSource {
         if failingAssetIDs.contains(descriptor.assetID) {
             throw TransferClientError.transport(message: "Synthetic export failure for tests.")
         }
-        let payload = Data(descriptor.assetID.utf8)
+        let payloadSize = max(1, exportedSizeByAssetID[descriptor.assetID] ?? descriptor.assetID.utf8.count)
+        let payload = Data(repeating: 0x5a, count: payloadSize)
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString.lowercased())
             .appendingPathExtension((descriptor.filename as NSString).pathExtension)

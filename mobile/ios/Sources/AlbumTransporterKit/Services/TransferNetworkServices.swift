@@ -966,6 +966,7 @@ actor PhotoLibraryTransferService: TransferService {
     private let transportResolver: (any TransferTransportResolving)?
     private let trustedDesktopStore: TrustedDesktopStore
     private let lookupBatchSize: Int
+    private let lookupBatchByteThresholdBytes: Int
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
 
@@ -973,13 +974,15 @@ actor PhotoLibraryTransferService: TransferService {
         assetSource: TransferAssetSource,
         transferClient: MobileTransferClient,
         trustedDesktopStore: TrustedDesktopStore,
-        lookupBatchSize: Int = 32
+        lookupBatchSize: Int = 32,
+        lookupBatchByteThresholdBytes: Int = 100 * 1024 * 1024
     ) {
         self.assetSource = assetSource
         self.transferClient = transferClient
         self.transportResolver = transferClient as? any TransferTransportResolving
         self.trustedDesktopStore = trustedDesktopStore
         self.lookupBatchSize = max(1, lookupBatchSize)
+        self.lookupBatchByteThresholdBytes = max(1, lookupBatchByteThresholdBytes)
     }
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
@@ -1091,6 +1094,7 @@ actor PhotoLibraryTransferService: TransferService {
             var transferredCount = 0
             var failedCount = 0
             var pendingBatch: [PreparedTransferAsset] = []
+            var pendingBatchTotalBytes = 0
             let initialTransport = await resolvedTransport(for: trustedDesktop)
             let initialSnapshot = makeProgressSnapshot(
                 transport: initialTransport,
@@ -1132,6 +1136,7 @@ actor PhotoLibraryTransferService: TransferService {
                             return pausedSnapshot
                         }
                         pendingBatch.removeAll(keepingCapacity: true)
+                        pendingBatchTotalBytes = 0
 
                         if let pausedSnapshot = await processPreparedBatch(
                             [preparedAsset],
@@ -1147,7 +1152,10 @@ actor PhotoLibraryTransferService: TransferService {
                     }
 
                     pendingBatch.append(preparedAsset)
-                    if pendingBatch.count >= lookupBatchSize {
+                    pendingBatchTotalBytes += max(preparedAsset.exportedAsset.fileSize, 0)
+                    if pendingBatch.count >= lookupBatchSize
+                        || pendingBatchTotalBytes >= lookupBatchByteThresholdBytes
+                    {
                         if let pausedSnapshot = await processPreparedBatch(
                             pendingBatch,
                             desktop: trustedDesktop,
@@ -1159,6 +1167,7 @@ actor PhotoLibraryTransferService: TransferService {
                             return pausedSnapshot
                         }
                         pendingBatch.removeAll(keepingCapacity: true)
+                        pendingBatchTotalBytes = 0
                     }
                 } catch {
                     failedCount += 1
