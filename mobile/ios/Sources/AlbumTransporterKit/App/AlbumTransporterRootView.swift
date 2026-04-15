@@ -75,69 +75,71 @@ public struct AlbumTransporterRootView: View {
     private var currentScreen: some View {
         switch model.route {
         case .home:
+            let homeViewModel = HomePageViewModel(model: model)
             HomeView(
-                summary: model.homeSummary,
+                summary: homeViewModel.summary,
                 onPrimaryAction: {
                     Task {
-                        await model.handleHomePrimaryAction()
+                        await homeViewModel.handlePrimaryAction()
                     }
                 },
                 onScanDesktop: {
                     Task {
-                        await model.openScanFlow()
+                        await homeViewModel.openScanFlow()
                     }
                 }
             )
         case .scanAndPair:
+            let pairingViewModel = PairingPageViewModel(model: model)
             PairingFlowView(
-                status: model.pairingStatus,
-                scannedQRCodeValue: Binding(
-                    get: { model.scannedQRCodeValue },
-                    set: { model.scannedQRCodeValue = $0 }
-                ),
+                status: pairingViewModel.status,
+                scannedQRCodeValue: pairingViewModel.scannedQRCodeBinding,
                 onStartPairing: {
                     Task {
-                        await model.beginPairing()
+                        await pairingViewModel.beginPairing()
                     }
                 },
                 onScanAgain: {
                     Task {
-                        await model.openScanFlow()
+                        await pairingViewModel.scanAgain()
                     }
                 },
                 onBack: {
                     Task {
-                        await model.returnHome()
+                        await pairingViewModel.goBack()
                     }
                 }
             )
         case .permissions:
+            let permissionsViewModel = PermissionsPageViewModel(model: model)
             PermissionsGateView(
-                summary: model.permissionSummary,
+                summary: permissionsViewModel.summary,
                 onContinue: {
                     Task {
-                        await model.startBackup()
+                        await permissionsViewModel.startBackup()
                     }
                 },
                 onBack: {
                     Task {
-                        await model.returnHome()
+                        await permissionsViewModel.goBack()
                     }
                 }
             )
         case .transfer:
+            let transferViewModel = TransferPageViewModel(model: model)
             TransferSessionView(
-                snapshot: model.transferSnapshot,
+                snapshot: transferViewModel.snapshot,
                 onStop: {
-                    model.requestStopTransfer()
+                    transferViewModel.requestStopTransfer()
                 }
             )
         case .completed:
+            let completionViewModel = CompletionPageViewModel(model: model)
             CompletionStateView(
-                summary: model.completionSummary,
+                summary: completionViewModel.summary,
                 onReturnHome: {
                     Task {
-                        await model.returnHome()
+                        await completionViewModel.returnHome()
                     }
                 }
             )
