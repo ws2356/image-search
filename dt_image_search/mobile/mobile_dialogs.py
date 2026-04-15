@@ -502,25 +502,21 @@ class MobilePairingDialog(QDialog):
         title.setStyleSheet("color: #1f2937;")
         layout.addWidget(title)
 
-        subtitle = QLabel("Scan the QR code for your device. Each code is valid for 15 minutes.")
+        subtitle = QLabel("Scan this QR code from Album Transporter on iPhone / iPad. The code is valid for 15 minutes.")
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 13px;")
         layout.addWidget(subtitle)
 
         qr_row = QHBoxLayout()
-        qr_row.setSpacing(14)
-        self.android_card = PairingQrCard(
-            platform=MobilePlatform.ANDROID,
-            token=pairing_session.token_for(MobilePlatform.ANDROID),
-            on_refresh=self._refresh_platform_token,
-        )
-        self.ios_card = PairingQrCard(
+        qr_row.setSpacing(0)
+        qr_row.addStretch()
+        self.qr_card = PairingQrCard(
             platform=MobilePlatform.IOS,
             token=pairing_session.token_for(MobilePlatform.IOS),
             on_refresh=self._refresh_platform_token,
         )
-        qr_row.addWidget(self.android_card)
-        qr_row.addWidget(self.ios_card)
+        qr_row.addWidget(self.qr_card)
+        qr_row.addStretch()
         layout.addLayout(qr_row)
 
         security_note = QLabel(
@@ -575,8 +571,7 @@ class MobilePairingDialog(QDialog):
 
     def _update_clock(self) -> None:
         now = datetime.now(self._pairing_session.created_at.tzinfo)
-        self.android_card.update_clock(now)
-        self.ios_card.update_clock(now)
+        self.qr_card.update_clock(now)
         self._update_pairing_result()
 
     def _refresh_platform_token(self, platform: MobilePlatform) -> MobilePairingToken:
@@ -622,10 +617,8 @@ class MobilePairingDialog(QDialog):
                 QPushButton:hover { background: #0070ef; }
                 """
             )
-            self.android_card.refresh_button.setEnabled(False)
-            self.android_card.refresh_button.hide()
-            self.ios_card.refresh_button.setEnabled(False)
-            self.ios_card.refresh_button.hide()
+            self.qr_card.refresh_button.setEnabled(False)
+            self.qr_card.refresh_button.hide()
             if not self._auto_accept_requested:
                 self._auto_accept_requested = True
                 QTimer.singleShot(0, self.accept)
