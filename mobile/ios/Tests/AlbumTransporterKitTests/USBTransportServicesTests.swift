@@ -77,6 +77,24 @@ final class USBTransportServicesTests: XCTestCase {
         XCTAssertEqual(lanStartCalls, 1)
     }
 
+    func test_adaptive_mobile_transfer_client_retries_usb_after_transient_fallback() async throws {
+        let lanClient = RecordingTransferClient()
+        let usbClient = FlakyUSBTransferClient(failuresRemaining: 1)
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .usb)
+
+        try await adaptiveClient.startSession(desktop: desktop, totalAssets: 5)
+        try await adaptiveClient.startSession(desktop: desktop, totalAssets: 5)
+
+        let lanStartCalls = await lanClient.startCalls()
+        let usbStartCalls = await usbClient.startCalls()
+        XCTAssertEqual(usbStartCalls, 2)
+        XCTAssertEqual(lanStartCalls, 1)
+    }
+
     func test_adaptive_mobile_transfer_client_uses_lan_for_lan_transport() async throws {
         let lanClient = RecordingTransferClient()
         let usbClient = RecordingTransferClient()
@@ -300,5 +318,65 @@ private actor RecordingTransferClient: MobileTransferClient, USBTransportConnect
 
     func isUSBTransportConnected() async -> Bool {
         usbConnected
+    }
+}
+
+private actor FlakyUSBTransferClient: MobileTransferClient, USBTransportConnectivityChecking {
+    private var failuresRemaining: Int
+    private var startCallCount = 0
+
+    init(failuresRemaining: Int) {
+        self.failuresRemaining = failuresRemaining
+    }
+
+    func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
+        startCallCount += 1
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            throw TransferClientError.transport(message: "USB disconnected")
+        }
+    }
+
+    func lookupExistingAssets(
+        _ candidates: [TransferAssetExistenceCandidate],
+        desktop: TrustedDesktopRecord
+    ) async throws -> [String: TransferAssetExistenceMatch] {
+        [:]
+    }
+
+    func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
+        TransferServerResponse(
+            schema: TransferProtocol.schema,
+            status: .stored,
+            message: "stored",
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            totalAssets: nil,
+            localRelativePath: "2026-04/\(asset.descriptor.filename)"
+        )
+    }
+
+    func completeSession(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int
+    ) async throws -> TransferServerResponse {
+        TransferServerResponse(
+            schema: TransferProtocol.schema,
+            status: .completed,
+            message: "completed",
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            totalAssets: nil,
+            localRelativePath: nil
+        )
+    }
+
+    func startCalls() -> Int {
+        startCallCount
+    }
+
+    func isUSBTransportConnected() async -> Bool {
+        true
     }
 }

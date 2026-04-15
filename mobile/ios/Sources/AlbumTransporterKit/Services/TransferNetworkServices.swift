@@ -13,7 +13,7 @@ enum TransferProtocol {
 }
 
 enum TransferAssetStreamProtocol {
-    static let chunkSizeBytes = 2 * 1024 * 1024
+    static let chunkSizeBytes = 5 * 1024 * 1024
     static let requestIDQueryField = "request_id"
     static let streamStateQueryField = "stream_state"
     static let streamStateStart = "start"

@@ -35,6 +35,7 @@ from dt_image_search.mobile.transport.contracts import (
     TRANSFER_COMPLETE_OPERATION,
     TRANSFER_EXISTENCE_OPERATION,
     TRANSFER_START_OPERATION,
+    MobileTransportKind,
     MobileTransportRequest,
     MobileTransportResponse,
     TransferAssetUploadPayload,
@@ -98,6 +99,7 @@ class MobilePairingService:
             state=PairingResultState.WAITING,
             message="Scan the QR code from the mobile app to begin pairing.",
         )
+        self._transfer_transport_by_session_id: dict[str, MobileTransportKind] = {}
 
         self._transport_router = MobileTransportRouter()
         self._register_transport_routes()
@@ -166,12 +168,15 @@ class MobilePairingService:
 
     def close_active_session(self) -> None:
         with self._lock:
+            closing_session = self._active_session
             should_stop_usb = self._pairing_result.state != PairingResultState.ACCEPTED
             self._active_session = None
             self._pairing_result = MobilePairingResult(
                 state=PairingResultState.WAITING,
                 message="Scan the QR code from the mobile app to begin pairing.",
             )
+        if closing_session is not None:
+            self._clear_transfer_transport_tracking(closing_session.session_id)
         if should_stop_usb:
             self._transport_manager.stop_usb()
 
@@ -180,6 +185,7 @@ class MobilePairingService:
             self._endpoint_url = None
             self._endpoint_urls = tuple()
             self._active_session = None
+            self._transfer_transport_by_session_id.clear()
 
         self._transport_manager.stop_all()
 
@@ -346,6 +352,7 @@ class MobilePairingService:
             return _transfer_object_payload_error(
                 message="Desktop requires JSON object payloads for transfer requests.",
             )
+        self._track_transfer_transport(request=request, payload=request.payload)
         status_code, response_payload = self._transfer_service.handle_start_request(request.payload)
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -354,6 +361,7 @@ class MobilePairingService:
             return _transfer_object_payload_error(
                 message="Desktop requires JSON object payloads for transfer existence requests.",
             )
+        self._track_transfer_transport(request=request, payload=request.payload)
         status_code, response_payload = self._transfer_service.handle_asset_existence_request(request.payload)
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -368,6 +376,7 @@ class MobilePairingService:
                 },
             )
 
+        self._track_transfer_transport(request=request, payload=request.payload)
         status_code, response_payload = self._transfer_service.handle_asset_upload(
             metadata_payload=request.payload.metadata_payload,
             body_stream=request.payload.body_stream,
@@ -382,8 +391,73 @@ class MobilePairingService:
             return _transfer_object_payload_error(
                 message="Desktop requires JSON object payloads for transfer completion requests.",
             )
+        session_id = self._extract_transfer_session_id(request.payload)
+        self._track_transfer_transport(request=request, payload=request.payload)
         status_code, response_payload = self._transfer_service.handle_complete_request(request.payload)
+        self._clear_transfer_transport_tracking(session_id)
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
+
+    def _track_transfer_transport(
+        self,
+        *,
+        request: MobileTransportRequest,
+        payload: object,
+    ) -> None:
+        session_id = self._extract_transfer_session_id(payload)
+        if session_id is None:
+            return
+
+        current_transport = request.context.transport
+        request_id = request.context.request_id or "-"
+        remote_address = request.context.remote_address or "-"
+
+        with self._lock:
+            previous_transport = self._transfer_transport_by_session_id.get(session_id)
+            self._transfer_transport_by_session_id[session_id] = current_transport
+
+        if previous_transport is None:
+            _log(
+                "debug",
+                message=(
+                    "MobilePairingService/transport: "
+                    f"session_id={session_id} initial_transport={current_transport.value} "
+                    f"operation={request.operation} request_id={request_id} remote={remote_address}"
+                ),
+            )
+        elif previous_transport != current_transport:
+            _log(
+                "warning",
+                message=(
+                    "MobilePairingService/transport: "
+                    f"session_id={session_id} transport_switch="
+                    f"{previous_transport.value}->{current_transport.value} "
+                    f"operation={request.operation} request_id={request_id} remote={remote_address}"
+                ),
+            )
+
+    def _clear_transfer_transport_tracking(self, session_id: str | None) -> None:
+        if not session_id:
+            return
+        with self._lock:
+            self._transfer_transport_by_session_id.pop(session_id, None)
+
+    @staticmethod
+    def _extract_transfer_session_id(payload: object) -> str | None:
+        payload_dict: dict[str, object] | None = None
+        if isinstance(payload, dict):
+            payload_dict = payload
+        elif isinstance(payload, TransferAssetUploadPayload):
+            payload_dict = payload.metadata_payload
+
+        if payload_dict is None:
+            return None
+        session_id = payload_dict.get("session_id")
+        if not isinstance(session_id, str):
+            return None
+        normalized_session_id = session_id.strip()
+        if not normalized_session_id:
+            return None
+        return normalized_session_id
 
     def _ensure_server_started(self) -> None:
         with self._lock:

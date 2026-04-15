@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 @preconcurrency import Network
 
 enum MobileTransportProtocol {
@@ -60,6 +61,26 @@ private struct USBTransportEnvelopeResponse: Sendable {
     let requestID: String
     let statusCode: Int
     let bodyData: Data
+}
+
+private enum USBTransportDebugLogger {
+    private static let logger = Logger(
+        subsystem: "AlbumTransporterKit.MobileFolder",
+        category: "USBTransport"
+    )
+
+    static func info(_ message: String) {
+        logger.info("\(message, privacy: .public)")
+    }
+
+    static func warning(_ message: String) {
+        logger.warning("\(message, privacy: .public)")
+    }
+
+    static func describe(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "\(type(of: error)): \(error.localizedDescription) [\(nsError.domain)#\(nsError.code)]"
+    }
 }
 
 actor USBWebSocketTransportRuntime {
@@ -921,6 +942,7 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
         try await executeWithFallback(
+            operationName: MobileTransportProtocol.transferStartOperation,
             desktop: desktop,
             usbOperation: {
                 let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
@@ -938,6 +960,7 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
         desktop: TrustedDesktopRecord
     ) async throws -> [String: TransferAssetExistenceMatch] {
         try await executeWithFallback(
+            operationName: MobileTransportProtocol.transferExistenceOperation,
             desktop: desktop,
             usbOperation: {
                 let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
@@ -952,6 +975,7 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
         try await executeWithFallback(
+            operationName: MobileTransportProtocol.transferAssetOperation,
             desktop: desktop,
             usbOperation: {
                 let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
@@ -966,6 +990,7 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
 
     func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse {
         try await executeWithFallback(
+            operationName: MobileTransportProtocol.transferCompleteOperation,
             desktop: desktop,
             usbOperation: {
                 let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
@@ -999,6 +1024,7 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
     }
 
     private func executeWithFallback<Result>(
+        operationName: String,
         desktop: TrustedDesktopRecord,
         usbOperation: () async throws -> Result,
         lanOperation: () async throws -> Result
@@ -1009,24 +1035,83 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
         case .usb:
             do {
                 let result = try await usbOperation()
-                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .usb
+                recordResolvedTransport(
+                    desktop: desktop,
+                    transport: .usb,
+                    operationName: operationName,
+                    reason: "usb_success"
+                )
                 return result
             } catch {
+                USBTransportDebugLogger.warning(
+                    "AdaptiveTransfer/fallback "
+                        + "desktop_id=\(desktop.desktopIDForRouting) "
+                        + "operation=\(operationName) from=usb to=lan "
+                        + "error=\(USBTransportDebugLogger.describe(error))"
+                )
                 let result = try await lanOperation()
-                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .lan
                 return result
             }
         case .lan:
             do {
                 let result = try await lanOperation()
-                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .lan
+                recordResolvedTransport(
+                    desktop: desktop,
+                    transport: .lan,
+                    operationName: operationName,
+                    reason: "lan_success"
+                )
                 return result
             } catch {
+                USBTransportDebugLogger.warning(
+                    "AdaptiveTransfer/fallback "
+                        + "desktop_id=\(desktop.desktopIDForRouting) "
+                        + "operation=\(operationName) from=lan to=usb "
+                        + "error=\(USBTransportDebugLogger.describe(error))"
+                )
                 let result = try await usbOperation()
-                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .usb
+                recordResolvedTransport(
+                    desktop: desktop,
+                    transport: .usb,
+                    operationName: operationName,
+                    reason: "lan_fallback_usb_success"
+                )
                 return result
             }
         }
+    }
+
+    private func recordResolvedTransport(
+        desktop: TrustedDesktopRecord,
+        transport: TransferTransport,
+        operationName: String,
+        reason: String
+    ) {
+        let desktopID = desktop.desktopIDForRouting
+        let previousTransport = lastResolvedTransportByDesktopID[desktopID]
+        lastResolvedTransportByDesktopID[desktopID] = transport
+        if previousTransport == transport {
+            return
+        }
+
+        if let previousTransport {
+            USBTransportDebugLogger.info(
+                "AdaptiveTransfer/transport_switch "
+                    + "desktop_id=\(desktopID) "
+                    + "operation=\(operationName) "
+                    + "from=\(previousTransport.rawValue) "
+                    + "to=\(transport.rawValue) "
+                    + "reason=\(reason)"
+            )
+            return
+        }
+        USBTransportDebugLogger.info(
+            "AdaptiveTransfer/transport_selected "
+                + "desktop_id=\(desktopID) "
+                + "operation=\(operationName) "
+                + "transport=\(transport.rawValue) "
+                + "reason=\(reason)"
+        )
     }
 
     private func desktopWithResolvedTransport(

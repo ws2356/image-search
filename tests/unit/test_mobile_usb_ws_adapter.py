@@ -522,7 +522,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
                 "body_schema": "dtis.mobile-transfer.v1",
                 "body": {
                     "stream_state": "start",
-                    "chunk_size": 2 * 1024 * 1024,
+                    "chunk_size": TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
                     "schema": "dtis.mobile-transfer.v1",
                     "session_id": "session-001",
                     "device_uuid": "ios-device-001",

@@ -4,7 +4,7 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class TransferServiceTests: XCTestCase {
-    func test_transfer_asset_chunk_streamer_splits_chunks_at_two_mb() async throws {
+    func test_transfer_asset_chunk_streamer_splits_chunks_at_configured_size() async throws {
         let totalSize = TransferAssetStreamProtocol.chunkSizeBytes + 257
         let payload = Data(
             (0 ..< totalSize).map { index in
