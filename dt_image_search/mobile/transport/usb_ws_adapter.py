@@ -102,6 +102,17 @@ def _default_websocket_connect(**kwargs: object) -> UsbWebSocketConnection:
             "Desktop USB transport requires the websockets package "
             "(install with `python3 -m pip install websockets`)."
         )
+    retry_sock: socket.socket | None = None
+    source_sock = kwargs.get("sock")
+    if (
+        isinstance(source_sock, socket.socket)
+        and source_sock.fileno() >= 0
+        and not kwargs.get("unix", False)
+    ):
+        try:
+            retry_sock = source_sock.dup()
+        except OSError:
+            retry_sock = None
     try:
         return websocket_connect(**kwargs)
     except OSError as exc:
@@ -114,9 +125,16 @@ def _default_websocket_connect(**kwargs: object) -> UsbWebSocketConnection:
         }
         if exc.errno not in supported_errno_values:
             raise
+        if retry_sock is None:
+            raise
         retry_kwargs = dict(kwargs)
         retry_kwargs["unix"] = True
+        retry_kwargs["sock"] = retry_sock
+        retry_sock = None
         return websocket_connect(**retry_kwargs)
+    finally:
+        if retry_sock is not None:
+            retry_sock.close()
 
 
 def iter_usb_probe_ports(
@@ -337,6 +355,7 @@ class UsbWebSocketTransportAdapter:
             websocket_connection = self._websocket_connect(
                 uri=f"ws://127.0.0.1:{tunnel_target.remote_port}",
                 sock=connected_socket,
+                unix=True,
                 additional_headers=(
                     ("x-dtis-session-id", config.session_id),
                     ("x-dtis-rand", rand),

@@ -164,7 +164,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
     def test_default_websocket_connect_retries_with_unix_mode_for_non_tcp_socket(self):
         sentinel_connection = _FakeWebSocketConnection()
         observed_kwargs: list[dict[str, object]] = []
-        fake_tunnel_socket = object()
+        tunnel_socket, peer_socket = socket.socketpair()
 
         def _fake_websocket_connect(**kwargs: object):
             observed_kwargs.append(dict(kwargs))
@@ -172,20 +172,31 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
                 return sentinel_connection
             raise OSError(errno.EOPNOTSUPP, "Operation not supported on socket")
 
-        with patch(
-            "dt_image_search.mobile.transport.usb_ws_adapter.websocket_connect",
-            new=_fake_websocket_connect,
-        ):
-            connected = _default_websocket_connect(
-                uri="ws://127.0.0.1:55032",
-                sock=fake_tunnel_socket,
-                proxy=None,
-            )
+        try:
+            with patch(
+                "dt_image_search.mobile.transport.usb_ws_adapter.websocket_connect",
+                new=_fake_websocket_connect,
+            ):
+                connected = _default_websocket_connect(
+                    uri="ws://127.0.0.1:55032",
+                    sock=tunnel_socket,
+                    proxy=None,
+                )
+        finally:
+            tunnel_socket.close()
+            peer_socket.close()
+            retried_sock = observed_kwargs[-1].get("sock") if observed_kwargs else None
+            if isinstance(retried_sock, socket.socket):
+                try:
+                    retried_sock.close()
+                except OSError:
+                    pass
 
         self.assertIs(connected, sentinel_connection)
         self.assertEqual(len(observed_kwargs), 2)
         self.assertFalse(observed_kwargs[0].get("unix", False))
         self.assertTrue(observed_kwargs[1].get("unix", False))
+        self.assertIsNot(observed_kwargs[0]["sock"], observed_kwargs[1]["sock"])
 
     def test_start_requires_bootstrap_config(self):
         with self.assertRaises(RuntimeError):
@@ -333,6 +344,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertNotIn("auth", websocket_connection.challenge_requests[0])
         self.assertEqual(provider.connect_calls, [("ios-001", 50213)])
         self.assertEqual(len(websocket_connector.calls), 1)
+        self.assertTrue(websocket_connector.calls[0].get("unix", False))
         self.assertEqual(
             provider.probe_calls,
             [
