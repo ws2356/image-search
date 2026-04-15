@@ -36,7 +36,7 @@ final class MobileAppModel {
         permissionService: PermissionService,
         transferService: TransferService,
         telemetryClient: TelemetryClient,
-        transferProgressPollingInterval: Duration = .seconds(2)
+        transferProgressPollingInterval: Duration = .seconds(1)
     ) {
         self.stateStore = stateStore
         self.qrCodePayloadDecoder = qrCodePayloadDecoder

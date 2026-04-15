@@ -1053,7 +1053,15 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
-        currentSnapshot
+        guard var snapshot = currentSnapshot else {
+            return nil
+        }
+        if let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() {
+            snapshot.transport = await resolvedTransport(for: trustedDesktop)
+        }
+        snapshot.transferSpeedText = currentTransferSpeedText()
+        currentSnapshot = snapshot
+        return snapshot
     }
 
     private func runTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {

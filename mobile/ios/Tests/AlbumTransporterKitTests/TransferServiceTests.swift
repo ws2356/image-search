@@ -145,6 +145,33 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.transport, .usb)
     }
 
+    func test_photo_library_transfer_service_progress_snapshot_refreshes_transport_without_new_events() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let transferClient = RecordingMobileTransferClient(resolvedTransport: .lan)
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(descriptors: []),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        _ = await service.startTransfer(progress: { _ in })
+        await transferClient.setResolvedTransport(.usb)
+        let refreshedSnapshot = await service.progressSnapshot()
+
+        XCTAssertEqual(refreshedSnapshot?.transport, .usb)
+    }
+
     func test_photo_library_transfer_service_points_failed_assets_to_device_logs() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -452,7 +479,7 @@ private actor ChunkSizeRecorder {
 private actor RecordingMobileTransferClient: MobileTransferClient, TransferTransportResolving {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
-    private let resolvedTransport: TransferTransport?
+    private var resolvedTransport: TransferTransport?
     private var lookupAssetIDsByBatch: [[String]] = []
     private var uploadedIDs: [String] = []
     private var completedTransferred: Int?
@@ -518,6 +545,10 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
 
     func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {
         resolvedTransport ?? desktop.transport
+    }
+
+    func setResolvedTransport(_ transport: TransferTransport?) {
+        resolvedTransport = transport
     }
 
     func startedAssetCount() -> Int? {
