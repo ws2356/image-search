@@ -89,6 +89,8 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         transfer_state = str(index.data(FolderTreeModel.MOBILE_TRANSFER_STATE_ROLE) or "")
         transferred_count = int(index.data(FolderTreeModel.MOBILE_TRANSFERRED_COUNT_ROLE) or 0)
         last_backup_at = index.data(FolderTreeModel.MOBILE_LAST_BACKUP_AT_ROLE)
+        last_transfer_status = index.data(FolderTreeModel.MOBILE_LAST_TRANSFER_STATUS_ROLE)
+        last_transfer_at = index.data(FolderTreeModel.MOBILE_LAST_TRANSFER_AT_ROLE)
         platform = str(index.data(FolderTreeModel.MOBILE_PLATFORM_ROLE) or "")
 
         painter.save()
@@ -123,6 +125,8 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
             transfer_state=transfer_state,
             transferred_count=transferred_count,
             last_backup_at=last_backup_at,
+            last_transfer_status=last_transfer_status,
+            last_transfer_at=last_transfer_at,
         )
         subtitle_top = title_rect.bottom() + 1
         subtitle_rect = QRect(content_rect.left(), subtitle_top, content_rect.width(), 14)
@@ -214,10 +218,29 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         painter.drawRoundedRect(fill_rect, 2, 2)
 
     @staticmethod
-    def _subtitle_text(*, transfer_state: str, transferred_count: int, last_backup_at: object) -> str:
+    def _subtitle_text(
+        *,
+        transfer_state: str,
+        transferred_count: int,
+        last_backup_at: object,
+        last_transfer_status: object,
+        last_transfer_at: object,
+    ) -> str:
         if transfer_state == "transferring":
             return f"{max(transferred_count, 0)} files transferred"
+        if isinstance(last_transfer_status, str) and last_transfer_status == "stopped_by_mobile":
+            return _stopped_backup_subtitle(last_transfer_at)
         return _last_backup_subtitle(last_backup_at)
+
+
+def _stopped_backup_subtitle(last_transfer_at: object) -> str:
+    if not isinstance(last_transfer_at, str) or not last_transfer_at:
+        return "Backup stopped"
+
+    parsed_time = _parse_iso_datetime(last_transfer_at)
+    if parsed_time is None:
+        return "Backup stopped"
+    return f"Backup stopped: {parsed_time.strftime('%Y-%m-%d %H:%M:%S')}"
 
 
 def _last_backup_subtitle(last_backup_at: object) -> str:

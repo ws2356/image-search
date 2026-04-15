@@ -480,10 +480,12 @@ final class TransferServiceTests: XCTestCase {
         let reason = await service.stopTransfer(current: currentSnapshot)
         let completedTransferredCount = await transferClient.completedTransferredCount()
         let completedFailedCount = await transferClient.completedFailedCount()
+        let completedInterruptionReason = await transferClient.completedInterruptionReason()
 
         XCTAssertEqual(reason, .stoppedByUser)
         XCTAssertEqual(completedTransferredCount, 3)
-        XCTAssertEqual(completedFailedCount, 1)
+        XCTAssertEqual(completedFailedCount, 0)
+        XCTAssertEqual(completedInterruptionReason, "stopped_by_user")
     }
 }
 
@@ -523,6 +525,7 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
     private var uploadedIDs: [String] = []
     private var completedTransferred: Int?
     private var completedFailed: Int?
+    private var completedInterruptionReasonValue: String?
 
     init(existingAssetIDs: Set<String> = [], resolvedTransport: TransferTransport? = nil) {
         self.existingAssetIDs = existingAssetIDs
@@ -568,9 +571,15 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
         )
     }
 
-    func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse {
+    func completeSession(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int,
+        interruptionReason: String?
+    ) async throws -> TransferServerResponse {
         completedTransferred = transferredCount
         completedFailed = failedCount
+        completedInterruptionReasonValue = interruptionReason
         return TransferServerResponse(
             schema: TransferProtocol.schema,
             status: .completed,
@@ -608,6 +617,10 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
 
     func completedFailedCount() -> Int? {
         completedFailed
+    }
+
+    func completedInterruptionReason() -> String? {
+        completedInterruptionReasonValue
     }
 }
 

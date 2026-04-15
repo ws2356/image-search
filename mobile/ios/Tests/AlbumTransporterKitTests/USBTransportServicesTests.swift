@@ -300,7 +300,12 @@ private actor RecordingTransferClient: MobileTransferClient, USBTransportConnect
         )
     }
 
-    func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse {
+    func completeSession(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int,
+        interruptionReason: String?
+    ) async throws -> TransferServerResponse {
         TransferServerResponse(
             schema: TransferProtocol.schema,
             status: .completed,
@@ -359,7 +364,8 @@ private actor FlakyUSBTransferClient: MobileTransferClient, USBTransportConnecti
     func completeSession(
         desktop: TrustedDesktopRecord,
         transferredCount: Int,
-        failedCount: Int
+        failedCount: Int,
+        interruptionReason: String?
     ) async throws -> TransferServerResponse {
         TransferServerResponse(
             schema: TransferProtocol.schema,

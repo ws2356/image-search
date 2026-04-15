@@ -17,7 +17,9 @@ from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_store import (
     MOBILE_BACKUP_SESSION_STATUS_COMPLETED,
     MOBILE_BACKUP_SESSION_STATUS_FAILED,
+    MOBILE_BACKUP_SESSION_STATUS_STOPPED,
     MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
+    MOBILE_TRANSFER_STATE_PAIRED,
     MOBILE_TRANSFER_STATE_COMPLETED,
     MOBILE_TRANSFER_STATE_FAILED,
     MOBILE_TRANSFER_STATE_TRANSFERRING,
@@ -44,6 +46,7 @@ MOBILE_TRANSFER_ASSET_PATH = "/api/mobile/transfer/asset"
 MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
 MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
+MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER = "stopped_by_user"
 
 
 @dataclass(frozen=True)
@@ -461,24 +464,38 @@ class MobileTransferService:
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
             failed_count = request.failed_count or 0
+            interruption_reason = _optional_non_empty_string(request_payload, "interruption_reason")
+            if interruption_reason == MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER:
+                session_status = MOBILE_BACKUP_SESSION_STATUS_STOPPED
+                folder_transfer_state = MOBILE_TRANSFER_STATE_PAIRED
+                response_message = (
+                    "Desktop marked the transfer session as stopped after receiving "
+                    f"{request.transferred_count or 0} assets with {request.failed_count or 0} failures."
+                )
+            else:
+                session_status = MOBILE_BACKUP_SESSION_STATUS_COMPLETED if failed_count == 0 else MOBILE_BACKUP_SESSION_STATUS_FAILED
+                folder_transfer_state = MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED
+                response_message = (
+                    f"Desktop finished the transfer session after receiving {request.transferred_count or 0} assets "
+                    f"with {request.failed_count or 0} failures."
+                )
             update_mobile_transfer_state(
                 conn,
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
-                session_status=MOBILE_BACKUP_SESSION_STATUS_COMPLETED if failed_count == 0 else MOBILE_BACKUP_SESSION_STATUS_FAILED,
-                folder_transfer_state=MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED,
+                session_status=session_status,
+                folder_transfer_state=folder_transfer_state,
                 updated_at=current_time,
                 ended_at=current_time,
                 transferred_count=request.transferred_count or 0,
                 failed_count=failed_count,
             )
-            transfer_state = MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED
             default_bus.publish(
                 MOBILE_TRANSFER_STATE_UPDATED_EVENT,
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
                 folder_path=transfer_context.folder_path,
-                transfer_state=transfer_state,
+                transfer_state=folder_transfer_state,
             )
 
         return (
@@ -486,10 +503,7 @@ class MobileTransferService:
             {
                 "schema": MOBILE_TRANSFER_SCHEMA,
                 "status": "completed",
-                "message": (
-                    f"Desktop finished the transfer session after receiving {request.transferred_count or 0} assets "
-                    f"with {request.failed_count or 0} failures."
-                ),
+                "message": response_message,
                 "session_id": request.session_id,
                 "device_uuid": request.device_uuid,
             },

@@ -944,13 +944,19 @@ struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnecti
         }
     }
 
-    func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse {
+    func completeSession(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int,
+        interruptionReason: String?
+    ) async throws -> TransferServerResponse {
         let request = TransferCompleteRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
             trustKey: desktop.sharedKeyBase64,
             transferredCount: transferredCount,
-            failedCount: failedCount
+            failedCount: failedCount,
+            interruptionReason: interruptionReason
         )
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferCompleteOperation,
@@ -1063,7 +1069,12 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
         )
     }
 
-    func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse {
+    func completeSession(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int,
+        interruptionReason: String?
+    ) async throws -> TransferServerResponse {
         try await executeWithFallback(
             operationName: MobileTransportProtocol.transferCompleteOperation,
             desktop: desktop,
@@ -1072,7 +1083,8 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
                 return try await usbClient.completeSession(
                     desktop: usbDesktop,
                     transferredCount: transferredCount,
-                    failedCount: failedCount
+                    failedCount: failedCount,
+                    interruptionReason: interruptionReason
                 )
             },
             lanOperation: {
@@ -1080,7 +1092,8 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
                 return try await lanClient.completeSession(
                     desktop: lanDesktop,
                     transferredCount: transferredCount,
-                    failedCount: failedCount
+                    failedCount: failedCount,
+                    interruptionReason: interruptionReason
                 )
             }
         )

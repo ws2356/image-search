@@ -19,6 +19,7 @@ MOBILE_TRANSFER_STATE_FAILED = "failed"
 MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING = "transferring"
 MOBILE_BACKUP_SESSION_STATUS_COMPLETED = "completed"
 MOBILE_BACKUP_SESSION_STATUS_FAILED = "failed"
+MOBILE_BACKUP_SESSION_STATUS_STOPPED = "stopped_by_mobile"
 MobileAssetSignatureKey = tuple[str, int, str]
 
 _MOBILE_PAIRING_SCHEMA_SQL = """
@@ -522,7 +523,10 @@ def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, d
         device_uuid = folder_row["device_uuid"]
         latest_session_row = conn.execute(
             """
-            SELECT transferred_count
+            SELECT
+                status,
+                transferred_count,
+                COALESCE(ended_at, paired_at, started_at) AS latest_transfer_at
             FROM mobile_backup_sessions
             WHERE device_uuid = ?
             ORDER BY started_at DESC
@@ -531,6 +535,8 @@ def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, d
             (device_uuid,),
         ).fetchone()
         transferred_count = int(latest_session_row["transferred_count"]) if latest_session_row is not None else 0
+        last_transfer_status = latest_session_row["status"] if latest_session_row is not None else None
+        last_transfer_at = latest_session_row["latest_transfer_at"] if latest_session_row is not None else None
 
         latest_successful_backup_row = conn.execute(
             """
@@ -550,6 +556,8 @@ def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, d
             "transferred_count": transferred_count,
             "last_backup_at": last_backup_at,
             "platform": folder_row["platform"],
+            "last_transfer_status": last_transfer_status,
+            "last_transfer_at": last_transfer_at,
         }
 
     return summaries_by_path

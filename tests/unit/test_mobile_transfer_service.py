@@ -270,6 +270,78 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
+    def test_complete_request_marks_stopped_session_and_clears_transferring_badge(self):
+        pairing_context = self._pair_device()
+        transfer_state_events: list[dict[str, object]] = []
+        transfer_state_subscription = default_bus.subscribe(
+            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+            lambda **event: transfer_state_events.append(event),
+        )
+        self.addCleanup(transfer_state_subscription.dispose)
+
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "total_assets": 3,
+            },
+        )
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+
+        complete_status, complete_response = self._post_json(
+            MOBILE_TRANSFER_COMPLETE_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "transferred_count": 1,
+                "failed_count": 0,
+                "interruption_reason": "stopped_by_user",
+            },
+        )
+        self.assertEqual(complete_status, 200)
+        self.assertEqual(complete_response["status"], "completed")
+        self.assertIn("marked the transfer session as stopped", complete_response["message"])
+
+        self.assertEqual(
+            transfer_state_events,
+            [
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "transfer_state": "transferring",
+                },
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "transfer_state": "paired",
+                },
+            ],
+        )
+
+        with create_db_conn(self._ctx) as conn:
+            session_row = conn.execute(
+                "SELECT status, transferred_count FROM mobile_backup_sessions WHERE session_id = ?",
+                (pairing_context["session_id"],),
+            ).fetchone()
+            self.assertIsNotNone(session_row)
+            self.assertEqual(session_row["status"], "stopped_by_mobile")
+            self.assertEqual(session_row["transferred_count"], 1)
+
+            folder_row = conn.execute(
+                "SELECT transfer_state FROM mobile_folders WHERE device_uuid = ?",
+                (pairing_context["device_uuid"],),
+            ).fetchone()
+            self.assertIsNotNone(folder_row)
+            self.assertEqual(folder_row["transfer_state"], "paired")
+
     def test_live_transfer_http_endpoints_skip_by_signature_tuple_for_different_asset_id(self):
         pairing_context = self._pair_device()
 

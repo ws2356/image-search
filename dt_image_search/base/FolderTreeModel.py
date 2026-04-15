@@ -14,6 +14,8 @@ class FolderTreeModel(QStandardItemModel):
     MOBILE_TRANSFERRED_COUNT_ROLE = Qt.UserRole + 2
     MOBILE_LAST_BACKUP_AT_ROLE = Qt.UserRole + 3
     MOBILE_PLATFORM_ROLE = Qt.UserRole + 4
+    MOBILE_LAST_TRANSFER_STATUS_ROLE = Qt.UserRole + 5
+    MOBILE_LAST_TRANSFER_AT_ROLE = Qt.UserRole + 6
     _LOCAL_SECTION_KIND = "local"
     _MOBILE_SECTION_KIND = "mobile"
 
@@ -216,11 +218,15 @@ class FolderTreeModel(QStandardItemModel):
         transferred_count = int(summary.get("transferred_count", 0))
         last_backup_at = summary.get("last_backup_at")
         platform = summary.get("platform")
+        last_transfer_status = summary.get("last_transfer_status")
+        last_transfer_at = summary.get("last_transfer_at")
 
         item.setData(transfer_state, self.MOBILE_TRANSFER_STATE_ROLE)
         item.setData(transferred_count, self.MOBILE_TRANSFERRED_COUNT_ROLE)
         item.setData(last_backup_at, self.MOBILE_LAST_BACKUP_AT_ROLE)
         item.setData(platform, self.MOBILE_PLATFORM_ROLE)
+        item.setData(last_transfer_status, self.MOBILE_LAST_TRANSFER_STATUS_ROLE)
+        item.setData(last_transfer_at, self.MOBILE_LAST_TRANSFER_AT_ROLE)
 
         base_name = Path(item_path).name or item_path
         item.setText(base_name)

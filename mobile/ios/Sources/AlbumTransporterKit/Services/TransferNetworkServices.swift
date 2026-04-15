@@ -44,6 +44,7 @@ struct TransferCompleteRequest: Codable, Sendable {
     var trustKey: String
     var transferredCount: Int
     var failedCount: Int
+    var interruptionReason: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case schema
@@ -52,6 +53,7 @@ struct TransferCompleteRequest: Codable, Sendable {
         case trustKey = "trust_key"
         case transferredCount = "transferred_count"
         case failedCount = "failed_count"
+        case interruptionReason = "interruption_reason"
     }
 }
 
@@ -325,7 +327,12 @@ protocol MobileTransferClient: Sendable {
         desktop: TrustedDesktopRecord
     ) async throws -> [String: TransferAssetExistenceMatch]
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse
-    func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse
+    func completeSession(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int,
+        interruptionReason: String?
+    ) async throws -> TransferServerResponse
 }
 
 protocol TransferTransportResolving: Sendable {
@@ -661,13 +668,19 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         )
     }
 
-    func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse {
+    func completeSession(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int,
+        interruptionReason: String?
+    ) async throws -> TransferServerResponse {
         let request = TransferCompleteRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
             trustKey: desktop.sharedKeyBase64,
             transferredCount: transferredCount,
-            failedCount: failedCount
+            failedCount: failedCount,
+            interruptionReason: interruptionReason
         )
         let endpoint = transferURL(for: desktop, path: TransferProtocol.completePath)
         TransferDebugLogger.info(
@@ -1005,10 +1018,11 @@ actor PhotoLibraryTransferService: TransferService {
             _ = try await transferClient.completeSession(
                 desktop: trustedDesktop,
                 transferredCount: current.transferredCount,
-                failedCount: max(current.failedCount, 1)
+                failedCount: current.failedCount,
+                interruptionReason: "stopped_by_user"
             )
             TransferDebugLogger.info(
-                "Reported stopped transfer to desktop session_id=\(trustedDesktop.lastSessionID) transferred=\(current.transferredCount) failed=\(max(current.failedCount, 1))"
+                "Reported stopped transfer to desktop session_id=\(trustedDesktop.lastSessionID) transferred=\(current.transferredCount) failed=\(current.failedCount)"
             )
         } catch {
             TransferDebugLogger.warning(
@@ -1034,7 +1048,8 @@ actor PhotoLibraryTransferService: TransferService {
             _ = try await transferClient.completeSession(
                 desktop: trustedDesktop,
                 transferredCount: current.transferredCount,
-                failedCount: current.failedCount
+                failedCount: current.failedCount,
+                interruptionReason: nil
             )
             let resolvedTransport = await resolvedTransport(for: trustedDesktop)
             var completedSnapshot = current
