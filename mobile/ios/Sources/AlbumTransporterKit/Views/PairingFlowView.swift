@@ -163,7 +163,7 @@ struct PairingFlowView: View {
                 .padding(.bottom, 8)
 
             VStack(spacing: 0) {
-                if let desktopName = status.desktopName {
+                if let desktopName = normalizedDesktopDisplayName(status.desktopName) {
                     infoRow(icon: "desktopcomputer", label: "PC", value: desktopName)
                     Divider().padding(.leading, 42)
                 }

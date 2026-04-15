@@ -166,7 +166,7 @@ struct DesktopBootstrapPairingService: PairingService {
 
             guard let sessionID = response.sessionID,
                   let desktopDeviceID = response.desktopDeviceID,
-                  let desktopName = response.desktopName,
+                  let desktopName = normalizedDesktopDisplayName(response.desktopName),
                   let serverNonce = response.serverNonce,
                   let pairedAt = response.pairedAt
             else {

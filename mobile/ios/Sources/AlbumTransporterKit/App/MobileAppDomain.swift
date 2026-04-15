@@ -417,3 +417,17 @@ struct LaunchSnapshot: Equatable, Sendable, Codable {
         removeAfterBackupEnabled: false
     )
 }
+
+func normalizedDesktopDisplayName(_ value: String?) -> String? {
+    guard let value else {
+        return nil
+    }
+    let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedValue.isEmpty else {
+        return nil
+    }
+    guard trimmedValue.lowercased().hasSuffix(".local"), trimmedValue.count > 6 else {
+        return trimmedValue
+    }
+    return String(trimmedValue.dropLast(6))
+}

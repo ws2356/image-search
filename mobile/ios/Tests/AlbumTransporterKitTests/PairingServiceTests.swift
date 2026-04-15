@@ -30,6 +30,12 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertEqual(decodedResponse.pairedAt?.timeIntervalSince1970 ?? 0, 1_775_838_184.577, accuracy: 0.001)
     }
 
+    func test_normalized_desktop_display_name_strips_local_suffix() {
+        XCTAssertEqual(normalizedDesktopDisplayName("Studio-MacBook-Pro.local"), "Studio-MacBook-Pro")
+        XCTAssertEqual(normalizedDesktopDisplayName("Studio Mac"), "Studio Mac")
+        XCTAssertNil(normalizedDesktopDisplayName(nil))
+    }
+
     func test_desktop_bootstrap_pairing_service_persists_trusted_desktop_record() async {
         let trustedDesktopStore = InMemoryTrustedDesktopStore()
         let service = DesktopBootstrapPairingService(
@@ -40,7 +46,7 @@ final class PairingServiceTests: XCTestCase {
                     message: "Pairing accepted for Alice iPhone.",
                     sessionID: "pairing-demo-001",
                     desktopDeviceID: "desktop-device-001",
-                    desktopName: "Studio Mac",
+                    desktopName: "Studio Mac.local",
                     deviceUUID: "ios-device-001",
                     folderID: 1,
                     folderPath: "/Users/demo/Alice iPhone",

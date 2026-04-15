@@ -65,7 +65,7 @@ struct HomeView: View {
 
     private var returningContent: some View {
         VStack(spacing: 0) {
-            Text(summary.desktopName ?? "")
+            Text(normalizedDesktopDisplayName(summary.desktopName) ?? "")
                 .font(.system(size: 34, weight: .bold))
                 .foregroundStyle(Color(hex: 0x1C1C1E))
                 .tracking(-0.5)
