@@ -143,12 +143,16 @@ class Pymobiledevice3UsbTunnelProvider:
             )
 
         try:
-            connected_socket = self._run_async(
-                asyncio.wait_for(
-                    mux_device.connect(port),
-                    timeout=timeout_seconds,
-                ),
-            )
+            connect_result = mux_device.connect(port)
+            if inspect.isawaitable(connect_result):
+                connected_socket = self._run_async(
+                    asyncio.wait_for(
+                        connect_result,
+                        timeout=timeout_seconds,
+                    ),
+                )
+            else:
+                connected_socket = connect_result
         except connection_errors as exc:
             raise UsbTunnelConnectError(
                 f"Desktop could not connect to USB device '{normalized_udid}' port {port}.",

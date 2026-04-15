@@ -49,6 +49,15 @@ class _FakeMuxDevice:
         return client_socket
 
 
+class _FakeSyncMuxDevice(_FakeMuxDevice):
+    def connect(self, port: int):
+        if port not in self._connectable_ports:
+            raise _FakeConnectionFailedError(f"Port {port} is closed")
+        client_socket, server_socket = socket.socketpair()
+        server_socket.close()
+        return client_socket
+
+
 class _FakeUsbmuxModule:
     def __init__(self, devices: tuple[_FakeMuxDevice, ...]):
         self._devices = devices
@@ -157,6 +166,26 @@ class TestPymobiledevice3UsbTunnelProvider(unittest.TestCase):
 
         with self.assertRaises(UsbTunnelConnectError):
             provider.connect_device_port(udid="ios-usb-001", port=50211)
+
+    def test_connect_device_port_supports_sync_connect_apis(self):
+        usbmux_module = _FakeUsbmuxModule(
+            devices=(
+                _FakeSyncMuxDevice(
+                    serial="ios-usb-001",
+                    connection_type="USB",
+                    connectable_ports={50211},
+                ),
+            )
+        )
+        provider = Pymobiledevice3UsbTunnelProvider(
+            usbmux_module=usbmux_module,
+            exceptions_module=_FakeExceptionsModule(),
+        )
+
+        connected_socket = provider.connect_device_port(udid="ios-usb-001", port=50211)
+
+        self.assertIsInstance(connected_socket, socket.socket)
+        connected_socket.close()
 
     def test_missing_pymobiledevice3_raises_unavailable_error(self):
         with patch(
