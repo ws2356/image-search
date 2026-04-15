@@ -328,6 +328,14 @@ protocol MobileTransferClient: Sendable {
     func completeSession(desktop: TrustedDesktopRecord, transferredCount: Int, failedCount: Int) async throws -> TransferServerResponse
 }
 
+protocol TransferTransportResolving: Sendable {
+    func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport
+}
+
+protocol USBTransportConnectivityChecking: Sendable {
+    func isUSBTransportConnected() async -> Bool
+}
+
 enum TransferClientError: Error, Sendable {
     case invalidHTTPResponse
     case unsupportedResponseSchema
@@ -949,6 +957,7 @@ private struct PreparedTransferAsset: Sendable {
 actor PhotoLibraryTransferService: TransferService {
     private let assetSource: TransferAssetSource
     private let transferClient: MobileTransferClient
+    private let transportResolver: (any TransferTransportResolving)?
     private let trustedDesktopStore: TrustedDesktopStore
     private let lookupBatchSize: Int
     private var stopRequested = false
@@ -962,6 +971,7 @@ actor PhotoLibraryTransferService: TransferService {
     ) {
         self.assetSource = assetSource
         self.transferClient = transferClient
+        self.transportResolver = transferClient as? any TransferTransportResolving
         self.trustedDesktopStore = trustedDesktopStore
         self.lookupBatchSize = max(1, lookupBatchSize)
     }
@@ -993,7 +1003,9 @@ actor PhotoLibraryTransferService: TransferService {
                 transferredCount: current.transferredCount,
                 failedCount: current.failedCount
             )
+            let resolvedTransport = await resolvedTransport(for: trustedDesktop)
             var completedSnapshot = current
+            completedSnapshot.transport = resolvedTransport
             completedSnapshot.statusMessage = "Desktop confirmed that this transfer session is complete."
             completedSnapshot.guidanceMessage = "You can return home and start another backup whenever new media appears on the device."
             TransferDebugLogger.info(
@@ -1002,7 +1014,9 @@ actor PhotoLibraryTransferService: TransferService {
             currentSnapshot = completedSnapshot
             return completedSnapshot
         } catch let error as TransferClientError {
+            let resolvedTransport = await resolvedTransport(for: trustedDesktop)
             var failedSnapshot = current
+            failedSnapshot.transport = resolvedTransport
             failedSnapshot.statusMessage = error.message
             TransferDebugLogger.error(
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
@@ -1010,7 +1024,9 @@ actor PhotoLibraryTransferService: TransferService {
             currentSnapshot = failedSnapshot
             return failedSnapshot
         } catch {
+            let resolvedTransport = await resolvedTransport(for: trustedDesktop)
             var failedSnapshot = current
+            failedSnapshot.transport = resolvedTransport
             failedSnapshot.statusMessage = error.localizedDescription
             TransferDebugLogger.error(
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
@@ -1046,11 +1062,12 @@ actor PhotoLibraryTransferService: TransferService {
             let assets = try await assetSource.fetchAssets()
             if assets.isEmpty {
                 TransferDebugLogger.warning("Transfer did not start because there are no eligible local assets.")
+                let resolvedTransport = await resolvedTransport(for: trustedDesktop)
                 let emptySnapshot = TransferSnapshot(
                     transferredCount: 0,
                     totalCount: 0,
                     failedCount: 0,
-                    transport: trustedDesktop.transport,
+                    transport: resolvedTransport,
                     etaDescription: nil,
                     statusMessage: "No eligible local photo or video assets are ready for transfer.",
                     guidanceMessage: "Check photo-library access or capture new media, then retry the backup.",
@@ -1068,8 +1085,9 @@ actor PhotoLibraryTransferService: TransferService {
             var transferredCount = 0
             var failedCount = 0
             var pendingBatch: [PreparedTransferAsset] = []
+            let initialTransport = await resolvedTransport(for: trustedDesktop)
             let initialSnapshot = makeProgressSnapshot(
-                transport: trustedDesktop.transport,
+                transport: initialTransport,
                 transferredCount: transferredCount,
                 totalCount: assets.count,
                 failedCount: failedCount
@@ -1080,8 +1098,9 @@ actor PhotoLibraryTransferService: TransferService {
             for (index, asset) in assets.enumerated() {
                 if stopRequested {
                     cleanupPreparedAssets(pendingBatch)
+                    let currentTransport = await resolvedTransport(for: trustedDesktop)
                     let pausedSnapshot = makePausedSnapshot(
-                        transport: trustedDesktop.transport,
+                        transport: currentTransport,
                         transferredCount: transferredCount,
                         totalCount: assets.count,
                         failedCount: failedCount,
@@ -1140,8 +1159,8 @@ actor PhotoLibraryTransferService: TransferService {
                     TransferDebugLogger.error(
                         "Transfer failed for \(assetSummary) error=\(TransferDebugLogger.describe(error))"
                     )
-                    recordProgressUpdate(
-                        transport: trustedDesktop.transport,
+                    await recordProgressUpdate(
+                        desktop: trustedDesktop,
                         transferredCount: transferredCount,
                         totalCount: assets.count,
                         failedCount: failedCount,
@@ -1152,8 +1171,9 @@ actor PhotoLibraryTransferService: TransferService {
 
             if stopRequested {
                 cleanupPreparedAssets(pendingBatch)
+                let currentTransport = await resolvedTransport(for: trustedDesktop)
                 let pausedSnapshot = makePausedSnapshot(
-                    transport: trustedDesktop.transport,
+                    transport: currentTransport,
                     transferredCount: transferredCount,
                     totalCount: assets.count,
                     failedCount: failedCount,
@@ -1177,11 +1197,12 @@ actor PhotoLibraryTransferService: TransferService {
             TransferDebugLogger.info(
                 "Transfer run finished session_id=\(trustedDesktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount) total=\(assets.count)"
             )
+            let completedTransport = await resolvedTransport(for: trustedDesktop)
             let completedSnapshot = TransferSnapshot(
                 transferredCount: transferredCount,
                 totalCount: assets.count,
                 failedCount: failedCount,
-                transport: trustedDesktop.transport,
+                transport: completedTransport,
                 etaDescription: nil,
                 statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
                 guidanceMessage: failedCount == 0
@@ -1195,11 +1216,12 @@ actor PhotoLibraryTransferService: TransferService {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
+            let failedTransport = await resolvedTransport(for: trustedDesktop)
             let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
                 failedCount: 1,
-                transport: trustedDesktop.transport,
+                transport: failedTransport,
                 etaDescription: nil,
                 statusMessage: error.message,
                 guidanceMessage: "Retry the backup after confirming the paired desktop is reachable on the same local network.",
@@ -1211,11 +1233,12 @@ actor PhotoLibraryTransferService: TransferService {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
+            let failedTransport = await resolvedTransport(for: trustedDesktop)
             let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
                 failedCount: 1,
-                transport: trustedDesktop.transport,
+                transport: failedTransport,
                 etaDescription: nil,
                 statusMessage: error.localizedDescription,
                 guidanceMessage: "Retry the backup after confirming photo-library access and desktop reachability.",
@@ -1253,8 +1276,8 @@ actor PhotoLibraryTransferService: TransferService {
                 for preparedAsset in batch {
                     failedCount += 1
                     cleanupExportedAsset(preparedAsset.exportedAsset)
-                    recordProgressUpdate(
-                        transport: desktop.transport,
+                    await recordProgressUpdate(
+                        desktop: desktop,
                         transferredCount: transferredCount,
                         totalCount: totalCount,
                         failedCount: failedCount,
@@ -1273,8 +1296,8 @@ actor PhotoLibraryTransferService: TransferService {
                 TransferDebugLogger.debug(
                     "Skipped upload after desktop signature hit \(assetSummary) local_relative_path=\(existingMatch.localRelativePath)"
                 )
-                recordProgressUpdate(
-                    transport: desktop.transport,
+                await recordProgressUpdate(
+                    desktop: desktop,
                     transferredCount: transferredCount,
                     totalCount: totalCount,
                     failedCount: failedCount,
@@ -1285,8 +1308,9 @@ actor PhotoLibraryTransferService: TransferService {
 
             if stopRequested {
                 cleanupPreparedAssets(Array(batch[index...]))
+                let currentTransport = await resolvedTransport(for: desktop)
                 let pausedSnapshot = makePausedSnapshot(
-                    transport: desktop.transport,
+                    transport: currentTransport,
                     transferredCount: transferredCount,
                     totalCount: totalCount,
                     failedCount: failedCount,
@@ -1317,8 +1341,8 @@ actor PhotoLibraryTransferService: TransferService {
                 )
             }
             cleanupExportedAsset(preparedAsset.exportedAsset)
-            recordProgressUpdate(
-                transport: desktop.transport,
+            await recordProgressUpdate(
+                desktop: desktop,
                 transferredCount: transferredCount,
                 totalCount: totalCount,
                 failedCount: failedCount,
@@ -1352,12 +1376,13 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     private func recordProgressUpdate(
-        transport: TransferTransport,
+        desktop: TrustedDesktopRecord,
         transferredCount: Int,
         totalCount: Int,
         failedCount: Int,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
-    ) {
+    ) async {
+        let transport = await resolvedTransport(for: desktop)
         let processedCount = min(transferredCount + failedCount, totalCount)
         TransferDebugLogger.debug(
             "Updated transfer progress processed=\(processedCount) total=\(totalCount) transferred=\(transferredCount) failed=\(failedCount)"
@@ -1370,6 +1395,13 @@ actor PhotoLibraryTransferService: TransferService {
         )
         currentSnapshot = updatedSnapshot
         progress(updatedSnapshot)
+    }
+
+    private func resolvedTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {
+        guard let transportResolver else {
+            return desktop.transport
+        }
+        return await transportResolver.resolveDesktopTransport(for: desktop)
     }
 
     private func makeProgressSnapshot(

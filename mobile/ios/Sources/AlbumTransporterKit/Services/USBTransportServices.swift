@@ -207,6 +207,10 @@ actor USBWebSocketTransportRuntime {
         resetRuntimeState()
     }
 
+    func isConnected() -> Bool {
+        activeConnection != nil && isActiveConnectionReady && isConnectionAuthenticated
+    }
+
     private func resetRuntimeState() {
         listener?.cancel()
         listener = nil
@@ -712,7 +716,7 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
     }
 }
 
-struct WebSocketMobileTransferClient: MobileTransferClient {
+struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnectivityChecking {
     let runtime: USBWebSocketTransportRuntime
     let responseTimeout: Duration
 
@@ -867,6 +871,10 @@ struct WebSocketMobileTransferClient: MobileTransferClient {
         }
     }
 
+    func isUSBTransportConnected() async -> Bool {
+        await runtime.isConnected()
+    }
+
     private func sendTransferEnvelope<RequestBody: Encodable & Sendable, ResponseBody: TransferSchemaResponse>(
         operation: String,
         request: RequestBody,
@@ -898,18 +906,29 @@ struct WebSocketMobileTransferClient: MobileTransferClient {
     }
 }
 
-struct AdaptiveMobileTransferClient: MobileTransferClient {
+actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResolving {
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
+    private var lastResolvedTransportByDesktopID: [String: TransferTransport] = [:]
+
+    init(
+        lanClient: MobileTransferClient,
+        usbClient: MobileTransferClient
+    ) {
+        self.lanClient = lanClient
+        self.usbClient = usbClient
+    }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
         try await executeWithFallback(
             desktop: desktop,
             usbOperation: {
-                try await usbClient.startSession(desktop: desktop, totalAssets: totalAssets)
+                let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
+                try await usbClient.startSession(desktop: usbDesktop, totalAssets: totalAssets)
             },
             lanOperation: {
-                try await lanClient.startSession(desktop: desktop, totalAssets: totalAssets)
+                let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
+                try await lanClient.startSession(desktop: lanDesktop, totalAssets: totalAssets)
             }
         )
     }
@@ -921,10 +940,12 @@ struct AdaptiveMobileTransferClient: MobileTransferClient {
         try await executeWithFallback(
             desktop: desktop,
             usbOperation: {
-                try await usbClient.lookupExistingAssets(candidates, desktop: desktop)
+                let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
+                return try await usbClient.lookupExistingAssets(candidates, desktop: usbDesktop)
             },
             lanOperation: {
-                try await lanClient.lookupExistingAssets(candidates, desktop: desktop)
+                let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
+                return try await lanClient.lookupExistingAssets(candidates, desktop: lanDesktop)
             }
         )
     }
@@ -933,10 +954,12 @@ struct AdaptiveMobileTransferClient: MobileTransferClient {
         try await executeWithFallback(
             desktop: desktop,
             usbOperation: {
-                try await usbClient.uploadAsset(asset, desktop: desktop)
+                let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
+                return try await usbClient.uploadAsset(asset, desktop: usbDesktop)
             },
             lanOperation: {
-                try await lanClient.uploadAsset(asset, desktop: desktop)
+                let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
+                return try await lanClient.uploadAsset(asset, desktop: lanDesktop)
             }
         )
     }
@@ -945,15 +968,17 @@ struct AdaptiveMobileTransferClient: MobileTransferClient {
         try await executeWithFallback(
             desktop: desktop,
             usbOperation: {
-                try await usbClient.completeSession(
-                    desktop: desktop,
+                let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
+                return try await usbClient.completeSession(
+                    desktop: usbDesktop,
                     transferredCount: transferredCount,
                     failedCount: failedCount
                 )
             },
             lanOperation: {
-                try await lanClient.completeSession(
-                    desktop: desktop,
+                let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
+                return try await lanClient.completeSession(
+                    desktop: lanDesktop,
                     transferredCount: transferredCount,
                     failedCount: failedCount
                 )
@@ -961,19 +986,64 @@ struct AdaptiveMobileTransferClient: MobileTransferClient {
         )
     }
 
+    func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {
+        if let usbConnectivity = usbClient as? USBTransportConnectivityChecking,
+           await usbConnectivity.isUSBTransportConnected()
+        {
+            return .usb
+        }
+        if let resolvedTransport = lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] {
+            return resolvedTransport
+        }
+        return desktop.transport
+    }
+
     private func executeWithFallback<Result>(
         desktop: TrustedDesktopRecord,
         usbOperation: () async throws -> Result,
         lanOperation: () async throws -> Result
     ) async throws -> Result {
-        guard desktop.transport == .usb else {
-            return try await lanOperation()
-        }
+        let preferredTransport = await resolveDesktopTransport(for: desktop)
 
-        do {
-            return try await usbOperation()
-        } catch {
-            return try await lanOperation()
+        switch preferredTransport {
+        case .usb:
+            do {
+                let result = try await usbOperation()
+                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .usb
+                return result
+            } catch {
+                let result = try await lanOperation()
+                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .lan
+                return result
+            }
+        case .lan:
+            do {
+                let result = try await lanOperation()
+                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .lan
+                return result
+            } catch {
+                let result = try await usbOperation()
+                lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] = .usb
+                return result
+            }
         }
+    }
+
+    private func desktopWithResolvedTransport(
+        _ desktop: TrustedDesktopRecord,
+        transport: TransferTransport
+    ) -> TrustedDesktopRecord {
+        var resolvedDesktop = desktop
+        resolvedDesktop.transport = transport
+        return resolvedDesktop
+    }
+}
+
+private extension TrustedDesktopRecord {
+    var desktopIDForRouting: String {
+        if desktopDeviceID.isEmpty {
+            return lastSessionID
+        }
+        return desktopDeviceID
     }
 }

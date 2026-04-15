@@ -108,6 +108,43 @@ final class TransferServiceTests: XCTestCase {
         )
     }
 
+    func test_photo_library_transfer_service_uses_resolved_transport_for_progress() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient(resolvedTransport: .usb)
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+
+        XCTAssertEqual(snapshot.transport, .usb)
+    }
+
     func test_photo_library_transfer_service_points_failed_assets_to_device_logs() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -346,16 +383,18 @@ private actor ChunkSizeRecorder {
     }
 }
 
-private actor RecordingMobileTransferClient: MobileTransferClient {
+private actor RecordingMobileTransferClient: MobileTransferClient, TransferTransportResolving {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
+    private let resolvedTransport: TransferTransport?
     private var lookupAssetIDsByBatch: [[String]] = []
     private var uploadedIDs: [String] = []
     private var completedTransferred: Int?
     private var completedFailed: Int?
 
-    init(existingAssetIDs: Set<String> = []) {
+    init(existingAssetIDs: Set<String> = [], resolvedTransport: TransferTransport? = nil) {
         self.existingAssetIDs = existingAssetIDs
+        self.resolvedTransport = resolvedTransport
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
@@ -409,6 +448,10 @@ private actor RecordingMobileTransferClient: MobileTransferClient {
             totalAssets: nil,
             localRelativePath: nil
         )
+    }
+
+    func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {
+        resolvedTransport ?? desktop.transport
     }
 
     func startedAssetCount() -> Int? {

@@ -94,6 +94,25 @@ final class USBTransportServicesTests: XCTestCase {
         XCTAssertEqual(usbStartCalls, 0)
     }
 
+    func test_adaptive_mobile_transfer_client_prefers_connected_usb_even_for_lan_record() async throws {
+        let lanClient = RecordingTransferClient()
+        let usbClient = RecordingTransferClient(usbConnected: true)
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .lan)
+
+        try await adaptiveClient.startSession(desktop: desktop, totalAssets: 1)
+
+        let lanStartCalls = await lanClient.startCalls()
+        let usbStartCalls = await usbClient.startCalls()
+        let resolvedTransport = await adaptiveClient.resolveDesktopTransport(for: desktop)
+        XCTAssertEqual(lanStartCalls, 0)
+        XCTAssertEqual(usbStartCalls, 1)
+        XCTAssertEqual(resolvedTransport, .usb)
+    }
+
     private func trustedDesktop(transport: TransferTransport) -> TrustedDesktopRecord {
         TrustedDesktopRecord(
             desktopDeviceID: "desktop-device-001",
@@ -227,12 +246,14 @@ private struct ProcessResult {
     let outputSummary: String
 }
 
-private actor RecordingTransferClient: MobileTransferClient {
+private actor RecordingTransferClient: MobileTransferClient, USBTransportConnectivityChecking {
     private let startSessionError: Error?
+    private let usbConnected: Bool
     private var startCallCount = 0
 
-    init(startSessionError: Error? = nil) {
+    init(startSessionError: Error? = nil, usbConnected: Bool = false) {
         self.startSessionError = startSessionError
+        self.usbConnected = usbConnected
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
@@ -275,5 +296,9 @@ private actor RecordingTransferClient: MobileTransferClient {
 
     func startCalls() -> Int {
         startCallCount
+    }
+
+    func isUSBTransportConnected() async -> Bool {
+        usbConnected
     }
 }
