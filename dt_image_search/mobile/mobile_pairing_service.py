@@ -166,13 +166,14 @@ class MobilePairingService:
 
     def close_active_session(self) -> None:
         with self._lock:
+            should_stop_usb = self._pairing_result.state != PairingResultState.ACCEPTED
             self._active_session = None
             self._pairing_result = MobilePairingResult(
                 state=PairingResultState.WAITING,
                 message="Scan the QR code from the mobile app to begin pairing.",
             )
-        # TODO: verify the logic - Close usb before transfer completed???
-        self._transport_manager.stop_usb()
+        if should_stop_usb:
+            self._transport_manager.stop_usb()
 
     def shutdown(self) -> None:
         with self._lock:

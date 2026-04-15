@@ -410,6 +410,51 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertIn("USB transfer", response_payload["message"])
         self.assertEqual(pairing_service.current_result().transport, "usb")
 
+    def test_close_active_session_keeps_usb_running_after_accepted_pairing(self):
+        pairing_service = MobilePairingService(
+            self._ctx,
+            listen_host="127.0.0.1",
+            desktop_name="Studio Mac",
+        )
+        self.addCleanup(pairing_service.shutdown)
+        transport_manager = _StubTransportManager(usb_state_after_start=UsbTransportState.CONNECTED)
+        pairing_service._transport_manager = transport_manager
+
+        now = datetime(2026, 4, 10, 9, 0, tzinfo=timezone.utc)
+        session = pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+        status_code, response_payload = pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-usb-001",
+                "device_name": "USB iPhone",
+                "client_nonce": "usb-client-nonce-123",
+            },
+            now=now + timedelta(seconds=5),
+        )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(response_payload["transport"], "usb")
+        pairing_service.close_active_session()
+        self.assertEqual(transport_manager.stop_usb_calls, 0)
+
+    def test_close_active_session_stops_usb_when_pairing_not_accepted(self):
+        pairing_service = MobilePairingService(
+            self._ctx,
+            listen_host="127.0.0.1",
+            desktop_name="Studio Mac",
+        )
+        self.addCleanup(pairing_service.shutdown)
+        transport_manager = _StubTransportManager()
+        pairing_service._transport_manager = transport_manager
+
+        pairing_service.start_pairing_session(self._temp_dir.name)
+        pairing_service.close_active_session()
+        self.assertEqual(transport_manager.stop_usb_calls, 1)
+
     def _post_pairing_request(self, payload: dict[str, str]) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
