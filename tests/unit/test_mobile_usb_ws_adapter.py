@@ -16,6 +16,9 @@ from dt_image_search.mobile.transport.contracts import (
     MobileTransportResponse,
     TransferAssetUploadPayload,
 )
+from dt_image_search.mobile.transport.asset_upload_stream import (
+    TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+)
 from dt_image_search.mobile.transport.router import MobileTransportRouter
 from dt_image_search.mobile.transport.usb_tunnel import (
     UsbConnectedDevice,
@@ -345,6 +348,10 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertEqual(provider.connect_calls, [("ios-001", 50213)])
         self.assertEqual(len(websocket_connector.calls), 1)
         self.assertTrue(websocket_connector.calls[0].get("unix", False))
+        self.assertEqual(
+            websocket_connector.calls[0].get("max_size"),
+            TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+        )
         self.assertEqual(
             provider.probe_calls,
             [

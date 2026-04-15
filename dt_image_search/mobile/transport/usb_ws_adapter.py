@@ -363,6 +363,7 @@ class UsbWebSocketTransportAdapter:
                 open_timeout=2.0,
                 ping_interval=20.0,
                 ping_timeout=20.0,
+                max_size=TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
                 proxy=None,
             )
         except (OSError, RuntimeError, TimeoutError, WebSocketException):
