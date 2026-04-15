@@ -42,6 +42,13 @@ protocol TransferService: Sendable {
     func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot
     func progressSnapshot() async -> TransferSnapshot?
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult
+}
+
+enum TransferAssetCleanupResult: Equatable, Sendable {
+    case skipped
+    case removed(Int)
+    case failed(message: String)
 }
 
 protocol TelemetryClient: Sendable {

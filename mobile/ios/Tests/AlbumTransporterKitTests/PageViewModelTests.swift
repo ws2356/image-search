@@ -40,10 +40,14 @@ final class PageViewModelTests: XCTestCase {
         let viewModel = PermissionsPageViewModel(model: model)
 
         XCTAssertEqual(viewModel.summary, model.permissionSummary)
+        XCTAssertEqual(viewModel.removeAfterBackupEnabled, model.removeAfterBackupEnabled)
 
+        viewModel.setRemoveAfterBackupEnabled(true)
         await viewModel.startBackup()
         await viewModel.goBack()
 
+        XCTAssertEqual(model.setRemoveAfterBackupEnabledCallCount, 1)
+        XCTAssertTrue(model.removeAfterBackupEnabled)
         XCTAssertEqual(model.startBackupCallCount, 1)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
@@ -74,6 +78,7 @@ private final class StubPageModel: AppPageModeling {
     var homeSummary = HomeSummary.firstLaunch
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
+    var removeAfterBackupEnabled = false
     var transferSnapshot = TransferSnapshot.demo
     var completionSummary = CompletionSummary.demo
     var scannedQRCodeValue = ""
@@ -83,6 +88,7 @@ private final class StubPageModel: AppPageModeling {
     var beginPairingCallCount = 0
     var returnHomeCallCount = 0
     var startBackupCallCount = 0
+    var setRemoveAfterBackupEnabledCallCount = 0
     var requestStopTransferCallCount = 0
 
     func handleHomePrimaryAction() async {
@@ -103,6 +109,11 @@ private final class StubPageModel: AppPageModeling {
 
     func startBackup() async {
         startBackupCallCount += 1
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
+        removeAfterBackupEnabled = isEnabled
+        setRemoveAfterBackupEnabledCallCount += 1
     }
 
     func requestStopTransfer() {

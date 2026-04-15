@@ -1351,6 +1351,7 @@ actor PhotoLibraryTransferService: TransferService {
     private let lookupBatchSize: Int
     private let lookupBatchByteThresholdBytes: Int
     private var transferSpeedSamples: [TransferSpeedSample] = []
+    private var successfullyTransferredAssetIDs: [String] = []
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
 
@@ -1460,8 +1461,59 @@ actor PhotoLibraryTransferService: TransferService {
         return snapshot
     }
 
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        var seenAssetIDs: Set<String> = []
+        let candidateAssetIDs = successfullyTransferredAssetIDs.filter { assetID in
+            seenAssetIDs.insert(assetID).inserted
+        }
+        guard !candidateAssetIDs.isEmpty else {
+            return .skipped
+        }
+
+        let fetchedAssets = PHAsset.fetchAssets(withLocalIdentifiers: candidateAssetIDs, options: nil)
+        guard fetchedAssets.count > 0 else {
+            successfullyTransferredAssetIDs.removeAll(keepingCapacity: true)
+            return .skipped
+        }
+
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                PHPhotoLibrary.shared().performChanges({
+                    PHAssetChangeRequest.deleteAssets(fetchedAssets)
+                }) { success, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    if success {
+                        continuation.resume(returning: ())
+                    } else {
+                        continuation.resume(
+                            throwing: TransferClientError.transport(
+                                message: "Photo library cleanup did not complete successfully."
+                            )
+                        )
+                    }
+                }
+            }
+            let removedCount = fetchedAssets.count
+            successfullyTransferredAssetIDs.removeAll(keepingCapacity: true)
+            TransferDebugLogger.info(
+                "Moved transferred assets to Recently Removed removed_count=\(removedCount)"
+            )
+            return .removed(removedCount)
+        } catch {
+            let message = "Photo library cleanup failed. \(error.localizedDescription)"
+            TransferDebugLogger.error(
+                "Failed to move transferred assets to Recently Removed error=\(TransferDebugLogger.describe(error))"
+            )
+            return .failed(message: message)
+        }
+    }
+
     private func runTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         stopRequested = false
+        successfullyTransferredAssetIDs.removeAll(keepingCapacity: true)
 
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             let failedSnapshot = TransferSnapshot(
@@ -1755,6 +1807,7 @@ actor PhotoLibraryTransferService: TransferService {
                     switch response.status {
                     case .stored:
                         transferredCount += 1
+                        successfullyTransferredAssetIDs.append(preparedAsset.exportedAsset.descriptor.assetID)
                         recordTransferredBytes(preparedAsset.exportedAsset.fileSize)
                         TransferDebugLogger.debug(
                             "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"

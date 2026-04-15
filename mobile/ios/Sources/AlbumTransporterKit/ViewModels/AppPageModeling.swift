@@ -3,6 +3,7 @@ protocol AppPageModeling: AnyObject {
     var homeSummary: HomeSummary { get }
     var pairingStatus: PairingStatus { get }
     var permissionSummary: PermissionSummary { get }
+    var removeAfterBackupEnabled: Bool { get }
     var transferSnapshot: TransferSnapshot { get }
     var completionSummary: CompletionSummary { get }
     var scannedQRCodeValue: String { get set }
@@ -12,6 +13,7 @@ protocol AppPageModeling: AnyObject {
     func beginPairing() async
     func returnHome() async
     func startBackup() async
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool)
     func requestStopTransfer()
 }
 

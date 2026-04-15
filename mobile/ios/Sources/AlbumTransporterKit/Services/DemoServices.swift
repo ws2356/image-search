@@ -80,4 +80,8 @@ struct DemoTransferService: TransferService {
     func progressSnapshot() async -> TransferSnapshot? {
         initialSnapshot
     }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
 }

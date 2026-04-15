@@ -10,8 +10,16 @@ struct PermissionsPageViewModel {
         model.permissionSummary
     }
 
+    var removeAfterBackupEnabled: Bool {
+        model.removeAfterBackupEnabled
+    }
+
     func startBackup() async {
         await model.startBackup()
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
+        model.setRemoveAfterBackupEnabled(isEnabled)
     }
 
     func goBack() async {

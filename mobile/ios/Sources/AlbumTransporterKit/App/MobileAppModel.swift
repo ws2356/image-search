@@ -7,6 +7,7 @@ final class MobileAppModel {
     private(set) var route: AppRoute = .home
     private(set) var homeSummary = HomeSummary.firstLaunch
     private(set) var permissionSummary = PermissionSummary.demo
+    private(set) var removeAfterBackupEnabled = false
     private(set) var pairingStatus = PairingStatus.idle
     private(set) var transferSnapshot = TransferSnapshot.demo
     private(set) var completionSummary = CompletionSummary.demo
@@ -172,6 +173,14 @@ final class MobileAppModel {
         await beginTransferAfterPreflightChecks()
     }
 
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
+        guard removeAfterBackupEnabled != isEnabled else {
+            return
+        }
+        removeAfterBackupEnabled = isEnabled
+        persistSnapshot()
+    }
+
     private func beginTransferAfterPreflightChecks() async {
         if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
@@ -206,6 +215,12 @@ final class MobileAppModel {
     func completeTransfer() async {
         stopTransferProgressPolling()
         transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
+        let cleanupResult: TransferAssetCleanupResult
+        if removeAfterBackupEnabled {
+            cleanupResult = await transferService.moveSuccessfullyTransferredAssetsToRecentlyRemoved()
+        } else {
+            cleanupResult = .skipped
+        }
         let completedAt = Date()
         let sessionDuration = transferStartedAt.map { completedAt.timeIntervalSince($0) }
         let totalTransferredDescription: String = {
@@ -217,7 +232,7 @@ final class MobileAppModel {
         }()
         completionSummary = CompletionSummary(
             title: "Backup Complete!",
-            message: "Desktop confirmed \(transferSnapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop.",
+            message: completionMessage(for: cleanupResult),
             itemsBackedUp: transferSnapshot.transferredCount,
             totalTransferredDescription: totalTransferredDescription,
             durationDescription: formattedDuration(sessionDuration),
@@ -293,6 +308,7 @@ final class MobileAppModel {
     private func apply(snapshot: LaunchSnapshot) {
         homeSummary = snapshot.homeSummary
         permissionSummary = snapshot.permissionSummary
+        removeAfterBackupEnabled = snapshot.removeAfterBackupEnabled
         pairingStatus = snapshot.pairingStatus
         transferSnapshot = snapshot.transferSnapshot
         route = .home
@@ -303,7 +319,8 @@ final class MobileAppModel {
             homeSummary: homeSummary,
             permissionSummary: permissionSummary,
             pairingStatus: pairingStatus,
-            transferSnapshot: transferSnapshot
+            transferSnapshot: transferSnapshot,
+            removeAfterBackupEnabled: removeAfterBackupEnabled
         )
         let worker = sideEffectWorker
         Task.detached(priority: .utility) {
@@ -326,6 +343,22 @@ final class MobileAppModel {
             return "Full Library Access is recommended so Album Transporter can include your complete library. You can continue now, or open Settings to upgrade Photos access."
         case .photosOnly, .videosOnly, .denied:
             return "Full Library Access is recommended so Album Transporter can include all local photos and videos. You can continue now, or open Settings to grant broader access."
+        }
+    }
+
+    private func completionMessage(for cleanupResult: TransferAssetCleanupResult) -> String {
+        let baseMessage = "Desktop confirmed \(transferSnapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop."
+        guard removeAfterBackupEnabled else {
+            return baseMessage
+        }
+        switch cleanupResult {
+        case .skipped:
+            return baseMessage
+        case .removed(let removedCount):
+            let itemLabel = removedCount == 1 ? "item" : "items"
+            return "\(baseMessage) Moved \(removedCount) transferred \(itemLabel) to Recently Removed on this device."
+        case .failed(let message):
+            return "\(baseMessage) Backup succeeded, but moving transferred items to Recently Removed failed: \(message)"
         }
     }
 

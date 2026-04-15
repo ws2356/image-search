@@ -250,6 +250,39 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .scanAndPair)
         XCTAssertLessThan(elapsed, .milliseconds(250))
     }
+
+    func test_complete_transfer_moves_assets_to_recently_removed_when_enabled() async {
+        let completedSnapshot = TransferSnapshot(
+            transferredCount: 3,
+            totalCount: 3,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
+            guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
+            isIncompleteLibrary: false
+        )
+        let transferService = CleanupTrackingTransferService(completedSnapshot: completedSnapshot)
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: transferService,
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        model.setRemoveAfterBackupEnabled(true)
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await model.startBackup()
+
+        let cleanupCallCount = await transferService.cleanupCallCount()
+        XCTAssertEqual(cleanupCallCount, 1)
+        XCTAssertTrue(model.completionSummary.message.contains("Moved 3 transferred items to Recently Removed"))
+    }
 }
 
 private struct StaticPairingService: PairingService {
@@ -300,6 +333,10 @@ private struct StaticTransferService: TransferService {
     func progressSnapshot() async -> TransferSnapshot? {
         .demo
     }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
 }
 
 private actor RecordingTelemetryClient: TelemetryClient {
@@ -338,6 +375,50 @@ private actor PollingTransferService: TransferService {
 
     func progressSnapshot() async -> TransferSnapshot? {
         currentSnapshotValue
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
+}
+
+private actor CleanupTrackingTransferService: TransferService {
+    private let completedSnapshot: TransferSnapshot
+    private var cleanupCalls = 0
+
+    init(completedSnapshot: TransferSnapshot) {
+        self.completedSnapshot = completedSnapshot
+    }
+
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(completedSnapshot)
+        return completedSnapshot
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        .stoppedByUser
+    }
+
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(snapshot)
+        return snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        completedSnapshot
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        cleanupCalls += 1
+        return .removed(completedSnapshot.transferredCount)
+    }
+
+    func cleanupCallCount() -> Int {
+        cleanupCalls
     }
 }
 

@@ -114,6 +114,10 @@ public struct AlbumTransporterRootView: View {
             let permissionsViewModel = PermissionsPageViewModel(model: model)
             PermissionsGateView(
                 summary: permissionsViewModel.summary,
+                removeAfterBackupEnabled: permissionsViewModel.removeAfterBackupEnabled,
+                onRemoveAfterBackupChanged: { isEnabled in
+                    permissionsViewModel.setRemoveAfterBackupEnabled(isEnabled)
+                },
                 onContinue: {
                     Task {
                         await permissionsViewModel.startBackup()

@@ -376,11 +376,44 @@ struct LaunchSnapshot: Equatable, Sendable, Codable {
     var permissionSummary: PermissionSummary
     var pairingStatus: PairingStatus
     var transferSnapshot: TransferSnapshot
+    var removeAfterBackupEnabled: Bool
+
+    init(
+        homeSummary: HomeSummary,
+        permissionSummary: PermissionSummary,
+        pairingStatus: PairingStatus,
+        transferSnapshot: TransferSnapshot,
+        removeAfterBackupEnabled: Bool = false
+    ) {
+        self.homeSummary = homeSummary
+        self.permissionSummary = permissionSummary
+        self.pairingStatus = pairingStatus
+        self.transferSnapshot = transferSnapshot
+        self.removeAfterBackupEnabled = removeAfterBackupEnabled
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case homeSummary
+        case permissionSummary
+        case pairingStatus
+        case transferSnapshot
+        case removeAfterBackupEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        homeSummary = try container.decode(HomeSummary.self, forKey: .homeSummary)
+        permissionSummary = try container.decode(PermissionSummary.self, forKey: .permissionSummary)
+        pairingStatus = try container.decode(PairingStatus.self, forKey: .pairingStatus)
+        transferSnapshot = try container.decode(TransferSnapshot.self, forKey: .transferSnapshot)
+        removeAfterBackupEnabled = try container.decodeIfPresent(Bool.self, forKey: .removeAfterBackupEnabled) ?? false
+    }
 
     static let firstLaunch = LaunchSnapshot(
         homeSummary: .firstLaunch,
         permissionSummary: .demo,
         pairingStatus: .idle,
-        transferSnapshot: .demo
+        transferSnapshot: .demo,
+        removeAfterBackupEnabled: false
     )
 }
