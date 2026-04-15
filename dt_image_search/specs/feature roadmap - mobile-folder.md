@@ -5,13 +5,12 @@
   - Exchange device identity and verify as minimum trust signal for backup authorization 
 - **Phase 2**
   - Initial USB transport support after QR/bootstrap pairing, with Wi-Fi LAN retained as fallback
+  - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
   - Reconnect path that depends on the desktop-driven reconnect workflow
   - Replace immediate post-claim QR dialog dismissal with a pending-transfer state (spinner + waiting message), then dismiss once transfer start is confirmed
-  - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
-  - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
   - Device mismatch handling during reconnect flows, with user-friendly error messaging and clear recovery paths
 - **Phase 3**
-  - Stronger platform-specific background transfer strategies where policy-compliant
+  - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
 - **Phase 4**
   - Service discovery to support backup resume from mobile without needing to scan QR code again
 - **Phase 5**
@@ -23,4 +22,5 @@
   - Automatic USB preference and in-session handoff when a supported mobile device is connected via USB during backup
 
 - **Future Considerations**
+  - Stronger platform-specific background transfer strategies where policy-compliant
   - File integrity verification with checksums or hashes, with user-friendly error handling and retry options for failed transfers
