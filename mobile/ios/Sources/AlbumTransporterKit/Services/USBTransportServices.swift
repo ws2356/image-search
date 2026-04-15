@@ -78,6 +78,12 @@ private enum USBTransportDebugLogger {
     }
 
     static func describe(_ error: Error) -> String {
+        if let transferError = error as? TransferClientError {
+            return "TransferClientError: \(transferError.message)"
+        }
+        if let runtimeError = error as? USBTransportRuntimeError {
+            return "USBTransportRuntimeError: \(runtimeError.localizedDescription)"
+        }
         let nsError = error as NSError
         return "\(type(of: error)): \(error.localizedDescription) [\(nsError.domain)#\(nsError.code)]"
     }
@@ -369,6 +375,9 @@ actor USBWebSocketTransportRuntime {
                     return
                 }
             } catch {
+                USBTransportDebugLogger.warning(
+                    "USBRuntime/auth_challenge_failure error=\(USBTransportDebugLogger.describe(error))"
+                )
                 isConnectionAuthenticated = false
                 activeStreamingRequestID = nil
             }
@@ -394,7 +403,7 @@ actor USBWebSocketTransportRuntime {
         on connection: NWConnection,
         data: Data
     ) async throws -> Bool {
-        guard let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             return false
         }
         guard envelope["schema"] as? String == MobileTransportProtocol.schema else {

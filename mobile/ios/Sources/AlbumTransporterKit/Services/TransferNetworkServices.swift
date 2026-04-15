@@ -355,6 +355,12 @@ enum TransferClientError: Error, Sendable {
     }
 }
 
+extension TransferClientError: LocalizedError {
+    var errorDescription: String? {
+        message
+    }
+}
+
 protocol TransferSchemaResponse: Decodable {
     var schema: String { get }
     var message: String { get }
