@@ -144,7 +144,11 @@ actor USBWebSocketTransportRuntime {
             bodySchema: bodySchema,
             request: request
         )
-        try await sendText(envelopeData, on: connection)
+        try await sendText(
+            envelopeData,
+            on: connection,
+            timeout: timeout
+        )
         return try await awaitResponse(
             requestID: requestID,
             operation: operation,
@@ -174,7 +178,11 @@ actor USBWebSocketTransportRuntime {
                 "chunk_size": chunkSizeBytes,
             ]
         )
-        try await sendText(envelopeData, on: connection)
+        try await sendText(
+            envelopeData,
+            on: connection,
+            timeout: timeout
+        )
         activeStreamingRequestID = requestID
         return requestID
     }
@@ -193,7 +201,11 @@ actor USBWebSocketTransportRuntime {
             )
         }
         let connection = try await waitForReadyConnection(timeout: timeout)
-        try await sendBinary(chunk, on: connection)
+        try await sendBinary(
+            chunk,
+            on: connection,
+            timeout: timeout
+        )
     }
 
     func finishStreamingRequest(
@@ -213,7 +225,11 @@ actor USBWebSocketTransportRuntime {
                 MobileTransportProtocol.transferAssetStreamStateField: MobileTransportProtocol.transferAssetStreamStateComplete,
             ]
         )
-        try await sendText(completionEnvelopeData, on: connection)
+        try await sendText(
+            completionEnvelopeData,
+            on: connection,
+            timeout: timeout
+        )
         defer {
             activeStreamingRequestID = nil
         }
@@ -452,7 +468,11 @@ actor USBWebSocketTransportRuntime {
             throw USBTransportRuntimeError.invalidEnvelope
         }
         let responseData = try JSONSerialization.data(withJSONObject: responseEnvelope, options: [])
-        try await sendText(responseData, on: connection)
+        try await sendText(
+            responseData,
+            on: connection,
+            timeout: .seconds(1)
+        )
         return true
     }
 
@@ -509,35 +529,76 @@ actor USBWebSocketTransportRuntime {
         throw USBTransportRuntimeError.connectionUnavailable
     }
 
-    private func sendText(_ envelopeData: Data, on connection: NWConnection) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
-            let context = NWConnection.ContentContext(
-                identifier: "mobile-transport-\(UUID().uuidString.lowercased())",
-                metadata: [metadata]
-            )
-            connection.send(
-                content: envelopeData,
-                contentContext: context,
-                isComplete: true,
-                completion: .contentProcessed { error in
-                    if let error {
-                        continuation.resume(
-                            throwing: USBTransportRuntimeError.sendFailed(message: error.localizedDescription)
-                        )
-                    } else {
-                        continuation.resume(returning: ())
-                    }
-                }
-            )
-        }
+    private func sendText(
+        _ envelopeData: Data,
+        on connection: NWConnection,
+        timeout: Duration
+    ) async throws {
+        try await sendWebSocketMessage(
+            envelopeData,
+            opcode: .text,
+            identifierPrefix: "mobile-transport",
+            on: connection,
+            timeout: timeout
+        )
     }
 
-    private func sendBinary(_ data: Data, on connection: NWConnection) async throws {
+    private func sendBinary(
+        _ data: Data,
+        on connection: NWConnection,
+        timeout: Duration
+    ) async throws {
+        try await sendWebSocketMessage(
+            data,
+            opcode: .binary,
+            identifierPrefix: "mobile-transport-binary",
+            on: connection,
+            timeout: timeout
+        )
+    }
+
+    private func sendWebSocketMessage(
+        _ data: Data,
+        opcode: NWProtocolWebSocket.Opcode,
+        identifierPrefix: String,
+        on connection: NWConnection,
+        timeout: Duration
+    ) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let metadata = NWProtocolWebSocket.Metadata(opcode: .binary)
+            let lock = NSLock()
+            var resumed = false
+
+            func resumeOnce(_ result: Result<Void, Error>) {
+                lock.lock()
+                guard !resumed else {
+                    lock.unlock()
+                    return
+                }
+                resumed = true
+                lock.unlock()
+                continuation.resume(with: result)
+            }
+
+            let timeoutSeconds =
+                Double(timeout.components.seconds)
+                + (Double(timeout.components.attoseconds) / 1_000_000_000_000_000_000)
+            let timeoutWorkItem = DispatchWorkItem {
+                resumeOnce(
+                    .failure(
+                        USBTransportRuntimeError.sendFailed(
+                            message: "Desktop USB transport send timed out."
+                        )
+                    )
+                )
+            }
+            queue.asyncAfter(
+                deadline: .now() + max(timeoutSeconds, 0.001),
+                execute: timeoutWorkItem
+            )
+
+            let metadata = NWProtocolWebSocket.Metadata(opcode: opcode)
             let context = NWConnection.ContentContext(
-                identifier: "mobile-transport-binary-\(UUID().uuidString.lowercased())",
+                identifier: "\(identifierPrefix)-\(UUID().uuidString.lowercased())",
                 metadata: [metadata]
             )
             connection.send(
@@ -545,12 +606,17 @@ actor USBWebSocketTransportRuntime {
                 contentContext: context,
                 isComplete: true,
                 completion: .contentProcessed { error in
+                    timeoutWorkItem.cancel()
                     if let error {
-                        continuation.resume(
-                            throwing: USBTransportRuntimeError.sendFailed(message: error.localizedDescription)
+                        resumeOnce(
+                            .failure(
+                                USBTransportRuntimeError.sendFailed(
+                                    message: error.localizedDescription
+                                )
+                            )
                         )
                     } else {
-                        continuation.resume(returning: ())
+                        resumeOnce(.success(()))
                     }
                 }
             )
