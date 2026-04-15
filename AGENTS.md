@@ -46,3 +46,6 @@ Welcome to the `image-search` repository. This document outlines the architectur
 - **Transactions**: Explicit `conn.commit()` calls must follow write operations.
 - **Row Access**: The project uses `conn.row_factory = sqlite3.Row` to allow dictionary-like column access by name. Do not rely on tuple indexing unless strictly necessary.
 - **Concurrency**: `PRAGMA journal_mode=WAL;` is enabled to resolve multi-writer conflicts. Keep DB connections short-lived or thread-local if writing heavily.
+
+## 8. TESTING
+- After adding unit and functional tests, ensure to add then to the [test script](./dt_image_search/scripts/run_tests.sh) so they can be run collectively.

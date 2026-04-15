@@ -8,6 +8,8 @@ import textwrap
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from dt_image_search.telemetry.crash_support import CrashRecoveryManager
 
 

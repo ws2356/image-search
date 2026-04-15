@@ -45,10 +45,32 @@ fi
 
 export IS_TESTING=true
 
-$python_bin -m pytest -s --log-cli-level=$level tests/unit/test_dts_index.py
-$python_bin -m pytest -s --log-cli-level=$level tests/unit/test_search_controller.py
-$python_bin -m pytest -s --log-cli-level=$level tests/functional/test_app_flow.py
-$python_bin -m pytest -s --log-cli-level=$level tests/functional/test_mobile_backup_flow.py
+unit_and_functional_tests=(
+  tests/unit/test_dts_index.py
+  tests/unit/test_browse_controller_mobile_folder.py
+  tests/unit/test_dts_db_folder_path_variants.py
+  tests/unit/test_incremental_index_worker.py
+  tests/unit/test_mobile_folder_controller.py
+  tests/unit/test_mobile_pairing_discovery.py
+  tests/unit/test_mobile_pairing_service.py
+  tests/unit/test_mobile_pairing_session.py
+  tests/unit/test_mobile_transfer_service.py
+  tests/unit/test_mobile_transport_manager.py
+  tests/unit/test_mobile_transport_router.py
+  tests/unit/test_mobile_usb_tunnel.py
+  tests/unit/test_mobile_usb_ws_adapter.py
+  tests/unit/test_pil_image_support.py
+  tests/unit/test_runtime_metadata.py
+  tests/unit/test_search_controller.py
+  tests/functional/test_app_flow.py
+  tests/functional/test_mobile_backup_flow.py
+  tests/functional/test_usb_handshake_pc_side.py
+  tests/functional/test_crash_recovery_harness.py
+)
+
+for test in "${unit_and_functional_tests[@]}"; do
+  $python_bin -m pytest -s --log-cli-level=$level "$test"
+done
 
 # Run UI tests only on Windows os
 if [[ "$OSTYPE" == "msys" ]]; then
