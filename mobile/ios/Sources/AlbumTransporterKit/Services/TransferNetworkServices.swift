@@ -1,3 +1,4 @@
+@preconcurrency import AVFoundation
 import CryptoKit
 import Foundation
 import OSLog
@@ -783,6 +784,20 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
 }
 
 actor PhotoLibraryAssetSource: TransferAssetSource {
+    private final class ExportSessionBox: @unchecked Sendable {
+        let session: AVAssetExportSession
+
+        init(_ session: AVAssetExportSession) {
+            self.session = session
+        }
+    }
+
+    private struct PreparedExportFile {
+        let fileURL: URL
+        let mimeType: String?
+        let filename: String
+    }
+
     func fetchAssets() async throws -> [TransferAssetDescriptor] {
         let authorizationStatus = await requestAuthorizationIfNeeded()
         TransferDebugLogger.info("Photo library authorization status=\(authorizationStatus.transferDescription)")
@@ -819,8 +834,7 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
 
     func exportAsset(_ descriptor: TransferAssetDescriptor) async throws -> ExportedTransferAsset {
         let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [descriptor.assetID], options: nil)
-        guard let asset = fetchResult.firstObject,
-              let resource = Self.preferredResource(for: asset)
+        guard let asset = fetchResult.firstObject
         else {
             TransferDebugLogger.error(
                 "Photo library asset is unavailable for export \(TransferDebugLogger.assetSummary(for: descriptor))"
@@ -828,10 +842,89 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
             throw TransferClientError.transport(message: "The selected photo library asset is no longer available.")
         }
 
-        let exportURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString.lowercased())
-            .appendingPathExtension((descriptor.filename as NSString).pathExtension)
+        let resources = PHAssetResource.assetResources(for: asset)
+        guard let resource = Self.preferredResource(from: resources) else {
+            TransferDebugLogger.error(
+                "Photo library asset has no exportable resource \(TransferDebugLogger.assetSummary(for: descriptor))"
+            )
+            throw TransferClientError.transport(message: "The selected photo library asset is missing export data.")
+        }
 
+        let hasAdjustmentData = resources.contains(where: { $0.type == .adjustmentData })
+        let preparedExport: PreparedExportFile
+        if asset.mediaType == .image {
+            preparedExport = try await Self.exportCurrentImage(asset: asset, descriptor: descriptor)
+        } else if asset.mediaType == .video, hasAdjustmentData {
+            preparedExport = try await Self.exportCurrentVideo(asset: asset, descriptor: descriptor)
+        } else {
+            preparedExport = try await Self.exportResource(
+                resource: resource,
+                descriptor: descriptor
+            )
+        }
+
+        let fileSize = (try? preparedExport.fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let contentSHA1: String
+        do {
+            contentSHA1 = try Self.sha1Hex(for: preparedExport.fileURL)
+        } catch {
+            TransferDebugLogger.error(
+                "Failed to hash exported asset \(TransferDebugLogger.assetSummary(for: descriptor)) error=\(TransferDebugLogger.describe(error))"
+            )
+            throw TransferClientError.transport(message: "The exported asset could not be hashed for transfer verification.")
+        }
+        TransferDebugLogger.debug(
+            "Exported asset \(TransferDebugLogger.assetSummary(for: descriptor)) exported_filename=\(preparedExport.filename) bytes=\(fileSize) sha1=\(contentSHA1)"
+        )
+
+        var exportedDescriptor = descriptor
+        exportedDescriptor.filename = preparedExport.filename
+        return ExportedTransferAsset(
+            descriptor: exportedDescriptor,
+            fileURL: preparedExport.fileURL,
+            mimeType: preparedExport.mimeType,
+            fileSize: fileSize,
+            contentSHA1: contentSHA1
+        )
+    }
+
+    private func requestAuthorizationIfNeeded() async -> PHAuthorizationStatus {
+        let currentStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard currentStatus == .notDetermined else {
+            return currentStatus
+        }
+
+        return await withCheckedContinuation { continuation in
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+                continuation.resume(returning: status)
+            }
+        }
+    }
+
+    private static func preferredResource(for asset: PHAsset) -> PHAssetResource? {
+        preferredResource(from: PHAssetResource.assetResources(for: asset))
+    }
+
+    private static func preferredResource(from resources: [PHAssetResource]) -> PHAssetResource? {
+        let preferredTypes: [PHAssetResourceType] = [
+            .fullSizePhoto,
+            .photo,
+            .fullSizeVideo,
+            .video,
+        ]
+        for preferredType in preferredTypes {
+            if let resource = resources.first(where: { $0.type == preferredType }) {
+                return resource
+            }
+        }
+        return resources.first
+    }
+
+    private static func exportResource(
+        resource: PHAssetResource,
+        descriptor: TransferAssetDescriptor
+    ) async throws -> PreparedExportFile {
+        let exportURL = temporaryExportURL(pathExtension: (descriptor.filename as NSString).pathExtension)
         TransferDebugLogger.debug(
             "Exporting asset \(TransferDebugLogger.assetSummary(for: descriptor)) resource_type=\(resource.type.rawValue) uti=\(resource.uniformTypeIdentifier)"
         )
@@ -864,57 +957,255 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
                 continuation.resume(returning: ())
             }
         }
-
-        let fileSize = (try? exportURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        let contentSHA1: String
-        do {
-            contentSHA1 = try Self.sha1Hex(for: exportURL)
-        } catch {
-            TransferDebugLogger.error(
-                "Failed to hash exported asset \(TransferDebugLogger.assetSummary(for: descriptor)) error=\(TransferDebugLogger.describe(error))"
-            )
-            throw TransferClientError.transport(message: "The exported asset could not be hashed for transfer verification.")
-        }
-        TransferDebugLogger.debug(
-            "Exported asset \(TransferDebugLogger.assetSummary(for: descriptor)) bytes=\(fileSize) sha1=\(contentSHA1)"
-        )
-
-        return ExportedTransferAsset(
-            descriptor: descriptor,
+        return PreparedExportFile(
             fileURL: exportURL,
             mimeType: UTType(resource.uniformTypeIdentifier)?.preferredMIMEType,
-            fileSize: fileSize,
-            contentSHA1: contentSHA1
+            filename: descriptor.filename
         )
     }
 
-    private func requestAuthorizationIfNeeded() async -> PHAuthorizationStatus {
-        let currentStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        guard currentStatus == .notDetermined else {
-            return currentStatus
-        }
-
-        return await withCheckedContinuation { continuation in
-            PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
-                continuation.resume(returning: status)
+    private static func exportCurrentImage(
+        asset: PHAsset,
+        descriptor: TransferAssetDescriptor
+    ) async throws -> PreparedExportFile {
+        let requestOptions = PHImageRequestOptions()
+        requestOptions.deliveryMode = .highQualityFormat
+        requestOptions.isNetworkAccessAllowed = true
+        requestOptions.version = .current
+        let renderedImage = try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<(Data, String?), Error>) in
+            PHImageManager.default().requestImageDataAndOrientation(for: asset, options: requestOptions) {
+                data, dataUTI, _, info in
+                if let error = info?[PHImageErrorKey] as? NSError {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                if let cancelled = info?[PHImageCancelledKey] as? Bool, cancelled {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "Photo library image export was cancelled."
+                        )
+                    )
+                    return
+                }
+                if let isInCloud = info?[PHImageResultIsInCloudKey] as? Bool, isInCloud, data == nil {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "The selected image is stored in iCloud and could not be downloaded for transfer."
+                        )
+                    )
+                    return
+                }
+                guard let data else {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "The selected image could not be exported from the photo library."
+                        )
+                    )
+                    return
+                }
+                continuation.resume(returning: (data, dataUTI))
             }
+        }
+        let renderedType = renderedImage.1.flatMap(UTType.init)
+        let outputExtension = renderedType?.preferredFilenameExtension ?? (descriptor.filename as NSString).pathExtension
+        let exportURL = temporaryExportURL(pathExtension: outputExtension)
+        try renderedImage.0.write(to: exportURL, options: .atomic)
+        let exportedFilename = filename(
+            for: descriptor.filename,
+            pathExtension: outputExtension
+        )
+        TransferDebugLogger.debug(
+            "Exported image with current edits \(TransferDebugLogger.assetSummary(for: descriptor)) data_uti=\(renderedImage.1 ?? "-")"
+        )
+        return PreparedExportFile(
+            fileURL: exportURL,
+            mimeType: renderedType?.preferredMIMEType,
+            filename: exportedFilename
+        )
+    }
+
+    private static func exportCurrentVideo(
+        asset: PHAsset,
+        descriptor: TransferAssetDescriptor
+    ) async throws -> PreparedExportFile {
+        let requestOptions = PHVideoRequestOptions()
+        requestOptions.version = .current
+        requestOptions.deliveryMode = .highQualityFormat
+        requestOptions.isNetworkAccessAllowed = true
+        let exportOutput = try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<(URL, String), Error>) in
+            PHImageManager.default().requestAVAsset(forVideo: asset, options: requestOptions) {
+                avAsset, audioMix, info in
+                if let error = info?[PHImageErrorKey] as? NSError {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                if let cancelled = info?[PHImageCancelledKey] as? Bool, cancelled {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "Photo library video export was cancelled."
+                        )
+                    )
+                    return
+                }
+                if let isInCloud = info?[PHImageResultIsInCloudKey] as? Bool, isInCloud, avAsset == nil {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "The selected video is stored in iCloud and could not be downloaded for transfer."
+                        )
+                    )
+                    return
+                }
+                guard let avAsset else {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "The selected video could not be exported from the photo library."
+                        )
+                    )
+                    return
+                }
+                guard let exportSession = AVAssetExportSession(
+                    asset: avAsset,
+                    presetName: AVAssetExportPresetHighestQuality
+                ) else {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "The selected edited video could not start a high-quality export session."
+                        )
+                    )
+                    return
+                }
+                guard let outputFileType = supportedVideoOutputFileType(
+                    from: exportSession.supportedFileTypes,
+                    preferredFilename: descriptor.filename
+                ) else {
+                    continuation.resume(
+                        throwing: TransferClientError.transport(
+                            message: "The selected edited video could not find a supported export format."
+                        )
+                    )
+                    return
+                }
+                let outputExtension = videoFilenameExtension(for: outputFileType) ?? (descriptor.filename as NSString).pathExtension
+                let exportURL = temporaryExportURL(pathExtension: outputExtension)
+                exportSession.outputURL = exportURL
+                exportSession.outputFileType = outputFileType
+                exportSession.audioMix = audioMix
+                let exportSessionBox = ExportSessionBox(exportSession)
+                exportSessionBox.session.exportAsynchronously {
+                    let completedSession = exportSessionBox.session
+                    switch completedSession.status {
+                    case .completed:
+                        continuation.resume(returning: (exportURL, outputFileType.rawValue))
+                    case .failed:
+                        continuation.resume(
+                            throwing: completedSession.error ?? TransferClientError.transport(
+                                message: "The selected edited video failed to export."
+                            )
+                        )
+                    case .cancelled:
+                        continuation.resume(
+                            throwing: TransferClientError.transport(
+                                message: "Photo library video export was cancelled."
+                            )
+                        )
+                    default:
+                        continuation.resume(
+                            throwing: TransferClientError.transport(
+                                message: "The selected edited video did not finish exporting."
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        let outputFileType = AVFileType(rawValue: exportOutput.1)
+        let outputExtension = videoFilenameExtension(for: outputFileType) ?? (descriptor.filename as NSString).pathExtension
+        let exportedFilename = filename(
+            for: descriptor.filename,
+            pathExtension: outputExtension
+        )
+        TransferDebugLogger.debug(
+            "Exported edited video composition \(TransferDebugLogger.assetSummary(for: descriptor)) output_type=\(exportOutput.1)"
+        )
+        return PreparedExportFile(
+            fileURL: exportOutput.0,
+            mimeType: mimeType(for: outputFileType),
+            filename: exportedFilename
+        )
+    }
+
+    private static func temporaryExportURL(pathExtension: String) -> URL {
+        let baseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString.lowercased())
+        let cleanedExtension = pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedExtension.isEmpty else {
+            return baseURL
+        }
+        return baseURL.appendingPathExtension(cleanedExtension)
+    }
+
+    private static func supportedVideoOutputFileType(
+        from supportedFileTypes: [AVFileType],
+        preferredFilename: String
+    ) -> AVFileType? {
+        let preferredExtension = (preferredFilename as NSString).pathExtension.lowercased()
+        let preferredType: AVFileType? = switch preferredExtension {
+        case "mp4":
+            .mp4
+        case "m4v":
+            .m4v
+        case "mov":
+            .mov
+        default:
+            nil
+        }
+        if let preferredType, supportedFileTypes.contains(preferredType) {
+            return preferredType
+        }
+        for fallbackType in [AVFileType.mp4, AVFileType.mov, AVFileType.m4v] where supportedFileTypes.contains(fallbackType) {
+            return fallbackType
+        }
+        return supportedFileTypes.first
+    }
+
+    private static func videoFilenameExtension(for fileType: AVFileType) -> String? {
+        switch fileType {
+        case .mp4:
+            return "mp4"
+        case .mov:
+            return "mov"
+        case .m4v:
+            return "m4v"
+        default:
+            return UTType(fileType.rawValue)?.preferredFilenameExtension
         }
     }
 
-    private static func preferredResource(for asset: PHAsset) -> PHAssetResource? {
-        let resources = PHAssetResource.assetResources(for: asset)
-        let preferredTypes: [PHAssetResourceType] = [
-            .fullSizePhoto,
-            .photo,
-            .fullSizeVideo,
-            .video,
-        ]
-        for preferredType in preferredTypes {
-            if let resource = resources.first(where: { $0.type == preferredType }) {
-                return resource
-            }
+    private static func mimeType(for fileType: AVFileType) -> String? {
+        if let preferred = UTType(fileType.rawValue)?.preferredMIMEType {
+            return preferred
         }
-        return resources.first
+        switch fileType {
+        case .mp4, .m4v:
+            return "video/mp4"
+        case .mov:
+            return "video/quicktime"
+        default:
+            return nil
+        }
+    }
+
+    private static func filename(for sourceFilename: String, pathExtension: String) -> String {
+        let cleanedExtension = pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedExtension.isEmpty else {
+            return sourceFilename
+        }
+        let sourcePath = sourceFilename as NSString
+        let stem = sourcePath.deletingPathExtension
+        let normalizedStem = stem.isEmpty ? sourceFilename : stem
+        return "\(normalizedStem).\(cleanedExtension)"
     }
 
     private static func sha1Hex(for fileURL: URL) throws -> String {
