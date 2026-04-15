@@ -231,6 +231,25 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(decoded.oneTimePasscode, "123456")
         XCTAssertNil(decoded.suggestedUSBPort)
     }
+
+    func test_open_scan_flow_returns_without_waiting_for_slow_side_effect_io() async {
+        let model = MobileAppModel(
+            stateStore: SlowAppStateStore(saveDelay: .milliseconds(600)),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            telemetryClient: SlowTelemetryClient(recordDelay: .milliseconds(600))
+        )
+        let clock = ContinuousClock()
+        let start = clock.now
+
+        await model.openScanFlow()
+
+        let elapsed = start.duration(to: clock.now)
+        XCTAssertEqual(model.route, .scanAndPair)
+        XCTAssertLessThan(elapsed, .milliseconds(250))
+    }
 }
 
 private struct StaticPairingService: PairingService {
@@ -319,5 +338,35 @@ private actor PollingTransferService: TransferService {
 
     func progressSnapshot() async -> TransferSnapshot? {
         currentSnapshotValue
+    }
+}
+
+private actor SlowAppStateStore: AppStateStore {
+    private let snapshot: LaunchSnapshot
+    private let saveDelay: Duration
+
+    init(snapshot: LaunchSnapshot = .firstLaunch, saveDelay: Duration) {
+        self.snapshot = snapshot
+        self.saveDelay = saveDelay
+    }
+
+    func loadLaunchSnapshot() async -> LaunchSnapshot {
+        snapshot
+    }
+
+    func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async {
+        try? await Task.sleep(for: saveDelay)
+    }
+}
+
+private actor SlowTelemetryClient: TelemetryClient {
+    private let recordDelay: Duration
+
+    init(recordDelay: Duration) {
+        self.recordDelay = recordDelay
+    }
+
+    func record(event: MobileTelemetryEvent) async {
+        try? await Task.sleep(for: recordDelay)
     }
 }

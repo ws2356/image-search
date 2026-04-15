@@ -27,7 +27,7 @@ final class MobileAppModel {
     @ObservationIgnored private let pairingService: PairingService
     @ObservationIgnored private let permissionService: PermissionService
     @ObservationIgnored private let transferService: TransferService
-    @ObservationIgnored private let telemetryClient: TelemetryClient
+    @ObservationIgnored private let sideEffectWorker: MobileAppSideEffectWorker
 
     init(
         stateStore: AppStateStore,
@@ -43,7 +43,10 @@ final class MobileAppModel {
         self.pairingService = pairingService
         self.permissionService = permissionService
         self.transferService = transferService
-        self.telemetryClient = telemetryClient
+        self.sideEffectWorker = MobileAppSideEffectWorker(
+            stateStore: stateStore,
+            telemetryClient: telemetryClient
+        )
         self.transferProgressPollingInterval = transferProgressPollingInterval
     }
 
@@ -74,7 +77,7 @@ final class MobileAppModel {
         Task.detached(priority: .utility) {
             await pairingService.primeNetworkAccess()
         }
-        await telemetryClient.record(event: .appLaunched)
+        recordTelemetry(.appLaunched)
     }
 
     func handleHomePrimaryAction() async {
@@ -97,8 +100,8 @@ final class MobileAppModel {
             message: "Point the camera at the desktop QR code shown in the PC app."
         )
         route = .scanAndPair
-        await telemetryClient.record(event: .scanStarted)
-        await persistSnapshot()
+        recordTelemetry(.scanStarted)
+        persistSnapshot()
     }
 
     func beginPairing() async {
@@ -109,7 +112,7 @@ final class MobileAppModel {
             transport: nil,
             message: "Validating the QR payload and establishing a secure local session with the desktop."
         )
-        await telemetryClient.record(event: .pairingStarted)
+        recordTelemetry(.pairingStarted)
 
         let payloadResult = qrCodePayloadDecoder.decode(scannedValue: scannedQRCodeValue)
 
@@ -123,17 +126,17 @@ final class MobileAppModel {
                     message: error.message
                 )
             }
-            await telemetryClient.record(event: .pairingFailed)
-            await persistSnapshot()
+            recordTelemetry(.pairingFailed)
+            persistSnapshot()
             return
         }
 
         let result = await pairingService.startPairing(using: payload)
         pairingStatus = result
-        await persistSnapshot()
+        persistSnapshot()
 
         guard result.phase == .paired else {
-            await telemetryClient.record(event: .pairingFailed)
+            recordTelemetry(.pairingFailed)
             return
         }
 
@@ -141,8 +144,8 @@ final class MobileAppModel {
         permissionSummary = await permissionService.loadPermissionSummary()
         route = .permissions
 
-        await telemetryClient.record(event: .pairingSucceeded)
-        await persistSnapshot()
+        recordTelemetry(.pairingSucceeded)
+        persistSnapshot()
     }
 
     func startBackup() async {
@@ -153,7 +156,7 @@ final class MobileAppModel {
             mediaAccessAlertMessage = mediaAccessAlertMessage(for: permissionSummary.mediaScope)
             isShowingMediaAccessAlert = true
             isAwaitingMediaAccessDecision = true
-            await persistSnapshot()
+            persistSnapshot()
             return
         }
 
@@ -172,7 +175,7 @@ final class MobileAppModel {
     private func beginTransferAfterPreflightChecks() async {
         if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
-            await persistSnapshot()
+            persistSnapshot()
             return
         }
 
@@ -196,8 +199,8 @@ final class MobileAppModel {
         transferStartedAt = nil
         route = .home
 
-        await telemetryClient.record(event: .transferStopped)
-        await persistSnapshot()
+        recordTelemetry(.transferStopped)
+        persistSnapshot()
     }
 
     func completeTransfer() async {
@@ -228,15 +231,15 @@ final class MobileAppModel {
         transferStartedAt = nil
         route = .completed
 
-        await telemetryClient.record(event: .transferCompleted)
-        await persistSnapshot()
+        recordTelemetry(.transferCompleted)
+        persistSnapshot()
     }
 
     func returnHome() async {
         stopTransferProgressPolling()
         transferStartedAt = nil
         route = .home
-        await persistSnapshot()
+        persistSnapshot()
     }
 
     private func startTransfer() async {
@@ -252,13 +255,13 @@ final class MobileAppModel {
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: permissionSummary.mediaScope != .full
         )
-        await telemetryClient.record(event: .transferStarted)
-        await persistSnapshot()
+        recordTelemetry(.transferStarted)
+        persistSnapshot()
         startTransferProgressPolling()
         transferSnapshot = await transferService.startTransfer(progress: { _ in })
         stopTransferProgressPolling()
         guard route == .transfer else {
-            await persistSnapshot()
+            persistSnapshot()
             return
         }
 
@@ -295,14 +298,24 @@ final class MobileAppModel {
         route = .home
     }
 
-    private func persistSnapshot() async {
+    private func persistSnapshot() {
         let snapshot = LaunchSnapshot(
             homeSummary: homeSummary,
             permissionSummary: permissionSummary,
             pairingStatus: pairingStatus,
             transferSnapshot: transferSnapshot
         )
-        await stateStore.saveLaunchSnapshot(snapshot)
+        let worker = sideEffectWorker
+        Task.detached(priority: .utility) {
+            await worker.persist(snapshot: snapshot)
+        }
+    }
+
+    private func recordTelemetry(_ event: MobileTelemetryEvent) {
+        let worker = sideEffectWorker
+        Task.detached(priority: .utility) {
+            await worker.record(event: event)
+        }
     }
 
     private func mediaAccessAlertMessage(for scope: PermissionScope) -> String {
@@ -355,5 +368,23 @@ final class MobileAppModel {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+actor MobileAppSideEffectWorker {
+    private let stateStore: AppStateStore
+    private let telemetryClient: TelemetryClient
+
+    init(stateStore: AppStateStore, telemetryClient: TelemetryClient) {
+        self.stateStore = stateStore
+        self.telemetryClient = telemetryClient
+    }
+
+    func persist(snapshot: LaunchSnapshot) async {
+        await stateStore.saveLaunchSnapshot(snapshot)
+    }
+
+    func record(event: MobileTelemetryEvent) async {
+        await telemetryClient.record(event: event)
     }
 }
