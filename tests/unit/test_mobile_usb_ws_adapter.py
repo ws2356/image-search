@@ -1,11 +1,13 @@
 import hashlib
 import json
+import errno
 import os
 from pathlib import Path
 import socket
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -25,6 +27,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbBootstrapConfig,
     UsbTransportState,
     UsbWebSocketTransportAdapter,
+    _default_websocket_connect,
     iter_usb_probe_ports,
 )
 
@@ -157,6 +160,32 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
             router=self._router,
             log_handler=self._noop_log,
         )
+
+    def test_default_websocket_connect_retries_with_unix_mode_for_non_tcp_socket(self):
+        sentinel_connection = _FakeWebSocketConnection()
+        observed_kwargs: list[dict[str, object]] = []
+        fake_tunnel_socket = object()
+
+        def _fake_websocket_connect(**kwargs: object):
+            observed_kwargs.append(dict(kwargs))
+            if kwargs.get("unix", False):
+                return sentinel_connection
+            raise OSError(errno.EOPNOTSUPP, "Operation not supported on socket")
+
+        with patch(
+            "dt_image_search.mobile.transport.usb_ws_adapter.websocket_connect",
+            new=_fake_websocket_connect,
+        ):
+            connected = _default_websocket_connect(
+                uri="ws://127.0.0.1:55032",
+                sock=fake_tunnel_socket,
+                proxy=None,
+            )
+
+        self.assertIs(connected, sentinel_connection)
+        self.assertEqual(len(observed_kwargs), 2)
+        self.assertFalse(observed_kwargs[0].get("unix", False))
+        self.assertTrue(observed_kwargs[1].get("unix", False))
 
     def test_start_requires_bootstrap_config(self):
         with self.assertRaises(RuntimeError):

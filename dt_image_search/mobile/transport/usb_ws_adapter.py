@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import errno
 from enum import Enum
 import hashlib
 import hmac
@@ -101,7 +102,21 @@ def _default_websocket_connect(**kwargs: object) -> UsbWebSocketConnection:
             "Desktop USB transport requires the websockets package "
             "(install with `python3 -m pip install websockets`)."
         )
-    return websocket_connect(**kwargs)
+    try:
+        return websocket_connect(**kwargs)
+    except OSError as exc:
+        if kwargs.get("sock") is None or kwargs.get("unix", False):
+            raise
+        supported_errno_values = {
+            errno.EOPNOTSUPP,
+            getattr(errno, "ENOTSUP", None),
+            getattr(errno, "ENOPROTOOPT", None),
+        }
+        if exc.errno not in supported_errno_values:
+            raise
+        retry_kwargs = dict(kwargs)
+        retry_kwargs["unix"] = True
+        return websocket_connect(**retry_kwargs)
 
 
 def iter_usb_probe_ports(
