@@ -998,6 +998,23 @@ actor PhotoLibraryTransferService: TransferService {
 
     func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
         stopRequested = true
+        guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
+            return .stoppedByUser
+        }
+        do {
+            _ = try await transferClient.completeSession(
+                desktop: trustedDesktop,
+                transferredCount: current.transferredCount,
+                failedCount: max(current.failedCount, 1)
+            )
+            TransferDebugLogger.info(
+                "Reported stopped transfer to desktop session_id=\(trustedDesktop.lastSessionID) transferred=\(current.transferredCount) failed=\(max(current.failedCount, 1))"
+            )
+        } catch {
+            TransferDebugLogger.warning(
+                "Failed to report stopped transfer to desktop session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
+            )
+        }
         return .stoppedByUser
     }
 

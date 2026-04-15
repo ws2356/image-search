@@ -446,6 +446,45 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(uploadedAssetIDs, ["ph://asset-001", "ph://asset-002", "ph://asset-003"])
         XCTAssertEqual(lookupBatchSizes, [2, 1])
     }
+
+    func test_photo_library_transfer_service_reports_stop_to_desktop_as_interrupted() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let transferClient = RecordingMobileTransferClient()
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(descriptors: []),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+        let currentSnapshot = TransferSnapshot(
+            transferredCount: 3,
+            totalCount: 10,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Stopping backup…",
+            guidanceMessage: "",
+            isIncompleteLibrary: false
+        )
+
+        let reason = await service.stopTransfer(current: currentSnapshot)
+        let completedTransferredCount = await transferClient.completedTransferredCount()
+        let completedFailedCount = await transferClient.completedFailedCount()
+
+        XCTAssertEqual(reason, .stoppedByUser)
+        XCTAssertEqual(completedTransferredCount, 3)
+        XCTAssertEqual(completedFailedCount, 1)
+    }
 }
 
 private actor InMemoryTransferTrustedDesktopStore: TrustedDesktopStore {

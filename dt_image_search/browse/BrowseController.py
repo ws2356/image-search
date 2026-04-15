@@ -95,8 +95,9 @@ class BrowseController(BaseController):
                 return
 
         self._refresh_mobile_transfer_states()
-        folder_item = self._ensure_folder_visible(folder.path)
+        fallback_item = self._ensure_folder_visible(folder.path)
         self._refresh_mobile_transfer_states()
+        folder_item = self.folder_list_model().find_folder_item(folder.path) or fallback_item
         if folder_item is None:
             log("warning", message=f"BrowseController/ensure_folder_registered: folder item not found in model for {folder.path}")
             return
