@@ -609,6 +609,7 @@ class UsbWebSocketTransportAdapter:
             return self._transport_error_response(
                 message="Desktop requires JSON object payloads for transfer asset requests.",
             )
+        print(f"[usb] Received transfer asset stream payload: raw_body={raw_body}")
 
         stream_state = raw_body.get(TRANSFER_ASSET_STREAM_STATE_FIELD)
         if stream_state == TRANSFER_ASSET_STREAM_STATE_START:
