@@ -37,7 +37,7 @@ QCoreApplication.setOrganizationName("net.boldman")
 QCoreApplication.setApplicationName("imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
-from dt_image_search.model.dts_config import setup_model_cache
+from dt_image_search.model.dts_config import is_mobile_folder_feature_enabled, setup_model_cache
 from dt_image_search.model.dts_fs import get_app_data_path
 ctx = get_context()
 setup_model_cache(ctx=ctx)
@@ -171,10 +171,13 @@ class MainWindow(QMainWindow):
 
         self.browse_controller = BrowseController(ctx=self.ctx)
         self.controller = self.browse_controller
-        self.mobile_folder_coordinator = MobileFolderCoordinator(
-            ctx=self.ctx,
-            on_folder_ready=self._on_mobile_transfer_folder_ready,
-        )
+        self._mobile_folder_feature_enabled = is_mobile_folder_feature_enabled(default=False)
+        self.mobile_folder_coordinator: MobileFolderCoordinator | None = None
+        if self._mobile_folder_feature_enabled:
+            self.mobile_folder_coordinator = MobileFolderCoordinator(
+                ctx=self.ctx,
+                on_folder_ready=self._on_mobile_transfer_folder_ready,
+            )
         self.controller.is_active = True  # Set the controller to active state
 
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
@@ -283,15 +286,18 @@ class MainWindow(QMainWindow):
             # Small delay to simulate user interaction and allow UI to update
             time.sleep(5)
         else:
-            selected_source = self.mobile_folder_coordinator.choose_source(self)
-            if selected_source is None:
-                return
+            if self._mobile_folder_feature_enabled and self.mobile_folder_coordinator is not None:
+                selected_source = self.mobile_folder_coordinator.choose_source(self)
+                if selected_source is None:
+                    return
 
-            if selected_source == MobileSourceType.MOBILE_DEVICE:
-                self.mobile_folder_coordinator.start_pairing_flow(self)
-                return
+                if selected_source == MobileSourceType.MOBILE_DEVICE:
+                    self.mobile_folder_coordinator.start_pairing_flow(self)
+                    return
 
-            folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+                folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+            else:
+                folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
             
         if not folder:
             return
