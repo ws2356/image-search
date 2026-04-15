@@ -21,6 +21,7 @@
   - ETA calculation and display based on transfer speed and remaining data
   - Automatic USB preference and in-session handoff when a supported mobile device is connected via USB during backup
 
-- **Future Considerations**
+- **Backlog**
   - Stronger platform-specific background transfer strategies where policy-compliant
   - File integrity verification with checksums or hashes, with user-friendly error handling and retry options for failed transfers
+  - Refactor pc: 1. use asyncio wherever possible
