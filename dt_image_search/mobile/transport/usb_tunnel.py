@@ -154,17 +154,23 @@ class Pymobiledevice3UsbTunnelProvider:
             else:
                 connected_socket = connect_result
         except connection_errors as exc:
+            print(f"Unexpected error while connecting to USB device '{normalized_udid}' port {port}: {exc!r}")
             raise UsbTunnelConnectError(
                 f"Desktop could not connect to USB device '{normalized_udid}' port {port}.",
             ) from exc
         except TimeoutError as exc:
+            print(f"Unexpected error while connecting to USB device '{normalized_udid}' port {port}: {exc!r}")
             raise UsbTunnelConnectError(
                 f"Desktop USB tunnel connection to '{normalized_udid}:{port}' timed out.",
             ) from exc
         except OSError as exc:
+            print(f"Unexpected error while connecting to USB device '{normalized_udid}' port {port}: {exc!r}")
             raise UsbTunnelConnectError(
                 f"Desktop USB tunnel socket failed for '{normalized_udid}:{port}'.",
             ) from exc
+        except Exception as exc:
+            print(f"Unexpected error while connecting to USB device '{normalized_udid}' port {port}: {exc!r}")
+            raise
 
         if not isinstance(connected_socket, socket.socket):
             raise UsbTunnelConnectError(
@@ -228,6 +234,9 @@ class Pymobiledevice3UsbTunnelProvider:
                 raise UsbTunnelUnavailableError(
                     "Desktop USB tunnel calls cannot run from an active asyncio event loop.",
                 ) from exc
+            raise
+        except Exception as exc:
+            print(f"Unexpected error while running async USB tunnel operation: {exc!r}")
             raise
 
 
