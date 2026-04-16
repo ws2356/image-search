@@ -68,8 +68,11 @@ unit_and_functional_tests=(
   tests/functional/test_crash_recovery_harness.py
 )
 
+has_failed=false
 for test in "${unit_and_functional_tests[@]}"; do
-  $python_bin -m pytest -s --log-cli-level=$level "$test"
+  if ! $python_bin -m pytest -s --log-cli-level=$level "$test"; then
+    has_failed=true
+  fi
 done
 
 # Run UI tests only on Windows os
@@ -83,4 +86,8 @@ if [[ "$OSTYPE" == "msys" ]]; then
   bash "$this_dir/uitest_start.sh"
 else
     echo "Skipping UI tests on non-Windows OS"
+fi
+
+if [ "$has_failed" = true ]; then
+  exit 1
 fi
