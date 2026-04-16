@@ -29,7 +29,7 @@ struct CompletionStateView: View {
 
                 greenInfoCallout
 
-                ActionButton(title: "OK", icon: "house", style: .primary, action: onReturnHome)
+                ActionButton(title: "OK", icon: nil, style: .primary, action: onReturnHome)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
