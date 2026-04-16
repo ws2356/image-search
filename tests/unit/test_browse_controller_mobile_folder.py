@@ -13,6 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
 from dt_image_search.bm_context import BMContext
@@ -80,10 +81,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
                 )
                 conn.commit()
 
-            selected_paths: list[str] = []
-            controller.folder_selection_signal.select_folder.connect(
-                lambda item: selected_paths.append(item.data(Qt.UserRole))
-            )
+            selection_spy = QSignalSpy(controller.folder_selection_signal.select_folder)
 
             controller.ensure_folder_registered(folder_path.as_posix())
 
@@ -91,7 +89,9 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertIsNotNone(folder_item)
             self.assertIsNotNone(folder_item.parent())
             self.assertEqual(folder_item.parent().text(), "MOBILE")
-            self.assertEqual(selected_paths, [folder_path.as_posix()])
+            self.assertEqual(selection_spy.count(), 1)
+            selected_item = selection_spy.at(0)[0]
+            self.assertEqual(selected_item.data(Qt.UserRole), folder_path.as_posix())
             add_folder_mock.assert_called_once_with(folder_path.as_posix())
             add_index_worker_mock.assert_called_once()
             self.assertEqual(add_index_worker_mock.call_args.kwargs["folder"].path, folder_path.as_posix())
@@ -131,10 +131,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
                 )
                 conn.commit()
 
-            selected_paths: list[str] = []
-            controller.folder_selection_signal.select_folder.connect(
-                lambda item: selected_paths.append(item.data(Qt.UserRole))
-            )
+            selection_spy = QSignalSpy(controller.folder_selection_signal.select_folder)
 
             controller.ensure_folder_registered(folder_path.as_posix())
 
@@ -142,7 +139,9 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertIsNotNone(folder_item)
             self.assertIsNotNone(folder_item.parent())
             self.assertEqual(folder_item.parent().text(), "MOBILE")
-            self.assertEqual(selected_paths, [folder_path.as_posix()])
+            self.assertEqual(selection_spy.count(), 1)
+            selected_item = selection_spy.at(0)[0]
+            self.assertEqual(selected_item.data(Qt.UserRole), folder_path.as_posix())
             add_folder_mock.assert_called_once_with(folder_path.as_posix())
             add_index_worker_mock.assert_called_once()
 
