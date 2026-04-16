@@ -31,16 +31,26 @@ def _sql_logger(statement):
     print("SQL:", statement)
 
 db_init_lock = threading.Lock()
+
+
+class _ManagedSQLiteConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
     db_path = get_app_data_path(ctx) / "app_data.sqlite"
     conn = None
     with db_init_lock:
         if not db_path.exists():
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(db_path, factory=_ManagedSQLiteConnection)
             schema_sql = files("dt_image_search.model").joinpath("db_schema.sql").read_text()
             conn.executescript(schema_sql)
     if conn is None:
-        conn = sqlite3.connect(db_path, timeout=30)
+        conn = sqlite3.connect(db_path, timeout=30, factory=_ManagedSQLiteConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     from dt_image_search.mobile.mobile_pairing_store import ensure_mobile_pairing_schema

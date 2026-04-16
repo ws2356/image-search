@@ -34,24 +34,25 @@ class FolderTreeModel(QStandardItemModel):
         self._ensure_section_items()
         for p in path_strs:
             path = Path(p).resolve()
+            resolved_path = path.as_posix()
             if not path.is_dir():
                 continue
             if not self.folder_predicate(path):
                 continue
-            existing_item = self.find_folder_item(str(path))
+            existing_item = self.find_folder_item(resolved_path)
             if existing_item is not None and self.is_top_level_folder_item(existing_item):
                 continue
             if existing_item is not None and existing_item.parent() is not None:
                 existing_item.parent().removeRow(existing_item.row())
 
             root_item = QStandardItem(path.name)
-            root_item.setData(str(path), Qt.UserRole)
+            root_item.setData(resolved_path, Qt.UserRole)
             root_item.setEditable(False)
             root_item.setCheckable(False)
             root_item.setSelectable(True)
             self._apply_mobile_transfer_state_to_item(root_item)
 
-            target_section = self._section_for_folder_path(str(path))
+            target_section = self._section_for_folder_path(resolved_path)
             target_section.appendRow(root_item)
 
             self._populate_subfolders(root_item, path)
@@ -143,10 +144,11 @@ class FolderTreeModel(QStandardItemModel):
         try:
             for child in sorted(parent_path.iterdir()):
                 if child.is_dir() and self.folder_predicate(child):
-                    if self._is_mobile_folder_path(str(child.resolve())):
+                    child_path = child.resolve().as_posix()
+                    if self._is_mobile_folder_path(child_path):
                         continue
                     child_item = QStandardItem(child.name)
-                    child_item.setData(str(child.resolve()), Qt.UserRole)
+                    child_item.setData(child_path, Qt.UserRole)
                     child_item.setEditable(False)
                     self._apply_mobile_transfer_state_to_item(child_item)
                     parent_item.appendRow(child_item)

@@ -47,7 +47,9 @@ class TestCrashRecoveryHarness(unittest.TestCase):
             manager = CrashRecoveryManager(app_data_path, lambda *args, **kwargs: None)
             manager.enable_native_crash_dump_capture()
             manager.mark_run_started(current_timestamp=1700000000)
-            os.kill(os.getpid(), signal.SIGABRT)
+            if hasattr(signal, "raise_signal"):
+                signal.raise_signal(signal.SIGABRT)
+            os.abort()
             """
         )
 
