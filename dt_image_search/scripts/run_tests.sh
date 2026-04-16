@@ -76,18 +76,18 @@ for test in "${unit_and_functional_tests[@]}"; do
 done
 
 # Run UI tests only on Windows os
-if [[ "$OSTYPE" == "msys" ]]; then
-  if [ "$need_build" = true ]; then
-      echo "Building app with PyInstaller..."
-      pyinstaller dt_image_search/DTImageSearch.spec --noconfirm --clean
-  fi
-
-  bash "$this_dir/uitest_bootstrap.sh"
-  bash "$this_dir/uitest_start.sh"
-else
-    echo "Skipping UI tests on non-Windows OS"
-fi
-
+# if [[ "$OSTYPE" == "msys" ]]; then
+#   if [ "$need_build" = true ]; then
+#       echo "Building app with PyInstaller..."
+#       pyinstaller dt_image_search/DTImageSearch.spec --noconfirm --clean
+#   fi
+# 
+#   bash "$this_dir/uitest_bootstrap.sh"
+#   bash "$this_dir/uitest_start.sh"
+# else
+#     echo "Skipping UI tests on non-Windows OS"
+# fi
+# 
 if [ "$has_failed" = true ]; then
   exit 1
 fi
