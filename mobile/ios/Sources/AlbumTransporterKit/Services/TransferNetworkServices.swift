@@ -1337,6 +1337,12 @@ private struct PreparedTransferAsset: Sendable {
     }
 }
 
+private struct PreparedTransferUploadResult: Sendable {
+    let preparedAsset: PreparedTransferAsset
+    let response: TransferServerResponse?
+    let errorDescription: String?
+}
+
 actor PhotoLibraryTransferService: TransferService {
     private struct TransferSpeedSample {
         let timestamp: Date
@@ -1350,6 +1356,7 @@ actor PhotoLibraryTransferService: TransferService {
     private let trustedDesktopStore: TrustedDesktopStore
     private let lookupBatchSize: Int
     private let lookupBatchByteThresholdBytes: Int
+    private let uploadConcurrencyLimit: Int
     private var transferSpeedSamples: [TransferSpeedSample] = []
     private var successfullyTransferredAssetIDs: [String] = []
     private var stopRequested = false
@@ -1360,7 +1367,8 @@ actor PhotoLibraryTransferService: TransferService {
         transferClient: MobileTransferClient,
         trustedDesktopStore: TrustedDesktopStore,
         lookupBatchSize: Int = 32,
-        lookupBatchByteThresholdBytes: Int = 100 * 1024 * 1024
+        lookupBatchByteThresholdBytes: Int = 100 * 1024 * 1024,
+        uploadConcurrencyLimit: Int = 10
     ) {
         self.assetSource = assetSource
         self.transferClient = transferClient
@@ -1368,6 +1376,7 @@ actor PhotoLibraryTransferService: TransferService {
         self.trustedDesktopStore = trustedDesktopStore
         self.lookupBatchSize = max(1, lookupBatchSize)
         self.lookupBatchByteThresholdBytes = max(1, lookupBatchByteThresholdBytes)
+        self.uploadConcurrencyLimit = max(1, uploadConcurrencyLimit)
     }
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
@@ -1768,6 +1777,9 @@ actor PhotoLibraryTransferService: TransferService {
             }
         }
 
+        var uploadCandidates: [PreparedTransferAsset] = []
+        uploadCandidates.reserveCapacity(batch.count)
+
         for (index, preparedAsset) in batch.enumerated() {
             let assetSummary = TransferDebugLogger.assetSummary(for: preparedAsset.exportedAsset.descriptor)
             if let existingMatch = matchesByAssetID[preparedAsset.exportedAsset.descriptor.assetID] {
@@ -1800,46 +1812,114 @@ actor PhotoLibraryTransferService: TransferService {
                 return pausedSnapshot
             }
 
-            do {
-                let response = try await transferClient.uploadAsset(preparedAsset.exportedAsset, desktop: desktop)
-                switch response.status {
-                case .stored, .skipped:
-                    switch response.status {
-                    case .stored:
-                        transferredCount += 1
-                        successfullyTransferredAssetIDs.append(preparedAsset.exportedAsset.descriptor.assetID)
-                        recordTransferredBytes(preparedAsset.exportedAsset.fileSize)
-                        TransferDebugLogger.debug(
-                            "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                        )
-                    case .skipped:
-                        transferredCount += 1
-                        TransferDebugLogger.debug(
-                            "Skipped transfer after desktop confirmation \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                        )
-                    case .accepted, .completed, .rejected:
-                        break
+            uploadCandidates.append(preparedAsset)
+        }
+
+        guard !uploadCandidates.isEmpty else {
+            return nil
+        }
+
+        let uploadClient = transferClient
+        var nextUploadIndex = 0
+        while nextUploadIndex < uploadCandidates.count {
+            if stopRequested {
+                break
+            }
+
+            let currentTransport = await resolvedTransport(for: desktop)
+            let preferredConcurrency = currentTransport == .usb ? 1 : uploadConcurrencyLimit
+            let remainingUploadCount = uploadCandidates.count - nextUploadIndex
+            let maxConcurrentUploads = min(max(1, preferredConcurrency), remainingUploadCount)
+            let chunkEndIndex = min(nextUploadIndex + maxConcurrentUploads, uploadCandidates.count)
+            let uploadChunk = Array(uploadCandidates[nextUploadIndex ..< chunkEndIndex])
+            nextUploadIndex = chunkEndIndex
+
+            let chunkResults = await withTaskGroup(
+                of: PreparedTransferUploadResult.self,
+                returning: [PreparedTransferUploadResult].self
+            ) { group in
+                for candidate in uploadChunk {
+                    group.addTask {
+                        do {
+                            let response = try await uploadClient.uploadAsset(candidate.exportedAsset, desktop: desktop)
+                            return PreparedTransferUploadResult(
+                                preparedAsset: candidate,
+                                response: response,
+                                errorDescription: nil
+                            )
+                        } catch {
+                            return PreparedTransferUploadResult(
+                                preparedAsset: candidate,
+                                response: nil,
+                                errorDescription: TransferDebugLogger.describe(error)
+                            )
+                        }
                     }
-                case .accepted, .completed, .rejected:
-                    failedCount += 1
-                    TransferDebugLogger.error(
-                        "Unexpected asset response for \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                    )
                 }
-            } catch {
-                failedCount += 1
-                TransferDebugLogger.error(
-                    "Transfer failed for \(assetSummary) error=\(TransferDebugLogger.describe(error))"
+
+                var results: [PreparedTransferUploadResult] = []
+                for await uploadResult in group {
+                    results.append(uploadResult)
+                }
+                return results
+            }
+
+            for uploadResult in chunkResults {
+                let assetSummary = TransferDebugLogger.assetSummary(for: uploadResult.preparedAsset.exportedAsset.descriptor)
+                if let response = uploadResult.response {
+                    switch response.status {
+                    case .stored, .skipped:
+                        switch response.status {
+                        case .stored:
+                            transferredCount += 1
+                            successfullyTransferredAssetIDs.append(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
+                            recordTransferredBytes(uploadResult.preparedAsset.exportedAsset.fileSize)
+                            TransferDebugLogger.debug(
+                                "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                            )
+                        case .skipped:
+                            transferredCount += 1
+                            TransferDebugLogger.debug(
+                                "Skipped transfer after desktop confirmation \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                            )
+                        case .accepted, .completed, .rejected:
+                            break
+                        }
+                    case .accepted, .completed, .rejected:
+                        failedCount += 1
+                        TransferDebugLogger.error(
+                            "Unexpected asset response for \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                        )
+                    }
+                } else {
+                    failedCount += 1
+                    let errorDescription = uploadResult.errorDescription ?? "unknown upload error"
+                    TransferDebugLogger.error("Transfer failed for \(assetSummary) error=\(errorDescription)")
+                }
+
+                cleanupExportedAsset(uploadResult.preparedAsset.exportedAsset)
+                await recordProgressUpdate(
+                    desktop: desktop,
+                    transferredCount: transferredCount,
+                    totalCount: totalCount,
+                    failedCount: failedCount,
+                    progress: progress
                 )
             }
-            cleanupExportedAsset(preparedAsset.exportedAsset)
-            await recordProgressUpdate(
-                desktop: desktop,
+        }
+
+        if stopRequested, nextUploadIndex < uploadCandidates.count {
+            cleanupPreparedAssets(Array(uploadCandidates[nextUploadIndex...]))
+            let currentTransport = await resolvedTransport(for: desktop)
+            let pausedSnapshot = makePausedSnapshot(
+                transport: currentTransport,
                 transferredCount: transferredCount,
                 totalCount: totalCount,
                 failedCount: failedCount,
-                progress: progress
+                sessionID: desktop.lastSessionID
             )
+            currentSnapshot = pausedSnapshot
+            return pausedSnapshot
         }
 
         return nil

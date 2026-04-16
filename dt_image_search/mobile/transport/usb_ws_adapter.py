@@ -650,6 +650,7 @@ class UsbWebSocketTransportAdapter:
             self._asset_upload_stream.start(
                 request_id=request_id,
                 metadata_payload=metadata_payload,
+                exclusive=True,
             )
 
     def _append_pending_asset_chunk(self, chunk: bytes) -> None:

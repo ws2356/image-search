@@ -273,6 +273,90 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(finalSnapshot.totalCount, 2)
     }
 
+    func test_photo_library_transfer_service_limits_concurrent_uploads_to_ten_assets() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let descriptors = (1 ... 24).map { index in
+            TransferAssetDescriptor(
+                assetID: String(format: "ph://asset-%03d", index),
+                assetVersion: "v\(index)",
+                filename: String(format: "IMG_%04d.JPG", index),
+                mediaType: "image",
+                createdAt: Date(timeIntervalSince1970: TimeInterval(1_776_123_610 + index)),
+                updatedAt: Date(timeIntervalSince1970: TimeInterval(1_776_123_610 + index))
+            )
+        }
+        let transferClient = RecordingMobileTransferClient(uploadDelayNanoseconds: 50_000_000)
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(descriptors: descriptors),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore,
+            lookupBatchSize: 32,
+            uploadConcurrencyLimit: 10
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let maxConcurrentUploads = await transferClient.maxConcurrentUploadsObserved()
+
+        XCTAssertEqual(snapshot.transferredCount, descriptors.count)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertGreaterThan(maxConcurrentUploads, 1)
+        XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
+    }
+
+    func test_photo_library_transfer_service_keeps_usb_uploads_serial_even_with_high_limit() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .usb,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let descriptors = (1 ... 12).map { index in
+            TransferAssetDescriptor(
+                assetID: String(format: "ph://asset-%03d", index),
+                assetVersion: "v\(index)",
+                filename: String(format: "IMG_%04d.JPG", index),
+                mediaType: "image",
+                createdAt: Date(timeIntervalSince1970: TimeInterval(1_776_223_610 + index)),
+                updatedAt: Date(timeIntervalSince1970: TimeInterval(1_776_223_610 + index))
+            )
+        }
+        let transferClient = RecordingMobileTransferClient(
+            resolvedTransport: .usb,
+            uploadDelayNanoseconds: 40_000_000
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(descriptors: descriptors),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore,
+            lookupBatchSize: 32,
+            uploadConcurrencyLimit: 10
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let maxConcurrentUploads = await transferClient.maxConcurrentUploadsObserved()
+
+        XCTAssertEqual(snapshot.transferredCount, descriptors.count)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(maxConcurrentUploads, 1)
+    }
+
     func test_photo_library_transfer_service_skips_known_assets_before_upload() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -520,16 +604,24 @@ private actor ChunkSizeRecorder {
 private actor RecordingMobileTransferClient: MobileTransferClient, TransferTransportResolving {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
+    private let uploadDelayNanoseconds: UInt64
     private var resolvedTransport: TransferTransport?
     private var lookupAssetIDsByBatch: [[String]] = []
     private var uploadedIDs: [String] = []
+    private var activeUploadCount = 0
+    private var maxConcurrentUploadCount = 0
     private var completedTransferred: Int?
     private var completedFailed: Int?
     private var completedInterruptionReasonValue: String?
 
-    init(existingAssetIDs: Set<String> = [], resolvedTransport: TransferTransport? = nil) {
+    init(
+        existingAssetIDs: Set<String> = [],
+        resolvedTransport: TransferTransport? = nil,
+        uploadDelayNanoseconds: UInt64 = 0
+    ) {
         self.existingAssetIDs = existingAssetIDs
         self.resolvedTransport = resolvedTransport
+        self.uploadDelayNanoseconds = uploadDelayNanoseconds
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
@@ -559,6 +651,14 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
+        activeUploadCount += 1
+        maxConcurrentUploadCount = max(maxConcurrentUploadCount, activeUploadCount)
+        defer {
+            activeUploadCount -= 1
+        }
+        if uploadDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: uploadDelayNanoseconds)
+        }
         uploadedIDs.append(asset.descriptor.assetID)
         return TransferServerResponse(
             schema: TransferProtocol.schema,
@@ -608,7 +708,7 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
     }
 
     func uploadedAssetIDs() -> [String] {
-        uploadedIDs
+        uploadedIDs.sorted()
     }
 
     func completedTransferredCount() -> Int? {
@@ -621,6 +721,10 @@ private actor RecordingMobileTransferClient: MobileTransferClient, TransferTrans
 
     func completedInterruptionReason() -> String? {
         completedInterruptionReasonValue
+    }
+
+    func maxConcurrentUploadsObserved() -> Int {
+        maxConcurrentUploadCount
     }
 }
 

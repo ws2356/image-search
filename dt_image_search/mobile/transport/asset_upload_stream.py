@@ -60,16 +60,28 @@ class _PendingTransferAssetUpload:
 
 class TransferAssetUploadStream:
     def __init__(self):
-        self._pending: _PendingTransferAssetUpload | None = None
+        self._pending_by_request_id: dict[str, _PendingTransferAssetUpload] = {}
+        self._active_request_id: str | None = None
 
     @property
     def active_request_id(self) -> str | None:
-        pending_upload = self._pending
-        if pending_upload is None:
-            return None
-        return pending_upload.request_id
+        active_request_id = self._active_request_id
+        if (
+            active_request_id is not None
+            and active_request_id in self._pending_by_request_id
+        ):
+            return active_request_id
+        if len(self._pending_by_request_id) == 1:
+            return next(iter(self._pending_by_request_id.keys()))
+        return None
 
-    def start(self, *, request_id: str, metadata_payload: dict[str, object]) -> None:
+    def start(
+        self,
+        *,
+        request_id: str,
+        metadata_payload: dict[str, object],
+        exclusive: bool = False,
+    ) -> None:
         staged_file = tempfile.NamedTemporaryFile(
             mode="w+b",
             prefix="dtis-transfer-asset-",
@@ -84,9 +96,13 @@ class TransferAssetUploadStream:
             content_sha1=hashlib.sha1(),
             content_length=0,
         )
-        if self._pending is not None:
-            self._pending.close()
-        self._pending = pending_upload
+        if exclusive:
+            self.clear()
+        existing_upload = self._pending_by_request_id.pop(request_id, None)
+        if existing_upload is not None:
+            existing_upload.close()
+        self._pending_by_request_id[request_id] = pending_upload
+        self._active_request_id = request_id
 
     def append_chunk(
         self,
@@ -102,34 +118,50 @@ class TransferAssetUploadStream:
                 f"{TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES} bytes."
             )
 
-        pending_upload = self._pending
-        if pending_upload is None:
+        resolved_request_id = request_id
+        if resolved_request_id is None:
+            resolved_request_id = self.active_request_id
+        if resolved_request_id is None:
+            if self._pending_by_request_id:
+                return (
+                    "Desktop rejected transfer asset stream chunk because request ids do not match the "
+                    "active binary stream."
+                )
             return (
                 "Desktop ignored transfer asset stream chunk because metadata was not received first."
             )
-        if request_id is not None and pending_upload.request_id != request_id:
+
+        pending_upload = self._pending_by_request_id.get(resolved_request_id)
+        if pending_upload is None:
+            if self._pending_by_request_id:
+                return (
+                    "Desktop rejected transfer asset stream chunk because request ids do not match the "
+                    "active binary stream."
+                )
             return (
-                "Desktop rejected transfer asset stream chunk because request ids do not match the "
-                "active binary stream."
+                "Desktop ignored transfer asset stream chunk because metadata was not received first."
             )
 
         pending_upload.append_chunk(chunk)
+        self._active_request_id = pending_upload.request_id
         return None
 
     def complete(self, *, request_id: str) -> TransferAssetUploadPayload | str:
-        pending_upload = self._pending
-        self._pending = None
+        pending_upload = self._pending_by_request_id.pop(request_id, None)
         if pending_upload is None:
+            if self._pending_by_request_id:
+                return (
+                    "Desktop rejected transfer asset completion because request ids do not match the "
+                    "active binary stream."
+                )
             return "Desktop did not receive transfer asset stream metadata before completion."
-        if pending_upload.request_id != request_id:
-            pending_upload.close()
-            return (
-                "Desktop rejected transfer asset completion because request ids do not match the "
-                "active binary stream."
-            )
+        if self._active_request_id == request_id:
+            self._active_request_id = None
         return pending_upload.to_payload()
 
     def clear(self) -> None:
-        if self._pending is not None:
-            self._pending.close()
-            self._pending = None
+        pending_uploads = list(self._pending_by_request_id.values())
+        self._pending_by_request_id = {}
+        self._active_request_id = None
+        for pending_upload in pending_uploads:
+            pending_upload.close()
