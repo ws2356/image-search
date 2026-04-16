@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import socket
 import sys
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -156,6 +157,16 @@ class _FakeWebSocketConnector:
         return self._connection
 
 
+class _BlockingCloseConnection:
+    def __init__(self):
+        self.close_started = threading.Event()
+        self.allow_close = threading.Event()
+
+    def close(self, code: int = 1000, reason: str = "") -> None:
+        self.close_started.set()
+        self.allow_close.wait(timeout=1.0)
+
+
 class TestUsbWebSocketTransportAdapter(unittest.TestCase):
     def setUp(self):
         self._router = MobileTransportRouter()
@@ -216,6 +227,30 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         digest = self._adapter.build_auth_digest("rand-xyz")
         self.assertTrue(self._adapter.verify_auth_digest(rand="rand-xyz", provided_digest=digest))
         self.assertFalse(self._adapter.verify_auth_digest(rand="rand-abc", provided_digest=digest))
+
+    def test_configure_bootstrap_does_not_block_while_closing_previous_connection(self):
+        blocking_connection = _BlockingCloseConnection()
+        with self._adapter._lock:
+            self._adapter._active_websocket_connection = blocking_connection
+
+        configured_event = threading.Event()
+
+        def _configure_bootstrap() -> None:
+            self._adapter.configure_bootstrap(
+                UsbBootstrapConfig(
+                    session_id="session-002",
+                    one_time_passcode="934271",
+                    suggested_port=50321,
+                )
+            )
+            configured_event.set()
+
+        worker_thread = threading.Thread(target=_configure_bootstrap)
+        worker_thread.start()
+        self.assertTrue(configured_event.wait(timeout=0.25))
+        self.assertTrue(blocking_connection.close_started.wait(timeout=0.5))
+        blocking_connection.allow_close.set()
+        worker_thread.join(timeout=1.0)
 
     def test_dispatch_text_envelope_routes_registered_operation(self):
         observed_contexts = []

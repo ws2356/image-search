@@ -211,12 +211,21 @@ class UsbWebSocketTransportAdapter:
             return self._last_probe_error
 
     def configure_bootstrap(self, config: UsbBootstrapConfig) -> None:
+        websocket_connection = None
+        tunnel_socket = None
         with self._lock:
             self._bootstrap_config = config
             self._state = UsbTransportState.CONFIGURED
             self._active_tunnel_target = None
             self._last_probe_error = None
-            self._close_active_connection_locked()
+            websocket_connection, tunnel_socket = self._detach_active_connection_locked()
+        if websocket_connection is not None or tunnel_socket is not None:
+            threading.Thread(
+                target=self._close_connection_handles,
+                args=(websocket_connection, tunnel_socket),
+                name="mobile-usb-close",
+                daemon=True,
+            ).start()
         self._safe_log(
             "info",
             message=(
@@ -822,12 +831,22 @@ class UsbWebSocketTransportAdapter:
         self._stop_event.wait(timeout=self._probe_interval_seconds)
 
     def _close_active_connection_locked(self) -> None:
+        websocket_connection, tunnel_socket = self._detach_active_connection_locked()
+        self._close_connection_handles(websocket_connection, tunnel_socket)
+
+    def _detach_active_connection_locked(self) -> tuple[object | None, socket.socket | None]:
         websocket_connection = self._active_websocket_connection
         tunnel_socket = self._active_tunnel_socket
         self._active_websocket_connection = None
         self._active_tunnel_socket = None
         self._asset_upload_stream.clear()
+        return websocket_connection, tunnel_socket
 
+    @staticmethod
+    def _close_connection_handles(
+        websocket_connection: object | None,
+        tunnel_socket: socket.socket | None,
+    ) -> None:
         if websocket_connection is not None:
             try:
                 websocket_connection.close()
