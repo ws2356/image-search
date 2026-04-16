@@ -6,44 +6,42 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from dt_image_search.model.dts_config import is_mobile_folder_feature_enabled
-from dt_image_search.telemetry.telemetry_client import log
 
 _FEATURE_FLAGS_ENDPOINT = "https://api.boldman.net/image-search/features"
-_FEATURE_FLAGS_TIMEOUT_SECONDS = 3
+_FEATURE_FLAGS_TIMEOUT_SECONDS = 10
 
 
 class _FeatureFlagStore:
     def __init__(self):
         self._lock = threading.RLock()
-        self._mobile_folder_enabled = False
-        self._refresh_started = False
-        self._initialized = False
+        self._mobile_folder_enabled: bool | None = None
+        self.refresh_thread = None
 
     def initialize(self) -> None:
-        with self._lock:
-            if self._initialized:
-                return
-            self._mobile_folder_enabled = is_mobile_folder_feature_enabled(default=False)
-            self._initialized = True
         self.refresh_async()
 
     def is_mobile_folder_enabled(self) -> bool:
         with self._lock:
+            if self._mobile_folder_enabled is not None:
+                return self._mobile_folder_enabled
+            self._mobile_folder_enabled = is_mobile_folder_feature_enabled()
             return self._mobile_folder_enabled
+
 
     def refresh_async(self) -> None:
         with self._lock:
-            if self._refresh_started:
-                return
-            self._refresh_started = True
-        refresh_thread = threading.Thread(
-            target=self._refresh_worker,
-            name="feature-flags-refresh",
-            daemon=True,
-        )
+            if self.refresh_thread is not None:
+                return  # Refresh already in progress
+            refresh_thread = threading.Thread(
+                target=self._refresh_worker,
+                name="feature-flags-refresh",
+                daemon=True,
+            )
+            self.refresh_thread = refresh_thread
         refresh_thread.start()
 
     def _refresh_worker(self) -> None:
+        from dt_image_search.telemetry.telemetry_client import log
         try:
             payload = _fetch_feature_flags_payload()
             remote_enabled = _extract_mobile_folder_enabled(payload)
@@ -55,9 +53,6 @@ class _FeatureFlagStore:
             log("info", message=f"FeatureFlags: remote mobile_folder.enabled={remote_enabled}.")
         except RuntimeError as exc:
             log("warning", message=f"FeatureFlags: failed to refresh remote flags: {exc}")
-        finally:
-            with self._lock:
-                self._refresh_started = False
 
 
 def _fetch_feature_flags_payload() -> dict:

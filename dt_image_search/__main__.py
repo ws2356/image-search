@@ -174,8 +174,6 @@ class MainWindow(QMainWindow):
         self.controller = self.browse_controller
         initialize_feature_flags()
         self.mobile_folder_coordinator: MobileFolderCoordinator | None = None
-        if is_mobile_folder_enabled():
-            self.mobile_folder_coordinator = self._ensure_mobile_folder_coordinator()
         self.controller.is_active = True  # Set the controller to active state
 
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
