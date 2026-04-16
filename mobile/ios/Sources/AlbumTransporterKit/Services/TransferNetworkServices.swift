@@ -1342,12 +1342,29 @@ private struct PreparedTransferUploadResult: Sendable {
     let existingMatch: TransferAssetExistenceMatch?
     let response: TransferServerResponse?
     let errorDescription: String?
+    let existenceCheckDurationSeconds: Double
+    let uploadDurationSeconds: Double
 }
 
 private struct ExportPipelineResult: Sendable {
     let descriptor: TransferAssetDescriptor
     let preparedAsset: PreparedTransferAsset?
     let errorDescription: String?
+    let exportDurationSeconds: Double
+}
+
+private struct TransferStageMetrics {
+    var exportDurations: [Double] = []
+    var existenceCheckDurations: [Double] = []
+    var uploadDurations: [Double] = []
+}
+
+private struct StageDurationSummary {
+    let count: Int
+    let averageMilliseconds: Double
+    let p50Milliseconds: Double
+    let p95Milliseconds: Double
+    let totalSeconds: Double
 }
 
 private actor PreparedTransferAssetQueue {
@@ -1398,31 +1415,43 @@ private func performPreparedAssetUpload(
     desktop: TrustedDesktopRecord,
     transferClient: MobileTransferClient
 ) async -> PreparedTransferUploadResult {
+    var existenceCheckDurationSeconds = 0.0
+    var uploadDurationSeconds = 0.0
     do {
         if let existenceCandidate = preparedAsset.existenceCandidate {
+            let existenceStart = ProcessInfo.processInfo.systemUptime
             let matches = try await transferClient.lookupExistingAssets([existenceCandidate], desktop: desktop)
+            existenceCheckDurationSeconds = ProcessInfo.processInfo.systemUptime - existenceStart
             if let existingMatch = matches[preparedAsset.exportedAsset.descriptor.assetID] {
                 return PreparedTransferUploadResult(
                     preparedAsset: preparedAsset,
                     existingMatch: existingMatch,
                     response: nil,
-                    errorDescription: nil
+                    errorDescription: nil,
+                    existenceCheckDurationSeconds: existenceCheckDurationSeconds,
+                    uploadDurationSeconds: uploadDurationSeconds
                 )
             }
         }
+        let uploadStart = ProcessInfo.processInfo.systemUptime
         let response = try await transferClient.uploadAsset(preparedAsset.exportedAsset, desktop: desktop)
+        uploadDurationSeconds = ProcessInfo.processInfo.systemUptime - uploadStart
         return PreparedTransferUploadResult(
             preparedAsset: preparedAsset,
             existingMatch: nil,
             response: response,
-            errorDescription: nil
+            errorDescription: nil,
+            existenceCheckDurationSeconds: existenceCheckDurationSeconds,
+            uploadDurationSeconds: uploadDurationSeconds
         )
     } catch {
         return PreparedTransferUploadResult(
             preparedAsset: preparedAsset,
             existingMatch: nil,
             response: nil,
-            errorDescription: TransferDebugLogger.describe(error)
+            errorDescription: TransferDebugLogger.describe(error),
+            existenceCheckDurationSeconds: existenceCheckDurationSeconds,
+            uploadDurationSeconds: uploadDurationSeconds
         )
     }
 }
@@ -1644,9 +1673,11 @@ actor PhotoLibraryTransferService: TransferService {
             )
             try await transferClient.startSession(desktop: trustedDesktop, totalAssets: assets.count)
             resetTransferSpeedWindow()
+            let transferRunStartSeconds = ProcessInfo.processInfo.systemUptime
 
             var transferredCount = 0
             var failedCount = 0
+            var stageMetrics = TransferStageMetrics()
             let initialTransport = await resolvedTransport(for: trustedDesktop)
             let initialSnapshot = makeProgressSnapshot(
                 transport: initialTransport,
@@ -1663,8 +1694,18 @@ actor PhotoLibraryTransferService: TransferService {
                 totalCount: assets.count,
                 transferredCount: &transferredCount,
                 failedCount: &failedCount,
+                stageMetrics: &stageMetrics,
                 progress: progress
             ) {
+                let transferRunDurationSeconds = ProcessInfo.processInfo.systemUptime - transferRunStartSeconds
+                logTransferStageMetrics(
+                    desktop: trustedDesktop,
+                    totalCount: assets.count,
+                    transferredCount: transferredCount,
+                    failedCount: failedCount,
+                    runDurationSeconds: transferRunDurationSeconds,
+                    stageMetrics: stageMetrics
+                )
                 return pausedSnapshot
             }
 
@@ -1684,6 +1725,15 @@ actor PhotoLibraryTransferService: TransferService {
                     ? "Backup completes automatically after the desktop confirms this transfer session."
                     : "Some items could not be transferred. Start another backup session to retry remaining items, then inspect the MobileTransfer device logs for per-item errors.",
                 isIncompleteLibrary: false
+            )
+            let transferRunDurationSeconds = ProcessInfo.processInfo.systemUptime - transferRunStartSeconds
+            logTransferStageMetrics(
+                desktop: trustedDesktop,
+                totalCount: assets.count,
+                transferredCount: transferredCount,
+                failedCount: failedCount,
+                runDurationSeconds: transferRunDurationSeconds,
+                stageMetrics: stageMetrics
             )
             currentSnapshot = completedSnapshot
             return completedSnapshot
@@ -1730,6 +1780,7 @@ actor PhotoLibraryTransferService: TransferService {
         totalCount: Int,
         transferredCount: inout Int,
         failedCount: inout Int,
+        stageMetrics: inout TransferStageMetrics,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
     ) async -> TransferSnapshot? {
         let preparedAssetQueue = PreparedTransferAssetQueue()
@@ -1756,6 +1807,7 @@ actor PhotoLibraryTransferService: TransferService {
                 }
 
                 while let exportResult = await preparedAssetQueue.tryDequeue() {
+                    stageMetrics.exportDurations.append(exportResult.exportDurationSeconds)
                     if stopHandled {
                         if let preparedAsset = exportResult.preparedAsset {
                             cleanupExportedAsset(preparedAsset.exportedAsset)
@@ -1803,6 +1855,7 @@ actor PhotoLibraryTransferService: TransferService {
                             totalCount: totalCount,
                             transferredCount: &transferredCount,
                             failedCount: &failedCount,
+                            stageMetrics: &stageMetrics,
                             progress: progress
                         )
                         continue
@@ -1815,6 +1868,7 @@ actor PhotoLibraryTransferService: TransferService {
                 }
 
                 if let exportResult = await preparedAssetQueue.dequeue() {
+                    stageMetrics.exportDurations.append(exportResult.exportDurationSeconds)
                     if stopHandled {
                         if let preparedAsset = exportResult.preparedAsset {
                             cleanupExportedAsset(preparedAsset.exportedAsset)
@@ -1882,18 +1936,21 @@ actor PhotoLibraryTransferService: TransferService {
                 nextAssetIndex += 1
                 inFlightExportCount += 1
                 group.addTask {
+                    let exportStart = ProcessInfo.processInfo.systemUptime
                     do {
                         let exportedAsset = try await exportSource.exportAsset(descriptor)
                         return ExportPipelineResult(
                             descriptor: descriptor,
                             preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
-                            errorDescription: nil
+                            errorDescription: nil,
+                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
                         )
                     } catch {
                         return ExportPipelineResult(
                             descriptor: descriptor,
                             preparedAsset: nil,
-                            errorDescription: TransferDebugLogger.describe(error)
+                            errorDescription: TransferDebugLogger.describe(error),
+                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
                         )
                     }
                 }
@@ -1917,18 +1974,21 @@ actor PhotoLibraryTransferService: TransferService {
                 nextAssetIndex += 1
                 inFlightExportCount += 1
                 group.addTask {
+                    let exportStart = ProcessInfo.processInfo.systemUptime
                     do {
                         let exportedAsset = try await exportSource.exportAsset(descriptor)
                         return ExportPipelineResult(
                             descriptor: descriptor,
                             preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
-                            errorDescription: nil
+                            errorDescription: nil,
+                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
                         )
                     } catch {
                         return ExportPipelineResult(
                             descriptor: descriptor,
                             preparedAsset: nil,
-                            errorDescription: TransferDebugLogger.describe(error)
+                            errorDescription: TransferDebugLogger.describe(error),
+                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
                         )
                     }
                 }
@@ -1944,8 +2004,15 @@ actor PhotoLibraryTransferService: TransferService {
         totalCount: Int,
         transferredCount: inout Int,
         failedCount: inout Int,
+        stageMetrics: inout TransferStageMetrics,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
     ) async {
+        if uploadResult.existenceCheckDurationSeconds > 0 {
+            stageMetrics.existenceCheckDurations.append(uploadResult.existenceCheckDurationSeconds)
+        }
+        if uploadResult.uploadDurationSeconds > 0 {
+            stageMetrics.uploadDurations.append(uploadResult.uploadDurationSeconds)
+        }
         let assetSummary = TransferDebugLogger.assetSummary(for: uploadResult.preparedAsset.exportedAsset.descriptor)
         if let existingMatch = uploadResult.existingMatch {
             transferredCount += 1
@@ -2077,6 +2144,91 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func cleanupExportedAsset(_ asset: ExportedTransferAsset) {
         try? FileManager.default.removeItem(at: asset.fileURL)
+    }
+
+    private func logTransferStageMetrics(
+        desktop: TrustedDesktopRecord,
+        totalCount: Int,
+        transferredCount: Int,
+        failedCount: Int,
+        runDurationSeconds: Double,
+        stageMetrics: TransferStageMetrics
+    ) {
+        let exportSummary = summarizeStageDurations(stageMetrics.exportDurations)
+        let existenceSummary = summarizeStageDurations(stageMetrics.existenceCheckDurations)
+        let uploadSummary = summarizeStageDurations(stageMetrics.uploadDurations)
+        let stageAggregateSeconds = exportSummary.totalSeconds + existenceSummary.totalSeconds + uploadSummary.totalSeconds
+        let bottleneckStage = [
+            ("export", exportSummary.totalSeconds),
+            ("existence", existenceSummary.totalSeconds),
+            ("upload", uploadSummary.totalSeconds),
+        ].max { lhs, rhs in lhs.1 < rhs.1 }?.0 ?? "none"
+        let throughputAssetsPerSecond = runDurationSeconds > 0
+            ? Double(transferredCount) / runDurationSeconds
+            : 0
+
+        TransferDebugLogger.info(
+            String(
+                format:
+                    "Transfer stage metrics session_id=%@ total=%d transferred=%d failed=%d run_s=%.3f throughput_assets_s=%.3f stage_aggregate_s=%.3f bottleneck=%@ export(count=%d avg_ms=%.1f p50_ms=%.1f p95_ms=%.1f total_s=%.3f) existence(count=%d avg_ms=%.1f p50_ms=%.1f p95_ms=%.1f total_s=%.3f) upload(count=%d avg_ms=%.1f p50_ms=%.1f p95_ms=%.1f total_s=%.3f)",
+                desktop.lastSessionID,
+                totalCount,
+                transferredCount,
+                failedCount,
+                runDurationSeconds,
+                throughputAssetsPerSecond,
+                stageAggregateSeconds,
+                bottleneckStage,
+                exportSummary.count,
+                exportSummary.averageMilliseconds,
+                exportSummary.p50Milliseconds,
+                exportSummary.p95Milliseconds,
+                exportSummary.totalSeconds,
+                existenceSummary.count,
+                existenceSummary.averageMilliseconds,
+                existenceSummary.p50Milliseconds,
+                existenceSummary.p95Milliseconds,
+                existenceSummary.totalSeconds,
+                uploadSummary.count,
+                uploadSummary.averageMilliseconds,
+                uploadSummary.p50Milliseconds,
+                uploadSummary.p95Milliseconds,
+                uploadSummary.totalSeconds
+            )
+        )
+    }
+
+    private func summarizeStageDurations(_ durations: [Double]) -> StageDurationSummary {
+        let normalizedDurations = durations.map { max($0, 0) }
+        guard !normalizedDurations.isEmpty else {
+            return StageDurationSummary(
+                count: 0,
+                averageMilliseconds: 0,
+                p50Milliseconds: 0,
+                p95Milliseconds: 0,
+                totalSeconds: 0
+            )
+        }
+        let sortedDurations = normalizedDurations.sorted()
+        let totalSeconds = sortedDurations.reduce(0, +)
+        let averageSeconds = totalSeconds / Double(sortedDurations.count)
+        return StageDurationSummary(
+            count: sortedDurations.count,
+            averageMilliseconds: averageSeconds * 1_000,
+            p50Milliseconds: percentileDuration(sortedDurations, percentile: 0.50) * 1_000,
+            p95Milliseconds: percentileDuration(sortedDurations, percentile: 0.95) * 1_000,
+            totalSeconds: totalSeconds
+        )
+    }
+
+    private func percentileDuration(_ sortedDurations: [Double], percentile: Double) -> Double {
+        guard !sortedDurations.isEmpty else {
+            return 0
+        }
+        let clampedPercentile = min(max(percentile, 0), 1)
+        let rawIndex = Double(sortedDurations.count - 1) * clampedPercentile
+        let index = min(max(Int(rawIndex.rounded(.up)), 0), sortedDurations.count - 1)
+        return sortedDurations[index]
     }
 
     private func resetTransferSpeedWindow() {
