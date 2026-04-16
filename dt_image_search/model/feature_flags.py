@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import errno
 import json
+import socket
 import threading
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -9,6 +12,8 @@ from dt_image_search.model.dts_config import is_mobile_folder_feature_enabled
 
 _FEATURE_FLAGS_ENDPOINT = "https://api.boldman.net/image-search/features"
 _FEATURE_FLAGS_TIMEOUT_SECONDS = 10
+_FEATURE_FLAGS_MAX_RETRIES = 3
+_FEATURE_FLAGS_RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0)
 
 
 class _FeatureFlagStore:
@@ -56,21 +61,36 @@ class _FeatureFlagStore:
 
 
 def _fetch_feature_flags_payload() -> dict:
-    request = Request(
-        _FEATURE_FLAGS_ENDPOINT,
-        headers={"Accept": "application/json"},
-        method="GET",
-    )
-    try:
-        with urlopen(request, timeout=_FEATURE_FLAGS_TIMEOUT_SECONDS) as response:
-            status_code = getattr(response, "status", None)
-            if status_code is not None and status_code != 200:
-                raise RuntimeError(f"Feature flag request failed with HTTP {status_code}.")
-            body = response.read()
-    except HTTPError as exc:
-        raise RuntimeError(f"Feature flag request failed with HTTP {exc.code}.") from exc
-    except URLError as exc:
-        raise RuntimeError(f"Feature flag request failed: {exc.reason}") from exc
+    body: bytes | None = None
+    last_error: RuntimeError | None = None
+
+    for attempt in range(1, _FEATURE_FLAGS_MAX_RETRIES + 2):
+        request = Request(
+            _FEATURE_FLAGS_ENDPOINT,
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=_FEATURE_FLAGS_TIMEOUT_SECONDS) as response:
+                status_code = getattr(response, "status", None)
+                if status_code is not None and status_code != 200:
+                    raise RuntimeError(f"Feature flag request failed with HTTP {status_code}.")
+                body = response.read()
+            break
+        except HTTPError as exc:
+            last_error = RuntimeError(f"Feature flag request failed with HTTP {exc.code}.")
+            break
+        except URLError as exc:
+            if _is_temporary_url_error(exc) and attempt <= _FEATURE_FLAGS_MAX_RETRIES:
+                _sleep_before_retry(retry_attempt=attempt, reason=f"network_{exc.reason}")
+                continue
+            last_error = RuntimeError(f"Feature flag request failed: {exc.reason}")
+            break
+
+    if last_error is not None:
+        raise last_error
+    if body is None:
+        raise RuntimeError("Feature flag request exceeded retry limit.")
 
     try:
         payload = json.loads(body.decode("utf-8"))
@@ -79,6 +99,47 @@ def _fetch_feature_flags_payload() -> dict:
     if not isinstance(payload, dict):
         raise RuntimeError("Feature flag response must be a JSON object.")
     return payload
+
+
+def _is_temporary_url_error(error: URLError) -> bool:
+    reason = error.reason
+    if isinstance(reason, socket.timeout):
+        return True
+    if isinstance(reason, socket.gaierror):
+        return True
+    if isinstance(reason, TimeoutError):
+        return True
+    if isinstance(reason, OSError):
+        if reason.errno in {errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ETIMEDOUT, errno.ECONNRESET}:
+            return True
+    if isinstance(reason, str):
+        lowered = reason.lower()
+        temporary_markers = (
+            "temporary failure in name resolution",
+            "name or service not known",
+            "nodename nor servname provided",
+            "timed out",
+            "network is unreachable",
+            "no route to host",
+        )
+        return any(marker in lowered for marker in temporary_markers)
+    return False
+
+
+def _sleep_before_retry(*, retry_attempt: int, reason: str) -> None:
+    from dt_image_search.telemetry.telemetry_client import log
+
+    delay_index = min(max(retry_attempt - 1, 0), len(_FEATURE_FLAGS_RETRY_DELAYS_SECONDS) - 1)
+    delay_seconds = _FEATURE_FLAGS_RETRY_DELAYS_SECONDS[delay_index]
+    log(
+        "warning",
+        message=(
+            "FeatureFlags: temporary request failure "
+            f"reason={reason} retry_attempt={retry_attempt}/{_FEATURE_FLAGS_MAX_RETRIES} "
+            f"delay_seconds={delay_seconds}"
+        ),
+    )
+    time.sleep(delay_seconds)
 
 
 def _extract_mobile_folder_enabled(payload: dict) -> bool | None:
