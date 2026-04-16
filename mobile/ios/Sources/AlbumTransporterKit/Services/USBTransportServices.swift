@@ -1042,7 +1042,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnecti
     }
 }
 
-actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResolving {
+actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving {
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
     private var lastResolvedTransportByDesktopID: [String: TransferTransport] = [:]
@@ -1074,9 +1074,22 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
         _ candidates: [TransferAssetExistenceCandidate],
         desktop: TrustedDesktopRecord
     ) async throws -> [String: TransferAssetExistenceMatch] {
+        try await lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: nil
+        )
+    }
+
+    func lookupExistingAssets(
+        _ candidates: [TransferAssetExistenceCandidate],
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?
+    ) async throws -> [String: TransferAssetExistenceMatch] {
         try await executeWithFallback(
             operationName: MobileTransportProtocol.transferExistenceOperation,
             desktop: desktop,
+            preferredTransport: preferredTransport,
             usbOperation: {
                 let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
                 return try await usbClient.lookupExistingAssets(candidates, desktop: usbDesktop)
@@ -1089,9 +1102,22 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
+        try await uploadAsset(
+            asset,
+            desktop: desktop,
+            preferredTransport: nil
+        )
+    }
+
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?
+    ) async throws -> TransferServerResponse {
         try await executeWithFallback(
             operationName: MobileTransportProtocol.transferAssetOperation,
             desktop: desktop,
+            preferredTransport: preferredTransport,
             usbOperation: {
                 let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
                 return try await usbClient.uploadAsset(asset, desktop: usbDesktop)
@@ -1148,12 +1174,18 @@ actor AdaptiveMobileTransferClient: MobileTransferClient, TransferTransportResol
     private func executeWithFallback<Result>(
         operationName: String,
         desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport? = nil,
         usbOperation: () async throws -> Result,
         lanOperation: () async throws -> Result
     ) async throws -> Result {
-        let preferredTransport = await resolveDesktopTransport(for: desktop)
+        let selectedTransport: TransferTransport
+        if let preferredTransport {
+            selectedTransport = preferredTransport
+        } else {
+            selectedTransport = await resolveDesktopTransport(for: desktop)
+        }
 
-        switch preferredTransport {
+        switch selectedTransport {
         case .usb:
             do {
                 let result = try await usbOperation()

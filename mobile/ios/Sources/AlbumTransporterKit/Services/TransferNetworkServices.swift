@@ -336,6 +336,19 @@ protocol MobileTransferClient: Sendable {
     ) async throws -> TransferServerResponse
 }
 
+protocol PreferredTransportMobileTransferClient: MobileTransferClient {
+    func lookupExistingAssets(
+        _ candidates: [TransferAssetExistenceCandidate],
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?
+    ) async throws -> [String: TransferAssetExistenceMatch]
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?
+    ) async throws -> TransferServerResponse
+}
+
 protocol TransferTransportResolving: Sendable {
     func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport
 }
@@ -1410,17 +1423,55 @@ private actor PreparedTransferAssetQueue {
     }
 }
 
+private func lookupExistingAssets(
+    transferClient: MobileTransferClient,
+    candidates: [TransferAssetExistenceCandidate],
+    desktop: TrustedDesktopRecord,
+    preferredTransport: TransferTransport?
+) async throws -> [String: TransferAssetExistenceMatch] {
+    if let preferredTransportClient = transferClient as? any PreferredTransportMobileTransferClient {
+        return try await preferredTransportClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: preferredTransport
+        )
+    }
+    return try await transferClient.lookupExistingAssets(candidates, desktop: desktop)
+}
+
+private func uploadPreparedAsset(
+    transferClient: MobileTransferClient,
+    asset: ExportedTransferAsset,
+    desktop: TrustedDesktopRecord,
+    preferredTransport: TransferTransport?
+) async throws -> TransferServerResponse {
+    if let preferredTransportClient = transferClient as? any PreferredTransportMobileTransferClient {
+        return try await preferredTransportClient.uploadAsset(
+            asset,
+            desktop: desktop,
+            preferredTransport: preferredTransport
+        )
+    }
+    return try await transferClient.uploadAsset(asset, desktop: desktop)
+}
+
 private func performPreparedAssetUpload(
     preparedAsset: PreparedTransferAsset,
     desktop: TrustedDesktopRecord,
-    transferClient: MobileTransferClient
+    transferClient: MobileTransferClient,
+    preferredTransport: TransferTransport?
 ) async -> PreparedTransferUploadResult {
     var existenceCheckDurationSeconds = 0.0
     var uploadDurationSeconds = 0.0
     do {
         if let existenceCandidate = preparedAsset.existenceCandidate {
             let existenceStart = ProcessInfo.processInfo.systemUptime
-            let matches = try await transferClient.lookupExistingAssets([existenceCandidate], desktop: desktop)
+            let matches = try await lookupExistingAssets(
+                transferClient: transferClient,
+                candidates: [existenceCandidate],
+                desktop: desktop,
+                preferredTransport: preferredTransport
+            )
             existenceCheckDurationSeconds = ProcessInfo.processInfo.systemUptime - existenceStart
             if let existingMatch = matches[preparedAsset.exportedAsset.descriptor.assetID] {
                 return PreparedTransferUploadResult(
@@ -1434,7 +1485,12 @@ private func performPreparedAssetUpload(
             }
         }
         let uploadStart = ProcessInfo.processInfo.systemUptime
-        let response = try await transferClient.uploadAsset(preparedAsset.exportedAsset, desktop: desktop)
+        let response = try await uploadPreparedAsset(
+            transferClient: transferClient,
+            asset: preparedAsset.exportedAsset,
+            desktop: desktop,
+            preferredTransport: preferredTransport
+        )
         uploadDurationSeconds = ProcessInfo.processInfo.systemUptime - uploadStart
         return PreparedTransferUploadResult(
             preparedAsset: preparedAsset,
@@ -1460,6 +1516,11 @@ actor PhotoLibraryTransferService: TransferService {
     private struct TransferSpeedSample {
         let timestamp: Date
         let bytes: Int
+    }
+
+    private struct UploadLane {
+        let preferredTransport: TransferTransport?
+        let concurrencyLimit: Int
     }
 
     private static let transferSpeedWindowSeconds: TimeInterval = 10
@@ -1790,14 +1851,17 @@ actor PhotoLibraryTransferService: TransferService {
                 queue: preparedAssetQueue
             )
         }
+        let uploadLanes = await configuredUploadLanes(for: desktop)
 
         var bufferedUploads: [PreparedTransferAsset] = []
         var producerFinished = false
         var inFlightUploadCount = 0
+        var inFlightUploadCountByLane: [Int: Int] = [:]
+        var nextUploadLaneIndex = 0
         var stopHandled = false
         let uploadClient = transferClient
 
-        await withTaskGroup(of: PreparedTransferUploadResult.self) { uploadGroup in
+        await withTaskGroup(of: (Int, PreparedTransferUploadResult).self) { uploadGroup in
             while true {
                 if stopRequested, !stopHandled {
                     stopHandled = true
@@ -1832,23 +1896,44 @@ actor PhotoLibraryTransferService: TransferService {
                 }
 
                 if !stopHandled {
-                    let preferredUploadConcurrency = uploadConcurrencyLimit
-                    while inFlightUploadCount < preferredUploadConcurrency, !bufferedUploads.isEmpty {
+                    while !bufferedUploads.isEmpty {
+                        guard
+                            let laneIndex = nextAvailableUploadLaneIndex(
+                                lanes: uploadLanes,
+                                inFlightCounts: inFlightUploadCountByLane,
+                                laneCursor: &nextUploadLaneIndex
+                            )
+                        else {
+                            break
+                        }
+                        let lane = uploadLanes[laneIndex]
                         let preparedAsset = bufferedUploads.removeFirst()
                         inFlightUploadCount += 1
+                        inFlightUploadCountByLane[laneIndex, default: 0] += 1
                         uploadGroup.addTask {
-                            await performPreparedAssetUpload(
-                                preparedAsset: preparedAsset,
-                                desktop: desktop,
-                                transferClient: uploadClient
+                            (
+                                laneIndex,
+                                await performPreparedAssetUpload(
+                                    preparedAsset: preparedAsset,
+                                    desktop: desktop,
+                                    transferClient: uploadClient,
+                                    preferredTransport: lane.preferredTransport
+                                )
                             )
                         }
                     }
                 }
 
                 if inFlightUploadCount > 0 {
-                    if let uploadResult = await uploadGroup.next() {
+                    if let (laneIndex, uploadResult) = await uploadGroup.next() {
                         inFlightUploadCount -= 1
+                        if let currentLaneCount = inFlightUploadCountByLane[laneIndex] {
+                            if currentLaneCount <= 1 {
+                                inFlightUploadCountByLane.removeValue(forKey: laneIndex)
+                            } else {
+                                inFlightUploadCountByLane[laneIndex] = currentLaneCount - 1
+                            }
+                        }
                         await processUploadResult(
                             uploadResult,
                             desktop: desktop,
@@ -1861,6 +1946,7 @@ actor PhotoLibraryTransferService: TransferService {
                         continue
                     }
                     inFlightUploadCount = 0
+                    inFlightUploadCountByLane.removeAll(keepingCapacity: false)
                 }
 
                 if producerFinished {
@@ -1915,6 +2001,52 @@ actor PhotoLibraryTransferService: TransferService {
             return pausedSnapshot
         }
 
+        return nil
+    }
+
+    private func configuredUploadLanes(for desktop: TrustedDesktopRecord) async -> [UploadLane] {
+        let defaultLane = [UploadLane(preferredTransport: nil, concurrencyLimit: uploadConcurrencyLimit)]
+        guard uploadConcurrencyLimit >= 2 else {
+            return defaultLane
+        }
+        guard transferClient is any PreferredTransportMobileTransferClient else {
+            return defaultLane
+        }
+        let currentTransport = await resolvedTransport(for: desktop)
+        guard currentTransport == .usb else {
+            return defaultLane
+        }
+
+        let lanConcurrency = max(1, uploadConcurrencyLimit / 2)
+        let usbConcurrency = max(1, uploadConcurrencyLimit - lanConcurrency)
+        TransferDebugLogger.info(
+            "Dual-channel upload scheduling enabled "
+                + "session_id=\(desktop.lastSessionID) "
+                + "usb_limit=\(usbConcurrency) lan_limit=\(lanConcurrency)"
+        )
+        return [
+            UploadLane(preferredTransport: .usb, concurrencyLimit: usbConcurrency),
+            UploadLane(preferredTransport: .lan, concurrencyLimit: lanConcurrency),
+        ]
+    }
+
+    private func nextAvailableUploadLaneIndex(
+        lanes: [UploadLane],
+        inFlightCounts: [Int: Int],
+        laneCursor: inout Int
+    ) -> Int? {
+        guard !lanes.isEmpty else {
+            return nil
+        }
+        let normalizedCursor = max(0, laneCursor)
+        for offset in 0 ..< lanes.count {
+            let candidateLaneIndex = (normalizedCursor + offset) % lanes.count
+            let inFlightCount = inFlightCounts[candidateLaneIndex, default: 0]
+            if inFlightCount < lanes[candidateLaneIndex].concurrencyLimit {
+                laneCursor = (candidateLaneIndex + 1) % lanes.count
+                return candidateLaneIndex
+            }
+        }
         return nil
     }
 
