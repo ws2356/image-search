@@ -41,8 +41,7 @@ def _endpoint_urls_detail(endpoint_urls: tuple[str, ...]) -> str:
     else:
         endpoint_heading = "Desktop endpoints:\n" + "\n".join(endpoint_urls)
     return (
-        f"{endpoint_heading}\n"
-        "Destination folder will be resolved after the mobile device identity is accepted."
+        f"{endpoint_heading}"
     )
 
 
@@ -373,10 +372,11 @@ class PairingQrCard(QFrame):
         self.refresh_overlay_button.setCursor(Qt.PointingHandCursor)
         self.refresh_overlay_button.setFixedSize(200, 200)
         self.refresh_overlay_button.move(0, 0)
+
         self.refresh_overlay_button.setStyleSheet(
             """
             QPushButton {
-                background: rgba(244, 247, 255, 242);
+                background: rgba(245, 245, 245, 245);
                 color: #007AFF;
                 border: 1px solid rgba(148, 163, 184, 180);
                 border-radius: 8px;
@@ -384,7 +384,7 @@ class PairingQrCard(QFrame):
                 font-weight: 700;
             }
             QPushButton:hover {
-                background: rgba(244, 247, 255, 248);
+                background: rgba(245, 245, 245, 245);
             }
             """
         )
@@ -461,16 +461,16 @@ class MobilePairingDialog(QDialog):
         qr_row.addStretch()
         layout.addLayout(qr_row)
 
-        security_note = QLabel(
-            "🔒  Pairing uses a one-time passcode and stays entirely on the local network. "
-            "No data leaves your devices."
-        )
-        security_note.setWordWrap(True)
-        security_note.setStyleSheet(
-            "background: #eef5ff; border: 1px solid #c4dcff; border-radius: 8px;"
-            " padding: 10px 12px; color: #3a5a9c; font-size: 12px;"
-        )
-        layout.addWidget(security_note)
+        # security_note = QLabel(
+        #     "🔒  Pairing uses a one-time passcode and stays entirely on the local network. "
+        #     "No data leaves your devices."
+        # )
+        # security_note.setWordWrap(True)
+        # security_note.setStyleSheet(
+        #     "background: #eef5ff; border: 1px solid #c4dcff; border-radius: 8px;"
+        #     " padding: 10px 12px; color: #3a5a9c; font-size: 12px;"
+        # )
+        # layout.addWidget(security_note)
 
         self.session_status_label = QLabel("Waiting for a mobile device to claim this session…")
         self.session_status_label.setWordWrap(True)
@@ -580,7 +580,7 @@ class MobilePairingDialog(QDialog):
             self.session_status_label.setStyleSheet(f"font-weight: 600; color: {color}; font-size: 13px;")
             return
 
-        self.session_status_label.setText(pairing_result.message)
+        self.session_status_label.setText("")
         self.session_details_label.setText(_endpoint_urls_detail(self._pairing_service.endpoint_urls))
         self.session_status_label.setStyleSheet("font-weight: 600; color: #1f2937; font-size: 13px;")
 
