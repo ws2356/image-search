@@ -376,15 +376,15 @@ class PairingQrCard(QFrame):
         self.refresh_overlay_button.setStyleSheet(
             """
             QPushButton {
-                background: rgba(244, 247, 255, 185);
-                color: #1f2937;
+                background: rgba(244, 247, 255, 242);
+                color: #007AFF;
                 border: 1px solid rgba(148, 163, 184, 180);
                 border-radius: 8px;
                 font-size: 18px;
                 font-weight: 700;
             }
             QPushButton:hover {
-                background: rgba(244, 247, 255, 210);
+                background: rgba(244, 247, 255, 248);
             }
             """
         )
