@@ -16,6 +16,9 @@ enum MobileTransportProtocol {
     static let transferAssetStreamStateField = "stream_state"
     static let transferAssetStreamStateStart = "start"
     static let transferAssetStreamStateComplete = "complete"
+    static let transferAssetBinaryFrameVersion: UInt8 = 1
+    static let transferAssetBinaryFrameRequestIDLength = 36
+    static let transferAssetBinaryFrameHeaderLength = 42
 }
 
 func buildDesktopUSBAuthDigest(oneTimePasscode: String, rand: String) -> String {
@@ -98,7 +101,7 @@ actor USBWebSocketTransportRuntime {
     private var bootstrapOneTimePasscode: String?
     private var bootstrapPort: Int?
     private var pendingResponses: [String: CheckedContinuation<USBTransportRuntimeResponse, Error>] = [:]
-    private var activeStreamingRequestID: String?
+    private var activeStreamingRequestIDs: Set<String> = []
     private let queue = DispatchQueue(label: "AlbumTransporterKit.USBTransportRuntime")
 
     deinit {
@@ -163,9 +166,6 @@ actor USBWebSocketTransportRuntime {
         chunkSizeBytes: Int,
         timeout: Duration = .seconds(3)
     ) async throws -> String {
-        guard activeStreamingRequestID == nil else {
-            throw USBTransportRuntimeError.sendFailed(message: "A streaming request is already active.")
-        }
         let connection = try await waitForReadyConnection(timeout: timeout)
         let requestID = UUID().uuidString.lowercased()
         let envelopeData = try encodeEnvelope(
@@ -183,7 +183,7 @@ actor USBWebSocketTransportRuntime {
             on: connection,
             timeout: timeout
         )
-        activeStreamingRequestID = requestID
+        activeStreamingRequestIDs.insert(requestID)
         return requestID
     }
 
@@ -192,7 +192,7 @@ actor USBWebSocketTransportRuntime {
         chunk: Data,
         timeout: Duration = .seconds(3)
     ) async throws {
-        guard activeStreamingRequestID == requestID else {
+        guard activeStreamingRequestIDs.contains(requestID) else {
             throw USBTransportRuntimeError.invalidEnvelope
         }
         guard chunk.count <= MobileTransportProtocol.transferAssetChunkSizeBytes else {
@@ -201,8 +201,12 @@ actor USBWebSocketTransportRuntime {
             )
         }
         let connection = try await waitForReadyConnection(timeout: timeout)
+        let framedChunk = try encodeTransferAssetBinaryFrame(
+            requestID: requestID,
+            chunk: chunk
+        )
         try await sendBinary(
-            chunk,
+            framedChunk,
             on: connection,
             timeout: timeout
         )
@@ -213,7 +217,7 @@ actor USBWebSocketTransportRuntime {
         requestID: String,
         timeout: Duration = .seconds(3)
     ) async throws -> USBTransportRuntimeResponse {
-        guard activeStreamingRequestID == requestID else {
+        guard activeStreamingRequestIDs.contains(requestID) else {
             throw USBTransportRuntimeError.invalidEnvelope
         }
         let connection = try await waitForReadyConnection(timeout: timeout)
@@ -231,7 +235,7 @@ actor USBWebSocketTransportRuntime {
             timeout: timeout
         )
         defer {
-            activeStreamingRequestID = nil
+            activeStreamingRequestIDs.remove(requestID)
         }
         return try await awaitResponse(
             requestID: requestID,
@@ -241,9 +245,7 @@ actor USBWebSocketTransportRuntime {
     }
 
     func abortStreamingRequest(requestID: String) {
-        if activeStreamingRequestID == requestID {
-            activeStreamingRequestID = nil
-        }
+        activeStreamingRequestIDs.remove(requestID)
     }
 
     func reset() {
@@ -261,7 +263,7 @@ actor USBWebSocketTransportRuntime {
         activeConnection = nil
         isActiveConnectionReady = false
         isConnectionAuthenticated = false
-        activeStreamingRequestID = nil
+        activeStreamingRequestIDs.removeAll(keepingCapacity: false)
         bootstrapSessionID = nil
         bootstrapOneTimePasscode = nil
         bootstrapPort = nil
@@ -338,13 +340,13 @@ actor USBWebSocketTransportRuntime {
             isActiveConnectionReady = false
             isConnectionAuthenticated = false
             activeConnection = nil
-            activeStreamingRequestID = nil
+            activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
         case .cancelled:
             isActiveConnectionReady = false
             isConnectionAuthenticated = false
             activeConnection = nil
-            activeStreamingRequestID = nil
+            activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
         default:
             break
@@ -376,7 +378,7 @@ actor USBWebSocketTransportRuntime {
             isActiveConnectionReady = false
             isConnectionAuthenticated = false
             activeConnection = nil
-            activeStreamingRequestID = nil
+            activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
             return
         }
@@ -395,7 +397,7 @@ actor USBWebSocketTransportRuntime {
                     "USBRuntime/auth_challenge_failure error=\(USBTransportDebugLogger.describe(error))"
                 )
                 isConnectionAuthenticated = false
-                activeStreamingRequestID = nil
+                activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             }
             do {
                 let envelopeResponse = try parseEnvelopeResponse(data)
@@ -454,7 +456,7 @@ actor USBWebSocketTransportRuntime {
                 "message": challengeResult.message,
             ]
             isConnectionAuthenticated = false
-            activeStreamingRequestID = nil
+            activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
         }
 
@@ -515,6 +517,38 @@ actor USBWebSocketTransportRuntime {
             proof: expectedDigest,
             message: "accepted"
         )
+    }
+
+    private func encodeTransferAssetBinaryFrame(
+        requestID: String,
+        chunk: Data
+    ) throws -> Data {
+        guard requestID.utf8.count == MobileTransportProtocol.transferAssetBinaryFrameRequestIDLength else {
+            throw USBTransportRuntimeError.invalidEnvelope
+        }
+        guard chunk.count <= MobileTransportProtocol.transferAssetChunkSizeBytes else {
+            throw USBTransportRuntimeError.sendFailed(
+                message: "Desktop USB transport chunk exceeded the maximum \(MobileTransportProtocol.transferAssetChunkSizeBytes)-byte limit."
+            )
+        }
+        guard chunk.count <= Int(UInt32.max) else {
+            throw USBTransportRuntimeError.sendFailed(
+                message: "Desktop USB transport chunk length exceeded framing limits."
+            )
+        }
+
+        var header = Data(capacity: MobileTransportProtocol.transferAssetBinaryFrameHeaderLength)
+        header.append(MobileTransportProtocol.transferAssetBinaryFrameVersion)
+        header.append(contentsOf: requestID.utf8)
+
+        var payloadLength = UInt32(chunk.count).bigEndian
+        withUnsafeBytes(of: &payloadLength) { buffer in
+            header.append(contentsOf: buffer)
+        }
+
+        header.append(0) // Reserved flags byte.
+        header.append(chunk)
+        return header
     }
 
     private func waitForReadyConnection(timeout: Duration) async throws -> NWConnection {

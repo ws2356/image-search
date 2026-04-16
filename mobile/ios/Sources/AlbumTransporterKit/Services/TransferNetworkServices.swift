@@ -1339,8 +1339,92 @@ private struct PreparedTransferAsset: Sendable {
 
 private struct PreparedTransferUploadResult: Sendable {
     let preparedAsset: PreparedTransferAsset
+    let existingMatch: TransferAssetExistenceMatch?
     let response: TransferServerResponse?
     let errorDescription: String?
+}
+
+private struct ExportPipelineResult: Sendable {
+    let descriptor: TransferAssetDescriptor
+    let preparedAsset: PreparedTransferAsset?
+    let errorDescription: String?
+}
+
+private actor PreparedTransferAssetQueue {
+    private var bufferedItems: [ExportPipelineResult] = []
+    private var pendingConsumers: [CheckedContinuation<ExportPipelineResult?, Never>] = []
+    private var isFinished = false
+
+    func enqueue(_ item: ExportPipelineResult) {
+        if let pendingConsumer = pendingConsumers.first {
+            pendingConsumers.removeFirst()
+            pendingConsumer.resume(returning: item)
+            return
+        }
+        bufferedItems.append(item)
+    }
+
+    func dequeue() async -> ExportPipelineResult? {
+        if !bufferedItems.isEmpty {
+            return bufferedItems.removeFirst()
+        }
+        if isFinished {
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            pendingConsumers.append(continuation)
+        }
+    }
+
+    func tryDequeue() -> ExportPipelineResult? {
+        guard !bufferedItems.isEmpty else {
+            return nil
+        }
+        return bufferedItems.removeFirst()
+    }
+
+    func finish() {
+        isFinished = true
+        let consumers = pendingConsumers
+        pendingConsumers.removeAll(keepingCapacity: false)
+        for consumer in consumers {
+            consumer.resume(returning: nil)
+        }
+    }
+}
+
+private func performPreparedAssetUpload(
+    preparedAsset: PreparedTransferAsset,
+    desktop: TrustedDesktopRecord,
+    transferClient: MobileTransferClient
+) async -> PreparedTransferUploadResult {
+    do {
+        if let existenceCandidate = preparedAsset.existenceCandidate {
+            let matches = try await transferClient.lookupExistingAssets([existenceCandidate], desktop: desktop)
+            if let existingMatch = matches[preparedAsset.exportedAsset.descriptor.assetID] {
+                return PreparedTransferUploadResult(
+                    preparedAsset: preparedAsset,
+                    existingMatch: existingMatch,
+                    response: nil,
+                    errorDescription: nil
+                )
+            }
+        }
+        let response = try await transferClient.uploadAsset(preparedAsset.exportedAsset, desktop: desktop)
+        return PreparedTransferUploadResult(
+            preparedAsset: preparedAsset,
+            existingMatch: nil,
+            response: response,
+            errorDescription: nil
+        )
+    } catch {
+        return PreparedTransferUploadResult(
+            preparedAsset: preparedAsset,
+            existingMatch: nil,
+            response: nil,
+            errorDescription: TransferDebugLogger.describe(error)
+        )
+    }
 }
 
 actor PhotoLibraryTransferService: TransferService {
@@ -1354,8 +1438,7 @@ actor PhotoLibraryTransferService: TransferService {
     private let transferClient: MobileTransferClient
     private let transportResolver: (any TransferTransportResolving)?
     private let trustedDesktopStore: TrustedDesktopStore
-    private let lookupBatchSize: Int
-    private let lookupBatchByteThresholdBytes: Int
+    private let exportConcurrencyLimit: Int
     private let uploadConcurrencyLimit: Int
     private var transferSpeedSamples: [TransferSpeedSample] = []
     private var successfullyTransferredAssetIDs: [String] = []
@@ -1366,16 +1449,14 @@ actor PhotoLibraryTransferService: TransferService {
         assetSource: TransferAssetSource,
         transferClient: MobileTransferClient,
         trustedDesktopStore: TrustedDesktopStore,
-        lookupBatchSize: Int = 32,
-        lookupBatchByteThresholdBytes: Int = 100 * 1024 * 1024,
+        exportConcurrencyLimit: Int = 5,
         uploadConcurrencyLimit: Int = 10
     ) {
         self.assetSource = assetSource
         self.transferClient = transferClient
         self.transportResolver = transferClient as? any TransferTransportResolving
         self.trustedDesktopStore = trustedDesktopStore
-        self.lookupBatchSize = max(1, lookupBatchSize)
-        self.lookupBatchByteThresholdBytes = max(1, lookupBatchByteThresholdBytes)
+        self.exportConcurrencyLimit = max(1, exportConcurrencyLimit)
         self.uploadConcurrencyLimit = max(1, uploadConcurrencyLimit)
     }
 
@@ -1566,8 +1647,6 @@ actor PhotoLibraryTransferService: TransferService {
 
             var transferredCount = 0
             var failedCount = 0
-            var pendingBatch: [PreparedTransferAsset] = []
-            var pendingBatchTotalBytes = 0
             let initialTransport = await resolvedTransport(for: trustedDesktop)
             let initialSnapshot = makeProgressSnapshot(
                 transport: initialTransport,
@@ -1578,101 +1657,8 @@ actor PhotoLibraryTransferService: TransferService {
             currentSnapshot = initialSnapshot
             progress(initialSnapshot)
 
-            for (index, asset) in assets.enumerated() {
-                if stopRequested {
-                    cleanupPreparedAssets(pendingBatch)
-                    let currentTransport = await resolvedTransport(for: trustedDesktop)
-                    let pausedSnapshot = makePausedSnapshot(
-                        transport: currentTransport,
-                        transferredCount: transferredCount,
-                        totalCount: assets.count,
-                        failedCount: failedCount,
-                        sessionID: trustedDesktop.lastSessionID
-                    )
-                    currentSnapshot = pausedSnapshot
-                    return pausedSnapshot
-                }
-
-                let assetSummary = TransferDebugLogger.assetSummary(for: asset)
-                TransferDebugLogger.debug("Preparing asset \(index + 1)/\(assets.count) \(assetSummary)")
-                do {
-                    let preparedAsset = PreparedTransferAsset(exportedAsset: try await assetSource.exportAsset(asset))
-                    if preparedAsset.existenceCandidate == nil {
-                        if let pausedSnapshot = await processPreparedBatch(
-                            pendingBatch,
-                            desktop: trustedDesktop,
-                            totalCount: assets.count,
-                            transferredCount: &transferredCount,
-                            failedCount: &failedCount,
-                            progress: progress
-                        ) {
-                            return pausedSnapshot
-                        }
-                        pendingBatch.removeAll(keepingCapacity: true)
-                        pendingBatchTotalBytes = 0
-
-                        if let pausedSnapshot = await processPreparedBatch(
-                            [preparedAsset],
-                            desktop: trustedDesktop,
-                            totalCount: assets.count,
-                            transferredCount: &transferredCount,
-                            failedCount: &failedCount,
-                            progress: progress
-                        ) {
-                            return pausedSnapshot
-                        }
-                        continue
-                    }
-
-                    pendingBatch.append(preparedAsset)
-                    pendingBatchTotalBytes += max(preparedAsset.exportedAsset.fileSize, 0)
-                    if pendingBatch.count >= lookupBatchSize
-                        || pendingBatchTotalBytes >= lookupBatchByteThresholdBytes
-                    {
-                        if let pausedSnapshot = await processPreparedBatch(
-                            pendingBatch,
-                            desktop: trustedDesktop,
-                            totalCount: assets.count,
-                            transferredCount: &transferredCount,
-                            failedCount: &failedCount,
-                            progress: progress
-                        ) {
-                            return pausedSnapshot
-                        }
-                        pendingBatch.removeAll(keepingCapacity: true)
-                        pendingBatchTotalBytes = 0
-                    }
-                } catch {
-                    failedCount += 1
-                    TransferDebugLogger.error(
-                        "Transfer failed for \(assetSummary) error=\(TransferDebugLogger.describe(error))"
-                    )
-                    await recordProgressUpdate(
-                        desktop: trustedDesktop,
-                        transferredCount: transferredCount,
-                        totalCount: assets.count,
-                        failedCount: failedCount,
-                        progress: progress
-                    )
-                }
-            }
-
-            if stopRequested {
-                cleanupPreparedAssets(pendingBatch)
-                let currentTransport = await resolvedTransport(for: trustedDesktop)
-                let pausedSnapshot = makePausedSnapshot(
-                    transport: currentTransport,
-                    transferredCount: transferredCount,
-                    totalCount: assets.count,
-                    failedCount: failedCount,
-                    sessionID: trustedDesktop.lastSessionID
-                )
-                currentSnapshot = pausedSnapshot
-                return pausedSnapshot
-            }
-
-            if let pausedSnapshot = await processPreparedBatch(
-                pendingBatch,
+            if let pausedSnapshot = await processTransferPipeline(
+                assets: assets,
                 desktop: trustedDesktop,
                 totalCount: assets.count,
                 transferredCount: &transferredCount,
@@ -1738,33 +1724,52 @@ actor PhotoLibraryTransferService: TransferService {
         }
     }
 
-    private func processPreparedBatch(
-        _ batch: [PreparedTransferAsset],
+    private func processTransferPipeline(
+        assets: [TransferAssetDescriptor],
         desktop: TrustedDesktopRecord,
         totalCount: Int,
         transferredCount: inout Int,
         failedCount: inout Int,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
     ) async -> TransferSnapshot? {
-        guard !batch.isEmpty else {
-            return nil
+        let preparedAssetQueue = PreparedTransferAssetQueue()
+        let producerTask = Task {
+            await producePreparedAssets(
+                assets: assets,
+                queue: preparedAssetQueue
+            )
         }
 
-        let lookupCandidates = batch.compactMap(\.existenceCandidate)
-        var matchesByAssetID: [String: TransferAssetExistenceMatch] = [:]
-        if !lookupCandidates.isEmpty {
-            do {
-                matchesByAssetID = try await transferClient.lookupExistingAssets(lookupCandidates, desktop: desktop)
-                TransferDebugLogger.debug(
-                    "Desktop signature check completed session_id=\(desktop.lastSessionID) requested=\(lookupCandidates.count) matched=\(matchesByAssetID.count)"
-                )
-            } catch {
-                TransferDebugLogger.error(
-                    "Desktop signature check failed session_id=\(desktop.lastSessionID) requested=\(lookupCandidates.count) error=\(TransferDebugLogger.describe(error))"
-                )
-                for preparedAsset in batch {
+        var bufferedUploads: [PreparedTransferAsset] = []
+        var producerFinished = false
+        var inFlightUploadCount = 0
+        var stopHandled = false
+        let uploadClient = transferClient
+
+        await withTaskGroup(of: PreparedTransferUploadResult.self) { uploadGroup in
+            while true {
+                if stopRequested, !stopHandled {
+                    stopHandled = true
+                    producerTask.cancel()
+                    cleanupPreparedAssets(bufferedUploads)
+                    bufferedUploads.removeAll(keepingCapacity: false)
+                }
+
+                while let exportResult = await preparedAssetQueue.tryDequeue() {
+                    if stopHandled {
+                        if let preparedAsset = exportResult.preparedAsset {
+                            cleanupExportedAsset(preparedAsset.exportedAsset)
+                        }
+                        continue
+                    }
+                    if let preparedAsset = exportResult.preparedAsset {
+                        bufferedUploads.append(preparedAsset)
+                        continue
+                    }
                     failedCount += 1
-                    cleanupExportedAsset(preparedAsset.exportedAsset)
+                    let assetSummary = TransferDebugLogger.assetSummary(for: exportResult.descriptor)
+                    let errorDescription = exportResult.errorDescription ?? "unknown export error"
+                    TransferDebugLogger.error("Transfer failed for \(assetSummary) error=\(errorDescription)")
                     await recordProgressUpdate(
                         desktop: desktop,
                         transferredCount: transferredCount,
@@ -1773,143 +1778,77 @@ actor PhotoLibraryTransferService: TransferService {
                         progress: progress
                     )
                 }
-                return nil
-            }
-        }
 
-        var uploadCandidates: [PreparedTransferAsset] = []
-        uploadCandidates.reserveCapacity(batch.count)
-
-        for (index, preparedAsset) in batch.enumerated() {
-            let assetSummary = TransferDebugLogger.assetSummary(for: preparedAsset.exportedAsset.descriptor)
-            if let existingMatch = matchesByAssetID[preparedAsset.exportedAsset.descriptor.assetID] {
-                transferredCount += 1
-                cleanupExportedAsset(preparedAsset.exportedAsset)
-                TransferDebugLogger.debug(
-                    "Skipped upload after desktop signature hit \(assetSummary) local_relative_path=\(existingMatch.localRelativePath)"
-                )
-                await recordProgressUpdate(
-                    desktop: desktop,
-                    transferredCount: transferredCount,
-                    totalCount: totalCount,
-                    failedCount: failedCount,
-                    progress: progress
-                )
-                continue
-            }
-
-            if stopRequested {
-                cleanupPreparedAssets(Array(batch[index...]))
-                let currentTransport = await resolvedTransport(for: desktop)
-                let pausedSnapshot = makePausedSnapshot(
-                    transport: currentTransport,
-                    transferredCount: transferredCount,
-                    totalCount: totalCount,
-                    failedCount: failedCount,
-                    sessionID: desktop.lastSessionID
-                )
-                currentSnapshot = pausedSnapshot
-                return pausedSnapshot
-            }
-
-            uploadCandidates.append(preparedAsset)
-        }
-
-        guard !uploadCandidates.isEmpty else {
-            return nil
-        }
-
-        let uploadClient = transferClient
-        var nextUploadIndex = 0
-        while nextUploadIndex < uploadCandidates.count {
-            if stopRequested {
-                break
-            }
-
-            let currentTransport = await resolvedTransport(for: desktop)
-            let preferredConcurrency = currentTransport == .usb ? 1 : uploadConcurrencyLimit
-            let remainingUploadCount = uploadCandidates.count - nextUploadIndex
-            let maxConcurrentUploads = min(max(1, preferredConcurrency), remainingUploadCount)
-            let chunkEndIndex = min(nextUploadIndex + maxConcurrentUploads, uploadCandidates.count)
-            let uploadChunk = Array(uploadCandidates[nextUploadIndex ..< chunkEndIndex])
-            nextUploadIndex = chunkEndIndex
-
-            let chunkResults = await withTaskGroup(
-                of: PreparedTransferUploadResult.self,
-                returning: [PreparedTransferUploadResult].self
-            ) { group in
-                for candidate in uploadChunk {
-                    group.addTask {
-                        do {
-                            let response = try await uploadClient.uploadAsset(candidate.exportedAsset, desktop: desktop)
-                            return PreparedTransferUploadResult(
-                                preparedAsset: candidate,
-                                response: response,
-                                errorDescription: nil
-                            )
-                        } catch {
-                            return PreparedTransferUploadResult(
-                                preparedAsset: candidate,
-                                response: nil,
-                                errorDescription: TransferDebugLogger.describe(error)
+                if !stopHandled {
+                    let preferredUploadConcurrency = uploadConcurrencyLimit
+                    while inFlightUploadCount < preferredUploadConcurrency, !bufferedUploads.isEmpty {
+                        let preparedAsset = bufferedUploads.removeFirst()
+                        inFlightUploadCount += 1
+                        uploadGroup.addTask {
+                            await performPreparedAssetUpload(
+                                preparedAsset: preparedAsset,
+                                desktop: desktop,
+                                transferClient: uploadClient
                             )
                         }
                     }
                 }
 
-                var results: [PreparedTransferUploadResult] = []
-                for await uploadResult in group {
-                    results.append(uploadResult)
+                if inFlightUploadCount > 0 {
+                    if let uploadResult = await uploadGroup.next() {
+                        inFlightUploadCount -= 1
+                        await processUploadResult(
+                            uploadResult,
+                            desktop: desktop,
+                            totalCount: totalCount,
+                            transferredCount: &transferredCount,
+                            failedCount: &failedCount,
+                            progress: progress
+                        )
+                        continue
+                    }
+                    inFlightUploadCount = 0
                 }
-                return results
-            }
 
-            for uploadResult in chunkResults {
-                let assetSummary = TransferDebugLogger.assetSummary(for: uploadResult.preparedAsset.exportedAsset.descriptor)
-                if let response = uploadResult.response {
-                    switch response.status {
-                    case .stored, .skipped:
-                        switch response.status {
-                        case .stored:
-                            transferredCount += 1
-                            successfullyTransferredAssetIDs.append(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
-                            recordTransferredBytes(uploadResult.preparedAsset.exportedAsset.fileSize)
-                            TransferDebugLogger.debug(
-                                "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                            )
-                        case .skipped:
-                            transferredCount += 1
-                            TransferDebugLogger.debug(
-                                "Skipped transfer after desktop confirmation \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
-                            )
-                        case .accepted, .completed, .rejected:
-                            break
+                if producerFinished {
+                    break
+                }
+
+                if let exportResult = await preparedAssetQueue.dequeue() {
+                    if stopHandled {
+                        if let preparedAsset = exportResult.preparedAsset {
+                            cleanupExportedAsset(preparedAsset.exportedAsset)
                         }
-                    case .accepted, .completed, .rejected:
+                        continue
+                    }
+                    if let preparedAsset = exportResult.preparedAsset {
+                        bufferedUploads.append(preparedAsset)
+                    } else {
                         failedCount += 1
-                        TransferDebugLogger.error(
-                            "Unexpected asset response for \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                        let assetSummary = TransferDebugLogger.assetSummary(for: exportResult.descriptor)
+                        let errorDescription = exportResult.errorDescription ?? "unknown export error"
+                        TransferDebugLogger.error("Transfer failed for \(assetSummary) error=\(errorDescription)")
+                        await recordProgressUpdate(
+                            desktop: desktop,
+                            transferredCount: transferredCount,
+                            totalCount: totalCount,
+                            failedCount: failedCount,
+                            progress: progress
                         )
                     }
                 } else {
-                    failedCount += 1
-                    let errorDescription = uploadResult.errorDescription ?? "unknown upload error"
-                    TransferDebugLogger.error("Transfer failed for \(assetSummary) error=\(errorDescription)")
+                    producerFinished = true
                 }
 
-                cleanupExportedAsset(uploadResult.preparedAsset.exportedAsset)
-                await recordProgressUpdate(
-                    desktop: desktop,
-                    transferredCount: transferredCount,
-                    totalCount: totalCount,
-                    failedCount: failedCount,
-                    progress: progress
-                )
+                if producerFinished, bufferedUploads.isEmpty, inFlightUploadCount == 0 {
+                    break
+                }
             }
         }
 
-        if stopRequested, nextUploadIndex < uploadCandidates.count {
-            cleanupPreparedAssets(Array(uploadCandidates[nextUploadIndex...]))
+        _ = await producerTask.result
+
+        if stopRequested {
             let currentTransport = await resolvedTransport(for: desktop)
             let pausedSnapshot = makePausedSnapshot(
                 transport: currentTransport,
@@ -1923,6 +1862,135 @@ actor PhotoLibraryTransferService: TransferService {
         }
 
         return nil
+    }
+
+    private func producePreparedAssets(
+        assets: [TransferAssetDescriptor],
+        queue: PreparedTransferAssetQueue
+    ) async {
+        let exportSource = assetSource
+
+        await withTaskGroup(of: ExportPipelineResult.self) { group in
+            var nextAssetIndex = 0
+            var inFlightExportCount = 0
+
+            while inFlightExportCount < exportConcurrencyLimit, nextAssetIndex < assets.count {
+                if Task.isCancelled || stopRequested {
+                    break
+                }
+                let descriptor = assets[nextAssetIndex]
+                nextAssetIndex += 1
+                inFlightExportCount += 1
+                group.addTask {
+                    do {
+                        let exportedAsset = try await exportSource.exportAsset(descriptor)
+                        return ExportPipelineResult(
+                            descriptor: descriptor,
+                            preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
+                            errorDescription: nil
+                        )
+                    } catch {
+                        return ExportPipelineResult(
+                            descriptor: descriptor,
+                            preparedAsset: nil,
+                            errorDescription: TransferDebugLogger.describe(error)
+                        )
+                    }
+                }
+            }
+
+            while inFlightExportCount > 0 {
+                guard let exportResult = await group.next() else {
+                    break
+                }
+                inFlightExportCount -= 1
+                await queue.enqueue(exportResult)
+
+                if Task.isCancelled || stopRequested {
+                    continue
+                }
+                if nextAssetIndex >= assets.count {
+                    continue
+                }
+
+                let descriptor = assets[nextAssetIndex]
+                nextAssetIndex += 1
+                inFlightExportCount += 1
+                group.addTask {
+                    do {
+                        let exportedAsset = try await exportSource.exportAsset(descriptor)
+                        return ExportPipelineResult(
+                            descriptor: descriptor,
+                            preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
+                            errorDescription: nil
+                        )
+                    } catch {
+                        return ExportPipelineResult(
+                            descriptor: descriptor,
+                            preparedAsset: nil,
+                            errorDescription: TransferDebugLogger.describe(error)
+                        )
+                    }
+                }
+            }
+        }
+
+        await queue.finish()
+    }
+
+    private func processUploadResult(
+        _ uploadResult: PreparedTransferUploadResult,
+        desktop: TrustedDesktopRecord,
+        totalCount: Int,
+        transferredCount: inout Int,
+        failedCount: inout Int,
+        progress: @escaping @Sendable (TransferSnapshot) -> Void
+    ) async {
+        let assetSummary = TransferDebugLogger.assetSummary(for: uploadResult.preparedAsset.exportedAsset.descriptor)
+        if let existingMatch = uploadResult.existingMatch {
+            transferredCount += 1
+            TransferDebugLogger.debug(
+                "Skipped upload after desktop signature hit \(assetSummary) local_relative_path=\(existingMatch.localRelativePath)"
+            )
+        } else if let response = uploadResult.response {
+            switch response.status {
+            case .stored, .skipped:
+                switch response.status {
+                case .stored:
+                    transferredCount += 1
+                    successfullyTransferredAssetIDs.append(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
+                    recordTransferredBytes(uploadResult.preparedAsset.exportedAsset.fileSize)
+                    TransferDebugLogger.debug(
+                        "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                    )
+                case .skipped:
+                    transferredCount += 1
+                    TransferDebugLogger.debug(
+                        "Skipped transfer after desktop confirmation \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                    )
+                case .accepted, .completed, .rejected:
+                    break
+                }
+            case .accepted, .completed, .rejected:
+                failedCount += 1
+                TransferDebugLogger.error(
+                    "Unexpected asset response for \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
+                )
+            }
+        } else {
+            failedCount += 1
+            let errorDescription = uploadResult.errorDescription ?? "unknown upload error"
+            TransferDebugLogger.error("Transfer failed for \(assetSummary) error=\(errorDescription)")
+        }
+
+        cleanupExportedAsset(uploadResult.preparedAsset.exportedAsset)
+        await recordProgressUpdate(
+            desktop: desktop,
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount,
+            progress: progress
+        )
     }
 
     private func makePausedSnapshot(

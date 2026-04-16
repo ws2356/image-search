@@ -301,7 +301,6 @@ final class TransferServiceTests: XCTestCase {
             assetSource: StaticTransferAssetSource(descriptors: descriptors),
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore,
-            lookupBatchSize: 32,
             uploadConcurrencyLimit: 10
         )
 
@@ -314,7 +313,7 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
     }
 
-    func test_photo_library_transfer_service_keeps_usb_uploads_serial_even_with_high_limit() async {
+    func test_photo_library_transfer_service_allows_usb_upload_concurrency_when_supported() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
                 desktopDeviceID: "desktop-device-001",
@@ -345,7 +344,6 @@ final class TransferServiceTests: XCTestCase {
             assetSource: StaticTransferAssetSource(descriptors: descriptors),
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore,
-            lookupBatchSize: 32,
             uploadConcurrencyLimit: 10
         )
 
@@ -354,7 +352,8 @@ final class TransferServiceTests: XCTestCase {
 
         XCTAssertEqual(snapshot.transferredCount, descriptors.count)
         XCTAssertEqual(snapshot.failedCount, 0)
-        XCTAssertEqual(maxConcurrentUploads, 1)
+        XCTAssertGreaterThan(maxConcurrentUploads, 1)
+        XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
     }
 
     func test_photo_library_transfer_service_skips_known_assets_before_upload() async {
@@ -404,10 +403,10 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.transferredCount, 2)
         XCTAssertEqual(snapshot.failedCount, 0)
         XCTAssertEqual(uploadedAssetIDs, ["ph://asset-002"])
-        XCTAssertEqual(lookupBatchSizes, [2])
+        XCTAssertEqual(lookupBatchSizes, [1, 1])
     }
 
-    func test_photo_library_transfer_service_checks_desktop_existence_in_batches() async {
+    func test_photo_library_transfer_service_checks_desktop_existence_per_asset() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
                 desktopDeviceID: "desktop-device-001",
@@ -452,8 +451,7 @@ final class TransferServiceTests: XCTestCase {
         let service = PhotoLibraryTransferService(
             assetSource: assetSource,
             transferClient: transferClient,
-            trustedDesktopStore: trustedDesktopStore,
-            lookupBatchSize: 2
+            trustedDesktopStore: trustedDesktopStore
         )
 
         let snapshot = await service.startTransfer(progress: { _ in })
@@ -463,10 +461,10 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.transferredCount, 3)
         XCTAssertEqual(snapshot.failedCount, 0)
         XCTAssertEqual(uploadedAssetIDs, ["ph://asset-001", "ph://asset-002", "ph://asset-003"])
-        XCTAssertEqual(lookupBatchSizes, [2, 1])
+        XCTAssertEqual(lookupBatchSizes, [1, 1, 1])
     }
 
-    func test_photo_library_transfer_service_flushes_batch_when_byte_threshold_is_reached() async {
+    func test_photo_library_transfer_service_per_asset_lookup_ignores_batch_threshold_settings() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
                 desktopDeviceID: "desktop-device-001",
@@ -516,9 +514,7 @@ final class TransferServiceTests: XCTestCase {
         let service = PhotoLibraryTransferService(
             assetSource: assetSource,
             transferClient: transferClient,
-            trustedDesktopStore: trustedDesktopStore,
-            lookupBatchSize: 32,
-            lookupBatchByteThresholdBytes: 24
+            trustedDesktopStore: trustedDesktopStore
         )
 
         let snapshot = await service.startTransfer(progress: { _ in })
@@ -528,7 +524,7 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.transferredCount, 3)
         XCTAssertEqual(snapshot.failedCount, 0)
         XCTAssertEqual(uploadedAssetIDs, ["ph://asset-001", "ph://asset-002", "ph://asset-003"])
-        XCTAssertEqual(lookupBatchSizes, [2, 1])
+        XCTAssertEqual(lookupBatchSizes, [1, 1, 1])
     }
 
     func test_photo_library_transfer_service_reports_stop_to_desktop_as_interrupted() async {

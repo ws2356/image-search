@@ -28,6 +28,8 @@ from dt_image_search.mobile.transport.usb_tunnel import (
 )
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+    USB_TRANSFER_BINARY_FRAME_VERSION,
+    USB_TRANSFER_BINARY_REQUEST_ID_LENGTH,
     UsbBootstrapConfig,
     UsbTransportState,
     UsbWebSocketTransportAdapter,
@@ -165,6 +167,19 @@ class _BlockingCloseConnection:
     def close(self, code: int = 1000, reason: str = "") -> None:
         self.close_started.set()
         self.allow_close.wait(timeout=1.0)
+
+
+def _frame_transfer_chunk(request_id: str, payload: bytes) -> bytes:
+    request_id_bytes = request_id.encode("ascii")
+    if len(request_id_bytes) != USB_TRANSFER_BINARY_REQUEST_ID_LENGTH:
+        raise ValueError("request_id must be 36 ASCII bytes for USB transfer frame tests.")
+    return (
+        bytes([USB_TRANSFER_BINARY_FRAME_VERSION])
+        + request_id_bytes
+        + len(payload).to_bytes(4, byteorder="big", signed=False)
+        + b"\x00"
+        + payload
+    )
 
 
 class TestUsbWebSocketTransportAdapter(unittest.TestCase):
@@ -549,11 +564,12 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
             )
 
         self._router.register("transfer.asset", handler)
+        asset_request_id = "12345678-1234-1234-1234-123456789abc"
         stream_start_envelope = json.dumps(
             {
                 "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
                 "operation": "transfer.asset",
-                "request_id": "req-asset-001",
+                "request_id": asset_request_id,
                 "body_schema": "dtis.mobile-transfer.v1",
                 "body": {
                     "stream_state": "start",
@@ -575,7 +591,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
             {
                 "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
                 "operation": "transfer.asset",
-                "request_id": "req-asset-001",
+                "request_id": asset_request_id,
                 "body_schema": "dtis.mobile-transfer.v1",
                 "body": {
                     "stream_state": "complete",
@@ -585,8 +601,8 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         websocket_connection = _FakeWebSocketConnection(
             incoming_messages=[
                 stream_start_envelope,
-                b"hello ",
-                b"world",
+                _frame_transfer_chunk(asset_request_id, b"hello "),
+                _frame_transfer_chunk(asset_request_id, b"world"),
                 stream_complete_envelope,
             ]
         )
@@ -626,7 +642,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertEqual(observed_upload["metadata"]["asset_id"], "asset-001")
         self.assertNotIn("chunk_size", observed_upload["metadata"])
         response_envelope = json.loads(websocket_connection.sent_messages[0])
-        self.assertEqual(response_envelope["request_id"], "req-asset-001")
+        self.assertEqual(response_envelope["request_id"], asset_request_id)
         self.assertEqual(response_envelope["status_code"], 200)
         self.assertEqual(response_envelope["body"]["status"], "stored")
 
