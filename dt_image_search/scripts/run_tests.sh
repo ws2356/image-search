@@ -70,7 +70,7 @@ unit_and_functional_tests=(
 
 has_failed=false
 for test in "${unit_and_functional_tests[@]}"; do
-  if ! $python_bin -m pytest -s --log-cli-level=$level "$test"; then
+  if ! $python_bin "$test"; then
     has_failed=true
   fi
 done
