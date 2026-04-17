@@ -85,7 +85,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
                     error.isLikelyLocalNetworkPermissionError &&
                     attempt < maxAttempts
                 if shouldRetry {
-                    try? await Task.sleep(for: .milliseconds(500))
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                     continue
                 }
 
@@ -99,7 +99,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
                     nsError.isLikelyLocalNetworkPermissionError &&
                     attempt < maxAttempts
                 if shouldRetry {
-                    try? await Task.sleep(for: .milliseconds(500))
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                     continue
                 }
 

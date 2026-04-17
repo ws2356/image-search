@@ -68,7 +68,7 @@ struct TransferSessionView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .compatibleScrollBounceBasedOnSize()
     }
 
     private var transportBadge: some View {

@@ -111,7 +111,7 @@ final class MobileAppModelTests: XCTestCase {
                 finalSnapshot: finalSnapshot
             ),
             telemetryClient: RecordingTelemetryClient(),
-            transferProgressPollingInterval: .milliseconds(10)
+            transferProgressPollingIntervalNanoseconds: 10_000_000
         )
 
         await model.load()
@@ -122,7 +122,7 @@ final class MobileAppModelTests: XCTestCase {
         let transferTask = Task {
             await model.startBackup()
         }
-        try? await Task.sleep(for: .milliseconds(30))
+        try? await Task.sleep(nanoseconds: 30_000_000)
         model.requestStopTransfer()
         await model.confirmStopTransfer()
 
@@ -167,7 +167,7 @@ final class MobileAppModelTests: XCTestCase {
                 finalSnapshot: finalSnapshot
             ),
             telemetryClient: RecordingTelemetryClient(),
-            transferProgressPollingInterval: .milliseconds(10)
+            transferProgressPollingIntervalNanoseconds: 10_000_000
         )
 
         await model.load()
@@ -178,7 +178,7 @@ final class MobileAppModelTests: XCTestCase {
         let transferTask = Task {
             await model.startBackup()
         }
-        try? await Task.sleep(for: .milliseconds(30))
+        try? await Task.sleep(nanoseconds: 30_000_000)
 
         XCTAssertEqual(model.route, .transfer)
         XCTAssertEqual(model.transferSnapshot.totalCount, 5)

@@ -180,3 +180,32 @@ struct BulletRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+extension View {
+    @ViewBuilder
+    func compatibleScrollBounceBasedOnSize() -> some View {
+        if #available(iOS 16.4, *) {
+            self.scrollBounceBehavior(.basedOnSize)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func compatibleKerning(_ value: CGFloat) -> some View {
+        if #available(iOS 16.0, *) {
+            self.kerning(value)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func compatibleTracking(_ value: CGFloat) -> some View {
+        if #available(iOS 16.0, *) {
+            self.tracking(value)
+        } else {
+            self
+        }
+    }
+}

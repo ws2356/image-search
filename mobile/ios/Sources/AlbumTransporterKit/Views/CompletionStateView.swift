@@ -5,7 +5,7 @@ struct CompletionStateView: View {
     let onReturnHome: () -> Void
 
     var body: some View {
-        ScrollView {
+        completionScrollView {
             VStack(spacing: 24) {
                 VStack(spacing: 14) {
                     heroCircle(
@@ -34,16 +34,11 @@ struct CompletionStateView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 
     private var sessionSummaryCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Session Summary")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x6E6E73))
-                .textCase(.uppercase)
-                .kerning(0.5)
+            sessionSummaryHeader
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 8)
@@ -98,5 +93,35 @@ struct CompletionStateView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(hex: 0xE6F9ED))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private func completionScrollView<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if #available(iOS 16.4, *) {
+            ScrollView {
+                content()
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        } else {
+            ScrollView {
+                content()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sessionSummaryHeader: some View {
+        if #available(iOS 16.0, *) {
+            Text("Session Summary")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .textCase(.uppercase)
+                .kerning(0.5)
+        } else {
+            Text("Session Summary")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .textCase(.uppercase)
+        }
     }
 }

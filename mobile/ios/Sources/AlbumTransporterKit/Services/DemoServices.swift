@@ -20,7 +20,7 @@ struct DemoPairingService: PairingService {
     var desktopName = "Studio Mac"
 
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
-        try? await Task.sleep(for: .milliseconds(250))
+        try? await Task.sleep(nanoseconds: 250_000_000)
 
         return PairingStatus(
             phase: .paired,
@@ -44,7 +44,7 @@ struct DemoTransferService: TransferService {
     var initialSnapshot: TransferSnapshot = .demo
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        try? await Task.sleep(for: .milliseconds(150))
+        try? await Task.sleep(nanoseconds: 150_000_000)
         progress(initialSnapshot)
         return initialSnapshot
     }
@@ -54,7 +54,7 @@ struct DemoTransferService: TransferService {
     }
 
     func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        try? await Task.sleep(for: .milliseconds(150))
+        try? await Task.sleep(nanoseconds: 150_000_000)
 
         var resumed = snapshot
         resumed.transferredCount = min(snapshot.totalCount, snapshot.transferredCount + 126)
@@ -67,7 +67,7 @@ struct DemoTransferService: TransferService {
     }
 
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        try? await Task.sleep(for: .milliseconds(150))
+        try? await Task.sleep(nanoseconds: 150_000_000)
 
         var completed = current
         completed.transferredCount = current.totalCount

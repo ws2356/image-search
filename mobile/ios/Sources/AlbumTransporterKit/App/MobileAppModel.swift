@@ -1,34 +1,33 @@
 import Foundation
-import Observation
+import Combine
 
-@Observable
 @MainActor
-final class MobileAppModel {
-    private(set) var route: AppRoute = .home
-    private(set) var homeSummary = HomeSummary.firstLaunch
-    private(set) var permissionSummary = PermissionSummary.demo
-    private(set) var removeAfterBackupEnabled = false
-    private(set) var pairingStatus = PairingStatus.idle
-    private(set) var transferSnapshot = TransferSnapshot.demo
-    private(set) var completionSummary = CompletionSummary.demo
-    var scannedQRCodeValue = ""
+final class MobileAppModel: ObservableObject {
+    @Published private(set) var route: AppRoute = .home
+    @Published private(set) var homeSummary = HomeSummary.firstLaunch
+    @Published private(set) var permissionSummary = PermissionSummary.demo
+    @Published private(set) var removeAfterBackupEnabled = false
+    @Published private(set) var pairingStatus = PairingStatus.idle
+    @Published private(set) var transferSnapshot = TransferSnapshot.demo
+    @Published private(set) var completionSummary = CompletionSummary.demo
+    @Published var scannedQRCodeValue = ""
 
-    var isShowingStopConfirmation = false
-    var isShowingLowBatteryWarning = false
-    var isShowingMediaAccessAlert = false
-    var mediaAccessAlertMessage = "Full Library Access is recommended so Album Transporter can include all local photos and videos."
+    @Published var isShowingStopConfirmation = false
+    @Published var isShowingLowBatteryWarning = false
+    @Published var isShowingMediaAccessAlert = false
+    @Published var mediaAccessAlertMessage = "Full Library Access is recommended so Album Transporter can include all local photos and videos."
 
-    @ObservationIgnored private var hasLoaded = false
-    @ObservationIgnored private var transferProgressPollingTask: Task<Void, Never>?
-    @ObservationIgnored private let transferProgressPollingInterval: Duration
-    @ObservationIgnored private var transferStartedAt: Date?
-    @ObservationIgnored private var isAwaitingMediaAccessDecision = false
-    @ObservationIgnored private let stateStore: AppStateStore
-    @ObservationIgnored private let qrCodePayloadDecoder: QRCodePayloadDecoding
-    @ObservationIgnored private let pairingService: PairingService
-    @ObservationIgnored private let permissionService: PermissionService
-    @ObservationIgnored private let transferService: TransferService
-    @ObservationIgnored private let sideEffectWorker: MobileAppSideEffectWorker
+    private var hasLoaded = false
+    private var transferProgressPollingTask: Task<Void, Never>?
+    private let transferProgressPollingIntervalNanoseconds: UInt64
+    private var transferStartedAt: Date?
+    private var isAwaitingMediaAccessDecision = false
+    private let stateStore: AppStateStore
+    private let qrCodePayloadDecoder: QRCodePayloadDecoding
+    private let pairingService: PairingService
+    private let permissionService: PermissionService
+    private let transferService: TransferService
+    private let sideEffectWorker: MobileAppSideEffectWorker
 
     init(
         stateStore: AppStateStore,
@@ -37,7 +36,7 @@ final class MobileAppModel {
         permissionService: PermissionService,
         transferService: TransferService,
         telemetryClient: TelemetryClient,
-        transferProgressPollingInterval: Duration = .seconds(1)
+        transferProgressPollingIntervalNanoseconds: UInt64 = 1_000_000_000
     ) {
         self.stateStore = stateStore
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
@@ -48,7 +47,7 @@ final class MobileAppModel {
             stateStore: stateStore,
             telemetryClient: telemetryClient
         )
-        self.transferProgressPollingInterval = transferProgressPollingInterval
+        self.transferProgressPollingIntervalNanoseconds = transferProgressPollingIntervalNanoseconds
     }
 
     var navigationTitle: String {
@@ -295,7 +294,7 @@ final class MobileAppModel {
                         self.transferSnapshot = snapshot
                     }
                 }
-                try? await Task.sleep(for: self.transferProgressPollingInterval)
+                try? await Task.sleep(nanoseconds: self.transferProgressPollingIntervalNanoseconds)
             }
         }
     }

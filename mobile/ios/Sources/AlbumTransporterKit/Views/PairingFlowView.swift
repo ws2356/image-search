@@ -10,13 +10,23 @@ struct PairingFlowView: View {
     var body: some View {
         #if os(iOS)
         if isLiveScanPhase {
-            LiveQRCodeScannerScreen(
-                status: status,
-                scannedQRCodeValue: $scannedQRCodeValue,
-                onStartPairing: onStartPairing,
-                onBack: onBack
-            )
-            .toolbar(.hidden, for: .navigationBar)
+            if #available(iOS 16.0, *) {
+                LiveQRCodeScannerScreen(
+                    status: status,
+                    scannedQRCodeValue: $scannedQRCodeValue,
+                    onStartPairing: onStartPairing,
+                    onBack: onBack
+                )
+                .toolbar(.hidden, for: .navigationBar)
+            } else {
+                LiveQRCodeScannerScreen(
+                    status: status,
+                    scannedQRCodeValue: $scannedQRCodeValue,
+                    onStartPairing: onStartPairing,
+                    onBack: onBack
+                )
+                .navigationBarHidden(true)
+            }
         } else {
             pairingStateContent
         }
@@ -81,7 +91,7 @@ struct PairingFlowView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .compatibleScrollBounceBasedOnSize()
     }
 
     @ViewBuilder
@@ -157,7 +167,7 @@ struct PairingFlowView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .textCase(.uppercase)
-                .kerning(0.5)
+                .compatibleKerning(0.5)
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 8)

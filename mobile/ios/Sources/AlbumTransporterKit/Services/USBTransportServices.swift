@@ -92,6 +92,15 @@ private enum USBTransportDebugLogger {
     }
 }
 
+private func nanoseconds(from seconds: TimeInterval) -> UInt64 {
+    let clampedSeconds = max(seconds, 0)
+    let nanoseconds = clampedSeconds * 1_000_000_000
+    if nanoseconds >= Double(UInt64.max) {
+        return UInt64.max
+    }
+    return UInt64(nanoseconds.rounded())
+}
+
 actor USBWebSocketTransportRuntime {
     private var listener: NWListener?
     private var activeConnection: NWConnection?
@@ -137,7 +146,7 @@ actor USBWebSocketTransportRuntime {
         operation: String,
         bodySchema: String,
         request: Request,
-        timeout: Duration = .seconds(3)
+        timeout: TimeInterval = 3
     ) async throws -> USBTransportRuntimeResponse {
         let connection = try await waitForReadyConnection(timeout: timeout)
         let requestID = UUID().uuidString.lowercased()
@@ -164,7 +173,7 @@ actor USBWebSocketTransportRuntime {
         bodySchema: String,
         request: Request,
         chunkSizeBytes: Int,
-        timeout: Duration = .seconds(3)
+        timeout: TimeInterval = 3
     ) async throws -> String {
         let connection = try await waitForReadyConnection(timeout: timeout)
         let requestID = UUID().uuidString.lowercased()
@@ -190,7 +199,7 @@ actor USBWebSocketTransportRuntime {
     func sendStreamingBinaryChunk(
         requestID: String,
         chunk: Data,
-        timeout: Duration = .seconds(3)
+        timeout: TimeInterval = 3
     ) async throws {
         guard activeStreamingRequestIDs.contains(requestID) else {
             throw USBTransportRuntimeError.invalidEnvelope
@@ -215,7 +224,7 @@ actor USBWebSocketTransportRuntime {
     func finishStreamingRequest(
         operation: String,
         requestID: String,
-        timeout: Duration = .seconds(3)
+        timeout: TimeInterval = 3
     ) async throws -> USBTransportRuntimeResponse {
         guard activeStreamingRequestIDs.contains(requestID) else {
             throw USBTransportRuntimeError.invalidEnvelope
@@ -473,7 +482,7 @@ actor USBWebSocketTransportRuntime {
         try await sendText(
             responseData,
             on: connection,
-            timeout: .seconds(1)
+            timeout: 1
         )
         return true
     }
@@ -551,14 +560,13 @@ actor USBWebSocketTransportRuntime {
         return header
     }
 
-    private func waitForReadyConnection(timeout: Duration) async throws -> NWConnection {
-        let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        while clock.now < deadline {
+    private func waitForReadyConnection(timeout: TimeInterval) async throws -> NWConnection {
+        let deadline = Date().timeIntervalSince1970 + max(timeout, 0)
+        while Date().timeIntervalSince1970 < deadline {
             if let activeConnection, isActiveConnectionReady, isConnectionAuthenticated {
                 return activeConnection
             }
-            try await Task.sleep(for: .milliseconds(100))
+            try await Task.sleep(nanoseconds: 100_000_000)
         }
         throw USBTransportRuntimeError.connectionUnavailable
     }
@@ -566,7 +574,7 @@ actor USBWebSocketTransportRuntime {
     private func sendText(
         _ envelopeData: Data,
         on connection: NWConnection,
-        timeout: Duration
+        timeout: TimeInterval
     ) async throws {
         try await sendWebSocketMessage(
             envelopeData,
@@ -580,7 +588,7 @@ actor USBWebSocketTransportRuntime {
     private func sendBinary(
         _ data: Data,
         on connection: NWConnection,
-        timeout: Duration
+        timeout: TimeInterval
     ) async throws {
         try await sendWebSocketMessage(
             data,
@@ -596,7 +604,7 @@ actor USBWebSocketTransportRuntime {
         opcode: NWProtocolWebSocket.Opcode,
         identifierPrefix: String,
         on connection: NWConnection,
-        timeout: Duration
+        timeout: TimeInterval
     ) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let lock = NSLock()
@@ -613,9 +621,7 @@ actor USBWebSocketTransportRuntime {
                 continuation.resume(with: result)
             }
 
-            let timeoutSeconds =
-                Double(timeout.components.seconds)
-                + (Double(timeout.components.attoseconds) / 1_000_000_000_000_000_000)
+            let timeoutSeconds = max(timeout, 0.001)
             let timeoutWorkItem = DispatchWorkItem {
                 resumeOnce(
                     .failure(
@@ -660,12 +666,12 @@ actor USBWebSocketTransportRuntime {
     private func awaitResponse(
         requestID: String,
         operation: String,
-        timeout: Duration
+        timeout: TimeInterval
     ) async throws -> USBTransportRuntimeResponse {
         try await withCheckedThrowingContinuation { continuation in
             pendingResponses[requestID] = continuation
             Task {
-                try? await Task.sleep(for: timeout)
+                try? await Task.sleep(nanoseconds: nanoseconds(from: timeout))
                 self.timeoutPendingResponse(
                     requestID: requestID,
                     operation: operation
@@ -759,11 +765,11 @@ actor USBWebSocketTransportRuntime {
 
 struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
     let runtime: USBWebSocketTransportRuntime
-    let responseTimeout: Duration
+    let responseTimeout: TimeInterval
 
     init(
         runtime: USBWebSocketTransportRuntime,
-        responseTimeout: Duration = .milliseconds(1200)
+        responseTimeout: TimeInterval = 1.2
     ) {
         self.runtime = runtime
         self.responseTimeout = responseTimeout
@@ -848,11 +854,11 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
 
 struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnectivityChecking {
     let runtime: USBWebSocketTransportRuntime
-    let responseTimeout: Duration
+    let responseTimeout: TimeInterval
 
     init(
         runtime: USBWebSocketTransportRuntime,
-        responseTimeout: Duration = .seconds(6)
+        responseTimeout: TimeInterval = 6
     ) {
         self.runtime = runtime
         self.responseTimeout = responseTimeout

@@ -72,7 +72,7 @@ struct LiveQRCodeScannerScreen: View {
                 }
             }
         }
-        .onChange(of: status.phase) { _, newPhase in
+        .onChange(of: status.phase) { newPhase in
             guard newPhase != .pairing else {
                 return
             }

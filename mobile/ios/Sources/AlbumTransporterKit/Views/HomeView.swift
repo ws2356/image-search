@@ -19,7 +19,7 @@ struct HomeView: View {
                 firstTimeContent
             }
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .compatibleScrollBounceBasedOnSize()
     }
 
     private var hasSessionHistory: Bool {
@@ -68,7 +68,7 @@ struct HomeView: View {
             Text(normalizedDesktopDisplayName(summary.desktopName) ?? "")
                 .font(.system(size: 34, weight: .bold))
                 .foregroundStyle(Color(hex: 0x1C1C1E))
-                .tracking(-0.5)
+                .compatibleTracking(-0.5)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
@@ -216,7 +216,7 @@ struct HomeView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .textCase(.uppercase)
-                .kerning(0.5)
+                .compatibleKerning(0.5)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
 

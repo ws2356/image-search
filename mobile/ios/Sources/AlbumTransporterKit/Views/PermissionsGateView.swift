@@ -55,7 +55,7 @@ struct PermissionsGateView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .compatibleScrollBounceBasedOnSize()
     }
 
     private func infoBanner(message: String, tint: Color) -> some View {
