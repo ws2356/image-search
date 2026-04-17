@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "AlbumTransporterKit",
     platforms: [
-        .iOS(.v17),
+        .iOS(.v15),
         .macOS(.v14),
     ],
     products: [
