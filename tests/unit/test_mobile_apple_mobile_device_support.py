@@ -9,9 +9,14 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.mobile.apple_mobile_device_support import (
+    APPLE_BUNDLED_INSTALLER_FILES,
     APPLE_MOBILE_DEVICE_SUPPORT_MSI,
+    APPLE_NETWORK_DRIVER_CAT,
     APPLE_NETWORK_DRIVER_INF,
+    APPLE_NETWORK_DRIVER_SYS,
+    APPLE_USB_DRIVER_CAT,
     APPLE_USB_DRIVER_INF,
+    APPLE_USB_DRIVER_SYS,
     AppleMobileDeviceSupportInstallError,
     AppleMobileDeviceSupportManager,
 )
@@ -67,7 +72,11 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
             status.missing_bundled_assets,
             (
                 APPLE_USB_DRIVER_INF,
+                APPLE_USB_DRIVER_CAT,
+                APPLE_USB_DRIVER_SYS,
                 APPLE_NETWORK_DRIVER_INF,
+                APPLE_NETWORK_DRIVER_CAT,
+                APPLE_NETWORK_DRIVER_SYS,
             ),
         )
 
@@ -109,11 +118,7 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
             self.assertIn("Remove-Item -LiteralPath $stageDir", decoded_script)
             self.assertEqual(
                 {asset_path.name for asset_path in copied_assets},
-                {
-                    APPLE_MOBILE_DEVICE_SUPPORT_MSI,
-                    APPLE_USB_DRIVER_INF,
-                    APPLE_NETWORK_DRIVER_INF,
-                },
+                set(APPLE_BUNDLED_INSTALLER_FILES),
             )
 
     def test_launch_installer_cleans_up_staging_dir_when_elevation_fails(self):

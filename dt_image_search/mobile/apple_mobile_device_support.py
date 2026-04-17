@@ -16,7 +16,26 @@ from dt_image_search.telemetry.telemetry_client import log
 APPLE_MOBILE_DEVICE_SERVICE_NAME = "Apple Mobile Device Service"
 APPLE_MOBILE_DEVICE_SUPPORT_MSI = "AppleMobileDeviceSupport64.msi"
 APPLE_USB_DRIVER_INF = "usbaapl64.inf"
+APPLE_USB_DRIVER_CAT = "usbaapl64.cat"
+APPLE_USB_DRIVER_SYS = "usbaapl64.sys"
 APPLE_NETWORK_DRIVER_INF = "netaapl64.inf"
+APPLE_NETWORK_DRIVER_CAT = "netaapl64.cat"
+APPLE_NETWORK_DRIVER_SYS = "netaapl64.sys"
+APPLE_USB_DRIVER_PACKAGE_FILES = (
+    APPLE_USB_DRIVER_INF,
+    APPLE_USB_DRIVER_CAT,
+    APPLE_USB_DRIVER_SYS,
+)
+APPLE_NETWORK_DRIVER_PACKAGE_FILES = (
+    APPLE_NETWORK_DRIVER_INF,
+    APPLE_NETWORK_DRIVER_CAT,
+    APPLE_NETWORK_DRIVER_SYS,
+)
+APPLE_BUNDLED_INSTALLER_FILES = (
+    APPLE_MOBILE_DEVICE_SUPPORT_MSI,
+    *APPLE_USB_DRIVER_PACKAGE_FILES,
+    *APPLE_NETWORK_DRIVER_PACKAGE_FILES,
+)
 
 
 class AppleMobileDeviceSupportInstallError(RuntimeError):
@@ -32,6 +51,7 @@ class AppleMobileDeviceSupportStatus:
     bundled_msi_available: bool
     bundled_usb_driver_available: bool
     bundled_network_driver_available: bool
+    missing_bundled_asset_names: tuple[str, ...] = tuple()
     probe_error: str | None = None
 
     @property
@@ -47,12 +67,7 @@ class AppleMobileDeviceSupportStatus:
 
     @property
     def can_install(self) -> bool:
-        return (
-            self.is_windows
-            and self.bundled_msi_available
-            and self.bundled_usb_driver_available
-            and self.bundled_network_driver_available
-        )
+        return self.is_windows and not self.missing_bundled_asset_names
 
     @property
     def missing_system_components(self) -> tuple[str, ...]:
@@ -69,14 +84,7 @@ class AppleMobileDeviceSupportStatus:
 
     @property
     def missing_bundled_assets(self) -> tuple[str, ...]:
-        missing_assets: list[str] = []
-        if not self.bundled_msi_available:
-            missing_assets.append(APPLE_MOBILE_DEVICE_SUPPORT_MSI)
-        if not self.bundled_usb_driver_available:
-            missing_assets.append(APPLE_USB_DRIVER_INF)
-        if not self.bundled_network_driver_available:
-            missing_assets.append(APPLE_NETWORK_DRIVER_INF)
-        return tuple(missing_assets)
+        return self.missing_bundled_asset_names
 
 
 class AppleMobileDeviceSupportManager:
@@ -98,6 +106,7 @@ class AppleMobileDeviceSupportManager:
         self._resource_copier = resource_copier or _copy_resource_to_dir
 
     def probe(self) -> AppleMobileDeviceSupportStatus:
+        missing_bundled_assets = _missing_bundled_assets(self._resource_exists)
         if self._platform != "win32":
             return AppleMobileDeviceSupportStatus(
                 is_windows=False,
@@ -107,6 +116,7 @@ class AppleMobileDeviceSupportManager:
                 bundled_msi_available=self._resource_exists(APPLE_MOBILE_DEVICE_SUPPORT_MSI),
                 bundled_usb_driver_available=self._resource_exists(APPLE_USB_DRIVER_INF),
                 bundled_network_driver_available=self._resource_exists(APPLE_NETWORK_DRIVER_INF),
+                missing_bundled_asset_names=missing_bundled_assets,
             )
 
         probe_error: str | None = None
@@ -137,6 +147,7 @@ class AppleMobileDeviceSupportManager:
             bundled_msi_available=self._resource_exists(APPLE_MOBILE_DEVICE_SUPPORT_MSI),
             bundled_usb_driver_available=self._resource_exists(APPLE_USB_DRIVER_INF),
             bundled_network_driver_available=self._resource_exists(APPLE_NETWORK_DRIVER_INF),
+            missing_bundled_asset_names=missing_bundled_assets,
             probe_error=probe_error,
         )
         log(
@@ -180,6 +191,14 @@ class AppleMobileDeviceSupportManager:
                 APPLE_NETWORK_DRIVER_INF,
                 staging_dir,
             )
+            for asset_name in APPLE_BUNDLED_INSTALLER_FILES:
+                if asset_name in (
+                    APPLE_MOBILE_DEVICE_SUPPORT_MSI,
+                    APPLE_USB_DRIVER_INF,
+                    APPLE_NETWORK_DRIVER_INF,
+                ):
+                    continue
+                self._resource_copier(asset_name, staging_dir)
             command = _build_elevated_install_command(
                 staging_dir=staging_dir,
                 staged_msi_path=staged_msi_path,
@@ -308,6 +327,14 @@ def _driver_original_name_installed(driver_inventory: str, original_name: str) -
             flags=re.IGNORECASE,
         )
         is not None
+    )
+
+
+def _missing_bundled_assets(resource_exists: Callable[[str], bool]) -> tuple[str, ...]:
+    return tuple(
+        asset_name
+        for asset_name in APPLE_BUNDLED_INSTALLER_FILES
+        if not resource_exists(asset_name)
     )
 
 
