@@ -77,8 +77,8 @@ class SourceSelectionDialog(QDialog):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "Local Device keeps the existing folder-indexing flow.\n"
-            "Mobile Device starts a paired backup flow over USB or Wi-Fi LAN."
+            "**Local Device** create index for semantic search for images in a folder on this computer.\n"
+            "**Mobile Device** starts a paired backup flow over USB or Wi-Fi LAN, before creating an index."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 12px;")
@@ -98,7 +98,7 @@ class SourceSelectionDialog(QDialog):
             self._build_source_card(
                 icon=self._ICON_MOBILE,
                 title="Mobile Device",
-                description="Pair a phone or tablet for local backup transfer.",
+                description="Pair a phone or tablet for local backup transfer and index creation.",
                 source=MobileSourceType.MOBILE_DEVICE,
             )
         )
