@@ -324,7 +324,20 @@ class UsbWebSocketTransportAdapter:
                 self._wait_for_retry_interval()
                 continue
 
-            tunnel_target = self._probe_usb_tunnel(config)
+            try:
+                tunnel_target = self._probe_usb_tunnel(config)
+            except Exception as exc:
+                self._set_probe_error(str(exc))
+                self._safe_log(
+                    "warning",
+                    message=(
+                        "UsbWebSocketTransportAdapter/_run_transport_loop: unexpected USB probe failure; "
+                        f"retrying. error={exc}"
+                    ),
+                )
+                self._set_ready_state()
+                self._wait_for_retry_interval()
+                continue
             if tunnel_target is None:
                 self._set_ready_state()
                 self._wait_for_retry_interval()

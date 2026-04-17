@@ -45,16 +45,20 @@ class _FakeUsbTunnelProvider:
         devices: tuple[UsbConnectedDevice, ...] = tuple(),
         connectable_ports: set[tuple[str, int]] | None = None,
         unavailable_error: str | None = None,
+        list_devices_errors: list[Exception] | None = None,
     ):
         self._devices = devices
         self._connectable_ports = connectable_ports or set()
         self._unavailable_error = unavailable_error
+        self._list_devices_errors = list(list_devices_errors or [])
         self.probe_calls: list[tuple[str, int]] = []
         self.connect_calls: list[tuple[str, int]] = []
 
     def list_usb_devices(self) -> tuple[UsbConnectedDevice, ...]:
         if self._unavailable_error is not None:
             raise UsbTunnelUnavailableError(self._unavailable_error)
+        if self._list_devices_errors:
+            raise self._list_devices_errors.pop(0)
         return self._devices
 
     def probe_device_port(
@@ -483,6 +487,94 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
 
         self.assertEqual(adapter.state, UsbTransportState.READY)
         self.assertEqual(adapter.last_probe_error, "pymobiledevice3 not installed")
+        adapter.stop()
+
+    def test_start_recovers_after_transient_usb_probe_failure(self):
+        provider = _FakeUsbTunnelProvider(
+            devices=(UsbConnectedDevice(udid="ios-001"),),
+            connectable_ports={("ios-001", 50211)},
+            list_devices_errors=[UsbTunnelConnectError("Desktop could not read USB device list from usbmuxd.")],
+        )
+        websocket_connection = _FakeWebSocketConnection()
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="session-001",
+                one_time_passcode="482913",
+                suggested_port=50211,
+                fallback_port_window=0,
+            )
+        )
+
+        adapter.start()
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.last_probe_error == "Desktop could not read USB device list from usbmuxd.",
+                timeout_seconds=1.0,
+            )
+        )
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.state == UsbTransportState.CONNECTED,
+                timeout_seconds=1.2,
+            )
+        )
+
+        self.assertIsNone(adapter.last_probe_error)
+        self.assertEqual(provider.probe_calls, [("ios-001", 50211)])
+        self.assertEqual(provider.connect_calls, [("ios-001", 50211)])
+        adapter.stop()
+
+    def test_start_recovers_after_unexpected_probe_exception(self):
+        provider = _FakeUsbTunnelProvider(
+            devices=(UsbConnectedDevice(udid="ios-001"),),
+            connectable_ports={("ios-001", 50211)},
+            list_devices_errors=[RuntimeError("stream.tell() failed")],
+        )
+        websocket_connection = _FakeWebSocketConnection()
+        websocket_connector = _FakeWebSocketConnector(websocket_connection)
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            tunnel_provider=provider,
+            websocket_connect_fn=websocket_connector,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="session-001",
+                one_time_passcode="482913",
+                suggested_port=50211,
+                fallback_port_window=0,
+            )
+        )
+
+        adapter.start()
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.last_probe_error == "stream.tell() failed",
+                timeout_seconds=1.0,
+            )
+        )
+        self.assertTrue(
+            self._wait_until(
+                lambda: adapter.state == UsbTransportState.CONNECTED,
+                timeout_seconds=1.2,
+            )
+        )
+
+        self.assertIsNone(adapter.last_probe_error)
+        self.assertEqual(provider.probe_calls, [("ios-001", 50211)])
+        self.assertEqual(provider.connect_calls, [("ios-001", 50211)])
         adapter.stop()
 
     def test_usb_websocket_loop_sends_correlated_response_envelopes(self):

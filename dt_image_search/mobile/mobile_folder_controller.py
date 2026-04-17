@@ -8,8 +8,10 @@ from PySide6.QtWidgets import QWidget
 
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.bm_context import BMContext
+from dt_image_search.mobile.apple_mobile_device_support import AppleMobileDeviceSupportManager
 from dt_image_search.mobile.mobile_dialogs import (
     MobilePairingDialog,
+    MobileUsbPrerequisitesDialog,
     ParentFolderSelectionDialog,
     SourceSelectionDialog,
 )
@@ -46,6 +48,9 @@ class MobileFolderCoordinator(QObject):
     def start_pairing_flow(self, parent: QWidget | None = None) -> MobilePairingSessionDraft | None:
         destination_parent = self._choose_destination_parent(parent)
         if not destination_parent:
+            return None
+
+        if not self._ensure_usb_prerequisites(parent):
             return None
 
         pairing_service = self._get_pairing_service()
@@ -101,6 +106,14 @@ class MobileFolderCoordinator(QObject):
         if self._pairing_service is None:
             self._pairing_service = MobilePairingService(self.ctx)
         return self._pairing_service
+
+    @staticmethod
+    def _ensure_usb_prerequisites(parent: QWidget | None = None) -> bool:
+        support_manager = AppleMobileDeviceSupportManager()
+        return MobileUsbPrerequisitesDialog.ensure_ready(
+            support_manager=support_manager,
+            parent=parent,
+        )
 
     def _on_transfer_started(self, *, session_id: str, folder_path: str, **_: object) -> None:
         self.transfer_started.emit(session_id, folder_path)

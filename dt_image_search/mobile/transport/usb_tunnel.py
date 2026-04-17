@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import importlib
 import inspect
 import socket
+import sys
 from typing import Any, Protocol
 
 
@@ -62,13 +63,25 @@ class Pymobiledevice3UsbTunnelProvider:
     def list_usb_devices(self) -> tuple[UsbConnectedDevice, ...]:
         usbmux_module = self._require_usbmux_module()
         connection_errors = self._connection_error_types()
+        self._ensure_usbmux_reachable(
+            usbmux_module=usbmux_module,
+            failure_message="Desktop could not read USB device list from usbmuxd.",
+        )
         try:
             devices = self._run_async(
                 usbmux_module.select_devices_by_connection_type("USB"),
             )
+            if not devices and hasattr(usbmux_module, "list_devices"):
+                devices = [
+                    device
+                    for device in self._run_async(usbmux_module.list_devices())
+                    if self._is_usb_mux_device(device)
+                ]
         except connection_errors as exc:
             raise UsbTunnelConnectError("Desktop could not read USB device list from usbmuxd.") from exc
         except OSError as exc:
+            raise UsbTunnelConnectError("Desktop failed while listing USB devices.") from exc
+        except Exception as exc:
             raise UsbTunnelConnectError("Desktop failed while listing USB devices.") from exc
         connected_devices: list[UsbConnectedDevice] = []
         for device in devices:
@@ -124,6 +137,12 @@ class Pymobiledevice3UsbTunnelProvider:
 
         usbmux_module = self._require_usbmux_module()
         connection_errors = self._connection_error_types()
+        self._ensure_usbmux_reachable(
+            usbmux_module=usbmux_module,
+            failure_message=(
+                f"Desktop could not inspect USB device '{normalized_udid}' via usbmuxd."
+            ),
+        )
 
         try:
             mux_device = self._run_async(
@@ -132,17 +151,24 @@ class Pymobiledevice3UsbTunnelProvider:
                     connection_type="USB",
                 ),
             )
+            if mux_device is None:
+                mux_device = self._run_async(usbmux_module.select_device(normalized_udid))
         except connection_errors as exc:
             raise UsbTunnelConnectError(
                 f"Desktop could not inspect USB device '{normalized_udid}' via usbmuxd.",
             ) from exc
         except Exception as exc:
-            print(f"Unexpected error while selecting USB device '{normalized_udid}': {exc!r}")
-            raise
+            raise UsbTunnelConnectError(
+                f"Desktop failed while inspecting USB device '{normalized_udid}'.",
+            ) from exc
 
         if mux_device is None:
             raise UsbTunnelDeviceNotFoundError(
                 f"Desktop could not find USB device '{normalized_udid}'.",
+            )
+        if not self._is_usb_mux_device(mux_device):
+            raise UsbTunnelDeviceNotFoundError(
+                f"Desktop found device '{normalized_udid}' but it is not available over USB.",
             )
 
         try:
@@ -172,8 +198,9 @@ class Pymobiledevice3UsbTunnelProvider:
                 f"Desktop USB tunnel socket failed for '{normalized_udid}:{port}'.",
             ) from exc
         except Exception as exc:
-            print(f"Unexpected error while connecting to USB device '{normalized_udid}' port {port}: {exc!r}")
-            raise
+            raise UsbTunnelConnectError(
+                f"Desktop USB tunnel connection failed for '{normalized_udid}:{port}'.",
+            ) from exc
 
         if not isinstance(connected_socket, socket.socket):
             raise UsbTunnelConnectError(
@@ -184,6 +211,7 @@ class Pymobiledevice3UsbTunnelProvider:
 
     def _require_usbmux_module(self) -> Any:
         if self._usbmux_module is not None:
+            self._ensure_usbmux_stream_compat(self._usbmux_module)
             return self._usbmux_module
 
         try:
@@ -193,6 +221,7 @@ class Pymobiledevice3UsbTunnelProvider:
                 "Desktop USB transport requires pymobiledevice3 "
                 "(install with `python3 -m pip install pymobiledevice3`).",
             ) from exc
+        self._ensure_usbmux_stream_compat(self._usbmux_module)
         return self._usbmux_module
 
     def _connection_error_types(self) -> tuple[type[BaseException], ...]:
@@ -203,6 +232,7 @@ class Pymobiledevice3UsbTunnelProvider:
             "MuxException",
             "ConnectionFailedToUsbmuxdError",
             "BadDevError",
+            "UsbmuxConnectionError",
         ):
             exception_value = getattr(exceptions_module, exception_name, None)
             if (
@@ -225,6 +255,51 @@ class Pymobiledevice3UsbTunnelProvider:
                 "Desktop USB transport requires pymobiledevice3 exception classes.",
             ) from exc
         return self._exceptions_module
+
+    @staticmethod
+    def _ensure_usbmux_reachable(*, usbmux_module: Any, failure_message: str) -> None:
+        if sys.platform not in ("win32", "cygwin"):
+            return
+        mux_connection_type = getattr(usbmux_module, "MuxConnection", None)
+        usbmux_host = getattr(mux_connection_type, "ITUNES_HOST", None)
+        if (
+            not isinstance(usbmux_host, tuple)
+            or len(usbmux_host) != 2
+            or not isinstance(usbmux_host[0], str)
+            or not isinstance(usbmux_host[1], int)
+        ):
+            return
+
+        probe_socket: socket.socket | None = None
+        try:
+            probe_socket = socket.create_connection(usbmux_host, timeout=0.5)
+        except OSError as exc:
+            raise UsbTunnelConnectError(failure_message) from exc
+        finally:
+            if probe_socket is not None:
+                probe_socket.close()
+
+    @staticmethod
+    def _ensure_usbmux_stream_compat(usbmux_module: Any) -> None:
+        safe_stream_socket_type = getattr(usbmux_module, "SafeStreamSocket", None)
+        if not isinstance(safe_stream_socket_type, type):
+            return
+        tell_method = getattr(safe_stream_socket_type, "tell", None)
+        if callable(tell_method):
+            return
+
+        def _tell(_self: object) -> int:
+            return 0
+
+        setattr(safe_stream_socket_type, "tell", _tell)
+
+    @staticmethod
+    def _is_usb_mux_device(device: Any) -> bool:
+        is_usb_attr = getattr(device, "is_usb", None)
+        if isinstance(is_usb_attr, bool):
+            return is_usb_attr
+        connection_type = str(getattr(device, "connection_type", "")).strip().lower()
+        return connection_type == "usb"
 
     @staticmethod
     def _run_async(awaitable: Any) -> Any:

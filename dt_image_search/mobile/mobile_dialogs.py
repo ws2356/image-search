@@ -20,6 +20,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dt_image_search.mobile.apple_mobile_device_support import (
+    APPLE_NETWORK_DRIVER_INF,
+    APPLE_USB_DRIVER_INF,
+    AppleMobileDeviceSupportInstallError,
+    AppleMobileDeviceSupportManager,
+    AppleMobileDeviceSupportStatus,
+)
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService, PairingResultState
 from dt_image_search.mobile.mobile_pairing_session import (
     MobilePairingSessionDraft,
@@ -409,6 +416,208 @@ class PairingQrCard(QFrame):
     def _refresh_token(self) -> None:
         refreshed_token = self._on_refresh(self._platform)
         self.set_token(refreshed_token)
+
+
+class MobileUsbPrerequisitesDialog(QDialog):
+    def __init__(
+        self,
+        *,
+        support_manager: AppleMobileDeviceSupportManager,
+        initial_status: AppleMobileDeviceSupportStatus,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self._support_manager = support_manager
+        self._status = initial_status
+        self.setWindowTitle("Install Apple USB Support")
+        self.setModal(True)
+        self.resize(700, 500)
+        self.setStyleSheet("QDialog { background: #f4f4f4; }")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Install Apple USB Support")
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setWeight(QFont.Weight.DemiBold)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #1f2937;")
+        layout.addWidget(title)
+
+        subtitle = QLabel(
+            "This Windows desktop is missing Apple Mobile Device Support or the Apple USB drivers "
+            "needed for iPhone and iPad USB transport."
+        )
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("color: #666666; font-size: 13px;")
+        layout.addWidget(subtitle)
+
+        admin_banner = QFrame()
+        admin_banner.setStyleSheet(
+            "QFrame { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; }"
+        )
+        admin_banner_layout = QHBoxLayout(admin_banner)
+        admin_banner_layout.setContentsMargins(12, 10, 12, 10)
+        admin_banner_layout.setSpacing(8)
+        admin_icon = QLabel("!")
+        admin_icon.setStyleSheet("color: #9a3412; font-size: 15px; font-weight: 700;")
+        admin_banner_layout.addWidget(admin_icon, alignment=Qt.AlignTop)
+        admin_text = QLabel(
+            "Installing Apple USB support requires Windows administrator privileges. "
+            "When you click Install, Windows will show a User Account Control prompt before "
+            "the bundled Apple setup and driver installers run."
+        )
+        admin_text.setWordWrap(True)
+        admin_text.setStyleSheet("color: #9a3412; font-size: 12px; line-height: 1.5;")
+        admin_banner_layout.addWidget(admin_text, stretch=1)
+        layout.addWidget(admin_banner)
+
+        self.status_label = QLabel()
+        self.status_label.setWordWrap(True)
+        self.status_label.setStyleSheet("font-weight: 600; color: #1f2937; font-size: 13px;")
+        layout.addWidget(self.status_label)
+
+        self.details_label = QLabel()
+        self.details_label.setWordWrap(True)
+        self.details_label.setStyleSheet("color: #666666; font-size: 12px;")
+        self.details_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.details_label)
+
+        self.install_feedback_label = QLabel("")
+        self.install_feedback_label.setWordWrap(True)
+        self.install_feedback_label.setStyleSheet("color: #1d4ed8; font-size: 12px;")
+        layout.addWidget(self.install_feedback_label)
+
+        bottom_row = QHBoxLayout()
+        bottom_row.addStretch()
+
+        self.close_button = QPushButton("Close")
+        self.close_button.setCursor(Qt.PointingHandCursor)
+        self.close_button.setStyleSheet(
+            """
+            QPushButton {
+                background: #e0e0e0; border: 1px solid #c0c0c0; border-radius: 6px;
+                padding: 6px 18px; font-size: 13px; font-weight: 500; color: #333333;
+            }
+            QPushButton:hover { background: #d4d4d4; }
+            """
+        )
+        self.close_button.clicked.connect(self.reject)
+        bottom_row.addWidget(self.close_button)
+
+        self.check_again_button = QPushButton("Check Again")
+        self.check_again_button.setCursor(Qt.PointingHandCursor)
+        self.check_again_button.setStyleSheet(
+            """
+            QPushButton {
+                background: #ffffff; border: 1px solid #c0c0c0; border-radius: 6px;
+                padding: 6px 18px; font-size: 13px; font-weight: 500; color: #333333;
+            }
+            QPushButton:hover { background: #f7f7f7; }
+            """
+        )
+        self.check_again_button.clicked.connect(self._refresh_status_and_maybe_continue)
+        bottom_row.addWidget(self.check_again_button)
+
+        self.install_button = QPushButton("Install as Administrator")
+        self.install_button.setCursor(Qt.PointingHandCursor)
+        self.install_button.setStyleSheet(
+            """
+            QPushButton {
+                background: #007AFF; border: 1px solid #0068dd; border-radius: 6px;
+                padding: 6px 18px; font-size: 13px; color: #ffffff; font-weight: 600;
+            }
+            QPushButton:hover { background: #0070ef; }
+            QPushButton:disabled { background: #b0d4ff; border-color: #90c0ef; }
+            """
+        )
+        self.install_button.clicked.connect(self._launch_installer)
+        bottom_row.addWidget(self.install_button)
+        layout.addLayout(bottom_row)
+
+        self._apply_status(self._status)
+
+    @classmethod
+    def ensure_ready(
+        cls,
+        *,
+        support_manager: AppleMobileDeviceSupportManager,
+        parent: QWidget | None = None,
+    ) -> bool:
+        initial_status = support_manager.probe()
+        if initial_status.is_ready:
+            return True
+        dialog = cls(
+            support_manager=support_manager,
+            initial_status=initial_status,
+            parent=parent,
+        )
+        return dialog.exec() == QDialog.DialogCode.Accepted
+
+    def _refresh_status_and_maybe_continue(self) -> None:
+        refreshed_status = self._support_manager.probe()
+        self._apply_status(refreshed_status)
+        if refreshed_status.is_ready:
+            self.accept()
+
+    def _launch_installer(self) -> None:
+        try:
+            self._support_manager.launch_installer()
+        except AppleMobileDeviceSupportInstallError as exc:
+            QMessageBox.warning(
+                self,
+                "Install Apple USB Support",
+                str(exc),
+            )
+            self.install_feedback_label.setText(str(exc))
+            return
+
+        self.install_feedback_label.setText(
+            "Installer launched. Approve the Windows admin prompt, wait for the Apple setup "
+            "and driver installation to finish, then click Check Again."
+        )
+
+    def _apply_status(self, status: AppleMobileDeviceSupportStatus) -> None:
+        self._status = status
+        if status.is_ready:
+            self.status_label.setText("Apple Mobile Device Support and the Apple USB drivers are installed.")
+            self.status_label.setStyleSheet("font-weight: 600; color: #065f46; font-size: 13px;")
+            self.details_label.setText("USB pairing can continue on this desktop.")
+            self.install_button.hide()
+            return
+
+        self.install_feedback_label.setText("")
+        missing_component_lines = "\n".join(
+            f"- {component}" for component in status.missing_system_components
+        )
+        if not missing_component_lines:
+            missing_component_lines = "- Apple USB support could not be verified on this desktop."
+
+        details = [
+            "Missing or incomplete desktop components:",
+            missing_component_lines,
+            "",
+            "Install uses these bundled setup files:",
+            "- AppleMobileDeviceSupport64.msi",
+            f"- {APPLE_USB_DRIVER_INF}",
+            f"- {APPLE_NETWORK_DRIVER_INF}",
+        ]
+        if status.missing_bundled_assets:
+            details.extend(
+                [
+                    "",
+                    "This build is missing bundled setup files:",
+                    "\n".join(f"- {asset_name}" for asset_name in status.missing_bundled_assets),
+                ]
+            )
+
+        self.status_label.setText("Apple mobile support software is missing on this desktop.")
+        self.status_label.setStyleSheet("font-weight: 600; color: #9A6400; font-size: 13px;")
+        self.details_label.setText("\n".join(details))
+        self.install_button.setVisible(True)
+        self.install_button.setEnabled(status.can_install)
 
 
 class MobilePairingDialog(QDialog):

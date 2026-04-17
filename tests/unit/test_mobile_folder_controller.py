@@ -106,6 +106,11 @@ class TestMobileFolderCoordinator(unittest.TestCase):
                 "select_destination_parent",
                 return_value=destination_parent_path,
             ),
+            patch.object(
+                mobile_folder_controller_module.MobileFolderCoordinator,
+                "_ensure_usb_prerequisites",
+                return_value=True,
+            ),
             patch.object(mobile_folder_controller_module, "MobilePairingDialog", _FakePairingDialog),
         ):
             coordinator = mobile_folder_controller_module.MobileFolderCoordinator(self._ctx)
@@ -141,6 +146,35 @@ class TestMobileFolderCoordinator(unittest.TestCase):
             select_destination_parent_mock.call_args.kwargs["initial_directory"],
             coordinator._default_destination_parent(),
         )
+
+    def test_start_pairing_flow_returns_none_when_usb_prerequisites_are_not_ready(self):
+        destination_parent = Path(self._temp_dir.name).resolve().as_posix()
+        pairing_session = MobilePairingSessionDraft.create(
+            destination_parent=destination_parent,
+            desktop_endpoint_url="http://127.0.0.1:54921/api/mobile/pairing/claim",
+        )
+        fake_pairing_service = _FakePairingService(pairing_session)
+
+        with (
+            patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()),
+            patch.object(
+                mobile_folder_controller_module.ParentFolderSelectionDialog,
+                "select_destination_parent",
+                return_value=destination_parent,
+            ),
+            patch.object(
+                mobile_folder_controller_module.MobileFolderCoordinator,
+                "_ensure_usb_prerequisites",
+                return_value=False,
+            ),
+        ):
+            coordinator = mobile_folder_controller_module.MobileFolderCoordinator(self._ctx)
+            with patch.object(coordinator, "_get_pairing_service", return_value=fake_pairing_service):
+                result_session = coordinator.start_pairing_flow()
+
+        self.assertIsNone(result_session)
+        self.assertIsNone(fake_pairing_service.started_with)
+        self.assertFalse(fake_pairing_service.closed)
 
 
 if __name__ == "__main__":
