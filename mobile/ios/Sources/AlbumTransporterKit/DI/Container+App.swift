@@ -58,7 +58,7 @@ extension Container {
             PhotoLibraryTransferService(
                 assetSource: PhotoLibraryAssetSource(),
                 transferClient: AdaptiveMobileTransferClient(
-                    lanClient: URLSessionMobileTransferClient(),
+                    lanClient: URLSessionMobileTransferClient(usePerBackupEphemeralSession: true),
                     usbClient: WebSocketMobileTransferClient(runtime: self.usbTransportRuntime())
                 ),
                 trustedDesktopStore: self.trustedDesktopStore()

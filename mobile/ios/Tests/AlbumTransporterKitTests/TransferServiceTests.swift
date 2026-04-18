@@ -313,6 +313,48 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
     }
 
+    func test_photo_library_transfer_service_memory_warning_keeps_upload_concurrency_limit() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let descriptors = (1 ... 24).map { index in
+            TransferAssetDescriptor(
+                assetID: String(format: "ph://asset-%03d", index),
+                assetVersion: "v\(index)",
+                filename: String(format: "IMG_%04d.JPG", index),
+                mediaType: "image",
+                createdAt: Date(timeIntervalSince1970: TimeInterval(1_776_323_610 + index)),
+                updatedAt: Date(timeIntervalSince1970: TimeInterval(1_776_323_610 + index))
+            )
+        }
+        let transferClient = RecordingMobileTransferClient(uploadDelayNanoseconds: 50_000_000)
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(descriptors: descriptors),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore,
+            uploadConcurrencyLimit: 10
+        )
+        await service.handleMemoryWarning()
+        await service.handleMemoryWarning()
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let maxConcurrentUploads = await transferClient.maxConcurrentUploadsObserved()
+
+        XCTAssertEqual(snapshot.transferredCount, descriptors.count)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertGreaterThan(maxConcurrentUploads, 1)
+        XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
+    }
+
     func test_photo_library_transfer_service_allows_usb_upload_concurrency_when_supported() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(

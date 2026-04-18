@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import CryptoKit
+import Darwin
 import Foundation
 import OSLog
 import Photos
@@ -282,29 +283,35 @@ enum TransferAssetChunkStreamer {
         guard chunkSizeBytes > 0 else {
             throw TransferAssetChunkStreamError.invalidChunkSize
         }
-        guard let inputStream = InputStream(url: fileURL) else {
+        let fileHandle: FileHandle
+        do {
+            fileHandle = try FileHandle(forReadingFrom: fileURL)
+        } catch {
             throw TransferAssetChunkStreamError.streamReadFailed(
-                message: "Desktop transfer could not open the asset stream."
+                message: TransferDebugLogger.describe(error)
             )
         }
-        inputStream.open()
         defer {
-            inputStream.close()
+            try? fileHandle.close()
         }
 
         var totalBytesRead = 0
-        var readBuffer = [UInt8](repeating: 0, count: chunkSizeBytes)
         while true {
-            let bytesRead = inputStream.read(&readBuffer, maxLength: readBuffer.count)
-            if bytesRead < 0 {
-                let streamError = inputStream.streamError?.localizedDescription ?? "unknown stream error"
-                throw TransferAssetChunkStreamError.streamReadFailed(message: streamError)
+            try Task.checkCancellation()
+            let chunk: Data
+            do {
+                chunk = try fileHandle.read(upToCount: chunkSizeBytes) ?? Data()
+            } catch {
+                throw TransferAssetChunkStreamError.streamReadFailed(
+                    message: TransferDebugLogger.describe(error)
+                )
             }
-            if bytesRead == 0 {
+            if chunk.isEmpty {
                 break
             }
-            totalBytesRead += bytesRead
-            try await onChunk(Data(readBuffer[0 ..< bytesRead]))
+            totalBytesRead += chunk.count
+            try Task.checkCancellation()
+            try await onChunk(chunk)
         }
 
         guard totalBytesRead == expectedSizeBytes else {
@@ -469,14 +476,53 @@ private enum TransferDebugLogger {
     }
 }
 
-struct URLSessionMobileTransferClient: MobileTransferClient {
-    let session: URLSession
+private actor TransferSessionURLSessionStore {
+    private var sessionsBySessionID: [String: URLSession] = [:]
 
-    init(session: URLSession = .shared) {
-        self.session = session
+    func session(for sessionID: String) -> URLSession {
+        if let session = sessionsBySessionID[sessionID] {
+            return session
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.waitsForConnectivity = false
+        let session = URLSession(configuration: configuration)
+        sessionsBySessionID[sessionID] = session
+        return session
+    }
+
+    func release(sessionID: String) async {
+        guard let session = sessionsBySessionID.removeValue(forKey: sessionID) else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            session.reset {
+                continuation.resume()
+            }
+        }
+        session.invalidateAndCancel()
+    }
+}
+
+struct URLSessionMobileTransferClient: MobileTransferClient {
+    private let defaultSession: URLSession
+    private let usePerBackupEphemeralSession: Bool
+    private let sessionStore: TransferSessionURLSessionStore
+
+    init(
+        session: URLSession = .shared,
+        usePerBackupEphemeralSession: Bool = false
+    ) {
+        self.defaultSession = session
+        self.usePerBackupEphemeralSession = usePerBackupEphemeralSession
+        self.sessionStore = TransferSessionURLSessionStore()
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
+        let activeSession = await activeSession(for: desktop)
         let request = TransferStartRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -488,7 +534,12 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             "Starting transfer session host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) total_assets=\(totalAssets)"
         )
         do {
-            let response = try await postJSON(to: endpoint, body: request, responseType: TransferServerResponse.self)
+            let response = try await postJSON(
+                to: endpoint,
+                body: request,
+                responseType: TransferServerResponse.self,
+                using: activeSession
+            )
             TransferDebugLogger.info("Transfer start response \(TransferDebugLogger.responseSummary(response))")
         } catch {
             TransferDebugLogger.error(
@@ -502,6 +553,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         _ candidates: [TransferAssetExistenceCandidate],
         desktop: TrustedDesktopRecord
     ) async throws -> [String: TransferAssetExistenceMatch] {
+        let activeSession = await activeSession(for: desktop)
         guard !candidates.isEmpty else {
             return [:]
         }
@@ -517,7 +569,12 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             "Checking desktop transfer signatures host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) asset_count=\(candidates.count)"
         )
         do {
-            let response = try await postJSON(to: endpoint, body: request, responseType: TransferExistenceResponse.self)
+            let response = try await postJSON(
+                to: endpoint,
+                body: request,
+                responseType: TransferExistenceResponse.self,
+                using: activeSession
+            )
             switch response.status {
             case .checked:
                 return Dictionary(uniqueKeysWithValues: response.matches.map { ($0.assetID, $0) })
@@ -533,6 +590,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
+        let activeSession = await activeSession(for: desktop)
+        try Task.checkCancellation()
         let metadata = TransferAssetUploadMetadata(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -553,22 +612,35 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             try await startChunkedAssetUpload(
                 metadata: metadata,
                 desktop: desktop,
-                requestID: requestID
+                requestID: requestID,
+                session: activeSession
             )
-            try await TransferAssetChunkStreamer.streamFile(
-                fileURL: asset.fileURL,
-                expectedSizeBytes: asset.fileSize,
-                chunkSizeBytes: TransferAssetStreamProtocol.chunkSizeBytes
-            ) { chunkData in
-                try await uploadChunkedAssetBytes(
-                    chunkData,
+            if asset.fileSize <= TransferAssetStreamProtocol.chunkSizeBytes {
+                try await uploadChunkedAssetFile(
+                    asset.fileURL,
                     desktop: desktop,
-                    requestID: requestID
+                    requestID: requestID,
+                    session: activeSession
                 )
+            } else {
+                try await TransferAssetChunkStreamer.streamFile(
+                    fileURL: asset.fileURL,
+                    expectedSizeBytes: asset.fileSize,
+                    chunkSizeBytes: TransferAssetStreamProtocol.chunkSizeBytes
+                ) { chunkData in
+                    try Task.checkCancellation()
+                    try await uploadChunkedAssetBytes(
+                        chunkData,
+                        desktop: desktop,
+                        requestID: requestID,
+                        session: activeSession
+                    )
+                }
             }
             let response = try await finishChunkedAssetUpload(
                 desktop: desktop,
-                requestID: requestID
+                requestID: requestID,
+                session: activeSession
             )
             TransferDebugLogger.debug(
                 "Upload response for \(assetSummary) \(TransferDebugLogger.responseSummary(response))"
@@ -613,7 +685,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
     private func startChunkedAssetUpload(
         metadata: TransferAssetUploadMetadata,
         desktop: TrustedDesktopRecord,
-        requestID: String
+        requestID: String,
+        session: URLSession
     ) async throws {
         let endpoint = try transferAssetStreamEndpoint(
             desktop: desktop,
@@ -627,7 +700,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         let response = try await postJSON(
             to: endpoint,
             body: startRequest,
-            responseType: TransferServerResponse.self
+            responseType: TransferServerResponse.self,
+            using: session
         )
         guard response.status == .accepted else {
             throw TransferClientError.rejected(message: response.message)
@@ -637,7 +711,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
     private func uploadChunkedAssetBytes(
         _ chunkData: Data,
         desktop: TrustedDesktopRecord,
-        requestID: String
+        requestID: String,
+        session: URLSession
     ) async throws {
         guard !chunkData.isEmpty else {
             return
@@ -659,7 +734,34 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let response = try await uploadData(
             using: request,
-            bodyData: chunkData
+            bodyData: chunkData,
+            session: session
+        )
+        guard response.status == .accepted else {
+            throw TransferClientError.rejected(message: response.message)
+        }
+    }
+
+    private func uploadChunkedAssetFile(
+        _ fileURL: URL,
+        desktop: TrustedDesktopRecord,
+        requestID: String,
+        session: URLSession
+    ) async throws {
+        let endpoint = try transferAssetStreamEndpoint(
+            desktop: desktop,
+            requestID: requestID,
+            streamState: TransferAssetStreamProtocol.streamStateChunk
+        )
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let response = try await uploadFile(
+            using: request,
+            fileURL: fileURL,
+            session: session
         )
         guard response.status == .accepted else {
             throw TransferClientError.rejected(message: response.message)
@@ -668,7 +770,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
 
     private func finishChunkedAssetUpload(
         desktop: TrustedDesktopRecord,
-        requestID: String
+        requestID: String,
+        session: URLSession
     ) async throws -> TransferServerResponse {
         let endpoint = try transferAssetStreamEndpoint(
             desktop: desktop,
@@ -678,7 +781,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         return try await postJSON(
             to: endpoint,
             body: TransferAssetStreamCompleteRequest(),
-            responseType: TransferServerResponse.self
+            responseType: TransferServerResponse.self,
+            using: session
         )
     }
 
@@ -688,6 +792,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         failedCount: Int,
         interruptionReason: String?
     ) async throws -> TransferServerResponse {
+        let activeSession = await activeSession(for: desktop)
         let request = TransferCompleteRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -701,13 +806,20 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             "Completing transfer session host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount)"
         )
         do {
-            let response = try await postJSON(to: endpoint, body: request, responseType: TransferServerResponse.self)
+            let response = try await postJSON(
+                to: endpoint,
+                body: request,
+                responseType: TransferServerResponse.self,
+                using: activeSession
+            )
             TransferDebugLogger.info("Transfer completion response \(TransferDebugLogger.responseSummary(response))")
+            await releaseSession(for: desktop)
             return response
         } catch {
             TransferDebugLogger.error(
                 "Transfer completion failed session_id=\(desktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
+            await releaseSession(for: desktop)
             throw error
         }
     }
@@ -715,7 +827,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
     private func postJSON<RequestBody: Encodable, ResponseBody: TransferSchemaResponse>(
         to endpoint: URL,
         body: RequestBody,
-        responseType: ResponseBody.Type
+        responseType: ResponseBody.Type,
+        using session: URLSession
     ) async throws -> ResponseBody {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
@@ -723,10 +836,14 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(body)
-        return try await execute(request: urlRequest, responseType: responseType)
+        return try await execute(request: urlRequest, responseType: responseType, using: session)
     }
 
-    private func uploadData(using request: URLRequest, bodyData: Data) async throws -> TransferServerResponse {
+    private func uploadData(
+        using request: URLRequest,
+        bodyData: Data,
+        session: URLSession
+    ) async throws -> TransferServerResponse {
         let data: Data
         let response: URLResponse
         do {
@@ -737,9 +854,25 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         return try decodeResponse(data: data, response: response, responseType: TransferServerResponse.self)
     }
 
+    private func uploadFile(
+        using request: URLRequest,
+        fileURL: URL,
+        session: URLSession
+    ) async throws -> TransferServerResponse {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.upload(for: request, fromFile: fileURL)
+        } catch {
+            throw TransferClientError.transport(message: error.localizedDescription)
+        }
+        return try decodeResponse(data: data, response: response, responseType: TransferServerResponse.self)
+    }
+
     private func execute<ResponseBody: TransferSchemaResponse>(
         request: URLRequest,
-        responseType: ResponseBody.Type
+        responseType: ResponseBody.Type,
+        using session: URLSession
     ) async throws -> ResponseBody {
         let data: Data
         let response: URLResponse
@@ -749,6 +882,20 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
             throw TransferClientError.transport(message: error.localizedDescription)
         }
         return try decodeResponse(data: data, response: response, responseType: responseType)
+    }
+
+    private func activeSession(for desktop: TrustedDesktopRecord) async -> URLSession {
+        guard usePerBackupEphemeralSession else {
+            return defaultSession
+        }
+        return await sessionStore.session(for: desktop.lastSessionID)
+    }
+
+    private func releaseSession(for desktop: TrustedDesktopRecord) async {
+        guard usePerBackupEphemeralSession else {
+            return
+        }
+        await sessionStore.release(sessionID: desktop.lastSessionID)
     }
 
     private func decodeResponse<ResponseBody: TransferSchemaResponse>(
@@ -869,7 +1016,7 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
             fallback: descriptor.filename
         )
         let preparedExport: PreparedExportFile
-        if asset.mediaType == .image {
+        if asset.mediaType == .image, hasAdjustmentData {
             preparedExport = try await Self.exportCurrentImage(
                 asset: asset,
                 descriptor: descriptor,
@@ -884,6 +1031,11 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
                 renderedFilename: resource.originalFilename
             )
         } else {
+            if asset.mediaType == .image {
+                TransferDebugLogger.debug(
+                    "Exporting unedited image via resource stream \(TransferDebugLogger.assetSummary(for: descriptor))"
+                )
+            }
             preparedExport = try await Self.exportResource(
                 resource: resource,
                 descriptor: descriptor
@@ -1380,6 +1532,38 @@ private struct StageDurationSummary {
     let totalSeconds: Double
 }
 
+private struct ProcessMemorySnapshot {
+    let physicalFootprintBytes: UInt64
+    let residentSizeBytes: UInt64
+
+    static func capture() -> ProcessMemorySnapshot? {
+        var info = task_vm_info_data_t()
+        var infoCount = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+
+        let result = withUnsafeMutablePointer(to: &info) { infoPointer in
+            infoPointer.withMemoryRebound(to: integer_t.self, capacity: Int(infoCount)) { integerPointer in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(TASK_VM_INFO),
+                    integerPointer,
+                    &infoCount
+                )
+            }
+        }
+
+        guard result == KERN_SUCCESS else {
+            return nil
+        }
+
+        return ProcessMemorySnapshot(
+            physicalFootprintBytes: info.phys_footprint,
+            residentSizeBytes: info.resident_size
+        )
+    }
+}
+
 private actor PreparedTransferAssetQueue {
     private var bufferedItems: [ExportPipelineResult] = []
     private var pendingConsumers: [CheckedContinuation<ExportPipelineResult?, Never>] = []
@@ -1464,6 +1648,7 @@ private func performPreparedAssetUpload(
     var existenceCheckDurationSeconds = 0.0
     var uploadDurationSeconds = 0.0
     do {
+        try Task.checkCancellation()
         if let existenceCandidate = preparedAsset.existenceCandidate {
             let existenceStart = ProcessInfo.processInfo.systemUptime
             let matches = try await lookupExistingAssets(
@@ -1484,6 +1669,7 @@ private func performPreparedAssetUpload(
                 )
             }
         }
+        try Task.checkCancellation()
         let uploadStart = ProcessInfo.processInfo.systemUptime
         let response = try await uploadPreparedAsset(
             transferClient: transferClient,
@@ -1508,6 +1694,34 @@ private func performPreparedAssetUpload(
             errorDescription: TransferDebugLogger.describe(error),
             existenceCheckDurationSeconds: existenceCheckDurationSeconds,
             uploadDurationSeconds: uploadDurationSeconds
+        )
+    }
+}
+
+private func exportPipelineResult(
+    descriptor: TransferAssetDescriptor,
+    exportSource: TransferAssetSource
+) async -> ExportPipelineResult {
+    let exportStart = ProcessInfo.processInfo.systemUptime
+    do {
+        try Task.checkCancellation()
+        let exportedAsset = try await exportSource.exportAsset(descriptor)
+        if Task.isCancelled {
+            try? FileManager.default.removeItem(at: exportedAsset.fileURL)
+            throw CancellationError()
+        }
+        return ExportPipelineResult(
+            descriptor: descriptor,
+            preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
+            errorDescription: nil,
+            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
+        )
+    } catch {
+        return ExportPipelineResult(
+            descriptor: descriptor,
+            preparedAsset: nil,
+            errorDescription: TransferDebugLogger.describe(error),
+            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
         )
     }
 }
@@ -1641,6 +1855,13 @@ actor PhotoLibraryTransferService: TransferService {
         return snapshot
     }
 
+    func handleMemoryWarning() async {
+        TransferDebugLogger.warning(
+            "iOS memory warning received upload_concurrency_limit=\(uploadConcurrencyLimit)"
+        )
+        logTransferMemoryUsage(event: "memory_warning")
+    }
+
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
         var seenAssetIDs: Set<String> = []
         let candidateAssetIDs = successfullyTransferredAssetIDs.filter { assetID in
@@ -1734,6 +1955,11 @@ actor PhotoLibraryTransferService: TransferService {
             )
             try await transferClient.startSession(desktop: trustedDesktop, totalAssets: assets.count)
             resetTransferSpeedWindow()
+            logTransferMemoryUsage(
+                event: "transfer_start",
+                processedCount: 0,
+                totalCount: assets.count
+            )
             let transferRunStartSeconds = ProcessInfo.processInfo.systemUptime
 
             var transferredCount = 0
@@ -1866,6 +2092,7 @@ actor PhotoLibraryTransferService: TransferService {
                 if stopRequested, !stopHandled {
                     stopHandled = true
                     producerTask.cancel()
+                    uploadGroup.cancelAll()
                     cleanupPreparedAssets(bufferedUploads)
                     bufferedUploads.removeAll(keepingCapacity: false)
                 }
@@ -1933,6 +2160,10 @@ actor PhotoLibraryTransferService: TransferService {
                             } else {
                                 inFlightUploadCountByLane[laneIndex] = currentLaneCount - 1
                             }
+                        }
+                        if stopHandled {
+                            cleanupExportedAsset(uploadResult.preparedAsset.exportedAsset)
+                            continue
                         }
                         await processUploadResult(
                             uploadResult,
@@ -2062,29 +2293,17 @@ actor PhotoLibraryTransferService: TransferService {
 
             while inFlightExportCount < exportConcurrencyLimit, nextAssetIndex < assets.count {
                 if Task.isCancelled || stopRequested {
+                    group.cancelAll()
                     break
                 }
                 let descriptor = assets[nextAssetIndex]
                 nextAssetIndex += 1
                 inFlightExportCount += 1
                 group.addTask {
-                    let exportStart = ProcessInfo.processInfo.systemUptime
-                    do {
-                        let exportedAsset = try await exportSource.exportAsset(descriptor)
-                        return ExportPipelineResult(
-                            descriptor: descriptor,
-                            preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
-                            errorDescription: nil,
-                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
-                        )
-                    } catch {
-                        return ExportPipelineResult(
-                            descriptor: descriptor,
-                            preparedAsset: nil,
-                            errorDescription: TransferDebugLogger.describe(error),
-                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
-                        )
-                    }
+                    await exportPipelineResult(
+                        descriptor: descriptor,
+                        exportSource: exportSource
+                    )
                 }
             }
 
@@ -2096,6 +2315,7 @@ actor PhotoLibraryTransferService: TransferService {
                 await queue.enqueue(exportResult)
 
                 if Task.isCancelled || stopRequested {
+                    group.cancelAll()
                     continue
                 }
                 if nextAssetIndex >= assets.count {
@@ -2106,23 +2326,10 @@ actor PhotoLibraryTransferService: TransferService {
                 nextAssetIndex += 1
                 inFlightExportCount += 1
                 group.addTask {
-                    let exportStart = ProcessInfo.processInfo.systemUptime
-                    do {
-                        let exportedAsset = try await exportSource.exportAsset(descriptor)
-                        return ExportPipelineResult(
-                            descriptor: descriptor,
-                            preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
-                            errorDescription: nil,
-                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
-                        )
-                    } catch {
-                        return ExportPipelineResult(
-                            descriptor: descriptor,
-                            preparedAsset: nil,
-                            errorDescription: TransferDebugLogger.describe(error),
-                            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
-                        )
-                    }
+                    await exportPipelineResult(
+                        descriptor: descriptor,
+                        exportSource: exportSource
+                    )
                 }
             }
         }
@@ -2209,8 +2416,8 @@ actor PhotoLibraryTransferService: TransferService {
             transport: transport,
             transferSpeedText: currentTransferSpeedText(),
             etaDescription: nil,
-            statusMessage: "Backup stopped after finishing the current asset upload.",
-            guidanceMessage: "Start a new backup session to continue sending the remaining accessible items.",
+            statusMessage: "Backup stopped. In-flight work was canceled to release resources quickly.",
+            guidanceMessage: "Start a new backup session to continue sending any remaining accessible items.",
             isIncompleteLibrary: false
         )
     }
@@ -2227,6 +2434,13 @@ actor PhotoLibraryTransferService: TransferService {
         TransferDebugLogger.debug(
             "Updated transfer progress processed=\(processedCount) total=\(totalCount) transferred=\(transferredCount) failed=\(failedCount)"
         )
+        if processedCount == totalCount || (processedCount > 0 && processedCount.isMultiple(of: 25)) {
+            logTransferMemoryUsage(
+                event: "transfer_progress",
+                processedCount: processedCount,
+                totalCount: totalCount
+            )
+        }
         let updatedSnapshot = makeProgressSnapshot(
             transport: transport,
             transferredCount: transferredCount,
@@ -2276,6 +2490,39 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func cleanupExportedAsset(_ asset: ExportedTransferAsset) {
         try? FileManager.default.removeItem(at: asset.fileURL)
+    }
+
+    private func logTransferMemoryUsage(
+        event: String,
+        processedCount: Int? = nil,
+        totalCount: Int? = nil
+    ) {
+        guard let memorySnapshot = ProcessMemorySnapshot.capture() else {
+            TransferDebugLogger.warning(
+                "Transfer memory telemetry unavailable event=\(event) upload_concurrency_limit=\(uploadConcurrencyLimit)"
+            )
+            return
+        }
+        var fields = [
+            "Transfer memory telemetry",
+            "event=\(event)",
+            "footprint=\(formattedByteCount(memorySnapshot.physicalFootprintBytes))",
+            "resident=\(formattedByteCount(memorySnapshot.residentSizeBytes))",
+            "upload_concurrency_limit=\(uploadConcurrencyLimit)",
+        ]
+        if let processedCount, let totalCount {
+            fields.append("processed=\(processedCount)")
+            fields.append("total=\(totalCount)")
+        }
+        TransferDebugLogger.info(fields.joined(separator: " "))
+    }
+
+    private func formattedByteCount(_ bytes: UInt64) -> String {
+        let cappedBytes = min(bytes, UInt64(Int64.max))
+        return ByteCountFormatter.string(
+            fromByteCount: Int64(cappedBytes),
+            countStyle: .memory
+        )
     }
 
     private func logTransferStageMetrics(

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 import Combine
 
 @MainActor
@@ -28,6 +31,9 @@ final class MobileAppModel: ObservableObject {
     private let permissionService: PermissionService
     private let transferService: TransferService
     private let sideEffectWorker: MobileAppSideEffectWorker
+#if canImport(UIKit)
+    private var memoryWarningObservationTask: Task<Void, Never>?
+#endif
 
     init(
         stateStore: AppStateStore,
@@ -48,6 +54,14 @@ final class MobileAppModel: ObservableObject {
             telemetryClient: telemetryClient
         )
         self.transferProgressPollingIntervalNanoseconds = transferProgressPollingIntervalNanoseconds
+        configureMemoryWarningObservation()
+    }
+
+    deinit {
+        transferProgressPollingTask?.cancel()
+#if canImport(UIKit)
+        memoryWarningObservationTask?.cancel()
+#endif
     }
 
     var navigationTitle: String {
@@ -285,10 +299,10 @@ final class MobileAppModel: ObservableObject {
     private func startTransferProgressPolling() {
         stopTransferProgressPolling()
         transferProgressPollingTask = Task { [weak self] in
-            guard let self else {
-                return
-            }
             while !Task.isCancelled {
+                guard let self else {
+                    return
+                }
                 if let snapshot = await self.transferService.progressSnapshot() {
                     await MainActor.run {
                         self.transferSnapshot = snapshot
@@ -331,6 +345,30 @@ final class MobileAppModel: ObservableObject {
         let worker = sideEffectWorker
         Task.detached(priority: .utility) {
             await worker.record(event: event)
+        }
+    }
+
+    private func configureMemoryWarningObservation() {
+#if canImport(UIKit)
+        memoryWarningObservationTask?.cancel()
+        memoryWarningObservationTask = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(
+                named: UIApplication.didReceiveMemoryWarningNotification
+            ) {
+                guard let self else {
+                    return
+                }
+                await self.handleMemoryWarningNotification()
+            }
+        }
+#endif
+    }
+
+    private func handleMemoryWarningNotification() {
+        recordTelemetry(.memoryWarningReceived)
+        let transferService = transferService
+        Task.detached(priority: .utility) {
+            await transferService.handleMemoryWarning()
         }
     }
 

@@ -43,6 +43,7 @@ protocol TransferService: Sendable {
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot
     func progressSnapshot() async -> TransferSnapshot?
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult
+    func handleMemoryWarning() async
 }
 
 enum TransferAssetCleanupResult: Equatable, Sendable {
@@ -62,6 +63,7 @@ enum MobileTelemetryEvent: String, Sendable {
     case pairingSucceeded
     case pairingFailed
     case transferStarted
+    case memoryWarningReceived
     case transferStopped
     case resumeTapped
     case transferCompleted
@@ -77,6 +79,10 @@ extension PairingService {
 
 extension PairingBootstrapClient {
     func primeInternetAccess() async {}
+}
+
+extension TransferService {
+    func handleMemoryWarning() async {}
 }
 
 enum PairingBootstrapResponseStatus: String, Codable, Sendable {
