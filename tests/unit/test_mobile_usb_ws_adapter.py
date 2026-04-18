@@ -444,15 +444,8 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertEqual(websocket_connection.challenge_requests[0]["sid"], "session-001")
         self.assertTrue(isinstance(websocket_connection.challenge_requests[0]["rand"], str))
         self.assertNotIn("auth", websocket_connection.challenge_requests[0])
-        self.assertEqual(provider.connect_calls, [("ios-001", 50213)])
-        self.assertEqual(len(websocket_connector.calls), 1)
-        self.assertTrue(websocket_connector.calls[0].get("unix", False))
         self.assertEqual(
-            websocket_connector.calls[0].get("max_size"),
-            TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
-        )
-        self.assertEqual(
-            provider.probe_calls,
+            provider.connect_calls,
             [
                 ("ios-001", 50211),
                 ("ios-001", 50212),
@@ -460,6 +453,13 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
                 ("ios-001", 50213),
             ],
         )
+        self.assertEqual(len(websocket_connector.calls), 1)
+        self.assertTrue(websocket_connector.calls[0].get("unix", False))
+        self.assertEqual(
+            websocket_connector.calls[0].get("max_size"),
+            TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+        )
+        self.assertEqual(provider.probe_calls, [])
         adapter.stop()
 
     def test_start_records_probe_error_when_no_port_is_reachable(self):
@@ -574,7 +574,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         )
 
         self.assertIsNone(adapter.last_probe_error)
-        self.assertEqual(provider.probe_calls, [("ios-001", 50211)])
+        self.assertEqual(provider.probe_calls, [])
         self.assertEqual(provider.connect_calls, [("ios-001", 50211)])
         adapter.stop()
 
@@ -618,7 +618,7 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         )
 
         self.assertIsNone(adapter.last_probe_error)
-        self.assertEqual(provider.probe_calls, [("ios-001", 50211)])
+        self.assertEqual(provider.probe_calls, [])
         self.assertEqual(provider.connect_calls, [("ios-001", 50211)])
         adapter.stop()
 

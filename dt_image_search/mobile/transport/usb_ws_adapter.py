@@ -34,6 +34,7 @@ from dt_image_search.mobile.transport.usb_tunnel import (
     Pymobiledevice3UsbTunnelProvider,
     UsbConnectedDevice,
     UsbTunnelConnectError,
+    UsbTunnelDeviceNotFoundError,
     UsbTunnelProvider,
     UsbTunnelUnavailableError,
 )
@@ -335,7 +336,7 @@ class UsbWebSocketTransportAdapter:
                 continue
 
             try:
-                tunnel_target = self._probe_usb_tunnel(config)
+                tunnel_probe_result = self._probe_usb_tunnel(config)
             except Exception as exc:
                 self._set_probe_error(str(exc))
                 self._safe_log(
@@ -348,18 +349,21 @@ class UsbWebSocketTransportAdapter:
                 self._set_ready_state()
                 self._wait_for_retry_interval()
                 continue
-            if tunnel_target is None:
+            if tunnel_probe_result is None:
                 self._set_ready_state()
                 self._wait_for_retry_interval()
                 continue
+            tunnel_target, connected_socket = tunnel_probe_result
 
             try:
                 self._run_websocket_session(
                     tunnel_target=tunnel_target,
+                    connected_socket=connected_socket,
                     config=config,
                 )
             except (
                 UsbTunnelUnavailableError,
+                UsbTunnelDeviceNotFoundError,
                 UsbTunnelConnectError,
                 OSError,
                 RuntimeError,
@@ -383,13 +387,9 @@ class UsbWebSocketTransportAdapter:
         self,
         *,
         tunnel_target: UsbTunnelTarget,
+        connected_socket: socket.socket,
         config: UsbBootstrapConfig,
     ) -> None:
-        connected_socket = self._tunnel_provider.connect_device_port(
-            udid=tunnel_target.device_udid,
-            port=tunnel_target.remote_port,
-            timeout_seconds=1.2,
-        )
         rand = secrets.token_hex(16)
         try:
             websocket_connection = self._websocket_connect(
@@ -840,7 +840,7 @@ class UsbWebSocketTransportAdapter:
     def _probe_usb_tunnel(
         self,
         config: UsbBootstrapConfig,
-    ) -> UsbTunnelTarget | None:
+    ) -> tuple[UsbTunnelTarget, socket.socket] | None:
         try:
             usb_devices = self._tunnel_provider.list_usb_devices()
         except (UsbTunnelUnavailableError, UsbTunnelConnectError) as exc:
@@ -860,12 +860,13 @@ class UsbWebSocketTransportAdapter:
             fallback_port_window=config.fallback_port_window,
         )
         for usb_device in usb_devices:
-            connected_target = self._probe_device_for_ports(
+            connected_result = self._probe_device_for_ports(
                 usb_device=usb_device,
                 candidate_ports=candidate_ports,
             )
-            if connected_target is None:
+            if connected_result is None:
                 continue
+            connected_target, connected_socket = connected_result
 
             self._set_probe_error(None)
             self._safe_log(
@@ -875,7 +876,7 @@ class UsbWebSocketTransportAdapter:
                     f"device={connected_target.device_udid} port={connected_target.remote_port}"
                 ),
             )
-            return connected_target
+            return connected_target, connected_socket
 
         self._set_probe_error("Desktop could not connect to any USB bootstrap port candidates.")
         return None
@@ -885,13 +886,28 @@ class UsbWebSocketTransportAdapter:
         *,
         usb_device: UsbConnectedDevice,
         candidate_ports: tuple[int, ...],
-    ) -> UsbTunnelTarget | None:
+    ) -> tuple[UsbTunnelTarget, socket.socket] | None:
         for port in candidate_ports:
-            if self._tunnel_provider.probe_device_port(udid=usb_device.udid, port=port):
-                return UsbTunnelTarget(
+            try:
+                connected_socket = self._tunnel_provider.connect_device_port(
+                    udid=usb_device.udid,
+                    port=port,
+                    timeout_seconds=1.2,
+                )
+            except (
+                UsbTunnelUnavailableError,
+                UsbTunnelDeviceNotFoundError,
+                UsbTunnelConnectError,
+                OSError,
+            ):
+                continue
+            return (
+                UsbTunnelTarget(
                     device_udid=usb_device.udid,
                     remote_port=port,
-                )
+                ),
+                connected_socket,
+            )
         return None
 
     def _set_probe_error(self, message: str | None) -> None:
