@@ -5,9 +5,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+import dt_image_search.mobile.apple_mobile_device_support as apple_mobile_device_support_module
 from dt_image_search.mobile.apple_mobile_device_support import (
     APPLE_BUNDLED_INSTALLER_FILES,
     APPLE_MOBILE_DEVICE_SUPPORT_MSI,
@@ -185,6 +187,18 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
                 manager.launch_installer()
 
             self.assertFalse(staging_dir.exists())
+
+    @patch("dt_image_search.mobile.apple_mobile_device_support.subprocess.run")
+    def test_run_command_hides_console_window_on_windows(self, subprocess_run_mock):
+        with patch.object(apple_mobile_device_support_module.sys, "platform", "win32"):
+            apple_mobile_device_support_module._run_command(["pnputil.exe", "/enum-drivers"])
+
+        run_kwargs = subprocess_run_mock.call_args.kwargs
+        self.assertEqual(run_kwargs.get("creationflags"), subprocess.CREATE_NO_WINDOW)
+        startupinfo = run_kwargs.get("startupinfo")
+        self.assertIsNotNone(startupinfo)
+        self.assertTrue(startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW)
+        self.assertEqual(startupinfo.wShowWindow, subprocess.SW_HIDE)
 
     @staticmethod
     def _command_runner(

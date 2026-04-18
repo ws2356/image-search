@@ -312,13 +312,22 @@ def _build_elevated_install_command(
 
 
 def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
+    run_kwargs: dict[str, object] = {
+        "check": False,
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "ignore",
+    }
+    if sys.platform == "win32":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        run_kwargs["startupinfo"] = startupinfo
     return subprocess.run(
         args,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="ignore",
+        **run_kwargs,
     )
 
 
