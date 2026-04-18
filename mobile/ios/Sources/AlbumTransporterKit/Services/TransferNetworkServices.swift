@@ -1738,6 +1738,8 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     private static let transferSpeedWindowSeconds: TimeInterval = 10
+    private static let lanUploadConcurrencyMax = 3
+    private static let usbUploadConcurrencyMax = 2
     private let assetSource: TransferAssetSource
     private let transferClient: MobileTransferClient
     private let transportResolver: (any TransferTransportResolving)?
@@ -1754,7 +1756,7 @@ actor PhotoLibraryTransferService: TransferService {
         transferClient: MobileTransferClient,
         trustedDesktopStore: TrustedDesktopStore,
         exportConcurrencyLimit: Int = 5,
-        uploadConcurrencyLimit: Int = 10
+        uploadConcurrencyLimit: Int = 5
     ) {
         self.assetSource = assetSource
         self.transferClient = transferClient
@@ -2236,29 +2238,52 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     private func configuredUploadLanes(for desktop: TrustedDesktopRecord) async -> [UploadLane] {
-        let defaultLane = [UploadLane(preferredTransport: nil, concurrencyLimit: uploadConcurrencyLimit)]
+        let currentTransport = await resolvedTransport(for: desktop)
+        let defaultLane = [
+            UploadLane(
+                preferredTransport: nil,
+                concurrencyLimit: cappedUploadConcurrencyLimit(for: currentTransport)
+            ),
+        ]
         guard uploadConcurrencyLimit >= 2 else {
             return defaultLane
         }
         guard transferClient is any PreferredTransportMobileTransferClient else {
             return defaultLane
         }
-        let currentTransport = await resolvedTransport(for: desktop)
         guard currentTransport == .usb else {
             return defaultLane
         }
 
-        let lanConcurrency = max(1, uploadConcurrencyLimit / 2)
-        let usbConcurrency = max(1, uploadConcurrencyLimit - lanConcurrency)
+        let dualChannelLimits = dualChannelUploadConcurrencyLimits()
         TransferDebugLogger.info(
             "Dual-channel upload scheduling enabled "
                 + "session_id=\(desktop.lastSessionID) "
-                + "usb_limit=\(usbConcurrency) lan_limit=\(lanConcurrency)"
+                + "usb_limit=\(dualChannelLimits.usb) lan_limit=\(dualChannelLimits.lan)"
         )
         return [
-            UploadLane(preferredTransport: .usb, concurrencyLimit: usbConcurrency),
-            UploadLane(preferredTransport: .lan, concurrencyLimit: lanConcurrency),
+            UploadLane(preferredTransport: .usb, concurrencyLimit: dualChannelLimits.usb),
+            UploadLane(preferredTransport: .lan, concurrencyLimit: dualChannelLimits.lan),
         ]
+    }
+
+    private func cappedUploadConcurrencyLimit(for transport: TransferTransport) -> Int {
+        let transportLimit: Int
+        switch transport {
+        case .lan:
+            transportLimit = Self.lanUploadConcurrencyMax
+        case .usb:
+            transportLimit = Self.usbUploadConcurrencyMax
+        }
+        return max(1, min(uploadConcurrencyLimit, transportLimit))
+    }
+
+    private func dualChannelUploadConcurrencyLimits() -> (usb: Int, lan: Int) {
+        let cappedTotal = max(1, uploadConcurrencyLimit)
+        let usbLimit = min(Self.usbUploadConcurrencyMax, max(1, cappedTotal - 1))
+        let remainingBudget = max(1, cappedTotal - usbLimit)
+        let lanLimit = min(Self.lanUploadConcurrencyMax, remainingBudget)
+        return (usb: usbLimit, lan: lanLimit)
     }
 
     private func nextAvailableUploadLaneIndex(

@@ -273,7 +273,7 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(finalSnapshot.totalCount, 2)
     }
 
-    func test_photo_library_transfer_service_limits_concurrent_uploads_to_ten_assets() async {
+    func test_photo_library_transfer_service_limits_lan_upload_concurrency_to_three_assets() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
                 desktopDeviceID: "desktop-device-001",
@@ -301,7 +301,7 @@ final class TransferServiceTests: XCTestCase {
             assetSource: StaticTransferAssetSource(descriptors: descriptors),
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore,
-            uploadConcurrencyLimit: 10
+            uploadConcurrencyLimit: 5
         )
 
         let snapshot = await service.startTransfer(progress: { _ in })
@@ -310,10 +310,10 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.transferredCount, descriptors.count)
         XCTAssertEqual(snapshot.failedCount, 0)
         XCTAssertGreaterThan(maxConcurrentUploads, 1)
-        XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
+        XCTAssertLessThanOrEqual(maxConcurrentUploads, 3)
     }
 
-    func test_photo_library_transfer_service_memory_warning_keeps_upload_concurrency_limit() async {
+    func test_photo_library_transfer_service_memory_warning_keeps_lan_upload_concurrency_limit() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
                 desktopDeviceID: "desktop-device-001",
@@ -341,7 +341,7 @@ final class TransferServiceTests: XCTestCase {
             assetSource: StaticTransferAssetSource(descriptors: descriptors),
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore,
-            uploadConcurrencyLimit: 10
+            uploadConcurrencyLimit: 5
         )
         await service.handleMemoryWarning()
         await service.handleMemoryWarning()
@@ -352,10 +352,10 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.transferredCount, descriptors.count)
         XCTAssertEqual(snapshot.failedCount, 0)
         XCTAssertGreaterThan(maxConcurrentUploads, 1)
-        XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
+        XCTAssertLessThanOrEqual(maxConcurrentUploads, 3)
     }
 
-    func test_photo_library_transfer_service_allows_usb_upload_concurrency_when_supported() async {
+    func test_photo_library_transfer_service_limits_usb_upload_concurrency_when_supported() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
                 desktopDeviceID: "desktop-device-001",
@@ -386,16 +386,19 @@ final class TransferServiceTests: XCTestCase {
             assetSource: StaticTransferAssetSource(descriptors: descriptors),
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore,
-            uploadConcurrencyLimit: 10
+            uploadConcurrencyLimit: 5
         )
 
         let snapshot = await service.startTransfer(progress: { _ in })
         let maxConcurrentUploads = await transferClient.maxConcurrentUploadsObserved()
+        let maxConcurrentUSBUploads = await transferClient.maxConcurrentUploadsObserved(for: .usb)
 
         XCTAssertEqual(snapshot.transferredCount, descriptors.count)
         XCTAssertEqual(snapshot.failedCount, 0)
         XCTAssertGreaterThan(maxConcurrentUploads, 1)
-        XCTAssertLessThanOrEqual(maxConcurrentUploads, 10)
+        XCTAssertLessThanOrEqual(maxConcurrentUploads, 5)
+        XCTAssertGreaterThan(maxConcurrentUSBUploads, 0)
+        XCTAssertLessThanOrEqual(maxConcurrentUSBUploads, 2)
     }
 
     func test_photo_library_transfer_service_dual_channel_scheduler_uses_usb_and_lan_lanes() async {
@@ -429,11 +432,13 @@ final class TransferServiceTests: XCTestCase {
             assetSource: StaticTransferAssetSource(descriptors: descriptors),
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore,
-            uploadConcurrencyLimit: 10
+            uploadConcurrencyLimit: 5
         )
 
         let snapshot = await service.startTransfer(progress: { _ in })
         let observedTransports = await transferClient.observedPreferredUploadTransports()
+        let maxConcurrentUSBUploads = await transferClient.maxConcurrentUploadsObserved(for: .usb)
+        let maxConcurrentLANUploads = await transferClient.maxConcurrentUploadsObserved(for: .lan)
         let usbUploads = observedTransports.filter { $0 == .usb }.count
         let lanUploads = observedTransports.filter { $0 == .lan }.count
 
@@ -442,6 +447,8 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(observedTransports.count, descriptors.count)
         XCTAssertGreaterThan(usbUploads, 0)
         XCTAssertGreaterThan(lanUploads, 0)
+        XCTAssertLessThanOrEqual(maxConcurrentUSBUploads, 2)
+        XCTAssertLessThanOrEqual(maxConcurrentLANUploads, 3)
     }
 
     func test_photo_library_transfer_service_skips_known_assets_before_upload() async {
@@ -694,6 +701,8 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
     private var uploadedIDs: [String] = []
     private var activeUploadCount = 0
     private var maxConcurrentUploadCount = 0
+    private var activeUploadCountByTransport: [String: Int] = [:]
+    private var maxConcurrentUploadCountByTransport: [String: Int] = [:]
     private var completedTransferred: Int?
     private var completedFailed: Int?
     private var completedInterruptionReasonValue: String?
@@ -757,11 +766,29 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
         preferredTransport: TransferTransport?
     ) async throws -> TransferServerResponse {
         if let preferredTransport {
+            let transportKey = preferredTransport.rawValue
+            let activeTransportUploads = activeUploadCountByTransport[transportKey, default: 0] + 1
+            activeUploadCountByTransport[transportKey] = activeTransportUploads
+            maxConcurrentUploadCountByTransport[transportKey] = max(
+                maxConcurrentUploadCountByTransport[transportKey, default: 0],
+                activeTransportUploads
+            )
+        }
+        if let preferredTransport {
             preferredUploadTransports.append(preferredTransport)
         }
         activeUploadCount += 1
         maxConcurrentUploadCount = max(maxConcurrentUploadCount, activeUploadCount)
         defer {
+            if let preferredTransport {
+                let transportKey = preferredTransport.rawValue
+                let activeTransportUploads = activeUploadCountByTransport[transportKey, default: 0]
+                if activeTransportUploads <= 1 {
+                    activeUploadCountByTransport.removeValue(forKey: transportKey)
+                } else {
+                    activeUploadCountByTransport[transportKey] = activeTransportUploads - 1
+                }
+            }
             activeUploadCount -= 1
         }
         if uploadDelayNanoseconds > 0 {
@@ -833,6 +860,10 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
 
     func maxConcurrentUploadsObserved() -> Int {
         maxConcurrentUploadCount
+    }
+
+    func maxConcurrentUploadsObserved(for transport: TransferTransport) -> Int {
+        maxConcurrentUploadCountByTransport[transport.rawValue, default: 0]
     }
 
     func observedPreferredUploadTransports() -> [TransferTransport] {
