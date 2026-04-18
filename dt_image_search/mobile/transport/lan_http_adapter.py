@@ -117,7 +117,10 @@ class LanHttpTransportAdapter:
                 "info",
                 message=(
                     "MobilePairingService/_ensure_server_started: listening for pairing requests on "
-                    f"{endpoint_info.endpoint_url}"
+                    f"{endpoint_info.endpoint_url} "
+                    f"(listen_host={self._listen_host} bound_address={self._server.server_address[0]} "
+                    f"bound_port={port} advertised_hosts={advertised_hosts} "
+                    f"advertised_endpoints={endpoint_urls})"
                 ),
             )
             return endpoint_info
