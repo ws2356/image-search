@@ -38,6 +38,7 @@ class UpdatePromptDialog(QDialog):
         self.setModal(True)
         self.setWindowModality(Qt.ApplicationModal)
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, False)
         self.setWindowFlag(Qt.WindowCloseButtonHint, not self._is_required)
         self.setMinimumWidth(460)
         self.setMinimumHeight(180)
