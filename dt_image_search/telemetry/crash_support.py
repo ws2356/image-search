@@ -95,11 +95,13 @@ class CrashRecoveryManager:
         try:
             self._dump_stream = self._native_dump_path.open("w", encoding="utf-8")
             faulthandler.enable(file=self._dump_stream, all_threads=True)
-            for sig in self._native_crash_signals():
-                try:
-                    faulthandler.register(sig, file=self._dump_stream, all_threads=True, chain=True)
-                except (ValueError, OSError, RuntimeError):
-                    continue
+            register_handler = getattr(faulthandler, "register", None)
+            if callable(register_handler):
+                for sig in self._native_crash_signals():
+                    try:
+                        register_handler(sig, file=self._dump_stream, all_threads=True, chain=True)
+                    except (ValueError, OSError, RuntimeError):
+                        continue
         except OSError as e:
             self._log(
                 "warning",
@@ -116,11 +118,13 @@ class CrashRecoveryManager:
             )
 
     def disable_native_crash_dump_capture(self) -> None:
-        for sig in self._native_crash_signals():
-            try:
-                faulthandler.unregister(sig)
-            except RuntimeError:
-                continue
+        unregister_handler = getattr(faulthandler, "unregister", None)
+        if callable(unregister_handler):
+            for sig in self._native_crash_signals():
+                try:
+                    unregister_handler(sig)
+                except RuntimeError:
+                    continue
 
         try:
             faulthandler.disable()

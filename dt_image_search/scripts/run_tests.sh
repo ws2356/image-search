@@ -61,6 +61,7 @@ unit_and_functional_tests=(
   tests/unit/test_mobile_usb_tunnel.py
   tests/unit/test_mobile_usb_ws_adapter.py
   tests/unit/test_pil_image_support.py
+  tests/unit/test_crash_support.py
   tests/unit/test_runtime_metadata.py
   tests/unit/test_search_controller.py
   tests/functional/test_app_flow.py
