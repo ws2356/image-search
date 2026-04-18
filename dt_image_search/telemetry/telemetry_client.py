@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import threading
+from collections.abc import Sequence
 from urllib.parse import urlparse
 
 # Ensure nuitka include this module which would otherwise be loaded dynamically
@@ -107,6 +108,43 @@ class OtelContextFilter(logging.Filter):
         return True
 
 
+_reserved_log_record_keys = frozenset(logging.makeLogRecord({}).__dict__.keys())
+
+
+_otel_attribute_primitive_types = (bool, bytes, int, float, str)
+
+
+def _is_valid_otel_attribute_sequence(value: object) -> bool:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return False
+    sequence_item_types: set[type] = set()
+    for item in value:
+        if not isinstance(item, _otel_attribute_primitive_types):
+            return False
+        sequence_item_types.add(type(item))
+    return len(sequence_item_types) <= 1
+
+
+def _is_valid_otel_attribute_value(value: object) -> bool:
+    if value is None or isinstance(value, _otel_attribute_primitive_types):
+        return True
+    return _is_valid_otel_attribute_sequence(value)
+
+
+class OtelAttributeSanitizerFilter(logging.Filter):
+    """Normalize custom LogRecord extras to OTEL-supported attribute types."""
+
+    def filter(self, record):
+        record_dict = record.__dict__
+        for key, value in list(record_dict.items()):
+            if key in _reserved_log_record_keys:
+                continue
+            if _is_valid_otel_attribute_value(value):
+                continue
+            record_dict[key] = repr(value)
+        return True
+
+
 # Open the system’s null device for writing:
 # ── '/dev/null' on Unix, 'nul' on Windows
 # Redirect both Python stdout and stderr so that naive dependencies that write to stdout/stderr won't break the app
@@ -130,6 +168,7 @@ def log(severity: str, error_type: str = "", message: str = "", where: str = "")
             handlers = get_other_handlers()
             if os.getenv('IS_TESTING', 'false') != 'true':
                 logging_handler = LoggingHandler(level=level, logger_provider=_logger_provider)
+                logging_handler.addFilter(OtelAttributeSanitizerFilter())
                 logging_handler.addFilter(OtelLogFilter())
                 logging_handler.addFilter(OtelContextFilter())
                 handlers.insert(0, logging_handler)
