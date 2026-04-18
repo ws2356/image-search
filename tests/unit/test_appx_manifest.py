@@ -32,8 +32,7 @@ class TestAppxManifest(unittest.TestCase):
     def test_manifest_declares_firewall_rule_for_pairing_listener(self):
         manifest_tree, namespace = self._load_manifest()
         firewall_extension = manifest_tree.find(
-            ".//appx:Applications/appx:Application/appx:Extensions/"
-            "desktop2:Extension[@Category='windows.firewallRules']",
+            "./appx:Extensions/desktop2:Extension[@Category='windows.firewallRules']",
             namespace,
         )
         self.assertIsNotNone(firewall_extension)

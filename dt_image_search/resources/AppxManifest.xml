@@ -19,14 +19,16 @@
             <uap:VisualElements DisplayName="AI Image Viewer" Description="Image search application" Square150x150Logo="icon.png" Square44x44Logo="icon.png" BackgroundColor="transparent" />
             <Extensions>
                 <desktop:Extension Category="windows.fullTrustProcess" />
-                <desktop2:Extension Category="windows.firewallRules">
-                    <desktop2:FirewallRules Executable="DTImageSearch\DTImageSearch.exe">
-                        <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="all" />
-                    </desktop2:FirewallRules>
-                </desktop2:Extension>
             </Extensions>
         </Application>
     </Applications>
+    <Extensions>
+        <desktop2:Extension Category="windows.firewallRules">
+            <desktop2:FirewallRules Executable="DTImageSearch\DTImageSearch.exe">
+                <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="all" />
+            </desktop2:FirewallRules>
+        </desktop2:Extension>
+    </Extensions>
     <Capabilities>
         <Capability Name="internetClient" />
         <Capability Name="privateNetworkClientServer" />
