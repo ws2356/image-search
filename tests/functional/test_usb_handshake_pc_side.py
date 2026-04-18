@@ -139,7 +139,7 @@ class _MockMobileUsbRuntimeServer:
 
 
 class TestUsbHandshakePcSideFunctional(unittest.TestCase):
-    def test_pc_usb_handshake_uses_probe_and_verifies_mobile_challenge(self):
+    def test_pc_usb_handshake_uses_tunnel_connect_and_verifies_mobile_challenge(self):
         session_id = "functional-usb-session-001"
         one_time_passcode = "482913"
         device_udid = "functional-ios-001"
@@ -180,10 +180,7 @@ class TestUsbHandshakePcSideFunctional(unittest.TestCase):
             )
         )
         self.assertTrue(mobile_runtime.challenge_received.is_set())
-        self.assertEqual(
-            tunnel_provider.probe_calls,
-            [(device_udid, mobile_runtime.port)],
-        )
+        self.assertEqual(tunnel_provider.probe_calls, [])
         self.assertEqual(
             tunnel_provider.connect_calls,
             [(device_udid, mobile_runtime.port)],
