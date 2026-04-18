@@ -57,7 +57,7 @@ class UpdatePromptDialog(QDialog):
         button_layout.addStretch(1)
 
         if not self._is_required:
-            cancel_button = QPushButton("Cancel", self)
+            cancel_button = QPushButton("Not Now", self)
             cancel_button.clicked.connect(self._on_cancel_clicked)
             button_layout.addWidget(cancel_button)
 
@@ -91,29 +91,11 @@ class UpdatePromptDialog(QDialog):
             )
             return
 
-        if self._is_required:
-            self._quit_application(reason="required_update")
-            return
-        self.accept()
+        if not self._is_required:
+            self.accept()
 
     def _on_cancel_clicked(self) -> None:
         self.reject()
-
-    def _quit_application(self, *, reason: str) -> None:
-        app = QApplication.instance()
-        if app is None:
-            log(
-                "warning",
-                message=(
-                    "UpdatePromptDialog/quit: QApplication instance unavailable; "
-                    f"closing dialog instead reason={reason}"
-                ),
-            )
-            self.reject()
-            return
-
-        log("info", message=f"UpdatePromptDialog/quit: exiting application reason={reason}")
-        app.quit()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._is_required:
