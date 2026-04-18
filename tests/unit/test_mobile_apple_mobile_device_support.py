@@ -14,7 +14,9 @@ from dt_image_search.mobile.apple_mobile_device_support import (
     APPLE_NETWORK_DRIVER_CAT,
     APPLE_NETWORK_DRIVER_INF,
     APPLE_NETWORK_DRIVER_SYS,
+    APPLE_NETWORK_DRIVER_WDF_COINSTALLER,
     APPLE_USB_DRIVER_CAT,
+    APPLE_USB_DRIVER_DLL,
     APPLE_USB_DRIVER_INF,
     APPLE_USB_DRIVER_SYS,
     AppleMobileDeviceSupportInstallError,
@@ -74,9 +76,41 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
                 APPLE_USB_DRIVER_INF,
                 APPLE_USB_DRIVER_CAT,
                 APPLE_USB_DRIVER_SYS,
+                APPLE_USB_DRIVER_DLL,
                 APPLE_NETWORK_DRIVER_INF,
                 APPLE_NETWORK_DRIVER_CAT,
                 APPLE_NETWORK_DRIVER_SYS,
+                APPLE_NETWORK_DRIVER_WDF_COINSTALLER,
+            ),
+        )
+
+    def test_probe_requires_companion_driver_assets_before_install(self):
+        available_assets = {
+            APPLE_MOBILE_DEVICE_SUPPORT_MSI,
+            APPLE_USB_DRIVER_INF,
+            APPLE_USB_DRIVER_CAT,
+            APPLE_USB_DRIVER_SYS,
+            APPLE_NETWORK_DRIVER_INF,
+            APPLE_NETWORK_DRIVER_CAT,
+            APPLE_NETWORK_DRIVER_SYS,
+        }
+        manager = AppleMobileDeviceSupportManager(
+            platform="win32",
+            command_runner=self._command_runner(
+                service_returncode=1060,
+                driver_stdout="",
+            ),
+            resource_exists=lambda name: name in available_assets,
+        )
+
+        status = manager.probe()
+
+        self.assertFalse(status.can_install)
+        self.assertEqual(
+            status.missing_bundled_assets,
+            (
+                APPLE_USB_DRIVER_DLL,
+                APPLE_NETWORK_DRIVER_WDF_COINSTALLER,
             ),
         )
 
@@ -86,6 +120,7 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             staging_dir = Path(temp_dir) / "apple-mobile-support"
+            installer_log_path = Path(temp_dir) / "apple-mobile-support-install.log"
             manager = AppleMobileDeviceSupportManager(
                 platform="win32",
                 command_runner=self._command_runner(
@@ -104,6 +139,7 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
                     shell_execute_calls,
                 ),
                 temp_dir_factory=lambda: str(staging_dir),
+                installer_log_path_factory=lambda: installer_log_path,
             )
 
             manager.launch_installer()
@@ -115,6 +151,10 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
             self.assertIn(APPLE_MOBILE_DEVICE_SUPPORT_MSI, decoded_script)
             self.assertIn(APPLE_USB_DRIVER_INF, decoded_script)
             self.assertIn(APPLE_NETWORK_DRIVER_INF, decoded_script)
+            self.assertIn(str(installer_log_path), decoded_script)
+            self.assertIn("Add-Content -LiteralPath $installerLogPath", decoded_script)
+            self.assertIn("Apple network pnputil output", decoded_script)
+            self.assertIn("Post-install driver status: usb=", decoded_script)
             self.assertIn("Remove-Item -LiteralPath $stageDir", decoded_script)
             self.assertEqual(
                 {asset_path.name for asset_path in copied_assets},
@@ -138,6 +178,7 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
                 ),
                 shell_execute_runner=lambda _file_path, _parameters: 5,
                 temp_dir_factory=lambda: str(staging_dir),
+                installer_log_path_factory=lambda: Path(temp_dir) / "apple-mobile-support-install.log",
             )
 
             with self.assertRaises(AppleMobileDeviceSupportInstallError):

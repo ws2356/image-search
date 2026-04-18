@@ -11,6 +11,8 @@ import sys
 import tempfile
 from typing import Callable
 
+from dt_image_search.bm_context import get_context
+from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.telemetry.telemetry_client import log
 
 APPLE_MOBILE_DEVICE_SERVICE_NAME = "Apple Mobile Device Service"
@@ -18,18 +20,22 @@ APPLE_MOBILE_DEVICE_SUPPORT_MSI = "AppleMobileDeviceSupport64.msi"
 APPLE_USB_DRIVER_INF = "usbaapl64.inf"
 APPLE_USB_DRIVER_CAT = "usbaapl64.cat"
 APPLE_USB_DRIVER_SYS = "usbaapl64.sys"
+APPLE_USB_DRIVER_DLL = "usbaaplrc.dll"
 APPLE_NETWORK_DRIVER_INF = "netaapl64.inf"
 APPLE_NETWORK_DRIVER_CAT = "netaapl64.cat"
 APPLE_NETWORK_DRIVER_SYS = "netaapl64.sys"
+APPLE_NETWORK_DRIVER_WDF_COINSTALLER = "WdfCoInstaller01009.dll"
 APPLE_USB_DRIVER_PACKAGE_FILES = (
     APPLE_USB_DRIVER_INF,
     APPLE_USB_DRIVER_CAT,
     APPLE_USB_DRIVER_SYS,
+    APPLE_USB_DRIVER_DLL,
 )
 APPLE_NETWORK_DRIVER_PACKAGE_FILES = (
     APPLE_NETWORK_DRIVER_INF,
     APPLE_NETWORK_DRIVER_CAT,
     APPLE_NETWORK_DRIVER_SYS,
+    APPLE_NETWORK_DRIVER_WDF_COINSTALLER,
 )
 APPLE_BUNDLED_INSTALLER_FILES = (
     APPLE_MOBILE_DEVICE_SUPPORT_MSI,
@@ -95,6 +101,7 @@ class AppleMobileDeviceSupportManager:
         command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
         shell_execute_runner: Callable[[str, str], int] | None = None,
         temp_dir_factory: Callable[[], str] | None = None,
+        installer_log_path_factory: Callable[[], Path] | None = None,
         resource_exists: Callable[[str], bool] | None = None,
         resource_copier: Callable[[str, Path], Path] | None = None,
     ):
@@ -102,6 +109,7 @@ class AppleMobileDeviceSupportManager:
         self._command_runner = command_runner or _run_command
         self._shell_execute_runner = shell_execute_runner or _run_shell_execute
         self._temp_dir_factory = temp_dir_factory or _create_temp_dir
+        self._installer_log_path_factory = installer_log_path_factory or _create_installer_log_path
         self._resource_exists = resource_exists or _resource_exists
         self._resource_copier = resource_copier or _copy_resource_to_dir
 
@@ -157,6 +165,7 @@ class AppleMobileDeviceSupportManager:
                 f"service={status.apple_service_installed} "
                 f"usb_driver={status.usb_driver_installed} "
                 f"net_driver={status.network_driver_installed} "
+                f"missing_bundle_assets={status.missing_bundled_assets or ('none',)} "
                 f"bundle_ready={status.can_install} "
                 f"ready={status.is_ready}"
             ),
@@ -177,6 +186,7 @@ class AppleMobileDeviceSupportManager:
             )
 
         staging_dir = Path(self._temp_dir_factory())
+        installer_log_path = self._installer_log_path_factory()
         launched = False
         try:
             staged_msi_path = self._resource_copier(
@@ -204,6 +214,7 @@ class AppleMobileDeviceSupportManager:
                 staged_msi_path=staged_msi_path,
                 staged_usb_driver_path=staged_usb_driver_path,
                 staged_network_driver_path=staged_network_driver_path,
+                installer_log_path=installer_log_path,
             )
             launch_result = self._shell_execute_runner("powershell.exe", command)
             if launch_result <= 32:
@@ -219,7 +230,7 @@ class AppleMobileDeviceSupportManager:
             "info",
             message=(
                 "AppleMobileDeviceSupportManager/launch_installer: launched elevated install "
-                f"from {staging_dir}"
+                f"from {staging_dir} diagnostics_log={installer_log_path}"
             ),
         )
 
@@ -245,6 +256,7 @@ def _build_elevated_install_command(
     staged_msi_path: Path,
     staged_usb_driver_path: Path,
     staged_network_driver_path: Path,
+    installer_log_path: Path,
 ) -> str:
     script = "\n".join(
         [
@@ -253,15 +265,42 @@ def _build_elevated_install_command(
             f"$msiPath = {_powershell_string_literal(staged_msi_path)}",
             f"$usbDriverPath = {_powershell_string_literal(staged_usb_driver_path)}",
             f"$networkDriverPath = {_powershell_string_literal(staged_network_driver_path)}",
+            f"$installerLogPath = {_powershell_string_literal(installer_log_path)}",
+            "$installerLogDir = Split-Path -Parent $installerLogPath",
+            "if ($installerLogDir -and -not (Test-Path -LiteralPath $installerLogDir)) {",
+            "    New-Item -ItemType Directory -Path $installerLogDir -Force | Out-Null",
+            "}",
+            "function Write-InstallLog([string]$message) {",
+            "    Add-Content -LiteralPath $installerLogPath -Encoding UTF8 -Value ((Get-Date -Format o) + ' ' + $message)",
+            "}",
             "try {",
+            "    Write-InstallLog \"Starting Apple Mobile Device Support install.\"",
+            "    Write-InstallLog \"Stage directory: $stageDir\"",
+            "    Write-InstallLog \"MSI path: $msiPath\"",
+            "    Write-InstallLog \"USB driver path: $usbDriverPath\"",
+            "    Write-InstallLog \"Network driver path: $networkDriverPath\"",
             "    $installer = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i', $msiPath, '/quiet', '/norestart') -Wait -PassThru",
+            "    Write-InstallLog \"msiexec exit code: $($installer.ExitCode)\"",
             "    if ($installer.ExitCode -ne 0) { throw \"Apple Mobile Device Support installer exited with code $($installer.ExitCode).\" }",
-            "    & pnputil.exe /add-driver $usbDriverPath /install | Out-Null",
+            "    $usbDriverOutput = & pnputil.exe /add-driver $usbDriverPath /install 2>&1",
+            "    if ($usbDriverOutput) { Write-InstallLog ((\"Apple USB pnputil output:`n\" + ($usbDriverOutput | Out-String)).TrimEnd()) }",
+            "    Write-InstallLog \"Apple USB pnputil exit code: $LASTEXITCODE\"",
             "    if ($LASTEXITCODE -ne 0) { throw \"Installing Apple USB driver failed with exit code $LASTEXITCODE.\" }",
-            "    & pnputil.exe /add-driver $networkDriverPath /install | Out-Null",
+            "    $networkDriverOutput = & pnputil.exe /add-driver $networkDriverPath /install 2>&1",
+            "    if ($networkDriverOutput) { Write-InstallLog ((\"Apple network pnputil output:`n\" + ($networkDriverOutput | Out-String)).TrimEnd()) }",
+            "    Write-InstallLog \"Apple network pnputil exit code: $LASTEXITCODE\"",
             "    if ($LASTEXITCODE -ne 0) { throw \"Installing Apple network driver failed with exit code $LASTEXITCODE.\" }",
+            "    $postInstallDriverInventory = & pnputil.exe /enum-drivers 2>&1",
+            "    if ($postInstallDriverInventory) { Write-InstallLog ((\"Post-install driver inventory excerpt:`n\" + ($postInstallDriverInventory | Out-String)).TrimEnd()) }",
+            "    Write-InstallLog (\"Post-install driver status: usb=\" + ($postInstallDriverInventory -match 'Original Name:\\s*usbaapl64\\.inf\\b') + ' network=' + ($postInstallDriverInventory -match 'Original Name:\\s*netaapl64\\.inf\\b'))",
+            "    Write-InstallLog 'Apple Mobile Device Support install completed.'",
+            "} catch {",
+            "    Write-InstallLog ((\"Installer error: \" + $_.Exception.Message).TrimEnd())",
+            "    Write-InstallLog ((\"Installer error detail:`n\" + ($_ | Out-String)).TrimEnd())",
+            "    throw",
             "}",
             "finally {",
+            "    Write-InstallLog 'Cleaning installer staging directory.'",
             "    if (Test-Path -LiteralPath $stageDir) {",
             "        Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue",
             "    }",
@@ -300,6 +339,18 @@ def _run_shell_execute(file_path: str, parameters: str) -> int:
 
 def _create_temp_dir() -> str:
     return tempfile.mkdtemp(prefix="dtis-apple-mobile-support-")
+
+
+def _create_installer_log_path() -> Path:
+    log_dir = get_app_data_path(get_context()) / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        prefix="apple-mobile-support-install-",
+        suffix=".log",
+        dir=log_dir,
+        delete=False,
+    ) as installer_log_file:
+        return Path(installer_log_file.name)
 
 
 def _resource_exists(file_name: str) -> bool:

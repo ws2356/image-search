@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metada
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
-datas += collect_data_files("dt_image_search", includes=["resources/*.msi", "resources/*.inf", "resources/*.cat", "resources/*.sys"])
+datas += collect_data_files("dt_image_search", includes=["resources/*.msi", "resources/*.inf", "resources/*.cat", "resources/*.sys", "resources/*.dll"])
 datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz", "model_configs/ViT-B-32*", "model_configs/xlm-roberta-base-ViT-B-32*"])
 datas += copy_metadata('hf_xet')
 heif_datas, heif_binaries, heif_hiddenimports = collect_all("pillow_heif")
