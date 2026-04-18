@@ -1048,7 +1048,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnecti
     }
 }
 
-actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving {
+actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving {
     private static let preferredTransportRetryCooldownSeconds: TimeInterval = 3
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
@@ -1178,6 +1178,25 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
             return resolvedTransport
         }
         return desktop.transport
+    }
+
+    func resolveLiveTransports(for desktop: TrustedDesktopRecord) async -> [TransferTransport] {
+        var liveTransports: [TransferTransport] = []
+        if let usbConnectivity = usbClient as? USBTransportConnectivityChecking,
+           await usbConnectivity.isUSBTransportConnected()
+        {
+            liveTransports.append(.usb)
+        }
+        if canAttemptPreferredTransport(.lan, desktop: desktop) {
+            liveTransports.append(.lan)
+        }
+        if !liveTransports.isEmpty {
+            return liveTransports
+        }
+        if let resolvedTransport = lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] {
+            return [resolvedTransport]
+        }
+        return [desktop.transport]
     }
 
     private func executeWithFallback<Result>(

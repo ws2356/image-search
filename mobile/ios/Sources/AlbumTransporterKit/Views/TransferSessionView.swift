@@ -11,7 +11,7 @@ struct TransferSessionView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                transportBadge
+                transportBadges
 
                 donutProgress
 
@@ -71,17 +71,25 @@ struct TransferSessionView: View {
         .compatibleScrollBounceBasedOnSize()
     }
 
-    private var transportBadge: some View {
+    private var transportBadges: some View {
         HStack(spacing: 6) {
-            Image(systemName: snapshot.transport.systemImage)
+            ForEach(snapshot.activeTransportsForDisplay, id: \.rawValue) { transport in
+                transportBadge(for: transport)
+            }
+        }
+    }
+
+    private func transportBadge(for transport: TransferTransport) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: transport.systemImage)
                 .font(.system(size: 13, weight: .semibold))
-            Text(snapshot.transport.title)
+            Text(transport.title)
                 .font(.system(size: 13, weight: .semibold))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .foregroundStyle(transportColor)
-        .background(transportBackground)
+        .foregroundStyle(transportColor(for: transport))
+        .background(transportBackground(for: transport))
         .clipShape(Capsule())
     }
 
@@ -156,7 +164,11 @@ struct TransferSessionView: View {
         snapshot.transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x007AFF)
     }
 
-    private var transportBackground: Color {
-        snapshot.transport == .usb ? Color(hex: 0xE6F9ED) : Color(hex: 0xE8F4FD)
+    private func transportColor(for transport: TransferTransport) -> Color {
+        transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x007AFF)
+    }
+
+    private func transportBackground(for transport: TransferTransport) -> Color {
+        transport == .usb ? Color(hex: 0xE6F9ED) : Color(hex: 0xE8F4FD)
     }
 }

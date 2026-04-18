@@ -87,7 +87,7 @@ enum PermissionScope: String, Equatable, Sendable, Codable {
     }
 }
 
-enum TransferTransport: String, Equatable, Sendable, Codable {
+enum TransferTransport: String, Equatable, Hashable, Sendable, Codable {
     case lan
     case usb
 
@@ -331,11 +331,24 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
     var totalCount: Int
     var failedCount: Int
     var transport: TransferTransport
+    var liveTransports: [TransferTransport]? = nil
     var transferSpeedText: String? = nil
     var etaDescription: String?
     var statusMessage: String
     var guidanceMessage: String
     var isIncompleteLibrary: Bool
+
+    var activeTransportsForDisplay: [TransferTransport] {
+        let candidates = (liveTransports?.isEmpty == false) ? (liveTransports ?? []) : [transport]
+        var uniqueTransports: [TransferTransport] = []
+        var seenTransports = Set<TransferTransport>()
+        for transport in candidates {
+            if seenTransports.insert(transport).inserted {
+                uniqueTransports.append(transport)
+            }
+        }
+        return uniqueTransports.isEmpty ? [transport] : uniqueTransports
+    }
 
     var progress: Double {
         guard totalCount > 0 else {

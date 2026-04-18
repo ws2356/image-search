@@ -158,7 +158,10 @@ final class TransferServiceTests: XCTestCase {
                 pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
             )
         )
-        let transferClient = RecordingMobileTransferClient(resolvedTransport: .lan)
+        let transferClient = RecordingMobileTransferClient(
+            resolvedTransport: .lan,
+            liveTransports: [.lan]
+        )
         let service = PhotoLibraryTransferService(
             assetSource: StaticTransferAssetSource(descriptors: []),
             transferClient: transferClient,
@@ -167,9 +170,40 @@ final class TransferServiceTests: XCTestCase {
 
         _ = await service.startTransfer(progress: { _ in })
         await transferClient.setResolvedTransport(.usb)
+        await transferClient.setLiveTransports([.usb, .lan])
         let refreshedSnapshot = await service.progressSnapshot()
 
         XCTAssertEqual(refreshedSnapshot?.transport, .usb)
+        XCTAssertEqual(refreshedSnapshot?.liveTransports, [.usb, .lan])
+    }
+
+    func test_photo_library_transfer_service_exposes_both_live_transports_when_usb_and_lan_are_alive() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let transferClient = RecordingMobileTransferClient(
+            resolvedTransport: .usb,
+            liveTransports: [.usb, .lan]
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(descriptors: []),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+
+        XCTAssertEqual(snapshot.transport, .usb)
+        XCTAssertEqual(snapshot.liveTransports, [.usb, .lan])
     }
 
     func test_photo_library_transfer_service_points_failed_assets_to_device_logs() async {
@@ -732,11 +766,12 @@ private actor ChunkSizeRecorder {
     }
 }
 
-private actor RecordingMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving {
+private actor RecordingMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
     private let uploadDelayNanoseconds: UInt64
     private var resolvedTransport: TransferTransport?
+    private var liveTransports: [TransferTransport]?
     private var lookupAssetIDsByBatch: [[String]] = []
     private var uploadedIDs: [String] = []
     private var activeUploadCount = 0
@@ -751,10 +786,12 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
     init(
         existingAssetIDs: Set<String> = [],
         resolvedTransport: TransferTransport? = nil,
+        liveTransports: [TransferTransport]? = nil,
         uploadDelayNanoseconds: UInt64 = 0
     ) {
         self.existingAssetIDs = existingAssetIDs
         self.resolvedTransport = resolvedTransport
+        self.liveTransports = liveTransports
         self.uploadDelayNanoseconds = uploadDelayNanoseconds
     }
 
@@ -870,8 +907,16 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
         resolvedTransport ?? desktop.transport
     }
 
+    func resolveLiveTransports(for desktop: TrustedDesktopRecord) async -> [TransferTransport] {
+        liveTransports ?? [resolvedTransport ?? desktop.transport]
+    }
+
     func setResolvedTransport(_ transport: TransferTransport?) {
         resolvedTransport = transport
+    }
+
+    func setLiveTransports(_ transports: [TransferTransport]?) {
+        liveTransports = transports
     }
 
     func startedAssetCount() -> Int? {

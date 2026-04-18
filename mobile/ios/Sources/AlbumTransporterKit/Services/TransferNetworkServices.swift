@@ -366,6 +366,10 @@ protocol TransferTransportResolving: Sendable {
     func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport
 }
 
+protocol TransferLiveTransportResolving: Sendable {
+    func resolveLiveTransports(for desktop: TrustedDesktopRecord) async -> [TransferTransport]
+}
+
 protocol USBTransportConnectivityChecking: Sendable {
     func isUSBTransportConnected() async -> Bool
 }
@@ -1785,6 +1789,7 @@ actor PhotoLibraryTransferService: TransferService {
     private let assetSource: TransferAssetSource
     private let transferClient: MobileTransferClient
     private let transportResolver: (any TransferTransportResolving)?
+    private let liveTransportResolver: (any TransferLiveTransportResolving)?
     private let trustedDesktopStore: TrustedDesktopStore
     private let exportConcurrencyLimit: Int
     private let uploadConcurrencyLimit: Int
@@ -1803,6 +1808,7 @@ actor PhotoLibraryTransferService: TransferService {
         self.assetSource = assetSource
         self.transferClient = transferClient
         self.transportResolver = transferClient as? any TransferTransportResolving
+        self.liveTransportResolver = transferClient as? any TransferLiveTransportResolving
         self.trustedDesktopStore = trustedDesktopStore
         self.exportConcurrencyLimit = max(1, exportConcurrencyLimit)
         self.uploadConcurrencyLimit = max(1, uploadConcurrencyLimit)
@@ -1859,6 +1865,10 @@ actor PhotoLibraryTransferService: TransferService {
             completedSnapshot.transport = resolvedTransport
             completedSnapshot.statusMessage = "Desktop confirmed that this transfer session is complete."
             completedSnapshot.guidanceMessage = "You can return home and start another backup whenever new media appears on the device."
+            completedSnapshot = await applyingLiveTransports(
+                to: completedSnapshot,
+                desktop: trustedDesktop
+            )
             TransferDebugLogger.info(
                 "Desktop confirmed transfer completion session_id=\(trustedDesktop.lastSessionID) transferred=\(current.transferredCount) failed=\(current.failedCount)"
             )
@@ -1869,6 +1879,10 @@ actor PhotoLibraryTransferService: TransferService {
             var failedSnapshot = current
             failedSnapshot.transport = resolvedTransport
             failedSnapshot.statusMessage = error.message
+            failedSnapshot = await applyingLiveTransports(
+                to: failedSnapshot,
+                desktop: trustedDesktop
+            )
             TransferDebugLogger.error(
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
@@ -1879,6 +1893,10 @@ actor PhotoLibraryTransferService: TransferService {
             var failedSnapshot = current
             failedSnapshot.transport = resolvedTransport
             failedSnapshot.statusMessage = error.localizedDescription
+            failedSnapshot = await applyingLiveTransports(
+                to: failedSnapshot,
+                desktop: trustedDesktop
+            )
             TransferDebugLogger.error(
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
@@ -1893,6 +1911,10 @@ actor PhotoLibraryTransferService: TransferService {
         }
         if let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() {
             snapshot.transport = await resolvedTransport(for: trustedDesktop)
+            snapshot = await applyingLiveTransports(
+                to: snapshot,
+                desktop: trustedDesktop
+            )
         }
         snapshot.transferSpeedText = currentTransferSpeedText()
         currentSnapshot = snapshot
@@ -1993,8 +2015,12 @@ actor PhotoLibraryTransferService: TransferService {
                     guidanceMessage: "Check photo-library access or capture new media, then retry the backup.",
                     isIncompleteLibrary: false
                 )
-                currentSnapshot = emptySnapshot
-                return emptySnapshot
+                let snapshotWithLiveTransports = await applyingLiveTransports(
+                    to: emptySnapshot,
+                    desktop: trustedDesktop
+                )
+                currentSnapshot = snapshotWithLiveTransports
+                return snapshotWithLiveTransports
             }
             let totalCount = assetBatch.totalCount
 
@@ -2020,8 +2046,12 @@ actor PhotoLibraryTransferService: TransferService {
                 totalCount: totalCount,
                 failedCount: failedCount
             )
-            currentSnapshot = initialSnapshot
-            progress(initialSnapshot)
+            let initialSnapshotWithLiveTransports = await applyingLiveTransports(
+                to: initialSnapshot,
+                desktop: trustedDesktop
+            )
+            currentSnapshot = initialSnapshotWithLiveTransports
+            progress(initialSnapshotWithLiveTransports)
 
             while true {
                 if !assetBatch.descriptors.isEmpty,
@@ -2073,6 +2103,10 @@ actor PhotoLibraryTransferService: TransferService {
                     : "Some items could not be transferred. Start another backup session to retry remaining items, then inspect the MobileTransfer device logs for per-item errors.",
                 isIncompleteLibrary: false
             )
+            let completedSnapshotWithLiveTransports = await applyingLiveTransports(
+                to: completedSnapshot,
+                desktop: trustedDesktop
+            )
             let transferRunDurationSeconds = ProcessInfo.processInfo.systemUptime - transferRunStartSeconds
             logTransferStageMetrics(
                 desktop: trustedDesktop,
@@ -2082,8 +2116,8 @@ actor PhotoLibraryTransferService: TransferService {
                 runDurationSeconds: transferRunDurationSeconds,
                 stageMetrics: stageMetrics
             )
-            currentSnapshot = completedSnapshot
-            return completedSnapshot
+            currentSnapshot = completedSnapshotWithLiveTransports
+            return completedSnapshotWithLiveTransports
         } catch let error as TransferClientError {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
@@ -2099,8 +2133,12 @@ actor PhotoLibraryTransferService: TransferService {
                 guidanceMessage: "Retry the backup after confirming the paired desktop is reachable on the same local network.",
                 isIncompleteLibrary: false
             )
-            currentSnapshot = failedSnapshot
-            return failedSnapshot
+            let failedSnapshotWithLiveTransports = await applyingLiveTransports(
+                to: failedSnapshot,
+                desktop: trustedDesktop
+            )
+            currentSnapshot = failedSnapshotWithLiveTransports
+            return failedSnapshotWithLiveTransports
         } catch {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
@@ -2116,8 +2154,12 @@ actor PhotoLibraryTransferService: TransferService {
                 guidanceMessage: "Retry the backup after confirming photo-library access and desktop reachability.",
                 isIncompleteLibrary: false
             )
-            currentSnapshot = failedSnapshot
-            return failedSnapshot
+            let failedSnapshotWithLiveTransports = await applyingLiveTransports(
+                to: failedSnapshot,
+                desktop: trustedDesktop
+            )
+            currentSnapshot = failedSnapshotWithLiveTransports
+            return failedSnapshotWithLiveTransports
         }
     }
 
@@ -2288,8 +2330,12 @@ actor PhotoLibraryTransferService: TransferService {
                 failedCount: failedCount,
                 sessionID: desktop.lastSessionID
             )
-            currentSnapshot = pausedSnapshot
-            return pausedSnapshot
+            let pausedSnapshotWithLiveTransports = await applyingLiveTransports(
+                to: pausedSnapshot,
+                desktop: desktop
+            )
+            currentSnapshot = pausedSnapshotWithLiveTransports
+            return pausedSnapshotWithLiveTransports
         }
 
         return nil
@@ -2530,8 +2576,12 @@ actor PhotoLibraryTransferService: TransferService {
             totalCount: totalCount,
             failedCount: failedCount
         )
-        currentSnapshot = updatedSnapshot
-        progress(updatedSnapshot)
+        let updatedSnapshotWithLiveTransports = await applyingLiveTransports(
+            to: updatedSnapshot,
+            desktop: desktop
+        )
+        currentSnapshot = updatedSnapshotWithLiveTransports
+        progress(updatedSnapshotWithLiveTransports)
     }
 
     private func resolvedTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {
@@ -2539,6 +2589,39 @@ actor PhotoLibraryTransferService: TransferService {
             return desktop.transport
         }
         return await transportResolver.resolveDesktopTransport(for: desktop)
+    }
+
+    private func applyingLiveTransports(
+        to snapshot: TransferSnapshot,
+        desktop: TrustedDesktopRecord
+    ) async -> TransferSnapshot {
+        guard let liveTransportResolver else {
+            return snapshot
+        }
+        let resolvedLiveTransports = await liveTransportResolver.resolveLiveTransports(for: desktop)
+        var updatedSnapshot = snapshot
+        updatedSnapshot.liveTransports = normalizedLiveTransports(
+            resolvedLiveTransports,
+            primaryTransport: snapshot.transport
+        )
+        return updatedSnapshot
+    }
+
+    private func normalizedLiveTransports(
+        _ resolvedLiveTransports: [TransferTransport],
+        primaryTransport: TransferTransport
+    ) -> [TransferTransport] {
+        var orderedLiveTransports: [TransferTransport] = []
+        let preferredDisplayOrder: [TransferTransport] = [.usb, .lan]
+        for candidateTransport in preferredDisplayOrder {
+            if resolvedLiveTransports.contains(candidateTransport) || candidateTransport == primaryTransport {
+                orderedLiveTransports.append(candidateTransport)
+            }
+        }
+        if orderedLiveTransports.isEmpty {
+            orderedLiveTransports.append(primaryTransport)
+        }
+        return orderedLiveTransports
     }
 
     private func makeProgressSnapshot(
