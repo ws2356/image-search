@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_service import (
+    MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
     MobilePairingService,
     PairingResultState,
     _is_ignorable_socket_disconnect,
@@ -26,6 +27,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbTransportState,
 )
 from dt_image_search.model.dts_db import create_db_conn, delete_folders
+from dt_image_search.tools.dts_event_bus import default_bus
 
 
 class _StubTransportManager:
@@ -176,6 +178,21 @@ class TestMobilePairingService(unittest.TestCase):
             ).fetchone()
             self.assertIsNotNone(session_row)
             self.assertEqual(session_row["status"], "paired")
+
+    def test_pairing_service_uses_event_bus_to_track_app_foreground_state(self):
+        self.assertTrue(self._pairing_service._is_desktop_foreground())
+
+        default_bus.publish(
+            MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
+            is_foreground=False,
+        )
+        self.assertFalse(self._pairing_service._is_desktop_foreground())
+
+        default_bus.publish(
+            MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
+            is_foreground=True,
+        )
+        self.assertTrue(self._pairing_service._is_desktop_foreground())
 
     def test_handle_pairing_request_rejects_expired_token(self):
         now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)

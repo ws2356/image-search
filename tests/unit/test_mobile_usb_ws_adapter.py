@@ -235,6 +235,51 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self._adapter.start()
 
+    def test_timing_profile_uses_foreground_values_when_desktop_is_active(self):
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            probe_interval_seconds=0.7,
+            response_poll_timeout_seconds=0.8,
+            background_probe_interval_seconds=6.0,
+            background_response_poll_timeout_seconds=1.0,
+            is_desktop_foreground_fn=lambda: True,
+        )
+
+        self.assertEqual(adapter._timing_profile_seconds(), (0.7, 0.8))
+
+    def test_timing_profile_uses_background_values_when_desktop_is_in_background(self):
+        foreground_state = {"active": True}
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            probe_interval_seconds=0.7,
+            response_poll_timeout_seconds=0.8,
+            background_probe_interval_seconds=6.0,
+            background_response_poll_timeout_seconds=1.0,
+            is_desktop_foreground_fn=lambda: foreground_state["active"],
+        )
+
+        self.assertEqual(adapter._timing_profile_seconds(), (0.7, 0.8))
+        foreground_state["active"] = False
+        self.assertEqual(adapter._timing_profile_seconds(), (6.0, 1.0))
+
+    def test_wait_for_retry_interval_uses_background_probe_interval_when_desktop_is_in_background(self):
+        adapter = UsbWebSocketTransportAdapter(
+            router=self._router,
+            log_handler=self._noop_log,
+            probe_interval_seconds=0.7,
+            response_poll_timeout_seconds=0.8,
+            background_probe_interval_seconds=6.0,
+            background_response_poll_timeout_seconds=1.0,
+            is_desktop_foreground_fn=lambda: False,
+        )
+
+        with patch.object(adapter._stop_event, "wait", return_value=False) as mocked_wait:
+            adapter._wait_for_retry_interval()
+
+        mocked_wait.assert_called_once_with(timeout=6.0)
+
     def test_build_and_verify_auth_digest(self):
         self._adapter.configure_bootstrap(
             UsbBootstrapConfig(

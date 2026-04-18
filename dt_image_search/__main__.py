@@ -61,7 +61,9 @@ from dt_image_search.index.incremental_index_worker import init_incremental_inde
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
 from dt_image_search.mobile import MobileFolderCoordinator, MobileSourceType
+from dt_image_search.mobile.mobile_pairing_service import MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT
 from dt_image_search.telemetry.crash_support import CrashRecoveryManager
+from dt_image_search.tools.dts_event_bus import default_bus
 
 
 
@@ -550,6 +552,18 @@ def cleanup():
     close_activation_server()
     release_single_instance_lock()
 
+
+def _publish_app_foreground_state(
+    app: QApplication,
+    app_state: Qt.ApplicationState | None = None,
+) -> None:
+    current_state = app_state if app_state is not None else app.applicationState()
+    is_foreground = current_state == Qt.ApplicationState.ApplicationActive
+    default_bus.publish(
+        MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
+        is_foreground=is_foreground,
+    )
+
 def main():
     # Protect against multiprocessing import issues on Windows
     import multiprocessing
@@ -563,6 +577,10 @@ def main():
         threading.excepthook = handle_threading_exception
 
     app = QApplication(sys.argv)
+    _publish_app_foreground_state(app)
+    app.applicationStateChanged.connect(
+        lambda state: _publish_app_foreground_state(app, state)
+    )
 
     if not acquire_single_instance_lock(ctx):
         send_activation_request(ctx)

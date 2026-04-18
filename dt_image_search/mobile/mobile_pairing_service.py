@@ -52,11 +52,13 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbWebSocketTransportAdapter,
 )
 from dt_image_search.model.dts_db import create_db_conn
+from dt_image_search.tools.dts_event_bus import default_bus
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
 PAIRING_CLAIM_PATH = "/api/mobile/pairing/claim"
 PAIRING_TRANSPORT_LAN = "lan"
 PAIRING_TRANSPORT_USB = "usb"
+MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT = "mobile_app_foreground_state_changed"
 
 
 class PairingResultState(str, Enum):
@@ -100,6 +102,11 @@ class MobilePairingService:
             message="Scan the QR code from the mobile app to begin pairing.",
         )
         self._transfer_transport_by_session_id: dict[str, MobileTransportKind] = {}
+        self._app_is_foreground = True
+        self._app_foreground_state_subscription = default_bus.subscribe(
+            MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
+            self._on_app_foreground_state_changed,
+        )
 
         self._transport_router = MobileTransportRouter()
         self._register_transport_routes()
@@ -181,13 +188,18 @@ class MobilePairingService:
             self._transport_manager.stop_usb()
 
     def shutdown(self) -> None:
+        app_foreground_state_subscription = None
         with self._lock:
             self._endpoint_url = None
             self._endpoint_urls = tuple()
             self._active_session = None
             self._transfer_transport_by_session_id.clear()
+            app_foreground_state_subscription = self._app_foreground_state_subscription
+            self._app_foreground_state_subscription = None
 
         self._transport_manager.stop_all()
+        if app_foreground_state_subscription is not None:
+            app_foreground_state_subscription.dispose()
 
     def handle_pairing_request(
         self,
@@ -485,6 +497,7 @@ class MobilePairingService:
         usb_transport = UsbWebSocketTransportAdapter(
             router=self._transport_router,
             log_handler=_log,
+            is_desktop_foreground_fn=self._is_desktop_foreground,
         )
         return MobileTransportManager(
             lan_transport=lan_transport,
@@ -526,6 +539,14 @@ class MobilePairingService:
         if platform == MobilePlatform.IOS and self._transport_manager.usb_state == UsbTransportState.CONNECTED:
             return PAIRING_TRANSPORT_USB
         return PAIRING_TRANSPORT_LAN
+
+    def _is_desktop_foreground(self) -> bool:
+        with self._lock:
+            return self._app_is_foreground
+
+    def _on_app_foreground_state_changed(self, *, is_foreground: object, **_: object) -> None:
+        with self._lock:
+            self._app_is_foreground = bool(is_foreground)
 
 
 def _response(

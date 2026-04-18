@@ -176,17 +176,27 @@ class UsbWebSocketTransportAdapter:
         websocket_connect_fn: Callable[..., UsbWebSocketConnection] | None = None,
         probe_interval_seconds: float = 0.6,
         response_poll_timeout_seconds: float = 0.6,
+        background_probe_interval_seconds: float = 6.0,
+        background_response_poll_timeout_seconds: float = 1.0,
+        is_desktop_foreground_fn: Callable[[], bool] | None = None,
     ):
         if probe_interval_seconds <= 0:
             raise ValueError("USB probe_interval_seconds must be greater than zero.")
         if response_poll_timeout_seconds <= 0:
             raise ValueError("USB response_poll_timeout_seconds must be greater than zero.")
+        if background_probe_interval_seconds <= 0:
+            raise ValueError("USB background_probe_interval_seconds must be greater than zero.")
+        if background_response_poll_timeout_seconds <= 0:
+            raise ValueError("USB background_response_poll_timeout_seconds must be greater than zero.")
         self._router = router
         self._log_handler = log_handler
         self._tunnel_provider = tunnel_provider or Pymobiledevice3UsbTunnelProvider()
         self._websocket_connect = websocket_connect_fn or _default_websocket_connect
-        self._probe_interval_seconds = probe_interval_seconds
-        self._response_poll_timeout_seconds = response_poll_timeout_seconds
+        self._foreground_probe_interval_seconds = probe_interval_seconds
+        self._foreground_response_poll_timeout_seconds = response_poll_timeout_seconds
+        self._background_probe_interval_seconds = background_probe_interval_seconds
+        self._background_response_poll_timeout_seconds = background_response_poll_timeout_seconds
+        self._is_desktop_foreground = is_desktop_foreground_fn
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._worker_thread: threading.Thread | None = None
@@ -425,8 +435,9 @@ class UsbWebSocketTransportAdapter:
 
         while not self._stop_event.is_set():
             try:
+                _, response_poll_timeout_seconds = self._timing_profile_seconds()
                 incoming_message = websocket_connection.recv(
-                    timeout=self._response_poll_timeout_seconds
+                    timeout=response_poll_timeout_seconds
                 )
             except TimeoutError:
                 continue
@@ -475,7 +486,8 @@ class UsbWebSocketTransportAdapter:
         challenge_deadline = time.monotonic() + USB_AUTH_CHALLENGE_TIMEOUT_SECONDS
         while not self._stop_event.is_set() and time.monotonic() < challenge_deadline:
             remaining_timeout = challenge_deadline - time.monotonic()
-            recv_timeout = min(self._response_poll_timeout_seconds, max(remaining_timeout, 0.01))
+            _, response_poll_timeout_seconds = self._timing_profile_seconds()
+            recv_timeout = min(response_poll_timeout_seconds, max(remaining_timeout, 0.01))
             try:
                 incoming_message = websocket_connection.recv(timeout=recv_timeout)
             except TimeoutError:
@@ -894,7 +906,30 @@ class UsbWebSocketTransportAdapter:
             self._close_active_connection_locked()
 
     def _wait_for_retry_interval(self) -> None:
-        self._stop_event.wait(timeout=self._probe_interval_seconds)
+        probe_interval_seconds, _ = self._timing_profile_seconds()
+        self._stop_event.wait(timeout=probe_interval_seconds)
+
+    def _timing_profile_seconds(self) -> tuple[float, float]:
+        if self._is_desktop_foreground is None:
+            return (
+                self._foreground_probe_interval_seconds,
+                self._foreground_response_poll_timeout_seconds,
+            )
+        try:
+            if bool(self._is_desktop_foreground()):
+                return (
+                    self._foreground_probe_interval_seconds,
+                    self._foreground_response_poll_timeout_seconds,
+                )
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            return (
+                self._foreground_probe_interval_seconds,
+                self._foreground_response_poll_timeout_seconds,
+            )
+        return (
+            self._background_probe_interval_seconds,
+            self._background_response_poll_timeout_seconds,
+        )
 
     def _close_active_connection_locked(self) -> None:
         websocket_connection, tunnel_socket = self._detach_active_connection_locked()
