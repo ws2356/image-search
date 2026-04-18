@@ -167,6 +167,12 @@ struct ExportedTransferAsset: Sendable {
     var contentSHA1: String
 }
 
+struct TransferAssetBatch: Sendable {
+    var descriptors: [TransferAssetDescriptor]
+    var nextCursor: Int?
+    var totalCount: Int
+}
+
 private struct TransferAssetUploadMetadata: Codable, Sendable {
     var schema = TransferProtocol.schema
     var sessionID: String
@@ -324,7 +330,7 @@ enum TransferAssetChunkStreamer {
 }
 
 protocol TransferAssetSource: Sendable {
-    func fetchAssets() async throws -> [TransferAssetDescriptor]
+    func fetchAssetBatch(cursor: Int?, batchSize: Int) async throws -> TransferAssetBatch
     func exportAsset(_ descriptor: TransferAssetDescriptor) async throws -> ExportedTransferAsset
 }
 
@@ -958,38 +964,65 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         let filename: String
     }
 
-    func fetchAssets() async throws -> [TransferAssetDescriptor] {
-        let authorizationStatus = await requestAuthorizationIfNeeded()
-        TransferDebugLogger.info("Photo library authorization status=\(authorizationStatus.transferDescription)")
-        guard authorizationStatus == .authorized || authorizationStatus == .limited else {
-            TransferDebugLogger.warning("Photo library access is unavailable for transfer.")
-            return []
+    private var cachedFetchResult: PHFetchResult<PHAsset>?
+
+    func fetchAssetBatch(cursor: Int?, batchSize: Int) async throws -> TransferAssetBatch {
+        guard batchSize > 0 else {
+            throw TransferClientError.transport(message: "Asset batch size must be greater than zero.")
+        }
+        guard let fetchResult = try await fetchResultForTransfer(refresh: cursor == nil) else {
+            return TransferAssetBatch(descriptors: [], nextCursor: nil, totalCount: 0)
         }
 
-        let fetchResult = PHAsset.fetchAssets(with: nil)
+        let totalCount = fetchResult.count
+        let startIndex = max(cursor ?? 0, 0)
+        guard startIndex < totalCount else {
+            return TransferAssetBatch(descriptors: [], nextCursor: nil, totalCount: totalCount)
+        }
+
+        let endIndex = min(startIndex + batchSize, totalCount)
         var descriptors: [TransferAssetDescriptor] = []
-        var skippedResourceCount = 0
-        fetchResult.enumerateObjects { asset, _, _ in
-            guard let resource = Self.preferredResource(for: asset) else {
-                skippedResourceCount += 1
-                TransferDebugLogger.debug("Skipping asset without exportable PhotoKit resource asset_id=\(asset.localIdentifier)")
-                return
-            }
+        descriptors.reserveCapacity(endIndex - startIndex)
+        for index in startIndex ..< endIndex {
+            let asset = fetchResult.object(at: index)
+            let preferredFilename = Self.preferredResource(for: asset)?.originalFilename
             descriptors.append(
                 TransferAssetDescriptor(
                     assetID: asset.localIdentifier,
                     assetVersion: Self.assetVersion(for: asset),
-                    filename: resource.originalFilename,
+                    filename: preferredFilename ?? Self.fallbackFilename(for: asset),
                     mediaType: Self.mediaType(for: asset),
                     createdAt: asset.creationDate,
                     updatedAt: asset.modificationDate ?? asset.creationDate
                 )
             )
         }
-        TransferDebugLogger.info(
-            "Prepared transferable assets count=\(descriptors.count) skipped_without_resource=\(skippedResourceCount)"
+
+        let nextCursor: Int? = endIndex < totalCount ? endIndex : nil
+        return TransferAssetBatch(
+            descriptors: descriptors,
+            nextCursor: nextCursor,
+            totalCount: totalCount
         )
-        return descriptors
+    }
+
+    private func fetchResultForTransfer(refresh: Bool) async throws -> PHFetchResult<PHAsset>? {
+        if !refresh, let cachedFetchResult {
+            return cachedFetchResult
+        }
+        let authorizationStatus = await requestAuthorizationIfNeeded()
+        TransferDebugLogger.info("Photo library authorization status=\(authorizationStatus.transferDescription)")
+        guard authorizationStatus == .authorized || authorizationStatus == .limited else {
+            TransferDebugLogger.warning("Photo library access is unavailable for transfer.")
+            return nil
+        }
+
+        let fetchResult = PHAsset.fetchAssets(with: nil)
+        cachedFetchResult = fetchResult
+        TransferDebugLogger.info(
+            "Prepared transferable asset cursor total_count=\(fetchResult.count)"
+        )
+        return fetchResult
     }
 
     func exportAsset(_ descriptor: TransferAssetDescriptor) async throws -> ExportedTransferAsset {
@@ -1473,6 +1506,14 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         ].joined(separator: "|")
     }
 
+    private static func fallbackFilename(for asset: PHAsset) -> String {
+        let normalizedIdentifier = asset.localIdentifier
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        let fallbackExtension = asset.mediaType == .video ? "mov" : "jpg"
+        return "\(normalizedIdentifier).\(fallbackExtension)"
+    }
+
     private static func mediaType(for asset: PHAsset) -> String {
         switch asset.mediaType {
         case .video:
@@ -1738,6 +1779,7 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     private static let transferSpeedWindowSeconds: TimeInterval = 10
+    private static let assetFetchBatchSize = 100
     private static let lanUploadConcurrencyMax = 3
     private static let usbUploadConcurrencyMax = 2
     private let assetSource: TransferAssetSource
@@ -1934,8 +1976,11 @@ actor PhotoLibraryTransferService: TransferService {
         }
 
         do {
-            let assets = try await assetSource.fetchAssets()
-            if assets.isEmpty {
+            var assetBatch = try await assetSource.fetchAssetBatch(
+                cursor: nil,
+                batchSize: Self.assetFetchBatchSize
+            )
+            if assetBatch.totalCount == 0 {
                 TransferDebugLogger.warning("Transfer did not start because there are no eligible local assets.")
                 let resolvedTransport = await resolvedTransport(for: trustedDesktop)
                 let emptySnapshot = TransferSnapshot(
@@ -1951,16 +1996,17 @@ actor PhotoLibraryTransferService: TransferService {
                 currentSnapshot = emptySnapshot
                 return emptySnapshot
             }
+            let totalCount = assetBatch.totalCount
 
             TransferDebugLogger.info(
-                "Starting backup run desktop=\(trustedDesktop.desktopName) session_id=\(trustedDesktop.lastSessionID) asset_count=\(assets.count)"
+                "Starting backup run desktop=\(trustedDesktop.desktopName) session_id=\(trustedDesktop.lastSessionID) asset_count=\(totalCount) batch_size=\(Self.assetFetchBatchSize)"
             )
-            try await transferClient.startSession(desktop: trustedDesktop, totalAssets: assets.count)
+            try await transferClient.startSession(desktop: trustedDesktop, totalAssets: totalCount)
             resetTransferSpeedWindow()
             logTransferMemoryUsage(
                 event: "transfer_start",
                 processedCount: 0,
-                totalCount: assets.count
+                totalCount: totalCount
             )
             let transferRunStartSeconds = ProcessInfo.processInfo.systemUptime
 
@@ -1971,40 +2017,52 @@ actor PhotoLibraryTransferService: TransferService {
             let initialSnapshot = makeProgressSnapshot(
                 transport: initialTransport,
                 transferredCount: transferredCount,
-                totalCount: assets.count,
+                totalCount: totalCount,
                 failedCount: failedCount
             )
             currentSnapshot = initialSnapshot
             progress(initialSnapshot)
 
-            if let pausedSnapshot = await processTransferPipeline(
-                assets: assets,
-                desktop: trustedDesktop,
-                totalCount: assets.count,
-                transferredCount: &transferredCount,
-                failedCount: &failedCount,
-                stageMetrics: &stageMetrics,
-                progress: progress
-            ) {
-                let transferRunDurationSeconds = ProcessInfo.processInfo.systemUptime - transferRunStartSeconds
-                logTransferStageMetrics(
-                    desktop: trustedDesktop,
-                    totalCount: assets.count,
-                    transferredCount: transferredCount,
-                    failedCount: failedCount,
-                    runDurationSeconds: transferRunDurationSeconds,
-                    stageMetrics: stageMetrics
+            while true {
+                if !assetBatch.descriptors.isEmpty,
+                   let pausedSnapshot = await processTransferPipeline(
+                       assets: assetBatch.descriptors,
+                       desktop: trustedDesktop,
+                       totalCount: totalCount,
+                       transferredCount: &transferredCount,
+                       failedCount: &failedCount,
+                       stageMetrics: &stageMetrics,
+                       progress: progress
+                   )
+                {
+                    let transferRunDurationSeconds = ProcessInfo.processInfo.systemUptime - transferRunStartSeconds
+                    logTransferStageMetrics(
+                        desktop: trustedDesktop,
+                        totalCount: totalCount,
+                        transferredCount: transferredCount,
+                        failedCount: failedCount,
+                        runDurationSeconds: transferRunDurationSeconds,
+                        stageMetrics: stageMetrics
+                    )
+                    return pausedSnapshot
+                }
+
+                guard let nextCursor = assetBatch.nextCursor else {
+                    break
+                }
+                assetBatch = try await assetSource.fetchAssetBatch(
+                    cursor: nextCursor,
+                    batchSize: Self.assetFetchBatchSize
                 )
-                return pausedSnapshot
             }
 
             TransferDebugLogger.info(
-                "Transfer run finished session_id=\(trustedDesktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount) total=\(assets.count)"
+                "Transfer run finished session_id=\(trustedDesktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount) total=\(totalCount)"
             )
             let completedTransport = await resolvedTransport(for: trustedDesktop)
             let completedSnapshot = TransferSnapshot(
                 transferredCount: transferredCount,
-                totalCount: assets.count,
+                totalCount: totalCount,
                 failedCount: failedCount,
                 transport: completedTransport,
                 transferSpeedText: currentTransferSpeedText(),
@@ -2018,7 +2076,7 @@ actor PhotoLibraryTransferService: TransferService {
             let transferRunDurationSeconds = ProcessInfo.processInfo.systemUptime - transferRunStartSeconds
             logTransferStageMetrics(
                 desktop: trustedDesktop,
-                totalCount: assets.count,
+                totalCount: totalCount,
                 transferredCount: transferredCount,
                 failedCount: failedCount,
                 runDurationSeconds: transferRunDurationSeconds,

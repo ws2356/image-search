@@ -451,6 +451,46 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertLessThanOrEqual(maxConcurrentLANUploads, 3)
     }
 
+    func test_photo_library_transfer_service_fetches_assets_in_batches_of_one_hundred() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let descriptors = (1 ... 101).map { index in
+            TransferAssetDescriptor(
+                assetID: String(format: "ph://asset-%03d", index),
+                assetVersion: "v\(index)",
+                filename: String(format: "IMG_%04d.JPG", index),
+                mediaType: "image",
+                createdAt: Date(timeIntervalSince1970: TimeInterval(1_776_423_610 + index)),
+                updatedAt: Date(timeIntervalSince1970: TimeInterval(1_776_423_610 + index))
+            )
+        }
+        let assetSource = StaticTransferAssetSource(descriptors: descriptors)
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: RecordingMobileTransferClient(),
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let batchStarts = await assetSource.batchStarts()
+        let batchSizes = await assetSource.batchSizes()
+
+        XCTAssertEqual(snapshot.transferredCount, descriptors.count)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(batchStarts, [0, 100])
+        XCTAssertEqual(batchSizes, [100, 100])
+    }
+
     func test_photo_library_transfer_service_skips_known_assets_before_upload() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -875,6 +915,8 @@ private actor StaticTransferAssetSource: TransferAssetSource {
     private let descriptors: [TransferAssetDescriptor]
     private let failingAssetIDs: Set<String>
     private let exportedSizeByAssetID: [String: Int]
+    private var observedBatchStarts: [Int] = []
+    private var observedBatchSizes: [Int] = []
 
     init(
         descriptors: [TransferAssetDescriptor],
@@ -886,8 +928,25 @@ private actor StaticTransferAssetSource: TransferAssetSource {
         self.exportedSizeByAssetID = exportedSizeByAssetID
     }
 
-    func fetchAssets() async throws -> [TransferAssetDescriptor] {
-        descriptors
+    func fetchAssetBatch(cursor: Int?, batchSize: Int) async throws -> TransferAssetBatch {
+        let startIndex = max(cursor ?? 0, 0)
+        observedBatchStarts.append(startIndex)
+        observedBatchSizes.append(batchSize)
+        guard startIndex < descriptors.count else {
+            return TransferAssetBatch(
+                descriptors: [],
+                nextCursor: nil,
+                totalCount: descriptors.count
+            )
+        }
+
+        let endIndex = min(startIndex + max(1, batchSize), descriptors.count)
+        let nextCursor: Int? = endIndex < descriptors.count ? endIndex : nil
+        return TransferAssetBatch(
+            descriptors: Array(descriptors[startIndex ..< endIndex]),
+            nextCursor: nextCursor,
+            totalCount: descriptors.count
+        )
     }
 
     func exportAsset(_ descriptor: TransferAssetDescriptor) async throws -> ExportedTransferAsset {
@@ -907,6 +966,14 @@ private actor StaticTransferAssetSource: TransferAssetSource {
             fileSize: payload.count,
             contentSHA1: sha1Hex(for: payload)
         )
+    }
+
+    func batchStarts() -> [Int] {
+        observedBatchStarts
+    }
+
+    func batchSizes() -> [Int] {
+        observedBatchSizes
     }
 }
 
