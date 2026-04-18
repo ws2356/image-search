@@ -1049,9 +1049,11 @@ struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnecti
 }
 
 actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving {
+    private static let preferredTransportRetryCooldownSeconds: TimeInterval = 3
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
     private var lastResolvedTransportByDesktopID: [String: TransferTransport] = [:]
+    private var unavailablePreferredTransportRetryDeadlinesByDesktopID: [String: [String: Date]] = [:]
 
     init(
         lanClient: MobileTransferClient,
@@ -1062,6 +1064,7 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
+        unavailablePreferredTransportRetryDeadlinesByDesktopID.removeValue(forKey: desktop.desktopIDForRouting)
         try await executeWithFallback(
             operationName: MobileTransportProtocol.transferStartOperation,
             desktop: desktop,
@@ -1186,7 +1189,11 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
     ) async throws -> Result {
         let selectedTransport: TransferTransport
         if let preferredTransport {
-            selectedTransport = preferredTransport
+            if canAttemptPreferredTransport(preferredTransport, desktop: desktop) {
+                selectedTransport = preferredTransport
+            } else {
+                selectedTransport = preferredTransport == .usb ? .lan : .usb
+            }
         } else {
             selectedTransport = await resolveDesktopTransport(for: desktop)
         }
@@ -1195,6 +1202,7 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
         case .usb:
             do {
                 let result = try await usbOperation()
+                clearPreferredTransportUnavailable(.usb, desktop: desktop)
                 recordResolvedTransport(
                     desktop: desktop,
                     transport: .usb,
@@ -1203,6 +1211,9 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
                 )
                 return result
             } catch {
+                if preferredTransport == .usb {
+                    markPreferredTransportUnavailable(.usb, desktop: desktop)
+                }
                 USBTransportDebugLogger.warning(
                     "AdaptiveTransfer/fallback "
                         + "desktop_id=\(desktop.desktopIDForRouting) "
@@ -1210,11 +1221,19 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
                         + "error=\(USBTransportDebugLogger.describe(error))"
                 )
                 let result = try await lanOperation()
+                clearPreferredTransportUnavailable(.lan, desktop: desktop)
+                recordResolvedTransport(
+                    desktop: desktop,
+                    transport: .lan,
+                    operationName: operationName,
+                    reason: "usb_fallback_lan_success"
+                )
                 return result
             }
         case .lan:
             do {
                 let result = try await lanOperation()
+                clearPreferredTransportUnavailable(.lan, desktop: desktop)
                 recordResolvedTransport(
                     desktop: desktop,
                     transport: .lan,
@@ -1223,6 +1242,9 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
                 )
                 return result
             } catch {
+                if preferredTransport == .lan {
+                    markPreferredTransportUnavailable(.lan, desktop: desktop)
+                }
                 USBTransportDebugLogger.warning(
                     "AdaptiveTransfer/fallback "
                         + "desktop_id=\(desktop.desktopIDForRouting) "
@@ -1230,6 +1252,7 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
                         + "error=\(USBTransportDebugLogger.describe(error))"
                 )
                 let result = try await usbOperation()
+                clearPreferredTransportUnavailable(.usb, desktop: desktop)
                 recordResolvedTransport(
                     desktop: desktop,
                     transport: .usb,
@@ -1281,6 +1304,48 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
         var resolvedDesktop = desktop
         resolvedDesktop.transport = transport
         return resolvedDesktop
+    }
+
+    private func canAttemptPreferredTransport(
+        _ transport: TransferTransport,
+        desktop: TrustedDesktopRecord
+    ) -> Bool {
+        let desktopID = desktop.desktopIDForRouting
+        guard
+            let deadline = unavailablePreferredTransportRetryDeadlinesByDesktopID[desktopID]?[transport.rawValue]
+        else {
+            return true
+        }
+        return Date() >= deadline
+    }
+
+    private func markPreferredTransportUnavailable(
+        _ transport: TransferTransport,
+        desktop: TrustedDesktopRecord
+    ) {
+        let desktopID = desktop.desktopIDForRouting
+        var retryDeadlines = unavailablePreferredTransportRetryDeadlinesByDesktopID[desktopID, default: [:]]
+        retryDeadlines[transport.rawValue] = Date()
+            .addingTimeInterval(Self.preferredTransportRetryCooldownSeconds)
+        unavailablePreferredTransportRetryDeadlinesByDesktopID[desktopID] = retryDeadlines
+    }
+
+    private func clearPreferredTransportUnavailable(
+        _ transport: TransferTransport,
+        desktop: TrustedDesktopRecord
+    ) {
+        let desktopID = desktop.desktopIDForRouting
+        guard
+            var retryDeadlines = unavailablePreferredTransportRetryDeadlinesByDesktopID[desktopID]
+        else {
+            return
+        }
+        retryDeadlines.removeValue(forKey: transport.rawValue)
+        if retryDeadlines.isEmpty {
+            unavailablePreferredTransportRetryDeadlinesByDesktopID.removeValue(forKey: desktopID)
+        } else {
+            unavailablePreferredTransportRetryDeadlinesByDesktopID[desktopID] = retryDeadlines
+        }
     }
 }
 

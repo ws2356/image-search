@@ -131,6 +131,90 @@ final class USBTransportServicesTests: XCTestCase {
         XCTAssertEqual(resolvedTransport, .usb)
     }
 
+    func test_adaptive_mobile_transfer_client_skips_preferred_lan_after_initial_lan_failure() async throws {
+        let lanClient = RecordingTransferClient(
+            lookupError: TransferClientError.transport(message: "LAN unavailable")
+        )
+        let usbClient = RecordingTransferClient()
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .usb)
+        let candidates = [
+            TransferAssetExistenceCandidate(
+                assetID: "ph://asset-001",
+                contentSHA1: "sha1-001",
+                fileSize: 42,
+                createdAt: Date(timeIntervalSince1970: 1_776_123_610)
+            ),
+        ]
+
+        _ = try await adaptiveClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: .lan
+        )
+        _ = try await adaptiveClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: .lan
+        )
+        _ = try await adaptiveClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: .lan
+        )
+
+        let lanLookupCalls = await lanClient.lookupCalls()
+        let usbLookupCalls = await usbClient.lookupCalls()
+        XCTAssertEqual(lanLookupCalls, 1)
+        XCTAssertEqual(usbLookupCalls, 3)
+    }
+
+    func test_adaptive_mobile_transfer_client_retries_preferred_lan_after_cooldown_when_recovered() async throws {
+        let lanClient = RecordingTransferClient(
+            lookupError: TransferClientError.transport(message: "LAN unavailable"),
+            lookupFailuresRemaining: 1
+        )
+        let usbClient = RecordingTransferClient()
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .usb)
+        let candidates = [
+            TransferAssetExistenceCandidate(
+                assetID: "ph://asset-001",
+                contentSHA1: "sha1-001",
+                fileSize: 42,
+                createdAt: Date(timeIntervalSince1970: 1_776_123_610)
+            ),
+        ]
+
+        _ = try await adaptiveClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: .lan
+        )
+        _ = try await adaptiveClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: .lan
+        )
+        try await Task.sleep(nanoseconds: 600_000_000)
+        _ = try await adaptiveClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: .lan
+        )
+
+        let lanLookupCalls = await lanClient.lookupCalls()
+        let usbLookupCalls = await usbClient.lookupCalls()
+        XCTAssertEqual(lanLookupCalls, 2)
+        XCTAssertEqual(usbLookupCalls, 2)
+    }
+
     private func trustedDesktop(transport: TransferTransport) -> TrustedDesktopRecord {
         TrustedDesktopRecord(
             desktopDeviceID: "desktop-device-001",
@@ -266,11 +350,21 @@ private struct ProcessResult {
 
 private actor RecordingTransferClient: MobileTransferClient, USBTransportConnectivityChecking {
     private let startSessionError: Error?
+    private let lookupError: Error?
+    private var lookupFailuresRemaining: Int?
     private let usbConnected: Bool
     private var startCallCount = 0
+    private var lookupCallCount = 0
 
-    init(startSessionError: Error? = nil, usbConnected: Bool = false) {
+    init(
+        startSessionError: Error? = nil,
+        lookupError: Error? = nil,
+        lookupFailuresRemaining: Int? = nil,
+        usbConnected: Bool = false
+    ) {
         self.startSessionError = startSessionError
+        self.lookupError = lookupError
+        self.lookupFailuresRemaining = lookupFailuresRemaining
         self.usbConnected = usbConnected
     }
 
@@ -285,7 +379,16 @@ private actor RecordingTransferClient: MobileTransferClient, USBTransportConnect
         _ candidates: [TransferAssetExistenceCandidate],
         desktop: TrustedDesktopRecord
     ) async throws -> [String: TransferAssetExistenceMatch] {
-        [:]
+        lookupCallCount += 1
+        if let failuresRemaining = lookupFailuresRemaining {
+            if failuresRemaining > 0 {
+                lookupFailuresRemaining = failuresRemaining - 1
+                throw lookupError ?? TransferClientError.transport(message: "Synthetic lookup failure")
+            }
+        } else if let lookupError {
+            throw lookupError
+        }
+        return [:]
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
@@ -319,6 +422,10 @@ private actor RecordingTransferClient: MobileTransferClient, USBTransportConnect
 
     func startCalls() -> Int {
         startCallCount
+    }
+
+    func lookupCalls() -> Int {
+        lookupCallCount
     }
 
     func isUSBTransportConnected() async -> Bool {
