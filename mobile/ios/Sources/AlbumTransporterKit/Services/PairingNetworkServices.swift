@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 
 struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
     let session: URLSession
@@ -120,17 +121,20 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
 struct DesktopBootstrapPairingService: PairingService {
     let bootstrapClient: PairingBootstrapClient
     let usbBootstrapClient: PairingUSBBootstrapClient?
+    let capabilityExchangeClient: (any MobileCapabilityExchangeClient)?
     let identityProvider: LocalDeviceIdentityProviding
     let trustedDesktopStore: TrustedDesktopStore
 
     init(
         bootstrapClient: PairingBootstrapClient,
         usbBootstrapClient: PairingUSBBootstrapClient? = nil,
+        capabilityExchangeClient: (any MobileCapabilityExchangeClient)? = nil,
         identityProvider: LocalDeviceIdentityProviding,
         trustedDesktopStore: TrustedDesktopStore
     ) {
         self.bootstrapClient = bootstrapClient
         self.usbBootstrapClient = usbBootstrapClient
+        self.capabilityExchangeClient = capabilityExchangeClient
         self.identityProvider = identityProvider
         self.trustedDesktopStore = trustedDesktopStore
     }
@@ -192,6 +196,14 @@ struct DesktopBootstrapPairingService: PairingService {
                 pairedAt: pairedAt
             )
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)
+#if DEBUG
+            if let capabilityExchangeClient {
+                Self.startDebugCapabilityExchangeBurst(
+                    using: capabilityExchangeClient,
+                    desktop: trustedRecord
+                )
+            }
+#endif
 
             return PairingStatus(
                 phase: .paired,
@@ -283,11 +295,81 @@ struct DesktopBootstrapPairingService: PairingService {
         let digest = SHA256.hash(data: Data(material.utf8))
         return Data(digest).base64URLEncodedString()
     }
+
+#if DEBUG
+    private static func startDebugCapabilityExchangeBurst(
+        using client: any MobileCapabilityExchangeClient,
+        desktop: TrustedDesktopRecord
+    ) {
+        Task.detached(priority: .background) {
+            PairingDebugLogger.debug(
+                "PairingDebug/capability_exchange: starting burst session_id=\(desktop.lastSessionID) "
+                    + "transport=\(desktop.transport.rawValue) requests=10"
+            )
+
+            for requestIndex in 1 ... 10 {
+                let capabilityPayload = debugCapabilityPayload(
+                    requestIndex: requestIndex,
+                    desktop: desktop
+                )
+                do {
+                    let response = try await client.exchangeCapabilities(capabilityPayload, desktop: desktop)
+                    PairingDebugLogger.debug(
+                        "PairingDebug/capability_exchange: request=\(requestIndex)/10 "
+                            + "status=\(response.status.rawValue) "
+                            + "sent_capabilities=\(capabilityPayload.keys.sorted()) "
+                            + "received_capabilities=\((response.capabilities ?? [:]).keys.sorted()) "
+                            + "session_id=\(desktop.lastSessionID)"
+                    )
+                } catch {
+                    PairingDebugLogger.error(
+                        "PairingDebug/capability_exchange: request=\(requestIndex)/10 failed "
+                            + "session_id=\(desktop.lastSessionID) error=\(error.localizedDescription)"
+                    )
+                }
+
+                if requestIndex < 10 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+            }
+
+            PairingDebugLogger.debug(
+                "PairingDebug/capability_exchange: completed burst session_id=\(desktop.lastSessionID)"
+            )
+        }
+    }
+
+    private static func debugCapabilityPayload(
+        requestIndex: Int,
+        desktop: TrustedDesktopRecord
+    ) -> [String: Int] {
+        [
+            "debug.mobile.capability.burst": 1,
+            "debug.mobile.capability.request_\(requestIndex)": 1,
+            "debug.mobile.transport.\(desktop.transport.rawValue)": 1,
+        ]
+    }
+#endif
 }
 
 private struct PairingBootstrapAttempt {
     let endpoint: URL
     let response: PairingClaimResponse
+}
+
+private enum PairingDebugLogger {
+    private static let logger = Logger(
+        subsystem: "AlbumTransporterKit.Pairing",
+        category: "CapabilityExchange"
+    )
+
+    static func debug(_ message: String) {
+        logger.debug("\(message, privacy: .public)")
+    }
+
+    static func error(_ message: String) {
+        logger.error("\(message, privacy: .public)")
+    }
 }
 
 private extension PairingServiceError {

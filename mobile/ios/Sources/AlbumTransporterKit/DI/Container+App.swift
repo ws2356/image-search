@@ -36,6 +36,10 @@ extension Container {
             DesktopBootstrapPairingService(
                 bootstrapClient: self.pairingBootstrapClient(),
                 usbBootstrapClient: self.pairingUSBBootstrapClient(),
+                capabilityExchangeClient: AdaptiveMobileTransferClient(
+                    lanClient: URLSessionMobileTransferClient(usePerBackupEphemeralSession: true),
+                    usbClient: WebSocketMobileTransferClient(runtime: self.usbTransportRuntime())
+                ),
                 identityProvider: self.localDeviceIdentityProvider(),
                 trustedDesktopStore: self.trustedDesktopStore()
             )
