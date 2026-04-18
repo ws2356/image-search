@@ -56,10 +56,9 @@ class UpdatePromptDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch(1)
 
-        if self._is_required:
-            cancel_button = QPushButton("Cancel", self)
-            cancel_button.clicked.connect(self._on_cancel_clicked)
-            button_layout.addWidget(cancel_button)
+        cancel_button = QPushButton("Cancel", self)
+        cancel_button.clicked.connect(self._on_cancel_clicked)
+        button_layout.addWidget(cancel_button)
 
         update_button = QPushButton("Update", self)
         update_button.setDefault(True)
@@ -97,7 +96,10 @@ class UpdatePromptDialog(QDialog):
         self.accept()
 
     def _on_cancel_clicked(self) -> None:
-        self._quit_application(reason="required_update_cancel")
+        if self._is_required:
+            self._quit_application(reason="required_update_cancel")
+            return
+        self.reject()
 
     def _quit_application(self, *, reason: str) -> None:
         app = QApplication.instance()
