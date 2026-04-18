@@ -8,6 +8,7 @@ enum MobileTransportProtocol {
     static let authChallengeOperation = "transport.auth.challenge"
     static let authChallengeBodySchema = "dtis.mobile-pairing.v1"
     static let pairingClaimOperation = "pairing.claim"
+    static let capabilityExchangeOperation = "capabilities.exchange"
     static let transferStartOperation = "transfer.start"
     static let transferExistenceOperation = "transfer.existence"
     static let transferAssetOperation = "transfer.asset"
@@ -99,6 +100,18 @@ private func nanoseconds(from seconds: TimeInterval) -> UInt64 {
         return UInt64.max
     }
     return UInt64(nanoseconds.rounded())
+}
+
+private func normalizedCapabilityExchangeFlags(_ capabilityFlags: [String: Int]) -> [String: Int] {
+    var normalizedFlags: [String: Int] = [:]
+    for (capabilityName, capabilityValue) in capabilityFlags {
+        let trimmedCapabilityName = capabilityName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCapabilityName.isEmpty, capabilityValue == 1 else {
+            continue
+        }
+        normalizedFlags[trimmedCapabilityName] = 1
+    }
+    return normalizedFlags
 }
 
 actor USBWebSocketTransportRuntime {
@@ -852,7 +865,7 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
     }
 }
 
-struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnectivityChecking {
+struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, USBTransportConnectivityChecking {
     let runtime: USBWebSocketTransportRuntime
     let responseTimeout: TimeInterval
 
@@ -1013,6 +1026,31 @@ struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnecti
         }
     }
 
+    func exchangeCapabilities(
+        _ mobileCapabilities: [String: Int],
+        desktop: TrustedDesktopRecord
+    ) async throws -> CapabilityExchangeResponse {
+        let request = CapabilityExchangeRequest(
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            trustKey: desktop.sharedKeyBase64,
+            capabilities: normalizedCapabilityExchangeFlags(mobileCapabilities)
+        )
+        let response = try await sendTransferEnvelope(
+            operation: MobileTransportProtocol.capabilityExchangeOperation,
+            request: request,
+            responseType: CapabilityExchangeResponse.self,
+            bodySchema: CapabilityExchangeProtocol.schema,
+            expectedSchema: CapabilityExchangeProtocol.schema
+        )
+        switch response.status {
+        case .accepted:
+            return response
+        case .rejected:
+            throw TransferClientError.rejected(message: response.message)
+        }
+    }
+
     func isUSBTransportConnected() async -> Bool {
         await runtime.isConnected()
     }
@@ -1020,17 +1058,19 @@ struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnecti
     private func sendTransferEnvelope<RequestBody: Encodable & Sendable, ResponseBody: TransferSchemaResponse>(
         operation: String,
         request: RequestBody,
-        responseType: ResponseBody.Type
+        responseType: ResponseBody.Type,
+        bodySchema: String = TransferProtocol.schema,
+        expectedSchema: String = TransferProtocol.schema
     ) async throws -> ResponseBody {
         do {
             let runtimeResponse = try await runtime.sendRequest(
                 operation: operation,
-                bodySchema: TransferProtocol.schema,
+                bodySchema: bodySchema,
                 request: request,
                 timeout: responseTimeout
             )
             let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: runtimeResponse.bodyData)
-            guard decodedResponse.schema == TransferProtocol.schema else {
+            guard decodedResponse.schema == expectedSchema else {
                 throw TransferClientError.unsupportedResponseSchema
             }
 
@@ -1048,7 +1088,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, USBTransportConnecti
     }
 }
 
-actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving {
+actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, TransferTransportResolving, TransferLiveTransportResolving {
     private static let preferredTransportRetryCooldownSeconds: TimeInterval = 3
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
@@ -1164,6 +1204,31 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Tran
                     failedCount: failedCount,
                     interruptionReason: interruptionReason
                 )
+            }
+        )
+    }
+
+    func exchangeCapabilities(
+        _ mobileCapabilities: [String: Int],
+        desktop: TrustedDesktopRecord
+    ) async throws -> CapabilityExchangeResponse {
+        let normalizedCapabilities = normalizedCapabilityExchangeFlags(mobileCapabilities)
+        return try await executeWithFallback(
+            operationName: MobileTransportProtocol.capabilityExchangeOperation,
+            desktop: desktop,
+            usbOperation: {
+                guard let usbCapabilityClient = usbClient as? any MobileCapabilityExchangeClient else {
+                    throw TransferClientError.transport(message: "USB capability exchange transport is unavailable.")
+                }
+                let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
+                return try await usbCapabilityClient.exchangeCapabilities(normalizedCapabilities, desktop: usbDesktop)
+            },
+            lanOperation: {
+                guard let lanCapabilityClient = lanClient as? any MobileCapabilityExchangeClient else {
+                    throw TransferClientError.transport(message: "LAN capability exchange transport is unavailable.")
+                }
+                let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
+                return try await lanCapabilityClient.exchangeCapabilities(normalizedCapabilities, desktop: lanDesktop)
             }
         )
     }

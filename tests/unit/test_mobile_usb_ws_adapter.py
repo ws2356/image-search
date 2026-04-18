@@ -352,6 +352,37 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertEqual(response.payload["status"], "rejected")
         self.assertIn("does not support", response.payload["message"])
 
+    def test_dispatch_text_envelope_routes_capability_exchange_operation(self):
+        observed_payloads = []
+
+        def handler(request):
+            observed_payloads.append(request.payload)
+            return MobileTransportResponse(
+                status_code=200,
+                payload={
+                    "schema": "dtis.mobile-capabilities.v1",
+                    "status": "accepted",
+                    "capabilities": {},
+                },
+            )
+
+        self._router.register("capabilities.exchange", handler)
+        response = self._adapter.dispatch_text_envelope(
+            (
+                '{"schema":"dtis.mobile-transport.v1","operation":"capabilities.exchange",'
+                '"request_id":"req-capability-001","body":{'
+                '"schema":"dtis.mobile-capabilities.v1","session_id":"session-001",'
+                '"device_uuid":"ios-device-001","trust_key":"trust-key","capabilities":{"encrypted_transfer":1}'
+                '}}'
+            ),
+            remote_address="usb://ios-001",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.payload["status"], "accepted")
+        self.assertEqual(len(observed_payloads), 1)
+        self.assertEqual(observed_payloads[0]["session_id"], "session-001")
+
     def test_dispatch_text_envelope_rejects_transfer_asset_without_stream_state(self):
         response = self._adapter.dispatch_text_envelope(
             json.dumps(

@@ -17,6 +17,7 @@ from dt_image_search.mobile.transport.asset_upload_stream import (
     TransferAssetUploadStream,
 )
 from dt_image_search.mobile.transport.contracts import (
+    CAPABILITY_EXCHANGE_OPERATION,
     PAIRING_CLAIM_OPERATION,
     TRANSFER_ASSET_OPERATION,
     TRANSFER_COMPLETE_OPERATION,
@@ -62,6 +63,8 @@ class LanHttpTransportAdapter:
         pairing_protocol_schema: str,
         pairing_rejected_status: str,
         transfer_schema: str,
+        capability_exchange_schema: str,
+        capability_exchange_path: str,
         transfer_start_path: str,
         transfer_existence_path: str,
         transfer_asset_path: str,
@@ -77,6 +80,8 @@ class LanHttpTransportAdapter:
         self._pairing_protocol_schema = pairing_protocol_schema
         self._pairing_rejected_status = pairing_rejected_status
         self._transfer_schema = transfer_schema
+        self._capability_exchange_schema = capability_exchange_schema
+        self._capability_exchange_path = capability_exchange_path
         self._transfer_start_path = transfer_start_path
         self._transfer_existence_path = transfer_existence_path
         self._transfer_asset_path = transfer_asset_path
@@ -206,6 +211,18 @@ class LanHttpTransportAdapter:
                         if request_payload is None:
                             return
                         self._dispatch_operation(TRANSFER_COMPLETE_OPERATION, request_payload)
+                        return
+
+                    if parsed_path.path == adapter._capability_exchange_path:
+                        request_payload = self._read_json_payload(
+                            schema=adapter._capability_exchange_schema,
+                            status="rejected",
+                            parse_error_message="Desktop could not parse the capability exchange JSON payload.",
+                            object_error_message="Desktop requires JSON object payloads for capability exchange requests.",
+                        )
+                        if request_payload is None:
+                            return
+                        self._dispatch_operation(CAPABILITY_EXCHANGE_OPERATION, request_payload)
                         return
 
                     if parsed_path.path == adapter._transfer_asset_path:

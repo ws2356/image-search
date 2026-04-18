@@ -1,4 +1,5 @@
 from dt_image_search.mobile.transport.contracts import (
+    CAPABILITY_EXCHANGE_OPERATION,
     PAIRING_CLAIM_OPERATION,
     TRANSFER_ASSET_OPERATION,
     TRANSFER_COMPLETE_OPERATION,
@@ -33,6 +34,7 @@ from dt_image_search.mobile.transport.usb_tunnel import (
 )
 
 __all__ = [
+    "CAPABILITY_EXCHANGE_OPERATION",
     "PAIRING_CLAIM_OPERATION",
     "TRANSFER_START_OPERATION",
     "TRANSFER_EXISTENCE_OPERATION",

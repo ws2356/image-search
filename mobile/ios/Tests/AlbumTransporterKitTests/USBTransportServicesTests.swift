@@ -131,6 +131,49 @@ final class USBTransportServicesTests: XCTestCase {
         XCTAssertEqual(resolvedTransport, .usb)
     }
 
+    func test_adaptive_mobile_transfer_client_exchanges_capabilities_over_connected_usb() async throws {
+        let lanClient = RecordingTransferClient()
+        let usbClient = RecordingTransferClient(usbConnected: true)
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .lan)
+
+        let response = try await adaptiveClient.exchangeCapabilities(
+            ["encrypted_transfer": 1, "bluetooth": 0],
+            desktop: desktop
+        )
+
+        let lanCapabilityExchangeCalls = await lanClient.capabilityExchangeCalls()
+        let usbCapabilityExchangeCalls = await usbClient.capabilityExchangeCalls()
+        XCTAssertEqual(response.status, .accepted)
+        XCTAssertEqual(response.capabilities ?? [:], [:])
+        XCTAssertEqual(usbCapabilityExchangeCalls, 1)
+        XCTAssertEqual(lanCapabilityExchangeCalls, 0)
+    }
+
+    func test_adaptive_mobile_transfer_client_falls_back_to_lan_for_capability_exchange_when_usb_fails() async throws {
+        let lanClient = RecordingTransferClient()
+        let usbClient = RecordingTransferClient(
+            capabilityExchangeError: TransferClientError.transport(message: "USB capability exchange failed")
+        )
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .usb)
+
+        let response = try await adaptiveClient.exchangeCapabilities(["encrypted_transfer": 1], desktop: desktop)
+
+        let lanCapabilityExchangeCalls = await lanClient.capabilityExchangeCalls()
+        let usbCapabilityExchangeCalls = await usbClient.capabilityExchangeCalls()
+        XCTAssertEqual(response.status, .accepted)
+        XCTAssertEqual(response.capabilities ?? [:], [:])
+        XCTAssertEqual(usbCapabilityExchangeCalls, 1)
+        XCTAssertEqual(lanCapabilityExchangeCalls, 1)
+    }
+
     func test_adaptive_mobile_transfer_client_skips_preferred_lan_after_initial_lan_failure() async throws {
         let lanClient = RecordingTransferClient(
             lookupError: TransferClientError.transport(message: "LAN unavailable")
@@ -348,23 +391,27 @@ private struct ProcessResult {
     let outputSummary: String
 }
 
-private actor RecordingTransferClient: MobileTransferClient, USBTransportConnectivityChecking {
+private actor RecordingTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, USBTransportConnectivityChecking {
     private let startSessionError: Error?
     private let lookupError: Error?
     private var lookupFailuresRemaining: Int?
+    private let capabilityExchangeError: Error?
     private let usbConnected: Bool
     private var startCallCount = 0
     private var lookupCallCount = 0
+    private var capabilityExchangeCallCount = 0
 
     init(
         startSessionError: Error? = nil,
         lookupError: Error? = nil,
         lookupFailuresRemaining: Int? = nil,
+        capabilityExchangeError: Error? = nil,
         usbConnected: Bool = false
     ) {
         self.startSessionError = startSessionError
         self.lookupError = lookupError
         self.lookupFailuresRemaining = lookupFailuresRemaining
+        self.capabilityExchangeError = capabilityExchangeError
         self.usbConnected = usbConnected
     }
 
@@ -420,12 +467,34 @@ private actor RecordingTransferClient: MobileTransferClient, USBTransportConnect
         )
     }
 
+    func exchangeCapabilities(
+        _ mobileCapabilities: [String: Int],
+        desktop: TrustedDesktopRecord
+    ) async throws -> CapabilityExchangeResponse {
+        capabilityExchangeCallCount += 1
+        if let capabilityExchangeError {
+            throw capabilityExchangeError
+        }
+        return CapabilityExchangeResponse(
+            schema: CapabilityExchangeProtocol.schema,
+            status: .accepted,
+            message: "accepted",
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            capabilities: [:]
+        )
+    }
+
     func startCalls() -> Int {
         startCallCount
     }
 
     func lookupCalls() -> Int {
         lookupCallCount
+    }
+
+    func capabilityExchangeCalls() -> Int {
+        capabilityExchangeCallCount
     }
 
     func isUSBTransportConnected() async -> Bool {

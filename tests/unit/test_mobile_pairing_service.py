@@ -19,6 +19,10 @@ from dt_image_search.mobile.mobile_pairing_service import (
     PairingResultState,
     _is_ignorable_socket_disconnect,
 )
+from dt_image_search.mobile.mobile_capability_exchange_service import (
+    MOBILE_CAPABILITY_EXCHANGE_PATH,
+    MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
+)
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
 from dt_image_search.mobile.transport.lan_http_adapter import LanHttpEndpointInfo
@@ -265,6 +269,93 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(response_payload["status"], "rejected")
         self.assertIn("Desktop failed while processing the pairing request.", response_payload["message"])
 
+    def test_live_capability_exchange_http_endpoint_accepts_authenticated_request(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+        client_nonce = "feature-exchange-nonce-001"
+        device_uuid = "ios-live-feature-001"
+        status_code, pairing_response = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": device_uuid,
+                "device_name": "Capability Exchange iPhone",
+                "client_nonce": client_nonce,
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(status_code, 200)
+
+        trust_key = derive_pairing_key_b64(
+            session_id=session.session_id,
+            one_time_passcode=token.one_time_passcode,
+            device_uuid=device_uuid,
+            platform="ios",
+            client_nonce=client_nonce,
+            server_nonce=pairing_response["server_nonce"],
+            desktop_device_id=pairing_response["desktop_device_id"],
+        )
+        exchange_status, exchange_payload = self._post_json_request(
+            path=MOBILE_CAPABILITY_EXCHANGE_PATH,
+            payload={
+                "schema": MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
+                "session_id": session.session_id,
+                "device_uuid": device_uuid,
+                "trust_key": trust_key,
+                "capabilities": {
+                    "encrypted_transfer": 1,
+                    "bluetooth": 1,
+                },
+            },
+        )
+
+        self.assertEqual(exchange_status, 200)
+        self.assertEqual(exchange_payload["schema"], MOBILE_CAPABILITY_EXCHANGE_SCHEMA)
+        self.assertEqual(exchange_payload["status"], "accepted")
+        self.assertEqual(exchange_payload["session_id"], session.session_id)
+        self.assertEqual(exchange_payload["device_uuid"], device_uuid)
+        self.assertEqual(exchange_payload["capabilities"], {})
+
+    def test_live_capability_exchange_http_endpoint_rejects_invalid_trust_key(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+        status_code, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-live-feature-reject-001",
+                "device_name": "Feature Reject iPhone",
+                "client_nonce": "feature-exchange-reject-nonce-001",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(status_code, 200)
+
+        exchange_status, exchange_payload = self._post_json_request(
+            path=MOBILE_CAPABILITY_EXCHANGE_PATH,
+            payload={
+                "schema": MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
+                "session_id": session.session_id,
+                "device_uuid": "ios-live-feature-reject-001",
+                "trust_key": "invalid-trust-key",
+                "capabilities": {
+                    "encrypted_transfer": 1,
+                },
+            },
+        )
+
+        self.assertEqual(exchange_status, 403)
+        self.assertEqual(exchange_payload["schema"], MOBILE_CAPABILITY_EXCHANGE_SCHEMA)
+        self.assertEqual(exchange_payload["status"], "rejected")
+        self.assertEqual(exchange_payload["capabilities"], {})
+        self.assertIn("rejected", exchange_payload["message"])
+
     def test_pairing_succeeds_after_mobile_folder_row_is_removed(self):
         now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)
         first_session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
@@ -474,12 +565,16 @@ class TestMobilePairingService(unittest.TestCase):
 
     def _post_pairing_request(self, payload: dict[str, str]) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)
+        return self._post_json_request(path=endpoint.path, payload=payload)
+
+    def _post_json_request(self, *, path: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+        endpoint = urlsplit(self._pairing_service.endpoint_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
             encoded_payload = json.dumps(payload).encode("utf-8")
             connection.request(
                 "POST",
-                endpoint.path,
+                path,
                 body=encoded_payload,
                 headers={
                     "Content-Type": "application/json",

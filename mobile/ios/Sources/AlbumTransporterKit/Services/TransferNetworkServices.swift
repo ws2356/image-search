@@ -14,6 +14,11 @@ enum TransferProtocol {
     static let completePath = "/api/mobile/transfer/complete"
 }
 
+enum CapabilityExchangeProtocol {
+    static let schema = "dtis.mobile-capabilities.v1"
+    static let exchangePath = "/api/mobile/capabilities/exchange"
+}
+
 enum TransferAssetStreamProtocol {
     static let chunkSizeBytes = 5 * 1024 * 1024
     static let requestIDQueryField = "request_id"
@@ -75,6 +80,22 @@ struct TransferExistenceRequest: Codable, Sendable {
     }
 }
 
+struct CapabilityExchangeRequest: Codable, Sendable {
+    var schema = CapabilityExchangeProtocol.schema
+    var sessionID: String
+    var deviceUUID: String
+    var trustKey: String
+    var capabilities: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+        case trustKey = "trust_key"
+        case capabilities
+    }
+}
+
 enum TransferResponseStatus: String, Codable, Sendable {
     case accepted
     case stored
@@ -85,6 +106,11 @@ enum TransferResponseStatus: String, Codable, Sendable {
 
 enum TransferExistenceResponseStatus: String, Codable, Sendable {
     case checked
+    case rejected
+}
+
+enum CapabilityExchangeResponseStatus: String, Codable, Sendable {
+    case accepted
     case rejected
 }
 
@@ -123,6 +149,24 @@ struct TransferExistenceResponse: Codable, Sendable {
         case sessionID = "session_id"
         case deviceUUID = "device_uuid"
         case matches
+    }
+}
+
+struct CapabilityExchangeResponse: Codable, Sendable, TransferSchemaResponse {
+    var schema: String
+    var status: CapabilityExchangeResponseStatus
+    var message: String
+    var sessionID: String?
+    var deviceUUID: String?
+    var capabilities: [String: Int]?
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case status
+        case message
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+        case capabilities
     }
 }
 
@@ -349,6 +393,13 @@ protocol MobileTransferClient: Sendable {
     ) async throws -> TransferServerResponse
 }
 
+protocol MobileCapabilityExchangeClient: Sendable {
+    func exchangeCapabilities(
+        _ mobileCapabilities: [String: Int],
+        desktop: TrustedDesktopRecord
+    ) async throws -> CapabilityExchangeResponse
+}
+
 protocol PreferredTransportMobileTransferClient: MobileTransferClient {
     func lookupExistingAssets(
         _ candidates: [TransferAssetExistenceCandidate],
@@ -406,6 +457,18 @@ protocol TransferSchemaResponse: Decodable {
 
 extension TransferServerResponse: TransferSchemaResponse {}
 extension TransferExistenceResponse: TransferSchemaResponse {}
+
+private func normalizedSupportedCapabilityFlags(_ capabilityFlags: [String: Int]) -> [String: Int] {
+    var normalizedFlags: [String: Int] = [:]
+    for (capabilityName, capabilityValue) in capabilityFlags {
+        let trimmedCapabilityName = capabilityName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCapabilityName.isEmpty, capabilityValue == 1 else {
+            continue
+        }
+        normalizedFlags[trimmedCapabilityName] = 1
+    }
+    return normalizedFlags
+}
 
 private enum TransferDebugLogger {
     private static let logger = Logger(
@@ -517,7 +580,7 @@ private actor TransferSessionURLSessionStore {
     }
 }
 
-struct URLSessionMobileTransferClient: MobileTransferClient {
+struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient {
     private let defaultSession: URLSession
     private let usePerBackupEphemeralSession: Bool
     private let sessionStore: TransferSessionURLSessionStore
@@ -596,6 +659,33 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
                 "Desktop transfer signature check failed session_id=\(desktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
             throw error
+        }
+    }
+
+    func exchangeCapabilities(
+        _ mobileCapabilities: [String: Int],
+        desktop: TrustedDesktopRecord
+    ) async throws -> CapabilityExchangeResponse {
+        let activeSession = await activeSession(for: desktop)
+        let request = CapabilityExchangeRequest(
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            trustKey: desktop.sharedKeyBase64,
+            capabilities: normalizedSupportedCapabilityFlags(mobileCapabilities)
+        )
+        let endpoint = transferURL(for: desktop, path: CapabilityExchangeProtocol.exchangePath)
+        let response = try await postJSON(
+            to: endpoint,
+            body: request,
+            responseType: CapabilityExchangeResponse.self,
+            expectedSchema: CapabilityExchangeProtocol.schema,
+            using: activeSession
+        )
+        switch response.status {
+        case .accepted:
+            return response
+        case .rejected:
+            throw TransferClientError.rejected(message: response.message)
         }
     }
 
@@ -838,6 +928,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         to endpoint: URL,
         body: RequestBody,
         responseType: ResponseBody.Type,
+        expectedSchema: String = TransferProtocol.schema,
         using session: URLSession
     ) async throws -> ResponseBody {
         var urlRequest = URLRequest(url: endpoint)
@@ -846,7 +937,12 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(body)
-        return try await execute(request: urlRequest, responseType: responseType, using: session)
+        return try await execute(
+            request: urlRequest,
+            responseType: responseType,
+            expectedSchema: expectedSchema,
+            using: session
+        )
     }
 
     private func uploadData(
@@ -882,6 +978,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
     private func execute<ResponseBody: TransferSchemaResponse>(
         request: URLRequest,
         responseType: ResponseBody.Type,
+        expectedSchema: String = TransferProtocol.schema,
         using session: URLSession
     ) async throws -> ResponseBody {
         let data: Data
@@ -891,7 +988,12 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
         }
-        return try decodeResponse(data: data, response: response, responseType: responseType)
+        return try decodeResponse(
+            data: data,
+            response: response,
+            responseType: responseType,
+            expectedSchema: expectedSchema
+        )
     }
 
     private func activeSession(for desktop: TrustedDesktopRecord) async -> URLSession {
@@ -911,7 +1013,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
     private func decodeResponse<ResponseBody: TransferSchemaResponse>(
         data: Data,
         response: URLResponse,
-        responseType: ResponseBody.Type
+        responseType: ResponseBody.Type,
+        expectedSchema: String = TransferProtocol.schema
     ) throws -> ResponseBody {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TransferClientError.invalidHTTPResponse
@@ -920,9 +1023,9 @@ struct URLSessionMobileTransferClient: MobileTransferClient {
         let bodyPreview = TransferDebugLogger.responseBodyPreview(from: data)
         do {
             let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: data)
-            guard decodedResponse.schema == TransferProtocol.schema else {
+            guard decodedResponse.schema == expectedSchema else {
                 TransferDebugLogger.error(
-                    "Unsupported transfer response schema http_status=\(httpResponse.statusCode) schema=\(decodedResponse.schema) body=\(bodyPreview)"
+                    "Unsupported transfer response schema http_status=\(httpResponse.statusCode) schema=\(decodedResponse.schema) expected=\(expectedSchema) body=\(bodyPreview)"
                 )
                 throw TransferClientError.unsupportedResponseSchema
             }
