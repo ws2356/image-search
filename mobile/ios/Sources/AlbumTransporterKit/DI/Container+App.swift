@@ -33,13 +33,15 @@ extension Container {
 
     var pairingService: Factory<PairingService> {
         self {
-            DesktopBootstrapPairingService(
+            let pairingDebugTransportClient = AdaptiveMobileTransferClient(
+                lanClient: URLSessionMobileTransferClient(usePerBackupEphemeralSession: true),
+                usbClient: WebSocketMobileTransferClient(runtime: self.usbTransportRuntime())
+            )
+            return DesktopBootstrapPairingService(
                 bootstrapClient: self.pairingBootstrapClient(),
                 usbBootstrapClient: self.pairingUSBBootstrapClient(),
-                capabilityExchangeClient: AdaptiveMobileTransferClient(
-                    lanClient: URLSessionMobileTransferClient(usePerBackupEphemeralSession: true),
-                    usbClient: WebSocketMobileTransferClient(runtime: self.usbTransportRuntime())
-                ),
+                capabilityExchangeClient: pairingDebugTransportClient,
+                updatePromptClient: pairingDebugTransportClient,
                 identityProvider: self.localDeviceIdentityProvider(),
                 trustedDesktopStore: self.trustedDesktopStore()
             )

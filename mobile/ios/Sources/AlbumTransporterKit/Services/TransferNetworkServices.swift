@@ -19,6 +19,11 @@ enum CapabilityExchangeProtocol {
     static let exchangePath = "/api/mobile/capabilities/exchange"
 }
 
+enum UpdatePromptProtocol {
+    static let schema = "dtis.mobile-update.v1"
+    static let promptPath = "/api/mobile/update/prompt"
+}
+
 enum TransferAssetStreamProtocol {
     static let chunkSizeBytes = 5 * 1024 * 1024
     static let requestIDQueryField = "request_id"
@@ -96,6 +101,26 @@ struct CapabilityExchangeRequest: Codable, Sendable {
     }
 }
 
+struct UpdatePromptRequest: Codable, Sendable {
+    var schema = UpdatePromptProtocol.schema
+    var sessionID: String
+    var deviceUUID: String
+    var trustKey: String
+    var required: Bool
+    var bodyText: String?
+    var updateDestination: String?
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+        case trustKey = "trust_key"
+        case required
+        case bodyText = "body_text"
+        case updateDestination = "update_destination"
+    }
+}
+
 enum TransferResponseStatus: String, Codable, Sendable {
     case accepted
     case stored
@@ -110,6 +135,11 @@ enum TransferExistenceResponseStatus: String, Codable, Sendable {
 }
 
 enum CapabilityExchangeResponseStatus: String, Codable, Sendable {
+    case accepted
+    case rejected
+}
+
+enum UpdatePromptResponseStatus: String, Codable, Sendable {
     case accepted
     case rejected
 }
@@ -167,6 +197,24 @@ struct CapabilityExchangeResponse: Codable, Sendable, TransferSchemaResponse {
         case sessionID = "session_id"
         case deviceUUID = "device_uuid"
         case capabilities
+    }
+}
+
+struct UpdatePromptResponse: Codable, Sendable, TransferSchemaResponse {
+    var schema: String
+    var status: UpdatePromptResponseStatus
+    var message: String
+    var sessionID: String?
+    var deviceUUID: String?
+    var required: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case status
+        case message
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+        case required
     }
 }
 
@@ -400,6 +448,15 @@ protocol MobileCapabilityExchangeClient: Sendable {
     ) async throws -> CapabilityExchangeResponse
 }
 
+protocol MobileUpdatePromptClient: Sendable {
+    func sendUpdatePrompt(
+        required: Bool,
+        bodyText: String?,
+        updateDestination: String?,
+        desktop: TrustedDesktopRecord
+    ) async throws -> UpdatePromptResponse
+}
+
 protocol PreferredTransportMobileTransferClient: MobileTransferClient {
     func lookupExistingAssets(
         _ candidates: [TransferAssetExistenceCandidate],
@@ -580,7 +637,7 @@ private actor TransferSessionURLSessionStore {
     }
 }
 
-struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient {
+struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient {
     private let defaultSession: URLSession
     private let usePerBackupEphemeralSession: Bool
     private let sessionStore: TransferSessionURLSessionStore
@@ -679,6 +736,37 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             body: request,
             responseType: CapabilityExchangeResponse.self,
             expectedSchema: CapabilityExchangeProtocol.schema,
+            using: activeSession
+        )
+        switch response.status {
+        case .accepted:
+            return response
+        case .rejected:
+            throw TransferClientError.rejected(message: response.message)
+        }
+    }
+
+    func sendUpdatePrompt(
+        required: Bool,
+        bodyText: String?,
+        updateDestination: String?,
+        desktop: TrustedDesktopRecord
+    ) async throws -> UpdatePromptResponse {
+        let activeSession = await activeSession(for: desktop)
+        let request = UpdatePromptRequest(
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            trustKey: desktop.sharedKeyBase64,
+            required: required,
+            bodyText: bodyText,
+            updateDestination: updateDestination
+        )
+        let endpoint = transferURL(for: desktop, path: UpdatePromptProtocol.promptPath)
+        let response = try await postJSON(
+            to: endpoint,
+            body: request,
+            responseType: UpdatePromptResponse.self,
+            expectedSchema: UpdatePromptProtocol.schema,
             using: activeSession
         )
         switch response.status {

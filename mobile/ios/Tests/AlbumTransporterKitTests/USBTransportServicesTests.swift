@@ -174,6 +174,54 @@ final class USBTransportServicesTests: XCTestCase {
         XCTAssertEqual(lanCapabilityExchangeCalls, 1)
     }
 
+    func test_adaptive_mobile_transfer_client_sends_update_prompt_over_connected_usb() async throws {
+        let lanClient = RecordingTransferClient()
+        let usbClient = RecordingTransferClient(usbConnected: true)
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .lan)
+
+        let response = try await adaptiveClient.sendUpdatePrompt(
+            required: false,
+            bodyText: "Please update for new features.",
+            updateDestination: "https://example.com/update",
+            desktop: desktop
+        )
+
+        let lanUpdatePromptCalls = await lanClient.updatePromptCalls()
+        let usbUpdatePromptCalls = await usbClient.updatePromptCalls()
+        XCTAssertEqual(response.status, .accepted)
+        XCTAssertEqual(usbUpdatePromptCalls, 1)
+        XCTAssertEqual(lanUpdatePromptCalls, 0)
+    }
+
+    func test_adaptive_mobile_transfer_client_falls_back_to_lan_for_update_prompt_when_usb_fails() async throws {
+        let lanClient = RecordingTransferClient()
+        let usbClient = RecordingTransferClient(
+            updatePromptError: TransferClientError.transport(message: "USB update prompt failed")
+        )
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .usb)
+
+        let response = try await adaptiveClient.sendUpdatePrompt(
+            required: false,
+            bodyText: "Please update for new features.",
+            updateDestination: "https://example.com/update",
+            desktop: desktop
+        )
+
+        let lanUpdatePromptCalls = await lanClient.updatePromptCalls()
+        let usbUpdatePromptCalls = await usbClient.updatePromptCalls()
+        XCTAssertEqual(response.status, .accepted)
+        XCTAssertEqual(usbUpdatePromptCalls, 1)
+        XCTAssertEqual(lanUpdatePromptCalls, 1)
+    }
+
     func test_adaptive_mobile_transfer_client_skips_preferred_lan_after_initial_lan_failure() async throws {
         let lanClient = RecordingTransferClient(
             lookupError: TransferClientError.transport(message: "LAN unavailable")
@@ -391,27 +439,31 @@ private struct ProcessResult {
     let outputSummary: String
 }
 
-private actor RecordingTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, USBTransportConnectivityChecking {
+private actor RecordingTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, USBTransportConnectivityChecking {
     private let startSessionError: Error?
     private let lookupError: Error?
     private var lookupFailuresRemaining: Int?
     private let capabilityExchangeError: Error?
+    private let updatePromptError: Error?
     private let usbConnected: Bool
     private var startCallCount = 0
     private var lookupCallCount = 0
     private var capabilityExchangeCallCount = 0
+    private var updatePromptCallCount = 0
 
     init(
         startSessionError: Error? = nil,
         lookupError: Error? = nil,
         lookupFailuresRemaining: Int? = nil,
         capabilityExchangeError: Error? = nil,
+        updatePromptError: Error? = nil,
         usbConnected: Bool = false
     ) {
         self.startSessionError = startSessionError
         self.lookupError = lookupError
         self.lookupFailuresRemaining = lookupFailuresRemaining
         self.capabilityExchangeError = capabilityExchangeError
+        self.updatePromptError = updatePromptError
         self.usbConnected = usbConnected
     }
 
@@ -485,6 +537,26 @@ private actor RecordingTransferClient: MobileTransferClient, MobileCapabilityExc
         )
     }
 
+    func sendUpdatePrompt(
+        required: Bool,
+        bodyText: String?,
+        updateDestination: String?,
+        desktop: TrustedDesktopRecord
+    ) async throws -> UpdatePromptResponse {
+        updatePromptCallCount += 1
+        if let updatePromptError {
+            throw updatePromptError
+        }
+        return UpdatePromptResponse(
+            schema: UpdatePromptProtocol.schema,
+            status: .accepted,
+            message: "accepted",
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            required: required
+        )
+    }
+
     func startCalls() -> Int {
         startCallCount
     }
@@ -495,6 +567,10 @@ private actor RecordingTransferClient: MobileTransferClient, MobileCapabilityExc
 
     func capabilityExchangeCalls() -> Int {
         capabilityExchangeCallCount
+    }
+
+    func updatePromptCalls() -> Int {
+        updatePromptCallCount
     }
 
     func isUSBTransportConnected() async -> Bool {

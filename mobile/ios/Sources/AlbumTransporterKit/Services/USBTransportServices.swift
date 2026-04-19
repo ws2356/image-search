@@ -9,6 +9,7 @@ enum MobileTransportProtocol {
     static let authChallengeBodySchema = "dtis.mobile-pairing.v1"
     static let pairingClaimOperation = "pairing.claim"
     static let capabilityExchangeOperation = "capabilities.exchange"
+    static let updatePromptOperation = "update.prompt"
     static let transferStartOperation = "transfer.start"
     static let transferExistenceOperation = "transfer.existence"
     static let transferAssetOperation = "transfer.asset"
@@ -865,7 +866,7 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
     }
 }
 
-struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, USBTransportConnectivityChecking {
+struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, USBTransportConnectivityChecking {
     let runtime: USBWebSocketTransportRuntime
     let responseTimeout: TimeInterval
 
@@ -1051,6 +1052,35 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
         }
     }
 
+    func sendUpdatePrompt(
+        required: Bool,
+        bodyText: String?,
+        updateDestination: String?,
+        desktop: TrustedDesktopRecord
+    ) async throws -> UpdatePromptResponse {
+        let request = UpdatePromptRequest(
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            trustKey: desktop.sharedKeyBase64,
+            required: required,
+            bodyText: bodyText,
+            updateDestination: updateDestination
+        )
+        let response = try await sendTransferEnvelope(
+            operation: MobileTransportProtocol.updatePromptOperation,
+            request: request,
+            responseType: UpdatePromptResponse.self,
+            bodySchema: UpdatePromptProtocol.schema,
+            expectedSchema: UpdatePromptProtocol.schema
+        )
+        switch response.status {
+        case .accepted:
+            return response
+        case .rejected:
+            throw TransferClientError.rejected(message: response.message)
+        }
+    }
+
     func isUSBTransportConnected() async -> Bool {
         await runtime.isConnected()
     }
@@ -1088,7 +1118,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
     }
 }
 
-actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, TransferTransportResolving, TransferLiveTransportResolving {
+actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving {
     private static let preferredTransportRetryCooldownSeconds: TimeInterval = 3
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
@@ -1229,6 +1259,42 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Mobi
                 }
                 let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
                 return try await lanCapabilityClient.exchangeCapabilities(normalizedCapabilities, desktop: lanDesktop)
+            }
+        )
+    }
+
+    func sendUpdatePrompt(
+        required: Bool,
+        bodyText: String?,
+        updateDestination: String?,
+        desktop: TrustedDesktopRecord
+    ) async throws -> UpdatePromptResponse {
+        try await executeWithFallback(
+            operationName: MobileTransportProtocol.updatePromptOperation,
+            desktop: desktop,
+            usbOperation: {
+                guard let usbUpdateClient = usbClient as? any MobileUpdatePromptClient else {
+                    throw TransferClientError.transport(message: "USB update prompt transport is unavailable.")
+                }
+                let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
+                return try await usbUpdateClient.sendUpdatePrompt(
+                    required: required,
+                    bodyText: bodyText,
+                    updateDestination: updateDestination,
+                    desktop: usbDesktop
+                )
+            },
+            lanOperation: {
+                guard let lanUpdateClient = lanClient as? any MobileUpdatePromptClient else {
+                    throw TransferClientError.transport(message: "LAN update prompt transport is unavailable.")
+                }
+                let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
+                return try await lanUpdateClient.sendUpdatePrompt(
+                    required: required,
+                    bodyText: bodyText,
+                    updateDestination: updateDestination,
+                    desktop: lanDesktop
+                )
             }
         )
     }

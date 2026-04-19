@@ -122,6 +122,7 @@ struct DesktopBootstrapPairingService: PairingService {
     let bootstrapClient: PairingBootstrapClient
     let usbBootstrapClient: PairingUSBBootstrapClient?
     let capabilityExchangeClient: (any MobileCapabilityExchangeClient)?
+    let updatePromptClient: (any MobileUpdatePromptClient)?
     let identityProvider: LocalDeviceIdentityProviding
     let trustedDesktopStore: TrustedDesktopStore
 
@@ -129,12 +130,14 @@ struct DesktopBootstrapPairingService: PairingService {
         bootstrapClient: PairingBootstrapClient,
         usbBootstrapClient: PairingUSBBootstrapClient? = nil,
         capabilityExchangeClient: (any MobileCapabilityExchangeClient)? = nil,
+        updatePromptClient: (any MobileUpdatePromptClient)? = nil,
         identityProvider: LocalDeviceIdentityProviding,
         trustedDesktopStore: TrustedDesktopStore
     ) {
         self.bootstrapClient = bootstrapClient
         self.usbBootstrapClient = usbBootstrapClient
         self.capabilityExchangeClient = capabilityExchangeClient
+        self.updatePromptClient = updatePromptClient
         self.identityProvider = identityProvider
         self.trustedDesktopStore = trustedDesktopStore
     }
@@ -197,6 +200,12 @@ struct DesktopBootstrapPairingService: PairingService {
             )
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)
 #if DEBUG
+            if let updatePromptClient {
+                Self.startDebugUpdatePromptRequest(
+                    using: updatePromptClient,
+                    desktop: trustedRecord
+                )
+            }
             if let capabilityExchangeClient {
                 Self.startDebugCapabilityExchangeBurst(
                     using: capabilityExchangeClient,
@@ -297,6 +306,34 @@ struct DesktopBootstrapPairingService: PairingService {
     }
 
 #if DEBUG
+    private static let debugUpdatePromptBodyText = "DEBUG: Mobile triggered optional update prompt after pairing."
+    private static let debugUpdatePromptDestination = "https://apps.microsoft.com/detail/9n5n8gvnrzdn?ref=mobile-debug-trigger"
+
+    private static func startDebugUpdatePromptRequest(
+        using client: any MobileUpdatePromptClient,
+        desktop: TrustedDesktopRecord
+    ) {
+        Task.detached(priority: .background) {
+            do {
+                let response = try await client.sendUpdatePrompt(
+                    required: false,
+                    bodyText: debugUpdatePromptBodyText,
+                    updateDestination: debugUpdatePromptDestination,
+                    desktop: desktop
+                )
+                PairingDebugLogger.debug(
+                    "PairingDebug/update_prompt: sent after pairing "
+                        + "status=\(response.status.rawValue) session_id=\(desktop.lastSessionID)"
+                )
+            } catch {
+                PairingDebugLogger.error(
+                    "PairingDebug/update_prompt: failed after pairing "
+                        + "session_id=\(desktop.lastSessionID) error=\(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
     private static func startDebugCapabilityExchangeBurst(
         using client: any MobileCapabilityExchangeClient,
         desktop: TrustedDesktopRecord
