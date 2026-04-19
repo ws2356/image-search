@@ -6,6 +6,7 @@ from enum import Enum
 import secrets
 import socket
 import threading
+from typing import Callable
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_discovery import discover_advertised_hosts
@@ -19,6 +20,7 @@ from dt_image_search.mobile.mobile_pairing_store import (
     get_or_create_desktop_device_id,
     get_or_create_mobile_folder,
     insert_mobile_backup_session,
+    repair_mobile_folder_device_binding,
     upsert_mobile_device,
 )
 from dt_image_search.mobile.mobile_capability_exchange_service import (
@@ -91,6 +93,28 @@ class MobilePairingResult:
     transport: str | None = None
 
 
+class MobileBackupAgainDecision(str, Enum):
+    CONTINUE_IN_SELECTED_FOLDER = "continue_in_selected_folder"
+    BACKUP_IN_NEW_FOLDER = "backup_in_new_folder"
+    CANCEL = "cancel"
+
+
+@dataclass(frozen=True)
+class MobileBackupAgainMismatchContext:
+    selected_folder_path: str
+    previous_device_uuid: str
+    replacement_device_uuid: str
+    replacement_device_name: str
+
+
+@dataclass(frozen=True)
+class MobileBackupAgainSessionContext:
+    selected_folder_id: int
+    selected_folder_path: str
+    expected_device_uuid: str
+    mismatch_resolver: Callable[[MobileBackupAgainMismatchContext], MobileBackupAgainDecision]
+
+
 class MobilePairingService:
     def __init__(
         self,
@@ -108,6 +132,8 @@ class MobilePairingService:
         self._endpoint_url: str | None = None
         self._endpoint_urls: tuple[str, ...] = tuple()
         self._active_session: MobilePairingSessionDraft | None = None
+        self._active_backup_again_context: MobileBackupAgainSessionContext | None = None
+        self._pairing_request_in_progress = False
         self._transfer_service = MobileTransferService(ctx)
         self._capability_exchange_service = MobileCapabilityExchangeService(ctx)
         self._update_prompt_service = MobileUpdatePromptService(ctx)
@@ -143,6 +169,7 @@ class MobilePairingService:
     def start_pairing_session(
         self,
         destination_parent: str,
+        backup_again_context: MobileBackupAgainSessionContext | None = None,
         now: datetime | None = None,
     ) -> MobilePairingSessionDraft:
         self._ensure_server_started()
@@ -152,6 +179,8 @@ class MobilePairingService:
                 desktop_endpoint_urls=self.endpoint_urls,
                 now=now,
             )
+            self._active_backup_again_context = backup_again_context
+            self._pairing_request_in_progress = False
             active_session = self._active_session
             self._pairing_result = MobilePairingResult(
                 state=PairingResultState.WAITING,
@@ -192,6 +221,8 @@ class MobilePairingService:
             closing_session = self._active_session
             should_stop_usb = self._pairing_result.state != PairingResultState.ACCEPTED
             self._active_session = None
+            self._active_backup_again_context = None
+            self._pairing_request_in_progress = False
             self._pairing_result = MobilePairingResult(
                 state=PairingResultState.WAITING,
                 message="Scan the QR code from the mobile app to begin pairing.",
@@ -207,6 +238,8 @@ class MobilePairingService:
             self._endpoint_url = None
             self._endpoint_urls = tuple()
             self._active_session = None
+            self._active_backup_again_context = None
+            self._pairing_request_in_progress = False
             self._transfer_transport_by_session_id.clear()
             app_foreground_state_subscription = self._app_foreground_state_subscription
             self._app_foreground_state_subscription = None
@@ -229,6 +262,12 @@ class MobilePairingService:
 
             if self._pairing_result.state == PairingResultState.ACCEPTED:
                 return _response(status_code=409, state=PairingResultState.REJECTED, message="This pairing session was already accepted.")
+            if self._pairing_request_in_progress:
+                return _response(
+                    status_code=409,
+                    state=PairingResultState.REJECTED,
+                    message="Desktop is already resolving another pairing request.",
+                )
 
             required_fields = ("schema", "sid", "opt", "platform", "device_uuid", "device_name", "client_nonce")
             for field_name in required_fields:
@@ -276,6 +315,54 @@ class MobilePairingService:
             device_name = request_payload["device_name"].strip()
             client_nonce = request_payload["client_nonce"].strip()
             server_nonce = secrets.token_urlsafe(24)
+            backup_again_context = self._active_backup_again_context
+            self._pairing_request_in_progress = True
+
+        try:
+            backup_again_decision = MobileBackupAgainDecision.BACKUP_IN_NEW_FOLDER
+            if (
+                backup_again_context is not None
+                and device_uuid != backup_again_context.expected_device_uuid
+            ):
+                mismatch_context = MobileBackupAgainMismatchContext(
+                    selected_folder_path=backup_again_context.selected_folder_path,
+                    previous_device_uuid=backup_again_context.expected_device_uuid,
+                    replacement_device_uuid=device_uuid,
+                    replacement_device_name=device_name,
+                )
+                try:
+                    resolved_decision = backup_again_context.mismatch_resolver(mismatch_context)
+                except Exception as exc:
+                    _log(
+                        "error",
+                        error_type=type(exc).__name__,
+                        message=(
+                            "MobilePairingService/handle_pairing_request: "
+                            f"failed to resolve backup-again mismatch: {exc}"
+                        ),
+                    )
+                    return _response(
+                        status_code=500,
+                        state=PairingResultState.REJECTED,
+                        message="Desktop failed while resolving the mobile pairing mismatch.",
+                    )
+                if isinstance(resolved_decision, MobileBackupAgainDecision):
+                    backup_again_decision = resolved_decision
+                if backup_again_decision == MobileBackupAgainDecision.CANCEL:
+                    return _response(
+                        status_code=409,
+                        state=PairingResultState.REJECTED,
+                        message="Desktop canceled this pairing request. Start Back Up Again to retry.",
+                    )
+
+            with self._lock:
+                current_session = self._active_session
+                if current_session is None or current_session.session_id != active_session.session_id:
+                    return _response(
+                        status_code=404,
+                        state=PairingResultState.REJECTED,
+                        message="There is no active desktop pairing session.",
+                    )
 
             with create_db_conn(ctx=self._ctx) as conn:
                 desktop_device_id = get_or_create_desktop_device_id(conn)
@@ -296,13 +383,27 @@ class MobilePairingService:
                     trust_key_b64=trust_key_b64,
                     paired_at=current_time,
                 )
-                folder_record = get_or_create_mobile_folder(
-                    conn,
-                    destination_parent=active_session.destination_parent,
-                    device_uuid=device_uuid,
-                    device_name=device_name,
-                    updated_at=current_time,
-                )
+                if (
+                    backup_again_context is not None
+                    and device_uuid != backup_again_context.expected_device_uuid
+                    and backup_again_decision == MobileBackupAgainDecision.CONTINUE_IN_SELECTED_FOLDER
+                ):
+                    folder_record = repair_mobile_folder_device_binding(
+                        conn,
+                        folder_id=backup_again_context.selected_folder_id,
+                        folder_path=backup_again_context.selected_folder_path,
+                        previous_device_uuid=backup_again_context.expected_device_uuid,
+                        replacement_device_uuid=device_uuid,
+                        updated_at=current_time,
+                    )
+                else:
+                    folder_record = get_or_create_mobile_folder(
+                        conn,
+                        destination_parent=active_session.destination_parent,
+                        device_uuid=device_uuid,
+                        device_name=device_name,
+                        updated_at=current_time,
+                    )
                 insert_mobile_backup_session(
                     conn,
                     session_id=active_session.session_id,
@@ -318,15 +419,31 @@ class MobilePairingService:
                 acceptance_message = f"Pairing accepted for {device_name}. Desktop is ready for USB transfer."
             else:
                 acceptance_message = f"Pairing accepted for {device_name}. Desktop is ready for LAN transfer."
-            self._pairing_result = MobilePairingResult(
-                state=PairingResultState.ACCEPTED,
-                message=acceptance_message,
-                device_name=device_name,
-                device_uuid=device_uuid,
-                folder_path=folder_record.folder_path,
-                session_id=active_session.session_id,
-                transport=selected_transport,
-            )
+
+            with self._lock:
+                current_session = self._active_session
+                if current_session is None or current_session.session_id != active_session.session_id:
+                    return _response(
+                        status_code=404,
+                        state=PairingResultState.REJECTED,
+                        message="There is no active desktop pairing session.",
+                    )
+                if self._pairing_result.state == PairingResultState.ACCEPTED:
+                    return _response(
+                        status_code=409,
+                        state=PairingResultState.REJECTED,
+                        message="This pairing session was already accepted.",
+                    )
+                self._pairing_result = MobilePairingResult(
+                    state=PairingResultState.ACCEPTED,
+                    message=acceptance_message,
+                    device_name=device_name,
+                    device_uuid=device_uuid,
+                    folder_path=folder_record.folder_path,
+                    session_id=active_session.session_id,
+                    transport=selected_transport,
+                )
+
             _log(
                 "info",
                 message=(
@@ -352,6 +469,9 @@ class MobilePairingService:
                     "server_nonce": server_nonce,
                 },
             )
+        finally:
+            with self._lock:
+                self._pairing_request_in_progress = False
 
     def _register_transport_routes(self) -> None:
         self._transport_router.register(PAIRING_CLAIM_OPERATION, self._dispatch_pairing_claim_operation)

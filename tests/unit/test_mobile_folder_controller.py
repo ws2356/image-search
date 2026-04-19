@@ -10,9 +10,14 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
-from dt_image_search.mobile.mobile_pairing_service import MobilePairingResult, PairingResultState
+from dt_image_search.mobile.mobile_pairing_service import (
+    MobileBackupAgainDecision,
+    MobileBackupAgainMismatchContext,
+    MobilePairingResult,
+    PairingResultState,
+)
 from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft
-from dt_image_search.model.dts_db import create_db_conn, get_config, set_config
+from dt_image_search.model.dts_db import create_db_conn, get_config, insert_folder, set_config
 
 mobile_folder_controller_module = importlib.import_module("dt_image_search.mobile.mobile_folder_controller")
 
@@ -37,6 +42,7 @@ class _FakePairingService:
     def __init__(self, session: MobilePairingSessionDraft):
         self._session = session
         self.started_with: str | None = None
+        self.backup_again_context = None
         self.closed = False
         self._result = MobilePairingResult(
             state=PairingResultState.WAITING,
@@ -44,8 +50,13 @@ class _FakePairingService:
             session_id=session.session_id,
         )
 
-    def start_pairing_session(self, destination_parent: str) -> MobilePairingSessionDraft:
+    def start_pairing_session(
+        self,
+        destination_parent: str,
+        backup_again_context=None,
+    ) -> MobilePairingSessionDraft:
         self.started_with = destination_parent
+        self.backup_again_context = backup_again_context
         self._session.set_destination_parent(destination_parent)
         return self._session
 
@@ -175,6 +186,95 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         self.assertIsNone(result_session)
         self.assertIsNone(fake_pairing_service.started_with)
         self.assertFalse(fake_pairing_service.closed)
+
+    def test_start_backup_again_flow_starts_pairing_from_selected_mobile_folder_parent(self):
+        destination_parent = (Path(self._temp_dir.name) / "Mobile Backups").resolve()
+        destination_parent.mkdir(parents=True, exist_ok=True)
+        mobile_folder = (destination_parent / "Alice iPhone").resolve()
+        mobile_folder.mkdir(parents=True, exist_ok=True)
+
+        pairing_session = MobilePairingSessionDraft.create(
+            destination_parent=destination_parent.as_posix(),
+            desktop_endpoint_url="http://127.0.0.1:54921/api/mobile/pairing/claim",
+        )
+        fake_pairing_service = _FakePairingService(pairing_session)
+        with create_db_conn(ctx=self._ctx) as conn:
+            folder = insert_folder(conn, mobile_folder.as_posix())
+            self.assertIsNotNone(folder)
+            conn.execute(
+                """
+                INSERT INTO mobile_devices (
+                    device_uuid,
+                    platform,
+                    device_name,
+                    trust_key_b64,
+                    paired_at,
+                    last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "ios-device-old-001",
+                    "ios",
+                    "Alice iPhone",
+                    "trust-old",
+                    "2026-04-10T00:00:00+00:00",
+                    "2026-04-10T00:00:00+00:00",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_folders (folder_id, device_uuid, transfer_state, transfer_state_updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    int(folder.id),
+                    "ios-device-old-001",
+                    "paired",
+                    "2026-04-10T00:00:00+00:00",
+                ),
+            )
+            conn.commit()
+
+        with (
+            patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()),
+            patch.object(
+                mobile_folder_controller_module.MobileFolderCoordinator,
+                "_ensure_usb_prerequisites",
+                return_value=True,
+            ),
+            patch.object(mobile_folder_controller_module, "MobilePairingDialog", _FakePairingDialog),
+        ):
+            coordinator = mobile_folder_controller_module.MobileFolderCoordinator(self._ctx)
+            with patch.object(coordinator, "_get_pairing_service", return_value=fake_pairing_service):
+                result_session = coordinator.start_backup_again_flow(mobile_folder.as_posix())
+
+        self.assertIsNotNone(result_session)
+        self.assertEqual(fake_pairing_service.started_with, destination_parent.as_posix())
+        self.assertIsNotNone(fake_pairing_service.backup_again_context)
+        self.assertEqual(fake_pairing_service.backup_again_context.selected_folder_path, mobile_folder.as_posix())
+        self.assertEqual(fake_pairing_service.backup_again_context.expected_device_uuid, "ios-device-old-001")
+
+    def test_resolve_backup_again_mismatch_uses_prompt_result_on_main_thread(self):
+        with patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()):
+            coordinator = mobile_folder_controller_module.MobileFolderCoordinator(self._ctx)
+
+        mismatch_context = MobileBackupAgainMismatchContext(
+            selected_folder_path="/tmp/mobile-folder",
+            previous_device_uuid="old-device",
+            replacement_device_uuid="new-device",
+            replacement_device_name="Replacement iPhone",
+        )
+        with patch.object(
+            coordinator,
+            "_prompt_backup_again_mismatch",
+            return_value=MobileBackupAgainDecision.CONTINUE_IN_SELECTED_FOLDER,
+        ), patch(
+            "dt_image_search.mobile.mobile_folder_controller.QThread.isMainThread",
+            return_value=True,
+        ):
+            decision = coordinator._resolve_backup_again_mismatch(mismatch_context)
+
+        self.assertEqual(decision, MobileBackupAgainDecision.CONTINUE_IN_SELECTED_FOLDER)
 
 
 if __name__ == "__main__":

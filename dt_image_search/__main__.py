@@ -403,13 +403,27 @@ class MainWindow(QMainWindow):
         folder_path = item.data(Qt.UserRole) if item else None
         if not folder_path:
             return
+        is_mobile_folder = bool(
+            model
+            and hasattr(model, "is_mobile_folder_path")
+            and model.is_mobile_folder_path(folder_path)
+        )
         menu = QMenu(self)
+        if is_mobile_folder and is_mobile_folder_enabled():
+            backup_again_action = menu.addAction("Back Up Again")
+            backup_again_action.triggered.connect(
+                lambda: self._start_mobile_folder_backup_again(folder_path)
+            )
+            menu.addSeparator()
         open_action = menu.addAction("Open Folder")
         open_action.triggered.connect(lambda: self._open_folder_in_explorer(folder_path))
         menu.addSeparator()
         remove_action = menu.addAction("Remove Folder")
         remove_action.triggered.connect(lambda: QTimer.singleShot(200, lambda: self.safe_execute_delete(p_index, folder_path)))
         menu.exec(self.ui.browsePageFolderTreeView.mapToGlobal(pos))
+
+    def _start_mobile_folder_backup_again(self, folder_path: str) -> None:
+        self._ensure_mobile_folder_coordinator().start_backup_again_flow(folder_path, self)
 
     def safe_execute_delete(self, p_index, folder_path):
         if not p_index.isValid():
