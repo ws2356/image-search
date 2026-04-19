@@ -5,6 +5,7 @@ import json
 import socket
 import threading
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -14,6 +15,7 @@ _FEATURE_FLAGS_ENDPOINT = "https://api.boldman.net/image-search/features"
 _FEATURE_FLAGS_TIMEOUT_SECONDS = 10
 _FEATURE_FLAGS_MAX_RETRIES = 3
 _FEATURE_FLAGS_RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0)
+_FEATURE_FLAGS_CACHE_FILENAME = "feature_flags_remote_cache.json"
 
 
 class _FeatureFlagStore:
@@ -29,6 +31,13 @@ class _FeatureFlagStore:
         with self._lock:
             if self._mobile_folder_enabled is not None:
                 return self._mobile_folder_enabled
+
+            cached_payload = _load_cached_feature_flags_payload()
+            cached_enabled = _extract_mobile_folder_enabled(cached_payload) if cached_payload is not None else None
+            if cached_enabled is not None:
+                self._mobile_folder_enabled = cached_enabled
+                return self._mobile_folder_enabled
+
             self._mobile_folder_enabled = is_mobile_folder_feature_enabled()
             return self._mobile_folder_enabled
 
@@ -49,6 +58,7 @@ class _FeatureFlagStore:
         from dt_image_search.telemetry.telemetry_client import log
         try:
             payload = _fetch_feature_flags_payload()
+            _save_cached_feature_flags_payload(payload)
             remote_enabled = _extract_mobile_folder_enabled(payload)
             if remote_enabled is None:
                 log("warning", message="FeatureFlags: remote payload missing mobile_folder.enabled.")
@@ -140,6 +150,44 @@ def _sleep_before_retry(*, retry_attempt: int, reason: str) -> None:
         ),
     )
     time.sleep(delay_seconds)
+
+
+def _feature_flags_cache_path() -> Path:
+    from dt_image_search.bm_context import get_context
+    from dt_image_search.model.dts_fs import get_app_data_path
+
+    return get_app_data_path(get_context()) / _FEATURE_FLAGS_CACHE_FILENAME
+
+
+def _load_cached_feature_flags_payload() -> dict | None:
+    from dt_image_search.telemetry.telemetry_client import log
+
+    cache_path = _feature_flags_cache_path()
+    if not cache_path.exists():
+        return None
+
+    try:
+        with cache_path.open("r", encoding="utf-8") as cache_file:
+            payload = json.load(cache_file)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        log("warning", message=f"FeatureFlags: failed to load cached remote flags: {exc}")
+        return None
+
+    if not isinstance(payload, dict):
+        log("warning", message="FeatureFlags: cached remote flags payload must be a JSON object.")
+        return None
+    return payload
+
+
+def _save_cached_feature_flags_payload(payload: dict) -> None:
+    from dt_image_search.telemetry.telemetry_client import log
+
+    cache_path = _feature_flags_cache_path()
+    try:
+        with cache_path.open("w", encoding="utf-8") as cache_file:
+            json.dump(payload, cache_file, ensure_ascii=False)
+    except (OSError, TypeError, ValueError) as exc:
+        log("warning", message=f"FeatureFlags: failed to save cached remote flags: {exc}")
 
 
 def _extract_mobile_folder_enabled(payload: dict) -> bool | None:
