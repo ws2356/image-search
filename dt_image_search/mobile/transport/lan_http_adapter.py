@@ -23,6 +23,7 @@ from dt_image_search.mobile.transport.contracts import (
     TRANSFER_COMPLETE_OPERATION,
     TRANSFER_EXISTENCE_OPERATION,
     TRANSFER_START_OPERATION,
+    UPDATE_PROMPT_OPERATION,
     MobileTransportContext,
     MobileTransportKind,
 )
@@ -65,6 +66,8 @@ class LanHttpTransportAdapter:
         transfer_schema: str,
         capability_exchange_schema: str,
         capability_exchange_path: str,
+        update_prompt_schema: str,
+        update_prompt_path: str,
         transfer_start_path: str,
         transfer_existence_path: str,
         transfer_asset_path: str,
@@ -82,6 +85,8 @@ class LanHttpTransportAdapter:
         self._transfer_schema = transfer_schema
         self._capability_exchange_schema = capability_exchange_schema
         self._capability_exchange_path = capability_exchange_path
+        self._update_prompt_schema = update_prompt_schema
+        self._update_prompt_path = update_prompt_path
         self._transfer_start_path = transfer_start_path
         self._transfer_existence_path = transfer_existence_path
         self._transfer_asset_path = transfer_asset_path
@@ -223,6 +228,18 @@ class LanHttpTransportAdapter:
                         if request_payload is None:
                             return
                         self._dispatch_operation(CAPABILITY_EXCHANGE_OPERATION, request_payload)
+                        return
+
+                    if parsed_path.path == adapter._update_prompt_path:
+                        request_payload = self._read_json_payload(
+                            schema=adapter._update_prompt_schema,
+                            status="rejected",
+                            parse_error_message="Desktop could not parse the update prompt JSON payload.",
+                            object_error_message="Desktop requires JSON object payloads for update prompt requests.",
+                        )
+                        if request_payload is None:
+                            return
+                        self._dispatch_operation(UPDATE_PROMPT_OPERATION, request_payload)
                         return
 
                     if parsed_path.path == adapter._transfer_asset_path:

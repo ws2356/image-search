@@ -5,6 +5,7 @@ from dt_image_search.mobile.transport.contracts import (
     TRANSFER_COMPLETE_OPERATION,
     TRANSFER_EXISTENCE_OPERATION,
     TRANSFER_START_OPERATION,
+    UPDATE_PROMPT_OPERATION,
     MobileTransportContext,
     MobileTransportKind,
     MobileTransportRequest,
@@ -36,6 +37,7 @@ from dt_image_search.mobile.transport.usb_tunnel import (
 __all__ = [
     "CAPABILITY_EXCHANGE_OPERATION",
     "PAIRING_CLAIM_OPERATION",
+    "UPDATE_PROMPT_OPERATION",
     "TRANSFER_START_OPERATION",
     "TRANSFER_EXISTENCE_OPERATION",
     "TRANSFER_ASSET_OPERATION",

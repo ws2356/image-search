@@ -23,6 +23,11 @@ from dt_image_search.mobile.mobile_capability_exchange_service import (
     MOBILE_CAPABILITY_EXCHANGE_PATH,
     MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
 )
+from dt_image_search.mobile.mobile_update_prompt_service import (
+    MOBILE_UPDATE_PROMPT_PATH,
+    MOBILE_UPDATE_PROMPT_REQUESTED_EVENT,
+    MOBILE_UPDATE_PROMPT_SCHEMA,
+)
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
 from dt_image_search.mobile.transport.lan_http_adapter import LanHttpEndpointInfo
@@ -355,6 +360,108 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(exchange_payload["status"], "rejected")
         self.assertEqual(exchange_payload["capabilities"], {})
         self.assertIn("rejected", exchange_payload["message"])
+
+    def test_live_update_prompt_http_endpoint_accepts_authenticated_request(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+        client_nonce = "update-prompt-nonce-001"
+        device_uuid = "ios-live-update-001"
+        status_code, pairing_response = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": device_uuid,
+                "device_name": "Update Prompt iPhone",
+                "client_nonce": client_nonce,
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(status_code, 200)
+
+        observed_events: list[dict[str, object]] = []
+        subscription = default_bus.subscribe(
+            MOBILE_UPDATE_PROMPT_REQUESTED_EVENT,
+            lambda **kwargs: observed_events.append(dict(kwargs)),
+        )
+        self.addCleanup(subscription.dispose)
+
+        trust_key = derive_pairing_key_b64(
+            session_id=session.session_id,
+            one_time_passcode=token.one_time_passcode,
+            device_uuid=device_uuid,
+            platform="ios",
+            client_nonce=client_nonce,
+            server_nonce=pairing_response["server_nonce"],
+            desktop_device_id=pairing_response["desktop_device_id"],
+        )
+        update_status, update_payload = self._post_json_request(
+            path=MOBILE_UPDATE_PROMPT_PATH,
+            payload={
+                "schema": MOBILE_UPDATE_PROMPT_SCHEMA,
+                "session_id": session.session_id,
+                "device_uuid": device_uuid,
+                "trust_key": trust_key,
+                "required": True,
+                "body_text": "Please install the latest update now.",
+                "update_destination": "https://example.com/update",
+            },
+        )
+
+        self.assertEqual(update_status, 200)
+        self.assertEqual(update_payload["schema"], MOBILE_UPDATE_PROMPT_SCHEMA)
+        self.assertEqual(update_payload["status"], "accepted")
+        self.assertEqual(update_payload["required"], True)
+        self.assertEqual(len(observed_events), 1)
+        self.assertEqual(observed_events[0]["required"], True)
+        self.assertEqual(observed_events[0]["session_id"], session.session_id)
+        self.assertEqual(
+            observed_events[0]["update_destination"],
+            "https://example.com/update",
+        )
+
+    def test_live_update_prompt_http_endpoint_rejects_invalid_trust_key(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+        status_code, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-live-update-reject-001",
+                "device_name": "Update Reject iPhone",
+                "client_nonce": "update-prompt-reject-nonce-001",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(status_code, 200)
+
+        observed_events: list[dict[str, object]] = []
+        subscription = default_bus.subscribe(
+            MOBILE_UPDATE_PROMPT_REQUESTED_EVENT,
+            lambda **kwargs: observed_events.append(dict(kwargs)),
+        )
+        self.addCleanup(subscription.dispose)
+
+        update_status, update_payload = self._post_json_request(
+            path=MOBILE_UPDATE_PROMPT_PATH,
+            payload={
+                "schema": MOBILE_UPDATE_PROMPT_SCHEMA,
+                "session_id": session.session_id,
+                "device_uuid": "ios-live-update-reject-001",
+                "trust_key": "invalid-trust-key",
+                "required": False,
+            },
+        )
+
+        self.assertEqual(update_status, 403)
+        self.assertEqual(update_payload["schema"], MOBILE_UPDATE_PROMPT_SCHEMA)
+        self.assertEqual(update_payload["status"], "rejected")
+        self.assertEqual(len(observed_events), 0)
 
     def test_pairing_succeeds_after_mobile_folder_row_is_removed(self):
         now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)

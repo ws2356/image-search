@@ -383,6 +383,40 @@ class TestUsbWebSocketTransportAdapter(unittest.TestCase):
         self.assertEqual(len(observed_payloads), 1)
         self.assertEqual(observed_payloads[0]["session_id"], "session-001")
 
+    def test_dispatch_text_envelope_routes_update_prompt_operation(self):
+        observed_payloads = []
+
+        def handler(request):
+            observed_payloads.append(request.payload)
+            return MobileTransportResponse(
+                status_code=200,
+                payload={
+                    "schema": "dtis.mobile-update.v1",
+                    "status": "accepted",
+                    "required": True,
+                },
+            )
+
+        self._router.register("update.prompt", handler)
+        response = self._adapter.dispatch_text_envelope(
+            (
+                '{"schema":"dtis.mobile-transport.v1","operation":"update.prompt",'
+                '"request_id":"req-update-001","body":{'
+                '"schema":"dtis.mobile-update.v1","session_id":"session-001",'
+                '"device_uuid":"ios-device-001","trust_key":"trust-key",'
+                '"required":true,'
+                '"body_text":"Please update now.",'
+                '"update_destination":"https://example.com/update"'
+                '}}'
+            ),
+            remote_address="usb://ios-001",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.payload["status"], "accepted")
+        self.assertEqual(len(observed_payloads), 1)
+        self.assertEqual(observed_payloads[0]["required"], True)
+
     def test_dispatch_text_envelope_rejects_transfer_asset_without_stream_state(self):
         response = self._adapter.dispatch_text_envelope(
             json.dumps(

@@ -30,7 +30,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle
-from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
+from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 QCoreApplication.setOrganizationName("net.boldman")
@@ -47,6 +47,7 @@ from PySide6.QtGui import QAction, QDesktopServices, QIcon, QStandardItem
 import subprocess
 
 from dt_image_search.view.dts_mainwindow_ui import Ui_MainWindow
+from dt_image_search.view.dts_update_prompt_dialog import UpdatePromptDialog
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
 from dt_image_search.index.index_worker import init_index_workers, deinit_index_workers
@@ -62,6 +63,7 @@ from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
 from dt_image_search.mobile import MobileFolderCoordinator, MobileSourceType
 from dt_image_search.mobile.mobile_pairing_service import MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT
+from dt_image_search.mobile.mobile_update_prompt_service import MOBILE_UPDATE_PROMPT_REQUESTED_EVENT
 from dt_image_search.telemetry.crash_support import CrashRecoveryManager
 from dt_image_search.tools.dts_event_bus import default_bus
 
@@ -161,6 +163,8 @@ def setup_activation_server(ctx: BMContext, window: QMainWindow) -> None:
 
 
 class MainWindow(QMainWindow):
+    show_update_prompt_signal = Signal(bool, str, str)
+
     def __init__(self, ctx: BMContext):
         super().__init__()
         from dt_image_search.telemetry.telemetry_client import log
@@ -171,6 +175,11 @@ class MainWindow(QMainWindow):
 
         self._alternativeController = None
         self._mode = _BrowseMode
+        self._update_prompt_subscription = default_bus.subscribe(
+            MOBILE_UPDATE_PROMPT_REQUESTED_EVENT,
+            self._on_update_prompt_requested,
+        )
+        self.show_update_prompt_signal.connect(self._show_update_prompt_dialog)
 
         self.browse_controller = BrowseController(ctx=self.ctx)
         self.controller = self.browse_controller
@@ -243,6 +252,38 @@ class MainWindow(QMainWindow):
         self.ui.searchInputField.installEventFilter(self.esc_clear_filter)
         self._register_image_list_double_click_handler()
         self._register_image_list_context_menu_handler()
+
+    def _on_update_prompt_requested(
+        self,
+        *,
+        required: object,
+        body_text: object = None,
+        update_destination: object = None,
+        **_: object,
+    ) -> None:
+        required_value = bool(required)
+        body_text_value = body_text if isinstance(body_text, str) else ""
+        update_destination_value = update_destination if isinstance(update_destination, str) else ""
+        self.show_update_prompt_signal.emit(
+            required_value,
+            body_text_value,
+            update_destination_value,
+        )
+
+    @Slot(bool, str, str)
+    def _show_update_prompt_dialog(
+        self,
+        required: bool,
+        body_text: str,
+        update_destination: str,
+    ) -> None:
+        dialog = UpdatePromptDialog(
+            is_required=required,
+            body_text=body_text or None,
+            update_destination=update_destination or None,
+            parent=self,
+        )
+        dialog.exec()
 
     @property
     def image_list_view(self):
@@ -487,6 +528,12 @@ class MainWindow(QMainWindow):
         elif action == copy_path_action:
             clipboard = QApplication.instance().clipboard()
             clipboard.setText(file_path)
+
+    def closeEvent(self, event):
+        if self._update_prompt_subscription is not None:
+            self._update_prompt_subscription.dispose()
+            self._update_prompt_subscription = None
+        super().closeEvent(event)
 
 # Global exception handler functions (defined outside main block for testing)
 def handle_python_exception(exc_type, exc_value, exc_traceback):

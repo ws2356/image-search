@@ -34,6 +34,11 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_START_PATH,
     MobileTransferService,
 )
+from dt_image_search.mobile.mobile_update_prompt_service import (
+    MOBILE_UPDATE_PROMPT_PATH,
+    MOBILE_UPDATE_PROMPT_SCHEMA,
+    MobileUpdatePromptService,
+)
 from dt_image_search.mobile.transport.contracts import (
     CAPABILITY_EXCHANGE_OPERATION,
     PAIRING_CLAIM_OPERATION,
@@ -41,6 +46,7 @@ from dt_image_search.mobile.transport.contracts import (
     TRANSFER_COMPLETE_OPERATION,
     TRANSFER_EXISTENCE_OPERATION,
     TRANSFER_START_OPERATION,
+    UPDATE_PROMPT_OPERATION,
     MobileTransportKind,
     MobileTransportRequest,
     MobileTransportResponse,
@@ -104,6 +110,7 @@ class MobilePairingService:
         self._active_session: MobilePairingSessionDraft | None = None
         self._transfer_service = MobileTransferService(ctx)
         self._capability_exchange_service = MobileCapabilityExchangeService(ctx)
+        self._update_prompt_service = MobileUpdatePromptService(ctx)
         self._pairing_result = MobilePairingResult(
             state=PairingResultState.WAITING,
             message="Scan the QR code from the mobile app to begin pairing.",
@@ -349,6 +356,7 @@ class MobilePairingService:
     def _register_transport_routes(self) -> None:
         self._transport_router.register(PAIRING_CLAIM_OPERATION, self._dispatch_pairing_claim_operation)
         self._transport_router.register(CAPABILITY_EXCHANGE_OPERATION, self._dispatch_capability_exchange_operation)
+        self._transport_router.register(UPDATE_PROMPT_OPERATION, self._dispatch_update_prompt_operation)
         self._transport_router.register(TRANSFER_START_OPERATION, self._dispatch_transfer_start_operation)
         self._transport_router.register(TRANSFER_EXISTENCE_OPERATION, self._dispatch_transfer_existence_operation)
         self._transport_router.register(TRANSFER_ASSET_OPERATION, self._dispatch_transfer_asset_operation)
@@ -382,6 +390,14 @@ class MobilePairingService:
                 message="Desktop requires JSON object payloads for capability exchange requests.",
             )
         status_code, response_payload = self._capability_exchange_service.handle_exchange_request(request.payload)
+        return MobileTransportResponse(status_code=status_code, payload=response_payload)
+
+    def _dispatch_update_prompt_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
+        if not isinstance(request.payload, dict):
+            return _update_prompt_object_payload_error(
+                message="Desktop requires JSON object payloads for update prompt requests.",
+            )
+        status_code, response_payload = self._update_prompt_service.handle_prompt_request(request.payload)
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_transfer_existence_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -506,6 +522,8 @@ class MobilePairingService:
             transfer_schema=MOBILE_TRANSFER_SCHEMA,
             capability_exchange_schema=MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
             capability_exchange_path=MOBILE_CAPABILITY_EXCHANGE_PATH,
+            update_prompt_schema=MOBILE_UPDATE_PROMPT_SCHEMA,
+            update_prompt_path=MOBILE_UPDATE_PROMPT_PATH,
             transfer_start_path=MOBILE_TRANSFER_START_PATH,
             transfer_existence_path=MOBILE_TRANSFER_EXISTENCE_PATH,
             transfer_asset_path=MOBILE_TRANSFER_ASSET_PATH,
@@ -602,6 +620,17 @@ def _capability_exchange_object_payload_error(*, message: str) -> MobileTranspor
             "status": "rejected",
             "message": message,
             "capabilities": {},
+        },
+    )
+
+
+def _update_prompt_object_payload_error(*, message: str) -> MobileTransportResponse:
+    return MobileTransportResponse(
+        status_code=400,
+        payload={
+            "schema": MOBILE_UPDATE_PROMPT_SCHEMA,
+            "status": "rejected",
+            "message": message,
         },
     )
 
