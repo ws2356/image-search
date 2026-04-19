@@ -190,15 +190,50 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
 
     @patch("dt_image_search.mobile.apple_mobile_device_support.subprocess.run")
     def test_run_command_hides_console_window_on_windows(self, subprocess_run_mock):
-        with patch.object(apple_mobile_device_support_module.sys, "platform", "win32"):
+        class _StartupInfo:
+            def __init__(self):
+                self.dwFlags = 0
+                self.wShowWindow = 0
+
+        startf_use_showwindow = 0x00000001
+        sw_hide = 0
+        create_no_window = 0x08000000
+
+        with (
+            patch.object(apple_mobile_device_support_module.sys, "platform", "win32"),
+            patch.object(
+                apple_mobile_device_support_module.subprocess,
+                "STARTUPINFO",
+                _StartupInfo,
+                create=True,
+            ),
+            patch.object(
+                apple_mobile_device_support_module.subprocess,
+                "STARTF_USESHOWWINDOW",
+                startf_use_showwindow,
+                create=True,
+            ),
+            patch.object(
+                apple_mobile_device_support_module.subprocess,
+                "SW_HIDE",
+                sw_hide,
+                create=True,
+            ),
+            patch.object(
+                apple_mobile_device_support_module.subprocess,
+                "CREATE_NO_WINDOW",
+                create_no_window,
+                create=True,
+            ),
+        ):
             apple_mobile_device_support_module._run_command(["pnputil.exe", "/enum-drivers"])
 
         run_kwargs = subprocess_run_mock.call_args.kwargs
-        self.assertEqual(run_kwargs.get("creationflags"), subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(run_kwargs.get("creationflags"), create_no_window)
         startupinfo = run_kwargs.get("startupinfo")
         self.assertIsNotNone(startupinfo)
-        self.assertTrue(startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW)
-        self.assertEqual(startupinfo.wShowWindow, subprocess.SW_HIDE)
+        self.assertTrue(startupinfo.dwFlags & startf_use_showwindow)
+        self.assertEqual(startupinfo.wShowWindow, sw_hide)
 
     @staticmethod
     def _command_runner(
