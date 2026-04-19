@@ -64,7 +64,10 @@ class _FeatureFlagStore:
                 log("warning", message="FeatureFlags: remote payload missing mobile_folder.enabled.")
                 return
             with self._lock:
-                self._mobile_folder_enabled = remote_enabled
+                # Only update the in-memory flag if it hasn't been set yet.
+                # This is to ensure consistent reading of the flag within a single app session, even if remote refreshes happen mid-session.
+                if self._mobile_folder_enabled is None:
+                    self._mobile_folder_enabled = remote_enabled
             log("info", message=f"FeatureFlags: remote mobile_folder.enabled={remote_enabled}.")
         except RuntimeError as exc:
             log("warning", message=f"FeatureFlags: failed to refresh remote flags: {exc}")

@@ -26,8 +26,6 @@ def is_mobile_folder_feature_enabled(default: bool = False) -> bool:
     mobile_folder_config = config.get("mobile_folder")
     if isinstance(mobile_folder_config, dict) and "enabled" in mobile_folder_config:
         return _as_bool(mobile_folder_config.get("enabled"), default)
-    if "mobile_folder.enabled" in config:
-        return _as_bool(config.get("mobile_folder.enabled"), default)
     return default
 
 
