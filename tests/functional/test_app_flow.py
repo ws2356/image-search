@@ -254,8 +254,13 @@ class TestAppFlow(unittest.TestCase):
         
         # 5. Build index
         index_path = dts_index.index_path_for_folder(self.ctx, folder)
-        # We need to mock os.path.exists for the index file to avoid create_index_if_needed issues
-        with patch('os.path.exists', side_effect=lambda p: True if p == index_path else os.path.exists(p)):
+        # Patch only dts_index's os.path.exists to avoid recursive global patching in logging internals.
+        real_exists = dts_index.os.path.exists
+        with patch.object(
+            dts_index.os.path,
+            "exists",
+            side_effect=lambda p: True if p == index_path else real_exists(p),
+        ):
             progress_gen = dts_index.build_index(self.ctx, index_path, folder.id)
             for progress in progress_gen:
                 self.assertTrue(progress['batch_result'])
