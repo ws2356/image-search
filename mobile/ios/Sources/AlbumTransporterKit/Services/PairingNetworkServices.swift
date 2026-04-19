@@ -199,20 +199,6 @@ struct DesktopBootstrapPairingService: PairingService {
                 pairedAt: pairedAt
             )
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)
-#if DEBUG
-            if let updatePromptClient {
-                Self.startDebugUpdatePromptRequest(
-                    using: updatePromptClient,
-                    desktop: trustedRecord
-                )
-            }
-            if let capabilityExchangeClient {
-                Self.startDebugCapabilityExchangeBurst(
-                    using: capabilityExchangeClient,
-                    desktop: trustedRecord
-                )
-            }
-#endif
 
             return PairingStatus(
                 phase: .paired,
@@ -304,89 +290,6 @@ struct DesktopBootstrapPairingService: PairingService {
         let digest = SHA256.hash(data: Data(material.utf8))
         return Data(digest).base64URLEncodedString()
     }
-
-#if DEBUG
-    private static let debugUpdatePromptBodyText = "DEBUG: Mobile triggered optional update prompt after pairing."
-    private static let debugUpdatePromptDestination = "https://apps.microsoft.com/detail/9n5n8gvnrzdn?ref=mobile-debug-trigger"
-
-    private static func startDebugUpdatePromptRequest(
-        using client: any MobileUpdatePromptClient,
-        desktop: TrustedDesktopRecord
-    ) {
-        Task.detached(priority: .background) {
-            do {
-                let response = try await client.sendUpdatePrompt(
-                    required: false,
-                    bodyText: debugUpdatePromptBodyText,
-                    updateDestination: debugUpdatePromptDestination,
-                    desktop: desktop
-                )
-                PairingDebugLogger.debug(
-                    "PairingDebug/update_prompt: sent after pairing "
-                        + "status=\(response.status.rawValue) session_id=\(desktop.lastSessionID)"
-                )
-            } catch {
-                PairingDebugLogger.error(
-                    "PairingDebug/update_prompt: failed after pairing "
-                        + "session_id=\(desktop.lastSessionID) error=\(error.localizedDescription)"
-                )
-            }
-        }
-    }
-
-    private static func startDebugCapabilityExchangeBurst(
-        using client: any MobileCapabilityExchangeClient,
-        desktop: TrustedDesktopRecord
-    ) {
-        Task.detached(priority: .background) {
-            PairingDebugLogger.debug(
-                "PairingDebug/capability_exchange: starting burst session_id=\(desktop.lastSessionID) "
-                    + "transport=\(desktop.transport.rawValue) requests=10"
-            )
-
-            for requestIndex in 1 ... 10 {
-                let capabilityPayload = debugCapabilityPayload(
-                    requestIndex: requestIndex,
-                    desktop: desktop
-                )
-                do {
-                    let response = try await client.exchangeCapabilities(capabilityPayload, desktop: desktop)
-                    PairingDebugLogger.debug(
-                        "PairingDebug/capability_exchange: request=\(requestIndex)/10 "
-                            + "status=\(response.status.rawValue) "
-                            + "sent_capabilities=\(capabilityPayload.keys.sorted()) "
-                            + "received_capabilities=\((response.capabilities ?? [:]).keys.sorted()) "
-                            + "session_id=\(desktop.lastSessionID)"
-                    )
-                } catch {
-                    PairingDebugLogger.error(
-                        "PairingDebug/capability_exchange: request=\(requestIndex)/10 failed "
-                            + "session_id=\(desktop.lastSessionID) error=\(error.localizedDescription)"
-                    )
-                }
-
-                if requestIndex < 10 {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                }
-            }
-
-            PairingDebugLogger.debug(
-                "PairingDebug/capability_exchange: completed burst session_id=\(desktop.lastSessionID)"
-            )
-        }
-    }
-
-    private static func debugCapabilityPayload(
-        requestIndex: Int,
-        desktop: TrustedDesktopRecord
-    ) -> [String: Int] {
-        [
-            "debug.mobile.capability.burst": 1,
-            "debug.mobile.capability.request_\(requestIndex)": 1,
-            "debug.mobile.transport.\(desktop.transport.rawValue)": 1,
-        ]
-    }
-#endif
 }
 
 private struct PairingBootstrapAttempt {
