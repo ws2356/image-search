@@ -19,19 +19,28 @@ class FolderTreeModel(QStandardItemModel):
     _LOCAL_SECTION_KIND = "local"
     _MOBILE_SECTION_KIND = "mobile"
 
-    def __init__(self, parent=None, folder_predicate=DefaultFolderPredicate):
+    def __init__(
+        self,
+        parent=None,
+        folder_predicate=DefaultFolderPredicate,
+        *,
+        sectioned_view: bool = True,
+    ):
         super().__init__(parent)
         self.folder_predicate = folder_predicate
+        self._sectioned_view = sectioned_view
         self._mobile_folder_paths: set[str] = set()
         self._mobile_transfer_states_by_path: dict[str, str] = {}
         self._mobile_folder_summaries_by_path: dict[str, dict[str, object]] = {}
         self._local_section_item: QStandardItem | None = None
         self._mobile_section_item: QStandardItem | None = None
-        self._ensure_section_items()
+        if self._sectioned_view:
+            self._ensure_section_items()
 
     def add_root_folder(self, path_strs: typing.List[str]):
         log("debug", message=f"FolderTreeModel/add_root_folder: adding {len(path_strs)} folders")
-        self._ensure_section_items()
+        if self._sectioned_view:
+            self._ensure_section_items()
         for p in path_strs:
             path = Path(p).resolve()
             resolved_path = path.as_posix()
@@ -52,14 +61,33 @@ class FolderTreeModel(QStandardItemModel):
             root_item.setSelectable(True)
             self._apply_mobile_transfer_state_to_item(root_item)
 
-            target_section = self._section_for_folder_path(resolved_path)
-            target_section.appendRow(root_item)
+            if self._sectioned_view:
+                target_section = self._section_for_folder_path(resolved_path)
+                target_section.appendRow(root_item)
+            else:
+                self.invisibleRootItem().appendRow(root_item)
 
             self._populate_subfolders(root_item, path)
 
     def deleteFolder(self, index: QPersistentModelIndex):
         # 1. 基础合法性校验 (使用 index 检查，不产生 item 对象)
         if not index.isValid():
+            return
+
+        if not self._sectioned_view:
+            if index.parent().isValid():
+                log("warning", message="FolderTreeModel/deleteFolder: item is not a top-level folder, skipping")
+                return
+            folder_path = index.data(Qt.UserRole)
+            row_index = index.row()
+            log("debug", message=f"FolderTreeModel/deleteFolder: deleting folder {folder_path} at row {row_index}")
+            if not folder_path:
+                return
+            self.invisibleRootItem().removeRow(row_index)
+
+            from PySide6.QtCore import QCoreApplication
+
+            QCoreApplication.processEvents()
             return
 
         parent_index = index.parent()
@@ -117,18 +145,27 @@ class FolderTreeModel(QStandardItemModel):
         child_path = normalized_folder_path(child_path).replace('\\', '/')
         matched_item: QStandardItem | None = None
         matched_path_length = -1
-        for section_item in self._section_items():
-            for row in range(section_item.rowCount()):
-                item = section_item.child(row)
-                if item is None:
-                    continue
-                data = item.data(Qt.UserRole)
-                if not data:
-                    continue
-                item_path = normalized_folder_path(data).replace('\\', '/')
-                if child_path.startswith(item_path) and len(item_path) > matched_path_length:
-                    matched_item = item
-                    matched_path_length = len(item_path)
+        root_items: list[QStandardItem] = []
+        if self._sectioned_view:
+            for section_item in self._section_items():
+                for row in range(section_item.rowCount()):
+                    item = section_item.child(row)
+                    if item is not None:
+                        root_items.append(item)
+        else:
+            for row in range(self.rowCount()):
+                item = self.item(row, 0)
+                if item is not None:
+                    root_items.append(item)
+
+        for item in root_items:
+            data = item.data(Qt.UserRole)
+            if not data:
+                continue
+            item_path = normalized_folder_path(data).replace('\\', '/')
+            if child_path.startswith(item_path) and len(item_path) > matched_path_length:
+                matched_item = item
+                matched_path_length = len(item_path)
         return matched_item
 
     def find_folder_item(self, folder_path: str) -> QStandardItem | None:
@@ -237,12 +274,16 @@ class FolderTreeModel(QStandardItemModel):
         if item is None:
             return False
         parent_item = item.parent()
-        return parent_item is not None and self._is_section_item(parent_item)
+        if self._sectioned_view:
+            return parent_item is not None and self._is_section_item(parent_item)
+        return parent_item is None and bool(item.data(Qt.UserRole))
 
     def is_mobile_folder_path(self, folder_path: str) -> bool:
         return self._is_mobile_folder_path(folder_path)
 
     def _ensure_section_items(self) -> None:
+        if not self._sectioned_view:
+            return
         if self._local_section_item is not None and self._mobile_section_item is not None:
             return
 
@@ -271,6 +312,8 @@ class FolderTreeModel(QStandardItemModel):
         return self._local_section_item, self._mobile_section_item
 
     def _section_for_folder_path(self, folder_path: str) -> QStandardItem:
+        if not self._sectioned_view:
+            return self.invisibleRootItem()
         local_section_item, mobile_section_item = self._section_items()
         if self._is_mobile_folder_path(folder_path):
             return mobile_section_item
@@ -284,6 +327,8 @@ class FolderTreeModel(QStandardItemModel):
         return bool(item.data(self.SECTION_ROLE))
 
     def _sync_top_level_folder_sections(self) -> None:
+        if not self._sectioned_view:
+            return
         local_section_item, mobile_section_item = self._section_items()
         top_level_items: list[QStandardItem] = []
         for section_item in (local_section_item, mobile_section_item):

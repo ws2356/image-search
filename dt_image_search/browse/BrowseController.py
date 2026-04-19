@@ -13,6 +13,7 @@ from dt_image_search.mobile.mobile_pairing_store import (
 )
 from dt_image_search.mobile.mobile_transfer_service import MOBILE_TRANSFER_STATE_UPDATED_EVENT
 from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_folder_by_path, insert_folder, match_parent_folder
+from dt_image_search.model.feature_flags import is_mobile_folder_enabled
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
@@ -200,7 +201,7 @@ class BrowseController(BaseController):
             return root_folders
 
     def _create_model_for_folder(self) -> QAbstractItemModel:
-        model = FolderTreeModel()
+        model = FolderTreeModel(sectioned_view=is_mobile_folder_enabled())
         return model
     
     @debounce(3)  # Debounce search queries to avoid excessive calls

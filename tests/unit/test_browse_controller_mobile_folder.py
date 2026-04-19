@@ -215,13 +215,30 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertEqual(folder_item.text(), "Alice iPhone")
             self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE))
 
-    def _controller_context(self):
-        return _ControllerContext(self._ctx)
+    def test_folder_tree_is_flat_when_mobile_folder_feature_is_disabled(self):
+        root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+
+        with self._controller_context(mobile_feature_enabled=False) as (controller, _add_folder_mock, _add_index_worker_mock):
+            model = controller.folder_list_model()
+            self.assertEqual(model.rowCount(), 1)
+            top_level_item = model.item(0, 0)
+            self.assertIsNotNone(top_level_item)
+            self.assertEqual(top_level_item.data(Qt.UserRole), root_folder.as_posix())
+            self.assertFalse(bool(top_level_item.data(model.SECTION_ROLE)))
+            self.assertTrue(model.is_top_level_folder_item(top_level_item))
+
+    def _controller_context(self, *, mobile_feature_enabled: bool = True):
+        return _ControllerContext(self._ctx, mobile_feature_enabled=mobile_feature_enabled)
 
 
 class _ControllerContext:
-    def __init__(self, ctx: BMContext):
+    def __init__(self, ctx: BMContext, *, mobile_feature_enabled: bool):
         self._ctx = ctx
+        self._mobile_feature_enabled = mobile_feature_enabled
         self._patches = []
         self._controller = None
         self._add_folder_mock = None
@@ -232,11 +249,16 @@ class _ControllerContext:
             patch.object(browse_controller_module.default_bus, "subscribe", return_value=_DummySubscription()),
             patch("dt_image_search.browse.BrowseController.add_folder"),
             patch("dt_image_search.browse.BrowseController.add_index_worker"),
+            patch(
+                "dt_image_search.browse.BrowseController.is_mobile_folder_enabled",
+                return_value=self._mobile_feature_enabled,
+            ),
         ]
-        subscribe_patch, add_folder_patch, add_index_worker_patch = self._patches
+        subscribe_patch, add_folder_patch, add_index_worker_patch, mobile_flag_patch = self._patches
         subscribe_patch.start()
         self._add_folder_mock = add_folder_patch.start()
         self._add_index_worker_mock = add_index_worker_patch.start()
+        mobile_flag_patch.start()
         self._controller = BrowseController(ctx=self._ctx)
         return self._controller, self._add_folder_mock, self._add_index_worker_mock
 
