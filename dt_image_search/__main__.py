@@ -183,7 +183,6 @@ class MainWindow(QMainWindow):
 
         self.browse_controller = BrowseController(ctx=self.ctx)
         self.controller = self.browse_controller
-        initialize_feature_flags()
         self.mobile_folder_coordinator: MobileFolderCoordinator | None = None
         self.controller.is_active = True  # Set the controller to active state
 
@@ -622,6 +621,8 @@ def main():
     # Install threading exception handler (available in Python 3.8+)
     if hasattr(threading, 'excepthook'):
         threading.excepthook = handle_threading_exception
+
+    initialize_feature_flags()
 
     app = QApplication(sys.argv)
     _publish_app_foreground_state(app)
