@@ -99,7 +99,8 @@ def add_folder(path: str):
         _folder_watch_map[path] = _watch
         if root_folder_parent not in _parent_folder_watch_map:
             _need_schedule_parent = True
-    _parent_folder_watch_map[root_folder_parent] = _fs_observer.schedule(_fs_handler, path=root_folder_parent, recursive=False)
+    if _need_schedule_parent:
+        _parent_folder_watch_map[root_folder_parent] = _fs_observer.schedule(_fs_handler, path=root_folder_parent, recursive=False)
 
 def remove_folder(path: str):
     path = normalized_folder_path(path).replace('\\', '/')
@@ -149,7 +150,6 @@ def _on_fs_changed(event):
 
     if is_relevant_event:
         log("debug", message=f"Directory changed: {event.event_type}")
-
-    # the deleted file may be a root folder. We can not be sure of a directory deletion because is_directory may be False even for directory deletion events.
-    if event.event_type == 'deleted':
-        remove_folder(event.src_path)
+        # the deleted file may be a root folder. We can not be sure of a directory deletion because is_directory may be False even for directory deletion events.
+        if event.event_type == 'deleted':
+            remove_folder(event.src_path)
