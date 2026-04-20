@@ -22,7 +22,7 @@ Write-Host "Changed to repository root: $(Get-Location)"
 
 Remove-Item -Force -Recurse -ErrorAction Ignore .\DTImageSearchApp
 Remove-Item -Force -Recurse -ErrorAction Ignore .\build
-Remove-Item -Force -Recurse -ErrorAction Ignore .\dist
+Remove-Item -Force -Recurse -ErrorAction Ignore "pyinstaller-dist-$BuildType"
 
 & "$scriptDir\build.ps1"
 . "$scriptDir\utils.ps1"
@@ -57,8 +57,8 @@ if (Test-Path "$appDir") {
 }
 
 # Move dist contents to DTImageSearchApp
-if (Test-Path "dist") {
-    Move-Item -Path "dist" -Destination "$appDir"
+if (Test-Path "pyinstaller-dist-$BuildType") {
+    Move-Item -Path "pyinstaller-dist-$BuildType" -Destination "$appDir"
 } else {
     Write-Error "dist directory not found"
     exit 1
