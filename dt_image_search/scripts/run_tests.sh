@@ -52,6 +52,7 @@ unit_and_functional_tests=(
   tests/unit/test_dts_db_folder_path_variants.py
   tests/unit/test_incremental_index_worker.py
   tests/unit/test_mobile_folder_controller.py
+  tests/unit/test_mobile_dialogs.py
   tests/unit/test_mobile_pairing_discovery.py
   tests/unit/test_mobile_pairing_service.py
   tests/unit/test_mobile_pairing_session.py

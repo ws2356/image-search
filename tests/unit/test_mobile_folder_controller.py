@@ -158,7 +158,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
             coordinator._default_destination_parent(),
         )
 
-    def test_start_pairing_flow_returns_none_when_usb_prerequisites_are_not_ready(self):
+    def test_start_pairing_flow_returns_none_when_user_cancels_usb_prerequisites_dialog(self):
         destination_parent = Path(self._temp_dir.name).resolve().as_posix()
         pairing_session = MobilePairingSessionDraft.create(
             destination_parent=destination_parent,

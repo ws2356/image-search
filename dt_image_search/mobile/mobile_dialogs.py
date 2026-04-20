@@ -429,7 +429,7 @@ class MobileUsbPrerequisitesDialog(QDialog):
         super().__init__(parent)
         self._support_manager = support_manager
         self._status = initial_status
-        self.setWindowTitle("Install Apple USB Support")
+        self.setWindowTitle("USB Drivers Needed for iPhone/iPad")
         self.setModal(True)
         self.resize(700, 500)
         self.setStyleSheet("QDialog { background: #f4f4f4; }")
@@ -438,7 +438,7 @@ class MobileUsbPrerequisitesDialog(QDialog):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
 
-        title = QLabel("Install Apple USB Support")
+        title = QLabel("USB Drivers Needed for iPhone/iPad")
         title_font = QFont()
         title_font.setPointSize(16)
         title_font.setWeight(QFont.Weight.DemiBold)
@@ -448,7 +448,7 @@ class MobileUsbPrerequisitesDialog(QDialog):
 
         subtitle = QLabel(
             "This Windows desktop is missing Apple Mobile Device Support or the Apple USB drivers "
-            "needed for iPhone and iPad USB transport."
+            "needed for iPhone and iPad USB transport. Click `Skip` if you are using an Android device."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 13px;")
@@ -466,8 +466,7 @@ class MobileUsbPrerequisitesDialog(QDialog):
         admin_banner_layout.addWidget(admin_icon, alignment=Qt.AlignTop)
         admin_text = QLabel(
             "Installing Apple USB support requires Windows administrator privileges. "
-            "When you click Install, Windows will show a User Account Control prompt before "
-            "the bundled Apple setup and driver installers run."
+            "Please approve the admin prompt for the installation to proceed."
         )
         admin_text.setWordWrap(True)
         admin_text.setStyleSheet("color: #9a3412; font-size: 12px; line-height: 1.5;")
@@ -493,19 +492,33 @@ class MobileUsbPrerequisitesDialog(QDialog):
         bottom_row = QHBoxLayout()
         bottom_row.addStretch()
 
-        self.close_button = QPushButton("Close")
+        self.close_button = QPushButton("Cancel Backup")
         self.close_button.setCursor(Qt.PointingHandCursor)
         self.close_button.setStyleSheet(
             """
             QPushButton {
-                background: #e0e0e0; border: 1px solid #c0c0c0; border-radius: 6px;
+                background: #ffffff; border: 1px solid #c0c0c0; border-radius: 6px;
                 padding: 6px 18px; font-size: 13px; font-weight: 500; color: #333333;
             }
-            QPushButton:hover { background: #d4d4d4; }
+            QPushButton:hover { background: #f7f7f7; }
             """
         )
         self.close_button.clicked.connect(self.reject)
         bottom_row.addWidget(self.close_button)
+
+        self.continue_button = QPushButton("Skip")
+        self.continue_button.setCursor(Qt.PointingHandCursor)
+        self.continue_button.setStyleSheet(
+            """
+            QPushButton {
+                background: #ffffff; border: 1px solid #c0c0c0; border-radius: 6px;
+                padding: 6px 18px; font-size: 13px; font-weight: 500; color: #333333;
+            }
+            QPushButton:hover { background: #f7f7f7; }
+            """
+        )
+        self.continue_button.clicked.connect(self.accept)
+        bottom_row.addWidget(self.continue_button)
 
         self.check_again_button = QPushButton("Check Again")
         self.check_again_button.setCursor(Qt.PointingHandCursor)
@@ -554,7 +567,21 @@ class MobileUsbPrerequisitesDialog(QDialog):
             initial_status=initial_status,
             parent=parent,
         )
-        return dialog.exec() == QDialog.DialogCode.Accepted
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            log(
+                "info",
+                message="MobileUsbPrerequisitesDialog/ensure_ready: user canceled mobile backup before pairing.",
+            )
+            return False
+        if not dialog._status.is_ready:
+            log(
+                "info",
+                message=(
+                    "MobileUsbPrerequisitesDialog/ensure_ready: desktop Apple USB prerequisites are missing; "
+                    "continuing with Wi-Fi transport."
+                ),
+            )
+        return True
 
     def _refresh_status_and_maybe_continue(self) -> None:
         refreshed_status = self._support_manager.probe()
@@ -582,12 +609,14 @@ class MobileUsbPrerequisitesDialog(QDialog):
     def _apply_status(self, status: AppleMobileDeviceSupportStatus) -> None:
         self._status = status
         if status.is_ready:
+            self.continue_button.setText("Continue")
             self.status_label.setText("Apple Mobile Device Support and the Apple USB drivers are installed.")
             self.status_label.setStyleSheet("font-weight: 600; color: #065f46; font-size: 13px;")
             self.details_label.setText("USB pairing can continue on this desktop.")
             self.install_button.hide()
             return
 
+        self.continue_button.setText("Skip")
         self.install_feedback_label.setText("")
         missing_component_lines = "\n".join(
             f"- {component}" for component in status.missing_system_components
