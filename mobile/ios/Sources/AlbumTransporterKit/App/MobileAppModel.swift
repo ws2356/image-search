@@ -31,6 +31,7 @@ final class MobileAppModel: ObservableObject {
     private let permissionService: PermissionService
     private let transferService: TransferService
     private let sideEffectWorker: MobileAppSideEffectWorker
+    private var backupFlowStateMachine = MobileBackupFlowStateMachine()
 #if canImport(UIKit)
     private var memoryWarningObservationTask: Task<Void, Never>?
 #endif
@@ -106,6 +107,7 @@ final class MobileAppModel: ObservableObject {
     }
 
     func openScanFlow() async {
+        transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
             phase: .scanning,
             desktopName: homeSummary.desktopName,
@@ -119,6 +121,7 @@ final class MobileAppModel: ObservableObject {
     }
 
     func beginPairing() async {
+        transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
             phase: .pairing,
             desktopName: homeSummary.desktopName,
@@ -139,6 +142,7 @@ final class MobileAppModel: ObservableObject {
                     transport: nil,
                     message: error.message
                 )
+                applyPairingStatusStateTransition(pairingStatus)
             }
             recordTelemetry(.pairingFailed)
             persistSnapshot()
@@ -147,6 +151,7 @@ final class MobileAppModel: ObservableObject {
 
         let result = await pairingService.startPairing(using: payload)
         pairingStatus = result
+        applyPairingStatusStateTransition(result)
         persistSnapshot()
 
         guard result.phase == .paired else {
@@ -217,6 +222,7 @@ final class MobileAppModel: ObservableObject {
         isShowingStopConfirmation = false
         stopTransferProgressPolling()
         _ = await transferService.stopTransfer(current: transferSnapshot)
+        transitionBackupFlow(.transferStopped)
         updateHomeSummaryAfterStoppedTransfer()
         transferStartedAt = nil
         route = .home
@@ -228,6 +234,7 @@ final class MobileAppModel: ObservableObject {
     func completeTransfer() async {
         stopTransferProgressPolling()
         transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
+        transitionBackupFlow(transferSnapshot.failedCount == 0 ? .transferCompleted : .transferFailed)
         let cleanupResult: TransferAssetCleanupResult
         if removeAfterBackupEnabled {
             cleanupResult = await transferService.moveSuccessfullyTransferredAssetsToRecentlyRemoved()
@@ -266,12 +273,14 @@ final class MobileAppModel: ObservableObject {
     func returnHome() async {
         stopTransferProgressPolling()
         transferStartedAt = nil
+        transitionBackupFlow(.resetToPendingPairing)
         route = .home
         persistSnapshot()
     }
 
     private func startTransfer() async {
         transferStartedAt = Date()
+        transitionBackupFlow(.transferStarted)
         route = .transfer
         transferSnapshot = TransferSnapshot(
             transferredCount: 0,
@@ -324,7 +333,49 @@ final class MobileAppModel: ObservableObject {
         removeAfterBackupEnabled = snapshot.removeAfterBackupEnabled
         pairingStatus = snapshot.pairingStatus
         transferSnapshot = snapshot.transferSnapshot
+        backupFlowStateMachine = MobileBackupFlowStateMachine(
+            state: inferredBackupFlowState(from: snapshot)
+        )
         route = .home
+    }
+
+    private func applyPairingStatusStateTransition(_ status: PairingStatus) {
+        switch status.phase {
+        case .paired:
+            transitionBackupFlow(.pairingAccepted)
+        case .expired:
+            transitionBackupFlow(.pairingFailed)
+        case .failed:
+            if Self.isPairingMismatchStatusMessage(status.message) {
+                transitionBackupFlow(.pairingMismatchDetected)
+            } else {
+                transitionBackupFlow(.pairingFailed)
+            }
+        case .instructions, .scanning, .pairing:
+            transitionBackupFlow(.pairingStarted)
+        }
+    }
+
+    private func transitionBackupFlow(_ event: MobileBackupFlowEvent) {
+        backupFlowStateMachine.transition(event)
+    }
+
+    private func inferredBackupFlowState(from snapshot: LaunchSnapshot) -> MobileBackupFlowState {
+        switch snapshot.homeSummary.primaryAction {
+        case .backupPendingItems:
+            return .pairingCompleted
+        case .scanDesktopQRCode, .resumeBackup:
+            break
+        }
+        return snapshot.pairingStatus.phase == .paired ? .pairingCompleted : .pendingPairing
+    }
+
+    private static func isPairingMismatchStatusMessage(_ message: String) -> Bool {
+        let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedMessage.isEmpty else {
+            return false
+        }
+        return normalizedMessage.contains("no longer paired") || normalizedMessage.contains("mismatch")
     }
 
     private func persistSnapshot() {
