@@ -1,6 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
+import tempfile
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metadata
 
 sys.path.insert(0, os.path.abspath("."))
@@ -10,6 +12,13 @@ datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz
 datas += copy_metadata('hf_xet')
 heif_datas, heif_binaries, heif_hiddenimports = collect_all("pillow_heif")
 datas += heif_datas
+
+build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
+if build_type not in {"prod", "dev"}:
+    raise ValueError(f"Unsupported DTIS_BUILD_TYPE: {build_type!r}. Expected 'prod' or 'dev'.")
+build_vars_path = Path(tempfile.gettempdir()) / f"dtis_build_vars_{build_type}"
+build_vars_path.write_text(f"build_type={build_type}\n", encoding="utf-8")
+datas += [(str(build_vars_path), "dt_image_search/resources")]
 
 a = Analysis(
     ['__main__.py'],

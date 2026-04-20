@@ -1,6 +1,9 @@
 #Requires -Version 5.1
 
-param()
+param(
+    [ValidateSet("prod", "dev")]
+    [string]$BuildType = "prod"
+)
 
 # Set strict mode and error action
 Set-StrictMode -Version Latest
@@ -23,6 +26,8 @@ Remove-Item -Force -Recurse -ErrorAction Ignore .\dist
 
 # Run PyInstaller
 Write-Host "Running PyInstaller..."
+$previousBuildType = $env:DTIS_BUILD_TYPE
+$env:DTIS_BUILD_TYPE = $BuildType
 try {
     $pyinstallerProcess = Start-Process -FilePath "pyinstaller" -ArgumentList "dt_image_search/DTImageSearch.spec" -Wait -PassThru -NoNewWindow
     if ($pyinstallerProcess.ExitCode -ne 0) {
@@ -33,6 +38,12 @@ try {
 } catch {
     Write-Error "Failed to run PyInstaller: $($_.Exception.Message)"
     exit 1
+} finally {
+    if ($null -eq $previousBuildType) {
+        Remove-Item Env:\DTIS_BUILD_TYPE -ErrorAction Ignore
+    } else {
+        $env:DTIS_BUILD_TYPE = $previousBuildType
+    }
 }
 
 # Create and clean DTImageSearchApp directory

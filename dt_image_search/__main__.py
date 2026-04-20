@@ -32,9 +32,11 @@ if project_root not in sys.path:
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from dt_image_search.build_flavor import get_build_type
 
 QCoreApplication.setOrganizationName("net.boldman")
-QCoreApplication.setApplicationName("imagesearch")
+_build_type = get_build_type()
+QCoreApplication.setApplicationName("imagesearch-dev" if _build_type == "dev" else "imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache
@@ -84,7 +86,7 @@ _crash_recovery = CrashRecoveryManager(get_app_data_path(ctx), _crash_support_lo
 
 def _activation_server_name(ctx: BMContext) -> str:
     suffix = ctx.subfolder or "default"
-    return f"net.boldman.imagesearch.{suffix}"
+    return f"net.boldman.imagesearch.{_build_type}.{suffix}"
 
 
 def acquire_single_instance_lock(ctx: BMContext) -> bool:
