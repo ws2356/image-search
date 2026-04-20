@@ -16,6 +16,11 @@ from dt_image_search.mobile.mobile_pairing_session import (
     MobilePairingToken,
     MobilePlatform,
 )
+from dt_image_search.mobile.mobile_backup_state_machine import (
+    MobileBackupEvent,
+    MobileBackupStateMachine,
+    MobileBackupStateTransitionError,
+)
 from dt_image_search.mobile.mobile_pairing_store import (
     derive_pairing_key_b64,
     get_or_create_desktop_device_id,
@@ -259,6 +264,7 @@ class MobilePairingService:
         now: datetime | None = None,
     ) -> tuple[int, dict[str, object]]:
         current_time = _utc_now(now)
+        backup_state_machine = MobileBackupStateMachine()
         with self._lock:
             active_session = self._active_session
             if active_session is None:
@@ -328,6 +334,10 @@ class MobilePairingService:
                 backup_again_context is not None
                 and device_uuid != backup_again_context.expected_device_uuid
             ):
+                backup_state_machine = self._advance_backup_state_machine(
+                    backup_state_machine,
+                    MobileBackupEvent.PAIRING_MISMATCH_DETECTED,
+                )
                 mismatch_context = MobileBackupAgainMismatchContext(
                     selected_folder_path=backup_again_context.selected_folder_path,
                     previous_device_uuid=backup_again_context.expected_device_uuid,
@@ -358,6 +368,10 @@ class MobilePairingService:
                         state=PairingResultState.REJECTED,
                         message="Desktop canceled this pairing request. Start Back Up Again to retry.",
                     )
+                backup_state_machine = self._advance_backup_state_machine(
+                    backup_state_machine,
+                    MobileBackupEvent.PAIRING_MISMATCH_RESOLVED,
+                )
 
             with self._lock:
                 current_session = self._active_session
@@ -438,6 +452,10 @@ class MobilePairingService:
                         state=PairingResultState.REJECTED,
                         message="This pairing session was already accepted.",
                     )
+                backup_state_machine = self._advance_backup_state_machine(
+                    backup_state_machine,
+                    MobileBackupEvent.PAIRING_ACCEPTED,
+                )
                 self._pairing_result = MobilePairingResult(
                     state=PairingResultState.ACCEPTED,
                     message=acceptance_message,
@@ -626,6 +644,23 @@ class MobilePairingService:
         if not normalized_session_id:
             return None
         return normalized_session_id
+
+    @staticmethod
+    def _advance_backup_state_machine(
+        state_machine: MobileBackupStateMachine,
+        event: MobileBackupEvent,
+    ) -> MobileBackupStateMachine:
+        try:
+            return state_machine.transition(event)
+        except MobileBackupStateTransitionError as exc:
+            _log(
+                "warning",
+                message=(
+                    "MobilePairingService/state_machine: "
+                    f"ignored invalid transition from {state_machine.state.value} via {event.value}: {exc}"
+                ),
+            )
+            return state_machine
 
     def _ensure_server_started(self) -> None:
         with self._lock:

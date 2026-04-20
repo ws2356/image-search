@@ -19,9 +19,6 @@ from dt_image_search.mobile.mobile_pairing_store import (
     MOBILE_BACKUP_SESSION_STATUS_FAILED,
     MOBILE_BACKUP_SESSION_STATUS_STOPPED,
     MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
-    MOBILE_TRANSFER_STATE_PAIRED,
-    MOBILE_TRANSFER_STATE_COMPLETED,
-    MOBILE_TRANSFER_STATE_FAILED,
     MOBILE_TRANSFER_STATE_TRANSFERRING,
     get_mobile_asset_record,
     get_mobile_asset_record_by_signature,
@@ -31,6 +28,12 @@ from dt_image_search.mobile.mobile_pairing_store import (
     mobile_asset_signature_key,
     update_mobile_transfer_state,
     upsert_mobile_asset_record,
+)
+from dt_image_search.mobile.mobile_backup_state_machine import (
+    MobileBackupEvent,
+    MobileBackupState,
+    folder_transfer_state_from_backup_state,
+    resolve_next_backup_state,
 )
 from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
@@ -129,12 +132,19 @@ class MobileTransferService:
             if transfer_context is None:
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
+            folder_transfer_state = folder_transfer_state_from_backup_state(
+                resolve_next_backup_state(
+                    current_folder_transfer_state=transfer_context.folder_transfer_state,
+                    event=MobileBackupEvent.TRANSFER_STARTED,
+                    fallback_state=MobileBackupState.PAIRING_COMPLETED,
+                )
+            )
             update_mobile_transfer_state(
                 conn,
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
                 session_status=MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
-                folder_transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
+                folder_transfer_state=folder_transfer_state,
                 updated_at=current_time,
                 transferred_count=0,
                 failed_count=0,
@@ -151,7 +161,7 @@ class MobileTransferService:
             session_id=request.session_id,
             device_uuid=request.device_uuid,
             folder_path=transfer_context.folder_path,
-            transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
+            transfer_state=folder_transfer_state,
         )
         log(
             "info",
@@ -381,12 +391,19 @@ class MobileTransferService:
                     )
             except OSError as exc:
                 _cleanup_temp_upload_file(staged_temp_file_path)
+                folder_transfer_state = folder_transfer_state_from_backup_state(
+                    resolve_next_backup_state(
+                        current_folder_transfer_state=transfer_context.folder_transfer_state,
+                        event=MobileBackupEvent.TRANSFER_FAILED,
+                        fallback_state=MobileBackupState.TRANSFER_IN_PROGRESS,
+                    )
+                )
                 update_mobile_transfer_state(
                     conn,
                     session_id=metadata.session_id,
                     device_uuid=metadata.device_uuid,
                     session_status=MOBILE_BACKUP_SESSION_STATUS_FAILED,
-                    folder_transfer_state=MOBILE_TRANSFER_STATE_FAILED,
+                    folder_transfer_state=folder_transfer_state,
                     updated_at=current_time,
                     ended_at=current_time,
                 )
@@ -395,7 +412,7 @@ class MobileTransferService:
                     session_id=metadata.session_id,
                     device_uuid=metadata.device_uuid,
                     folder_path=transfer_context.folder_path,
-                    transfer_state=MOBILE_TRANSFER_STATE_FAILED,
+                    transfer_state=folder_transfer_state,
                 )
                 return _response(
                     status_code=500,
@@ -467,18 +484,29 @@ class MobileTransferService:
             interruption_reason = _optional_non_empty_string(request_payload, "interruption_reason")
             if interruption_reason == MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER:
                 session_status = MOBILE_BACKUP_SESSION_STATUS_STOPPED
-                folder_transfer_state = MOBILE_TRANSFER_STATE_PAIRED
+                transition_event = MobileBackupEvent.TRANSFER_STOPPED
                 response_message = (
                     "Desktop marked the transfer session as stopped after receiving "
                     f"{request.transferred_count or 0} assets with {request.failed_count or 0} failures."
                 )
             else:
                 session_status = MOBILE_BACKUP_SESSION_STATUS_COMPLETED if failed_count == 0 else MOBILE_BACKUP_SESSION_STATUS_FAILED
-                folder_transfer_state = MOBILE_TRANSFER_STATE_COMPLETED if failed_count == 0 else MOBILE_TRANSFER_STATE_FAILED
+                transition_event = (
+                    MobileBackupEvent.TRANSFER_COMPLETED
+                    if failed_count == 0
+                    else MobileBackupEvent.TRANSFER_FAILED
+                )
                 response_message = (
                     f"Desktop finished the transfer session after receiving {request.transferred_count or 0} assets "
                     f"with {request.failed_count or 0} failures."
                 )
+            folder_transfer_state = folder_transfer_state_from_backup_state(
+                resolve_next_backup_state(
+                    current_folder_transfer_state=transfer_context.folder_transfer_state,
+                    event=transition_event,
+                    fallback_state=MobileBackupState.TRANSFER_IN_PROGRESS,
+                )
+            )
             update_mobile_transfer_state(
                 conn,
                 session_id=request.session_id,
