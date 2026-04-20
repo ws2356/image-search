@@ -17,6 +17,7 @@ from dt_image_search.mobile.mobile_pairing_service import (
     MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
     MobilePairingService,
     PairingResultState,
+    _desktop_name_for_build,
     _is_ignorable_socket_disconnect,
 )
 from dt_image_search.mobile.mobile_capability_exchange_service import (
@@ -202,6 +203,40 @@ class TestMobilePairingService(unittest.TestCase):
             is_foreground=True,
         )
         self.assertTrue(self._pairing_service._is_desktop_foreground())
+
+    def test_desktop_name_for_build_appends_suffix_only_for_non_prod(self):
+        self.assertEqual(_desktop_name_for_build("Studio Mac", "prod"), "Studio Mac")
+        self.assertEqual(_desktop_name_for_build("Studio Mac", "dev"), "Studio Mac-dev")
+        self.assertEqual(_desktop_name_for_build("Studio Mac-dev", "dev"), "Studio Mac-dev")
+
+    def test_handle_pairing_request_uses_build_suffix_for_non_prod_desktop_name(self):
+        now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)
+        with patch("dt_image_search.mobile.mobile_pairing_service.get_build_type", return_value="dev"):
+            pairing_service = MobilePairingService(
+                self._ctx,
+                listen_host="127.0.0.1",
+                advertised_host="127.0.0.1",
+                desktop_name="Studio Mac",
+            )
+        self.addCleanup(pairing_service.shutdown)
+
+        session = pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+        status_code, response_payload = pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-dev-001",
+                "device_name": "Alice iPhone",
+                "client_nonce": "client-nonce-dev-123",
+            },
+            now=now + timedelta(seconds=5),
+        )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(response_payload["desktop_name"], "Studio Mac-dev")
 
     def test_handle_pairing_request_rejects_expired_token(self):
         now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)

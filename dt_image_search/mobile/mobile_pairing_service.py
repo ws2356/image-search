@@ -63,6 +63,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbTransportState,
     UsbWebSocketTransportAdapter,
 )
+from dt_image_search.build_flavor import get_build_type
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.tools.dts_event_bus import default_bus
 
@@ -103,7 +104,8 @@ class MobilePairingService:
         self._ctx = ctx
         self._listen_host = listen_host
         self._advertised_host = advertised_host
-        self._desktop_name = desktop_name or socket.gethostname()
+        base_desktop_name = desktop_name or socket.gethostname()
+        self._desktop_name = _desktop_name_for_build(base_desktop_name, get_build_type())
         self._lock = threading.RLock()
         self._endpoint_url: str | None = None
         self._endpoint_urls: tuple[str, ...] = tuple()
@@ -650,6 +652,17 @@ def _format_pairing_endpoint_url(host: str, port: int) -> str:
 
 def _is_ignorable_socket_disconnect(exc: BaseException) -> bool:
     return _transport_is_ignorable_socket_disconnect(exc)
+
+
+def _desktop_name_for_build(desktop_name: str, build_type: str) -> str:
+    normalized_build_type = build_type.strip().lower() if build_type else "prod"
+    if normalized_build_type == "prod":
+        return desktop_name
+
+    suffix = f"-{normalized_build_type}"
+    if desktop_name.endswith(suffix):
+        return desktop_name
+    return f"{desktop_name}{suffix}"
 
 
 def _utc_now(now: datetime | None = None) -> datetime:
