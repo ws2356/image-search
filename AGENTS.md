@@ -22,7 +22,11 @@ Welcome to the `image-search` repository. This document outlines the architectur
   - Never update the UI directly from a background thread.
 - **Communication**: A custom Event Bus (`dts_event_bus.py`) provides a decoupled pub/sub mechanism for component communication (e.g., UI notifying background workers).
 
-## 4. Code Style & Naming Conventions
+## 4. Code Rules
+- **Separation of Concerns**: UI code should not contain business logic. Business logic should be in separate controller or worker classes. Each file should have a clear and often singular responsibility.
+- **Use asyncio**: The existing codebase is primarily synchronous, but new code should prefer `asyncio` for any I/O-bound operations (e.g., database access, file I/O) to improve responsiveness and scalability. Use `async def` and `await` as needed.
+- **Concurrency**: Ensure correctness under concurrent conditions. Even for local http/websocket servers, prepare for potential concurrent requests.
+- **Design Patterns**: Use approriate design patterns, e.g. DI, MVC, MVVM, State Machine, etc. where they fit naturally.
 - **Classes**: `PascalCase` (e.g., `IndexWorker`, `SearchController`).
 - **Functions & Methods**: `snake_case` (e.g., `create_db_conn`, `update_folder_status`).
 - **Variables**: `snake_case`.
