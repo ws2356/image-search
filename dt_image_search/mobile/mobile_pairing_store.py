@@ -76,6 +76,13 @@ class MobileFolderRecord:
 
 
 @dataclass(frozen=True)
+class MobileFolderBinding:
+    folder_id: int
+    folder_path: str
+    device_uuid: str
+
+
+@dataclass(frozen=True)
 class MobileTransferContext:
     session_id: str
     device_uuid: str
@@ -230,6 +237,145 @@ def get_or_create_mobile_folder(
     )
     conn.commit()
     return MobileFolderRecord(folder_id=_folder_id(folder), folder_path=normalized_folder_path, reused_existing=False)
+
+
+def get_mobile_folder_binding_by_path(
+    conn: sqlite3.Connection,
+    *,
+    folder_path: str,
+) -> MobileFolderBinding | None:
+    normalized_path = Path(folder_path).expanduser().resolve().as_posix()
+    row = conn.execute(
+        """
+        SELECT
+            mobile_folders.folder_id AS folder_id,
+            folders.path AS folder_path,
+            mobile_folders.device_uuid AS device_uuid
+        FROM mobile_folders
+        JOIN folders ON folders.id = mobile_folders.folder_id
+        WHERE folders.path IN (?, ?)
+        LIMIT 1
+        """,
+        _folder_path_variants(normalized_path),
+    ).fetchone()
+    if row is None:
+        return None
+    return MobileFolderBinding(
+        folder_id=int(row["folder_id"]),
+        folder_path=row["folder_path"],
+        device_uuid=row["device_uuid"],
+    )
+
+
+def repair_mobile_folder_device_binding(
+    conn: sqlite3.Connection,
+    *,
+    folder_id: int,
+    folder_path: str,
+    previous_device_uuid: str,
+    replacement_device_uuid: str,
+    updated_at: datetime,
+) -> MobileFolderRecord:
+    if previous_device_uuid == replacement_device_uuid:
+        conn.execute(
+            """
+            UPDATE mobile_folders
+            SET transfer_state = ?, transfer_state_updated_at = ?
+            WHERE folder_id = ?
+            """,
+            (MOBILE_TRANSFER_STATE_PAIRED, updated_at.isoformat(), folder_id),
+        )
+        conn.commit()
+        return MobileFolderRecord(folder_id=folder_id, folder_path=folder_path, reused_existing=True)
+
+    conflicting_row = conn.execute(
+        """
+        SELECT folder_id
+        FROM mobile_folders
+        WHERE device_uuid = ?
+        LIMIT 1
+        """,
+        (replacement_device_uuid,),
+    ).fetchone()
+    if conflicting_row is not None and int(conflicting_row["folder_id"]) != int(folder_id):
+        raise RuntimeError(
+            "Replacement mobile device is already associated with a different mobile folder."
+        )
+
+    old_asset_rows = conn.execute(
+        """
+        SELECT
+            remote_asset_id,
+            remote_asset_version,
+            content_sha1,
+            file_size_bytes,
+            asset_created_at,
+            local_relative_path,
+            last_transferred_at
+        FROM mobile_assets
+        WHERE device_uuid = ?
+        """,
+        (previous_device_uuid,),
+    ).fetchall()
+    for old_asset_row in old_asset_rows:
+        conn.execute(
+            """
+            INSERT INTO mobile_assets (
+                device_uuid,
+                remote_asset_id,
+                remote_asset_version,
+                content_sha1,
+                file_size_bytes,
+                asset_created_at,
+                local_relative_path,
+                last_transferred_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(device_uuid, remote_asset_id) DO UPDATE SET
+                remote_asset_version = excluded.remote_asset_version,
+                content_sha1 = excluded.content_sha1,
+                file_size_bytes = excluded.file_size_bytes,
+                asset_created_at = excluded.asset_created_at,
+                local_relative_path = excluded.local_relative_path,
+                last_transferred_at = excluded.last_transferred_at
+            """,
+            (
+                replacement_device_uuid,
+                old_asset_row["remote_asset_id"],
+                old_asset_row["remote_asset_version"],
+                old_asset_row["content_sha1"],
+                old_asset_row["file_size_bytes"],
+                old_asset_row["asset_created_at"],
+                old_asset_row["local_relative_path"],
+                old_asset_row["last_transferred_at"],
+            ),
+        )
+
+    conn.execute(
+        """
+        UPDATE mobile_backup_sessions
+        SET device_uuid = ?, folder_id = ?
+        WHERE device_uuid = ?
+        """,
+        (replacement_device_uuid, folder_id, previous_device_uuid),
+    )
+    conn.execute(
+        """
+        UPDATE mobile_folders
+        SET device_uuid = ?, transfer_state = ?, transfer_state_updated_at = ?
+        WHERE folder_id = ?
+        """,
+        (replacement_device_uuid, MOBILE_TRANSFER_STATE_PAIRED, updated_at.isoformat(), folder_id),
+    )
+    conn.execute(
+        "DELETE FROM mobile_assets WHERE device_uuid = ?",
+        (previous_device_uuid,),
+    )
+    conn.execute(
+        "DELETE FROM mobile_devices WHERE device_uuid = ?",
+        (previous_device_uuid,),
+    )
+    conn.commit()
+    return MobileFolderRecord(folder_id=folder_id, folder_path=folder_path, reused_existing=True)
 
 
 def insert_mobile_backup_session(
@@ -706,3 +852,11 @@ def _normalized_folder_key(folder_path: str) -> str:
     if normalized_path.endswith("/"):
         return normalized_path
     return normalized_path + "/"
+
+
+def _folder_path_variants(folder_path: str) -> tuple[str, str]:
+    normalized_path = folder_path.replace("\\", "/")
+    trimmed_path = normalized_path.rstrip("/")
+    if not trimmed_path:
+        return ("/", "/")
+    return (trimmed_path, trimmed_path + "/")

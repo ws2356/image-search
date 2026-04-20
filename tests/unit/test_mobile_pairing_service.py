@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_service import (
     MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
+    MobileBackupAgainDecision,
+    MobileBackupAgainSessionContext,
     MobilePairingService,
     PairingResultState,
     _desktop_name_for_build,
@@ -704,6 +707,370 @@ class TestMobilePairingService(unittest.TestCase):
         pairing_service.start_pairing_session(self._temp_dir.name)
         pairing_service.close_active_session()
         self.assertEqual(transport_manager.stop_usb_calls, 1)
+
+    def test_backup_again_mismatch_can_repair_selected_mobile_folder_binding(self):
+        now = datetime(2026, 4, 10, 10, 0, tzinfo=timezone.utc)
+        first_session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        first_token = first_session.token_for(MobilePlatform.IOS)
+        first_status, first_payload = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": first_session.session_id,
+                "opt": first_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-old-001",
+                "device_name": "Alice iPhone",
+                "client_nonce": "backup-again-old-client-nonce",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(first_status, 200)
+
+        with create_db_conn(self._ctx) as conn:
+            original_folder_row = conn.execute(
+                """
+                SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
+                FROM mobile_folders
+                JOIN folders ON folders.id = mobile_folders.folder_id
+                WHERE mobile_folders.device_uuid = ?
+                """,
+                ("ios-device-old-001",),
+            ).fetchone()
+            self.assertIsNotNone(original_folder_row)
+            conn.execute(
+                """
+                INSERT INTO mobile_assets (
+                    device_uuid,
+                    remote_asset_id,
+                    local_relative_path,
+                    last_transferred_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "ios-device-old-001",
+                    "ph://asset-old-001",
+                    "2026-04/IMG_0001.JPG",
+                    now.isoformat(),
+                ),
+            )
+            conn.commit()
+
+        observed_mismatch_contexts = []
+
+        def mismatch_resolver(context):
+            observed_mismatch_contexts.append(context)
+            return MobileBackupAgainDecision.CONTINUE_IN_SELECTED_FOLDER
+
+        second_session = self._pairing_service.start_pairing_session(
+            self._temp_dir.name,
+            backup_again_context=MobileBackupAgainSessionContext(
+                selected_folder_id=int(original_folder_row["folder_id"]),
+                selected_folder_path=original_folder_row["folder_path"],
+                expected_device_uuid="ios-device-old-001",
+                mismatch_resolver=mismatch_resolver,
+            ),
+            now=now + timedelta(minutes=1),
+        )
+        second_token = second_session.token_for(MobilePlatform.IOS)
+        second_status, second_payload = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": second_session.session_id,
+                "opt": second_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-new-001",
+                "device_name": "Alice iPhone Reinstalled",
+                "client_nonce": "backup-again-new-client-nonce",
+            },
+            now=now + timedelta(minutes=1, seconds=5),
+        )
+
+        self.assertEqual(second_status, 200)
+        self.assertEqual(second_payload["folder_path"], original_folder_row["folder_path"])
+        self.assertEqual(len(observed_mismatch_contexts), 1)
+        self.assertEqual(observed_mismatch_contexts[0].previous_device_uuid, "ios-device-old-001")
+        self.assertEqual(observed_mismatch_contexts[0].replacement_device_uuid, "ios-device-new-001")
+
+        with create_db_conn(self._ctx) as conn:
+            folders_count = conn.execute("SELECT COUNT(*) AS count FROM folders").fetchone()["count"]
+            self.assertEqual(folders_count, 1)
+
+            folder_binding_row = conn.execute(
+                "SELECT device_uuid FROM mobile_folders WHERE folder_id = ?",
+                (int(original_folder_row["folder_id"]),),
+            ).fetchone()
+            self.assertIsNotNone(folder_binding_row)
+            self.assertEqual(folder_binding_row["device_uuid"], "ios-device-new-001")
+
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM mobile_devices WHERE device_uuid = ?", ("ios-device-old-001",)).fetchone()
+            )
+            self.assertIsNotNone(
+                conn.execute("SELECT 1 FROM mobile_devices WHERE device_uuid = ?", ("ios-device-new-001",)).fetchone()
+            )
+
+            migrated_asset = conn.execute(
+                """
+                SELECT local_relative_path
+                FROM mobile_assets
+                WHERE device_uuid = ? AND remote_asset_id = ?
+                """,
+                ("ios-device-new-001", "ph://asset-old-001"),
+            ).fetchone()
+            self.assertIsNotNone(migrated_asset)
+            self.assertIsNone(
+                conn.execute(
+                    "SELECT 1 FROM mobile_assets WHERE device_uuid = ?",
+                    ("ios-device-old-001",),
+                ).fetchone()
+            )
+
+            old_session_rows = conn.execute(
+                "SELECT COUNT(*) AS count FROM mobile_backup_sessions WHERE device_uuid = ?",
+                ("ios-device-old-001",),
+            ).fetchone()
+            self.assertEqual(old_session_rows["count"], 0)
+            new_session_rows = conn.execute(
+                "SELECT COUNT(*) AS count FROM mobile_backup_sessions WHERE device_uuid = ?",
+                ("ios-device-new-001",),
+            ).fetchone()
+            self.assertEqual(new_session_rows["count"], 2)
+
+    def test_backup_again_mismatch_can_continue_in_new_mobile_folder(self):
+        now = datetime(2026, 4, 10, 11, 0, tzinfo=timezone.utc)
+        first_session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        first_token = first_session.token_for(MobilePlatform.IOS)
+        first_status, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": first_session.session_id,
+                "opt": first_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-old-002",
+                "device_name": "Alice iPhone",
+                "client_nonce": "backup-again-old-client-nonce-2",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(first_status, 200)
+
+        with create_db_conn(self._ctx) as conn:
+            original_folder_row = conn.execute(
+                """
+                SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
+                FROM mobile_folders
+                JOIN folders ON folders.id = mobile_folders.folder_id
+                WHERE mobile_folders.device_uuid = ?
+                """,
+                ("ios-device-old-002",),
+            ).fetchone()
+            self.assertIsNotNone(original_folder_row)
+            conn.execute(
+                """
+                INSERT INTO mobile_assets (
+                    device_uuid,
+                    remote_asset_id,
+                    local_relative_path,
+                    last_transferred_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "ios-device-old-002",
+                    "ph://asset-old-002",
+                    "2026-04/IMG_0002.JPG",
+                    now.isoformat(),
+                ),
+            )
+            conn.commit()
+
+        second_session = self._pairing_service.start_pairing_session(
+            self._temp_dir.name,
+            backup_again_context=MobileBackupAgainSessionContext(
+                selected_folder_id=int(original_folder_row["folder_id"]),
+                selected_folder_path=original_folder_row["folder_path"],
+                expected_device_uuid="ios-device-old-002",
+                mismatch_resolver=lambda _context: MobileBackupAgainDecision.BACKUP_IN_NEW_FOLDER,
+            ),
+            now=now + timedelta(minutes=1),
+        )
+        second_token = second_session.token_for(MobilePlatform.IOS)
+        second_status, second_payload = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": second_session.session_id,
+                "opt": second_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-new-002",
+                "device_name": "Alice iPhone Reinstalled",
+                "client_nonce": "backup-again-new-client-nonce-2",
+            },
+            now=now + timedelta(minutes=1, seconds=5),
+        )
+
+        self.assertEqual(second_status, 200)
+        self.assertNotEqual(second_payload["folder_path"], original_folder_row["folder_path"])
+
+        with create_db_conn(self._ctx) as conn:
+            old_binding = conn.execute(
+                "SELECT folder_id FROM mobile_folders WHERE device_uuid = ?",
+                ("ios-device-old-002",),
+            ).fetchone()
+            self.assertIsNotNone(old_binding)
+            self.assertEqual(int(old_binding["folder_id"]), int(original_folder_row["folder_id"]))
+
+            new_binding = conn.execute(
+                "SELECT folder_id FROM mobile_folders WHERE device_uuid = ?",
+                ("ios-device-new-002",),
+            ).fetchone()
+            self.assertIsNotNone(new_binding)
+            self.assertNotEqual(int(new_binding["folder_id"]), int(original_folder_row["folder_id"]))
+
+            self.assertIsNotNone(
+                conn.execute(
+                    "SELECT 1 FROM mobile_assets WHERE device_uuid = ? AND remote_asset_id = ?",
+                    ("ios-device-old-002", "ph://asset-old-002"),
+                ).fetchone()
+            )
+            self.assertIsNone(
+                conn.execute(
+                    "SELECT 1 FROM mobile_assets WHERE device_uuid = ? AND remote_asset_id = ?",
+                    ("ios-device-new-002", "ph://asset-old-002"),
+                ).fetchone()
+            )
+
+    def test_backup_again_mismatch_resolver_does_not_block_current_result_reads(self):
+        now = datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc)
+        first_session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        first_token = first_session.token_for(MobilePlatform.IOS)
+        first_status, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": first_session.session_id,
+                "opt": first_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-old-003",
+                "device_name": "Alice iPhone",
+                "client_nonce": "backup-again-old-client-nonce-3",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(first_status, 200)
+
+        with create_db_conn(self._ctx) as conn:
+            original_folder_row = conn.execute(
+                """
+                SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
+                FROM mobile_folders
+                JOIN folders ON folders.id = mobile_folders.folder_id
+                WHERE mobile_folders.device_uuid = ?
+                """,
+                ("ios-device-old-003",),
+            ).fetchone()
+            self.assertIsNotNone(original_folder_row)
+
+        def mismatch_resolver(_context):
+            read_complete = threading.Event()
+
+            def _read_current_result():
+                self._pairing_service.current_result()
+                read_complete.set()
+
+            reader = threading.Thread(target=_read_current_result, daemon=True)
+            reader.start()
+            reader.join(timeout=1.0)
+            self.assertTrue(read_complete.is_set())
+            return MobileBackupAgainDecision.BACKUP_IN_NEW_FOLDER
+
+        second_session = self._pairing_service.start_pairing_session(
+            self._temp_dir.name,
+            backup_again_context=MobileBackupAgainSessionContext(
+                selected_folder_id=int(original_folder_row["folder_id"]),
+                selected_folder_path=original_folder_row["folder_path"],
+                expected_device_uuid="ios-device-old-003",
+                mismatch_resolver=mismatch_resolver,
+            ),
+            now=now + timedelta(minutes=1),
+        )
+        second_token = second_session.token_for(MobilePlatform.IOS)
+        second_status, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": second_session.session_id,
+                "opt": second_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-new-003",
+                "device_name": "Alice iPhone Reinstalled",
+                "client_nonce": "backup-again-new-client-nonce-3",
+            },
+            now=now + timedelta(minutes=1, seconds=5),
+        )
+        self.assertEqual(second_status, 200)
+
+    def test_backup_again_mismatch_can_cancel_pairing_request(self):
+        now = datetime(2026, 4, 10, 13, 0, tzinfo=timezone.utc)
+        first_session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        first_token = first_session.token_for(MobilePlatform.IOS)
+        first_status, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": first_session.session_id,
+                "opt": first_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-old-004",
+                "device_name": "Alice iPhone",
+                "client_nonce": "backup-again-old-client-nonce-4",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(first_status, 200)
+
+        with create_db_conn(self._ctx) as conn:
+            original_folder_row = conn.execute(
+                """
+                SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
+                FROM mobile_folders
+                JOIN folders ON folders.id = mobile_folders.folder_id
+                WHERE mobile_folders.device_uuid = ?
+                """,
+                ("ios-device-old-004",),
+            ).fetchone()
+            self.assertIsNotNone(original_folder_row)
+
+        second_session = self._pairing_service.start_pairing_session(
+            self._temp_dir.name,
+            backup_again_context=MobileBackupAgainSessionContext(
+                selected_folder_id=int(original_folder_row["folder_id"]),
+                selected_folder_path=original_folder_row["folder_path"],
+                expected_device_uuid="ios-device-old-004",
+                mismatch_resolver=lambda _context: MobileBackupAgainDecision.CANCEL,
+            ),
+            now=now + timedelta(minutes=1),
+        )
+        second_token = second_session.token_for(MobilePlatform.IOS)
+        second_status, second_payload = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": second_session.session_id,
+                "opt": second_token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-new-004",
+                "device_name": "Alice iPhone Reinstalled",
+                "client_nonce": "backup-again-new-client-nonce-4",
+            },
+            now=now + timedelta(minutes=1, seconds=5),
+        )
+
+        self.assertEqual(second_status, 409)
+        self.assertEqual(second_payload["status"], "rejected")
+        self.assertIn("canceled", second_payload["message"].lower())
+
+        with create_db_conn(self._ctx) as conn:
+            self.assertIsNotNone(
+                conn.execute("SELECT 1 FROM mobile_devices WHERE device_uuid = ?", ("ios-device-old-004",)).fetchone()
+            )
+            self.assertIsNone(
+                conn.execute("SELECT 1 FROM mobile_devices WHERE device_uuid = ?", ("ios-device-new-004",)).fetchone()
+            )
 
     def _post_pairing_request(self, payload: dict[str, str]) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)
