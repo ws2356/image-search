@@ -1,4 +1,4 @@
-Backup State Machine
+# Pairing and Backup State Machine
 The backup process can be modeled as a state machine with the following states:
 1. Pending_Pairing: PC is waiting for mobile initiate pairing, e.g. via QR scan.
 2. Pairing_Completed: PC/Mobile pair is set up correctly. PC is now waiting for mobile to start the transferring process. Mobile can do permissions check and show warnings before allowing user before starting the transfer.
