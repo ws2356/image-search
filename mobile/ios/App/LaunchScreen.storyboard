@@ -35,7 +35,7 @@
                             <constraint firstItem="LaunchSplashRatioGuideView" firstAttribute="top" secondItem="LaunchScreenView" secondAttribute="top" id="LaunchSplashRatioGuideTopConstraint"/>
                             <constraint firstItem="LaunchSplashRatioGuideView" firstAttribute="leading" secondItem="LaunchScreenView" secondAttribute="leading" id="LaunchSplashRatioGuideLeadingConstraint"/>
                             <constraint firstAttribute="trailing" secondItem="LaunchSplashRatioGuideView" secondAttribute="trailing" id="LaunchSplashRatioGuideTrailingConstraint"/>
-                            <constraint firstItem="LaunchSplashRatioGuideView" firstAttribute="height" secondItem="LaunchScreenView" secondAttribute="height" multiplier="191:500" id="LaunchSplashRatioGuideHeightConstraint"/>
+                            <constraint firstItem="LaunchSplashRatioGuideView" firstAttribute="height" secondItem="LaunchScreenView" secondAttribute="height" multiplier="9:20" id="LaunchSplashRatioGuideHeightConstraint"/>
                             <constraint firstItem="LaunchSplashContentImageView" firstAttribute="centerX" secondItem="LaunchScreenView" secondAttribute="centerX" id="LaunchSplashContentCenterXConstraint"/>
                             <constraint firstItem="LaunchSplashContentImageView" firstAttribute="centerY" secondItem="LaunchSplashRatioGuideView" secondAttribute="bottom" id="LaunchSplashContentCenterYConstraint"/>
                             <constraint firstItem="LaunchSplashContentImageView" firstAttribute="width" secondItem="LaunchScreenView" secondAttribute="width" multiplier="39:50" id="LaunchSplashContentWidthConstraint"/>
