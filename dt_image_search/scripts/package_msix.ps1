@@ -8,6 +8,9 @@ param(
 # Set strict mode and error action
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$appExecutableRoot = if ($BuildType -eq "prod") { "DTImageSearch" } else { "DTImageSearch-$BuildType" }
+$appExecutablePath = "$appExecutableRoot\$appExecutableRoot.exe"
+$msixOutputName = if ($BuildType -eq "prod") { "DTImageSearch.msix" } else { "DTImageSearch-$BuildType.msix" }
 
 # Get script directory and change to repo root (equivalent to bash path resolution)
 $scriptPath = $MyInvocation.MyCommand.Path
@@ -82,6 +85,60 @@ if (Test-Path $iconSrc) {
     exit 1
 }
 
+# Apply build-type specific app identity/display values in AppxManifest.
+try {
+    [xml]$manifestXml = Get-Content -Path $manifestDst
+    $namespaceManager = New-Object System.Xml.XmlNamespaceManager($manifestXml.NameTable)
+    $namespaceManager.AddNamespace("appx", "http://schemas.microsoft.com/appx/manifest/foundation/windows10")
+    $namespaceManager.AddNamespace("uap", "http://schemas.microsoft.com/appx/manifest/uap/windows10")
+    $namespaceManager.AddNamespace("desktop2", "http://schemas.microsoft.com/appx/manifest/desktop/windows10/2")
+
+    $identityNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Identity", $namespaceManager)
+    $displayNameNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Properties/appx:DisplayName", $namespaceManager)
+    $applicationNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Applications/appx:Application", $namespaceManager)
+    $visualElementsNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Applications/appx:Application/uap:VisualElements", $namespaceManager)
+    $firewallRulesNode = $manifestXml.SelectSingleNode("/appx:Package/appx:Extensions/desktop2:Extension/desktop2:FirewallRules", $namespaceManager)
+
+    if ($null -eq $applicationNode -or $null -eq $firewallRulesNode) {
+        throw "AppxManifest.xml is missing required application executable nodes."
+    }
+
+    $applicationNode.SetAttribute("Executable", $appExecutablePath)
+    $firewallRulesNode.SetAttribute("Executable", $appExecutablePath)
+
+    if ($BuildType -ne "prod") {
+        $displaySuffix = "-$BuildType"
+        if ($null -ne $displayNameNode -and -not $displayNameNode.InnerText.EndsWith($displaySuffix)) {
+            $displayNameNode.InnerText = "$($displayNameNode.InnerText)$displaySuffix"
+        }
+        if ($null -ne $visualElementsNode) {
+            $currentDisplayName = $visualElementsNode.GetAttribute("DisplayName")
+            if ($currentDisplayName -and -not $currentDisplayName.EndsWith($displaySuffix)) {
+                $visualElementsNode.SetAttribute("DisplayName", "$currentDisplayName$displaySuffix")
+            }
+        }
+        if ($null -ne $applicationNode) {
+            $currentApplicationId = $applicationNode.GetAttribute("Id")
+            if ($currentApplicationId -and -not $currentApplicationId.EndsWith($displaySuffix)) {
+                $applicationNode.SetAttribute("Id", "$currentApplicationId$displaySuffix")
+            }
+        }
+        if ($null -ne $identityNode) {
+            $currentIdentityName = $identityNode.GetAttribute("Name")
+            $identitySuffix = ".$BuildType"
+            if ($currentIdentityName -and -not $currentIdentityName.EndsWith($identitySuffix)) {
+                $identityNode.SetAttribute("Name", "$currentIdentityName$identitySuffix")
+            }
+        }
+    }
+
+    $manifestXml.Save($manifestDst)
+    Write-Host "Updated AppxManifest.xml for build type '$BuildType'"
+} catch {
+    Write-Error "Failed to apply build type manifest values: $($_.Exception.Message)"
+    exit 1
+}
+
 # Execute bump_app_version.ps1 to update version
 $bumpScript = Join-Path $scriptDir "bump_app_version.ps1"
 Write-Host "Bumping app version..."
@@ -108,7 +165,7 @@ try {
     $process = Start-Process -FilePath $makeappx -ArgumentList @(
         "pack",
         "/d", "$appDir",
-        "/p", "DTImageSearch.msix",
+        "/p", $msixOutputName,
         "/o"
     ) -Wait -PassThru -NoNewWindow
     
@@ -117,7 +174,7 @@ try {
         exit 1
     }
     
-    Write-Host "Successfully created MSIX package: DTImageSearch.msix"
+    Write-Host "Successfully created MSIX package: $msixOutputName"
 } catch {
     Write-Error "Failed to create MSIX package: $($_.Exception.Message)"
     exit 1

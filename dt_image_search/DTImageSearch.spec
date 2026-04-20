@@ -16,6 +16,8 @@ datas += heif_datas
 build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
 if build_type not in {"prod", "dev"}:
     raise ValueError(f"Unsupported DTIS_BUILD_TYPE: {build_type!r}. Expected 'prod' or 'dev'.")
+app_name = "DTImageSearch" if build_type == "prod" else f"DTImageSearch-{build_type}"
+bundle_identifier = "vip.wansong.dtimagesearch" if build_type == "prod" else f"vip.wansong.dtimagesearch.{build_type}"
 build_vars_path = Path(tempfile.gettempdir()) / f"dtis_build_vars_{build_type}"
 build_vars_path.write_text(f"build_type={build_type}\n", encoding="utf-8")
 datas += [(str(build_vars_path), "dt_image_search/resources")]
@@ -43,7 +45,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='DTImageSearch',
+    name=app_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -62,11 +64,11 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='DTImageSearch',
+    name=app_name,
 )
 app = BUNDLE(
     coll,
-    name='DTImageSearch.app',
+    name=f"{app_name}.app",
     icon='resources/appicon.icns',
-    bundle_identifier='vip.wansong.dtimagesearch',
+    bundle_identifier=bundle_identifier,
 )
