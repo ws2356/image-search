@@ -36,7 +36,7 @@ from dt_image_search.build_flavor import get_build_type
 
 QCoreApplication.setOrganizationName("net.boldman")
 _build_type = get_build_type()
-_app_display_name = "DTImageSearch" if _build_type == "prod" else f"DTImageSearch-{_build_type}"
+_app_display_name = "imagesearch-dev" if _build_type == "dev" else "imagesearch"
 QCoreApplication.setApplicationName(_app_display_name)
 
 from dt_image_search.bm_context import get_context, BMContext

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+import re
 import secrets
 import socket
 import threading
@@ -122,13 +123,14 @@ class MobilePairingService:
         ctx: BMContext,
         *,
         listen_host: str = "0.0.0.0",
-        advertised_host: str | None = None,
         desktop_name: str | None = None,
+        advertised_host: str | None = None
     ):
         self._ctx = ctx
         self._listen_host = listen_host
         self._advertised_host = advertised_host
-        base_desktop_name = desktop_name or socket.gethostname()
+        base_desktop_name = desktop_name or socket.gethostname() or "Desktop"
+        base_desktop_name = re.sub(r'.local$', '', base_desktop_name, flags=re.IGNORECASE)
         self._desktop_name = _desktop_name_for_build(base_desktop_name, get_build_type())
         self._lock = threading.RLock()
         self._endpoint_url: str | None = None
