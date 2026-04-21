@@ -1733,11 +1733,17 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
 
         var hasher = Insecure.SHA1()
         while true {
-            let chunk = try handle.read(upToCount: 1024 * 1024) ?? Data()
-            if chunk.isEmpty {
+            let hasChunk = try autoreleasepool { () throws -> Bool in
+                let chunk = try handle.read(upToCount: 256 * 1024) ?? Data()
+                guard !chunk.isEmpty else {
+                    return false
+                }
+                hasher.update(data: chunk)
+                return true
+            }
+            if !hasChunk {
                 break
             }
-            hasher.update(data: chunk)
         }
         let digest = hasher.finalize()
         return digest.map { String(format: "%02x", $0) }.joined()
