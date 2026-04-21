@@ -217,7 +217,6 @@ struct DesktopBootstrapPairingService: PairingService {
             guard let sessionID = response.sessionID,
                   let desktopDeviceID = response.desktopDeviceID,
                   let desktopName = normalizedDesktopDisplayName(response.desktopName),
-                  let serverNonce = response.serverNonce,
                   let pairedAt = response.pairedAt
             else {
                 throw PairingServiceError.invalidAcceptedResponse
@@ -225,10 +224,7 @@ struct DesktopBootstrapPairingService: PairingService {
 
             let sharedKeyBase64 = derivePairingKeyBase64(
                 payload: payload,
-                identity: identity,
-                desktopDeviceID: desktopDeviceID,
-                clientNonce: clientNonce,
-                serverNonce: serverNonce
+                platform: identity.platform
             )
             let transport = TransferTransport(rawValue: response.transport ?? TransferTransport.lan.rawValue) ?? .lan
             let trustedRecord = TrustedDesktopRecord(
@@ -346,20 +342,13 @@ struct DesktopBootstrapPairingService: PairingService {
 
     private func derivePairingKeyBase64(
         payload: PairingQRCodePayload,
-        identity: LocalDeviceIdentity,
-        desktopDeviceID: String,
-        clientNonce: String,
-        serverNonce: String
+        platform: String
     ) -> String {
         let material = [
             PairingProtocol.schema,
             payload.sessionID,
             payload.oneTimePasscode,
-            identity.deviceUUID,
-            identity.platform,
-            clientNonce,
-            serverNonce,
-            desktopDeviceID,
+            platform,
         ].joined(separator: "\n")
         let digest = SHA256.hash(data: Data(material.utf8))
         return Data(digest).base64URLEncodedString()

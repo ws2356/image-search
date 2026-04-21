@@ -35,6 +35,7 @@ from dt_image_search.mobile.mobile_backup_state_machine import (
     folder_transfer_state_from_backup_state,
     resolve_next_backup_state,
 )
+from dt_image_search.mobile.mobile_trust_proof import is_valid_trust_proof
 from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
 )
@@ -57,7 +58,7 @@ class MobileTransferSessionRequest:
     schema: str
     session_id: str
     device_uuid: str
-    trust_key_b64: str
+    trust_proof: str
     total_assets: int | None = None
     transferred_count: int | None = None
     failed_count: int | None = None
@@ -68,7 +69,7 @@ class MobileTransferAssetMetadata:
     schema: str
     session_id: str
     device_uuid: str
-    trust_key_b64: str
+    trust_proof: str
     asset_id: str
     asset_version: str | None
     content_sha1: str | None
@@ -84,7 +85,7 @@ class MobileTransferAssetExistenceRequest:
     schema: str
     session_id: str
     device_uuid: str
-    trust_key_b64: str
+    trust_proof: str
     assets: tuple["MobileTransferAssetSignature", ...]
 
 
@@ -127,9 +128,14 @@ class MobileTransferService:
                 conn,
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
-                trust_key_b64=request.trust_key_b64,
             )
             if transfer_context is None:
+                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+            if not is_valid_trust_proof(
+                trust_key_b64=transfer_context.trust_key_b64,
+                payload=request_payload,
+                trust_proof_b64=request.trust_proof,
+            ):
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
             folder_transfer_state = folder_transfer_state_from_backup_state(
@@ -199,9 +205,14 @@ class MobileTransferService:
                 conn,
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
-                trust_key_b64=request.trust_key_b64,
             )
             if transfer_context is None:
+                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+            if not is_valid_trust_proof(
+                trust_key_b64=transfer_context.trust_key_b64,
+                payload=request_payload,
+                trust_proof_b64=request.trust_proof,
+            ):
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
             matching_assets = get_mobile_asset_records_by_signatures(
@@ -291,9 +302,15 @@ class MobileTransferService:
                 conn,
                 session_id=metadata.session_id,
                 device_uuid=metadata.device_uuid,
-                trust_key_b64=metadata.trust_key_b64,
             )
             if transfer_context is None:
+                _cleanup_temp_upload_file(staged_temp_file_path)
+                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+            if not is_valid_trust_proof(
+                trust_key_b64=transfer_context.trust_key_b64,
+                payload=metadata_payload,
+                trust_proof_b64=metadata.trust_proof,
+            ):
                 _cleanup_temp_upload_file(staged_temp_file_path)
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
@@ -475,9 +492,14 @@ class MobileTransferService:
                 conn,
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
-                trust_key_b64=request.trust_key_b64,
             )
             if transfer_context is None:
+                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+            if not is_valid_trust_proof(
+                trust_key_b64=transfer_context.trust_key_b64,
+                payload=request_payload,
+                trust_proof_b64=request.trust_proof,
+            ):
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
             failed_count = request.failed_count or 0
@@ -556,7 +578,7 @@ def _parse_transfer_session_request(
     schema = _require_non_empty_string(request_payload, "schema")
     session_id = _require_non_empty_string(request_payload, "session_id")
     device_uuid = _require_non_empty_string(request_payload, "device_uuid")
-    trust_key_b64 = _require_non_empty_string(request_payload, "trust_key")
+    trust_proof = _require_non_empty_string(request_payload, "trust_proof")
 
     total_assets: int | None = None
     transferred_count: int | None = None
@@ -571,7 +593,7 @@ def _parse_transfer_session_request(
         schema=schema,
         session_id=session_id,
         device_uuid=device_uuid,
-        trust_key_b64=trust_key_b64,
+        trust_proof=trust_proof,
         total_assets=total_assets,
         transferred_count=transferred_count,
         failed_count=failed_count,
@@ -583,7 +605,7 @@ def _parse_transfer_asset_metadata(metadata_payload: dict[str, object]) -> Mobil
         schema=_require_non_empty_string(metadata_payload, "schema"),
         session_id=_require_non_empty_string(metadata_payload, "session_id"),
         device_uuid=_require_non_empty_string(metadata_payload, "device_uuid"),
-        trust_key_b64=_require_non_empty_string(metadata_payload, "trust_key"),
+        trust_proof=_require_non_empty_string(metadata_payload, "trust_proof"),
         asset_id=_require_non_empty_string(metadata_payload, "asset_id"),
         asset_version=_optional_non_empty_string(metadata_payload, "asset_version"),
         content_sha1=_optional_sha1_hex(metadata_payload, "sha1"),
@@ -620,7 +642,7 @@ def _parse_transfer_asset_existence_request(
         schema=session_request.schema,
         session_id=session_request.session_id,
         device_uuid=session_request.device_uuid,
-        trust_key_b64=session_request.trust_key_b64,
+        trust_proof=session_request.trust_proof,
         assets=tuple(parsed_assets),
     )
 

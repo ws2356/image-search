@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_store import get_mobile_transfer_context
+from dt_image_search.mobile.mobile_trust_proof import is_valid_trust_proof
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_event_bus import default_bus
@@ -20,7 +21,7 @@ class MobileUpdatePromptRequest:
     schema: str
     session_id: str
     device_uuid: str
-    trust_key_b64: str
+    trust_proof: str
     required: bool
     body_text: str | None
     update_destination: str | None
@@ -48,9 +49,18 @@ class MobileUpdatePromptService:
                 conn,
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
-                trust_key_b64=request.trust_key_b64,
             )
             if transfer_context is None:
+                return _response(
+                    status_code=403,
+                    status="rejected",
+                    message="Desktop rejected the update prompt request.",
+                )
+            if not is_valid_trust_proof(
+                trust_key_b64=transfer_context.trust_key_b64,
+                payload=request_payload,
+                trust_proof_b64=request.trust_proof,
+            ):
                 return _response(
                     status_code=403,
                     status="rejected",
@@ -109,7 +119,7 @@ def _response(
 
 
 def _parse_update_prompt_request(payload: dict[str, object]) -> MobileUpdatePromptRequest:
-    required_string_fields = ("schema", "session_id", "device_uuid", "trust_key")
+    required_string_fields = ("schema", "session_id", "device_uuid", "trust_proof")
     normalized_fields: dict[str, str] = {}
     for field_name in required_string_fields:
         field_value = payload.get(field_name)
@@ -138,7 +148,7 @@ def _parse_update_prompt_request(payload: dict[str, object]) -> MobileUpdateProm
         schema=normalized_fields["schema"],
         session_id=normalized_fields["session_id"],
         device_uuid=normalized_fields["device_uuid"],
-        trust_key_b64=normalized_fields["trust_key"],
+        trust_proof=normalized_fields["trust_proof"],
         required=required_value,
         body_text=body_text,
         update_destination=update_destination,

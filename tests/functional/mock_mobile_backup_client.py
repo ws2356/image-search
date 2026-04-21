@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
+from dt_image_search.mobile.mobile_trust_proof import derive_trust_proof_b64
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_ASSET_PATH,
     MOBILE_TRANSFER_COMPLETE_PATH,
@@ -136,11 +137,7 @@ class MockMobileBackupClient:
                 trust_key_b64 = derive_pairing_key_b64(
                     session_id=session_id,
                     one_time_passcode=one_time_passcode,
-                    device_uuid=self._device_uuid,
                     platform=self._platform.value,
-                    client_nonce=self._client_nonce,
-                    server_nonce=_require_string(response_payload, "server_nonce"),
-                    desktop_device_id=_require_string(response_payload, "desktop_device_id"),
                 )
                 return MockPairingRecord(
                     endpoint_url=endpoint_url,
@@ -246,7 +243,8 @@ class MockMobileBackupClient:
     ) -> dict[str, object]:
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            encoded_payload = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            normalized_payload = _normalize_authenticated_payload(payload)
+            encoded_payload = json.dumps(normalized_payload, separators=(",", ":")).encode("utf-8")
             connection.request(
                 "POST",
                 (
@@ -333,7 +331,8 @@ class MockMobileBackupClient:
         endpoint = urlsplit(endpoint_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            encoded_payload = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            normalized_payload = _normalize_authenticated_payload(payload)
+            encoded_payload = json.dumps(normalized_payload, separators=(",", ":")).encode("utf-8")
             connection.request(
                 "POST",
                 path,
@@ -422,3 +421,18 @@ def _require_list(payload: dict[str, object], key: str) -> list[dict[str, object
             raise RuntimeError(f"The desktop response field '{key}' contains a non-object item.")
         normalized_items.append(item)
     return normalized_items
+
+
+def _normalize_authenticated_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized_payload = dict(payload)
+    raw_trust_key = normalized_payload.pop("trust_key", None)
+    if isinstance(raw_trust_key, str) and raw_trust_key:
+        proof_payload = dict(normalized_payload)
+        if proof_payload.get(TRANSFER_ASSET_STREAM_STATE_FIELD) == TRANSFER_ASSET_STREAM_STATE_START:
+            proof_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
+            proof_payload.pop("chunk_size", None)
+        normalized_payload["trust_proof"] = derive_trust_proof_b64(
+            trust_key_b64=raw_trust_key,
+            payload=proof_payload,
+        )
+    return normalized_payload

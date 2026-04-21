@@ -17,6 +17,7 @@ from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64, ensure_mobile_pairing_schema
+from dt_image_search.mobile.mobile_trust_proof import derive_trust_proof_b64
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_ASSET_PATH,
     MOBILE_TRANSFER_COMPLETE_PATH,
@@ -519,11 +520,7 @@ class TestMobileTransferService(unittest.TestCase):
         trust_key_b64 = derive_pairing_key_b64(
             session_id=session.session_id,
             one_time_passcode=token.one_time_passcode,
-            device_uuid="ios-device-001",
             platform="ios",
-            client_nonce="client-nonce-123",
-            server_nonce=response_payload["server_nonce"],
-            desktop_device_id=response_payload["desktop_device_id"],
         )
         return {
             "session_id": session.session_id,
@@ -536,7 +533,8 @@ class TestMobileTransferService(unittest.TestCase):
         endpoint = urlsplit(self._pairing_service.endpoint_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            encoded_payload = json.dumps(payload).encode("utf-8")
+            normalized_payload = self._normalize_authenticated_payload(payload)
+            encoded_payload = json.dumps(normalized_payload).encode("utf-8")
             connection.request(
                 "POST",
                 path,
@@ -601,7 +599,8 @@ class TestMobileTransferService(unittest.TestCase):
     ) -> tuple[int, dict[str, object]]:
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            encoded_payload = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            normalized_payload = self._normalize_authenticated_payload(payload)
+            encoded_payload = json.dumps(normalized_payload, separators=(",", ":")).encode("utf-8")
             connection.request(
                 "POST",
                 (
@@ -651,6 +650,21 @@ class TestMobileTransferService(unittest.TestCase):
             "sha1": hashlib.sha1(asset_bytes).hexdigest(),
             "file_size": len(asset_bytes),
         }
+
+    @staticmethod
+    def _normalize_authenticated_payload(payload: dict[str, object]) -> dict[str, object]:
+        normalized_payload = dict(payload)
+        raw_trust_key = normalized_payload.pop("trust_key", None)
+        if isinstance(raw_trust_key, str) and raw_trust_key:
+            proof_payload = dict(normalized_payload)
+            if proof_payload.get(TRANSFER_ASSET_STREAM_STATE_FIELD) == TRANSFER_ASSET_STREAM_STATE_START:
+                proof_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
+                proof_payload.pop("chunk_size", None)
+            normalized_payload["trust_proof"] = derive_trust_proof_b64(
+                trust_key_b64=raw_trust_key,
+                payload=proof_payload,
+            )
+        return normalized_payload
 
 
 if __name__ == "__main__":

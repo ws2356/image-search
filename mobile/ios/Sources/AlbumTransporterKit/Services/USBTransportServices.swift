@@ -861,7 +861,7 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
     var schema = TransferProtocol.schema
     var sessionID: String
     var deviceUUID: String
-    var trustKey: String
+    var trustProof: String
     var assetID: String
     var assetVersion: String
     var contentSHA1: String
@@ -875,7 +875,7 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
         case schema
         case sessionID = "session_id"
         case deviceUUID = "device_uuid"
-        case trustKey = "trust_key"
+        case trustProof = "trust_proof"
         case assetID = "asset_id"
         case assetVersion = "asset_version"
         case contentSHA1 = "sha1"
@@ -900,12 +900,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
-        let request = TransferStartRequest(
+        var request = TransferStartRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
-            trustKey: desktop.sharedKeyBase64,
+            trustProof: "",
             totalAssets: totalAssets
         )
+        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferStartOperation,
             request: request,
@@ -928,12 +929,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
         guard !candidates.isEmpty else {
             return [:]
         }
-        let request = TransferExistenceRequest(
+        var request = TransferExistenceRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
-            trustKey: desktop.sharedKeyBase64,
+            trustProof: "",
             assets: candidates
         )
+        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferExistenceOperation,
             request: request,
@@ -948,10 +950,10 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
-        let request = USBTransferAssetUploadRequest(
+        var request = USBTransferAssetUploadRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
-            trustKey: desktop.sharedKeyBase64,
+            trustProof: "",
             assetID: asset.descriptor.assetID,
             assetVersion: asset.descriptor.assetVersion,
             contentSHA1: asset.contentSHA1,
@@ -961,6 +963,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
             createdAt: asset.descriptor.createdAt,
             updatedAt: asset.descriptor.updatedAt
         )
+        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
         do {
             let requestID = try await runtime.beginStreamingRequest(
                 operation: MobileTransportProtocol.transferAssetOperation,
@@ -1025,14 +1028,15 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
         failedCount: Int,
         interruptionReason: String?
     ) async throws -> TransferServerResponse {
-        let request = TransferCompleteRequest(
+        var request = TransferCompleteRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
-            trustKey: desktop.sharedKeyBase64,
+            trustProof: "",
             transferredCount: transferredCount,
             failedCount: failedCount,
             interruptionReason: interruptionReason
         )
+        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferCompleteOperation,
             request: request,
@@ -1052,12 +1056,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
         _ mobileCapabilities: [String: Int],
         desktop: TrustedDesktopRecord
     ) async throws -> CapabilityExchangeResponse {
-        let request = CapabilityExchangeRequest(
+        var request = CapabilityExchangeRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
-            trustKey: desktop.sharedKeyBase64,
+            trustProof: "",
             capabilities: normalizedCapabilityExchangeFlags(mobileCapabilities)
         )
+        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.capabilityExchangeOperation,
             request: request,
@@ -1079,14 +1084,15 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
         updateDestination: String?,
         desktop: TrustedDesktopRecord
     ) async throws -> UpdatePromptResponse {
-        let request = UpdatePromptRequest(
+        var request = UpdatePromptRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
-            trustKey: desktop.sharedKeyBase64,
+            trustProof: "",
             required: required,
             bodyText: bodyText,
             updateDestination: updateDestination
         )
+        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.updatePromptOperation,
             request: request,

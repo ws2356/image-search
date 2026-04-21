@@ -120,22 +120,14 @@ def derive_pairing_key_b64(
     *,
     session_id: str,
     one_time_passcode: str,
-    device_uuid: str,
     platform: str,
-    client_nonce: str,
-    server_nonce: str,
-    desktop_device_id: str,
 ) -> str:
     material = "\n".join(
         [
             "dtis.mobile-pairing.v1",
             session_id,
             one_time_passcode,
-            device_uuid,
             platform,
-            client_nonce,
-            server_nonce,
-            desktop_device_id,
         ]
     ).encode("utf-8")
     return base64.urlsafe_b64encode(hashlib.sha256(material).digest()).decode("ascii").rstrip("=")
@@ -421,7 +413,6 @@ def get_mobile_transfer_context(
     *,
     session_id: str,
     device_uuid: str,
-    trust_key_b64: str,
 ) -> MobileTransferContext | None:
     row = conn.execute(
         """
@@ -442,8 +433,6 @@ def get_mobile_transfer_context(
         (session_id, device_uuid),
     ).fetchone()
     if row is None:
-        return None
-    if row["trust_key_b64"] != trust_key_b64:
         return None
     return MobileTransferContext(
         session_id=row["session_id"],

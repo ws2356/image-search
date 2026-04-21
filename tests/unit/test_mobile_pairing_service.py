@@ -35,6 +35,7 @@ from dt_image_search.mobile.mobile_update_prompt_service import (
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
+from dt_image_search.mobile.mobile_trust_proof import derive_trust_proof_b64
 from dt_image_search.mobile.transport.lan_http_adapter import LanHttpEndpointInfo
 from dt_image_search.mobile.transport.contracts import (
     PAIRING_STATE_OPERATION,
@@ -171,11 +172,7 @@ class TestMobilePairingService(unittest.TestCase):
             expected_key = derive_pairing_key_b64(
                 session_id=session.session_id,
                 one_time_passcode=token.one_time_passcode,
-                device_uuid="ios-device-001",
                 platform="ios",
-                client_nonce="client-nonce-123",
-                server_nonce=response_payload["server_nonce"],
-                desktop_device_id=response_payload["desktop_device_id"],
             )
             self.assertEqual(device_row["trust_key_b64"], expected_key)
 
@@ -407,11 +404,7 @@ class TestMobilePairingService(unittest.TestCase):
         trust_key = derive_pairing_key_b64(
             session_id=session.session_id,
             one_time_passcode=token.one_time_passcode,
-            device_uuid=device_uuid,
             platform="ios",
-            client_nonce=client_nonce,
-            server_nonce=pairing_response["server_nonce"],
-            desktop_device_id=pairing_response["desktop_device_id"],
         )
         exchange_status, exchange_payload = self._post_json_request(
             path=MOBILE_CAPABILITY_EXCHANGE_PATH,
@@ -501,11 +494,7 @@ class TestMobilePairingService(unittest.TestCase):
         trust_key = derive_pairing_key_b64(
             session_id=session.session_id,
             one_time_passcode=token.one_time_passcode,
-            device_uuid=device_uuid,
             platform="ios",
-            client_nonce=client_nonce,
-            server_nonce=pairing_response["server_nonce"],
-            desktop_device_id=pairing_response["desktop_device_id"],
         )
         update_status, update_payload = self._post_json_request(
             path=MOBILE_UPDATE_PROMPT_PATH,
@@ -1212,7 +1201,14 @@ class TestMobilePairingService(unittest.TestCase):
         endpoint = urlsplit(self._pairing_service.endpoint_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            encoded_payload = json.dumps(payload).encode("utf-8")
+            normalized_payload = dict(payload)
+            raw_trust_key = normalized_payload.pop("trust_key", None)
+            if isinstance(raw_trust_key, str) and raw_trust_key:
+                normalized_payload["trust_proof"] = derive_trust_proof_b64(
+                    trust_key_b64=raw_trust_key,
+                    payload=normalized_payload,
+                )
+            encoded_payload = json.dumps(normalized_payload).encode("utf-8")
             connection.request(
                 "POST",
                 path,

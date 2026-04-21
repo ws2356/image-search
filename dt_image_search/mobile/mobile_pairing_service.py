@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 import re
-import secrets
 import socket
 import threading
 from typing import Callable
@@ -558,7 +557,6 @@ class MobilePairingService:
         backup_again_context: MobileBackupAgainSessionContext | None,
         backup_again_decision: MobileBackupAgainDecision,
     ) -> tuple[int, dict[str, object]]:
-        server_nonce = secrets.token_urlsafe(24)
         with self._lock:
             current_session = self._active_session
             if current_session is None or current_session.session_id != session_id:
@@ -574,11 +572,7 @@ class MobilePairingService:
             trust_key_b64 = derive_pairing_key_b64(
                 session_id=session_id,
                 one_time_passcode=token.one_time_passcode,
-                device_uuid=device_uuid,
                 platform=requested_platform.value,
-                client_nonce=client_nonce,
-                server_nonce=server_nonce,
-                desktop_device_id=desktop_device_id,
             )
             upsert_mobile_device(
                 conn,
@@ -658,7 +652,6 @@ class MobilePairingService:
                 folder_path=folder_record.folder_path,
                 transport=selected_transport,
                 paired_at=current_time.isoformat(timespec="seconds"),
-                server_nonce=server_nonce,
             )
             self._pairing_result = MobilePairingResult(
                 state=PairingResultState.ACCEPTED,
@@ -808,7 +801,6 @@ class MobilePairingService:
         folder_path: str | None = None,
         transport: str | None = None,
         paired_at: str | None = None,
-        server_nonce: str | None = None,
     ) -> dict[str, object]:
         payload: dict[str, object] = {
             "schema": PAIRING_PROTOCOL_SCHEMA,
@@ -831,8 +823,6 @@ class MobilePairingService:
             payload["transport"] = transport
         if paired_at is not None:
             payload["paired_at"] = paired_at
-        if server_nonce is not None:
-            payload["server_nonce"] = server_nonce
         return payload
 
     def _register_transport_routes(self) -> None:
