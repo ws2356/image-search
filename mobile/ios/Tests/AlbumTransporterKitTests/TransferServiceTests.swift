@@ -744,6 +744,127 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(completedFailedCount, 0)
         XCTAssertEqual(completedInterruptionReason, "stopped_by_user")
     }
+
+    func test_photo_library_transfer_service_does_not_restart_desktop_transfer_after_stop_during_asset_fetch() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+            ],
+            initialFetchDelayNanoseconds: 250_000_000
+        )
+        let transferClient = RecordingMobileTransferClient()
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let startTask = Task {
+            await service.startTransfer(progress: { _ in })
+        }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        let stopReason = await service.stopTransfer(
+            current: TransferSnapshot(
+                transferredCount: 0,
+                totalCount: 1,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: nil,
+                statusMessage: "Stopping backup…",
+                guidanceMessage: "",
+                isIncompleteLibrary: false
+            )
+        )
+        let startSnapshot = await startTask.value
+        let startedAssetCount = await transferClient.startedAssetCount()
+        let completeSessionCallCount = await transferClient.completeSessionCallCount()
+
+        XCTAssertEqual(stopReason, .stoppedByUser)
+        XCTAssertNil(startedAssetCount)
+        XCTAssertEqual(completeSessionCallCount, 1)
+        XCTAssertEqual(startSnapshot.totalCount, 1)
+        XCTAssertEqual(startSnapshot.statusMessage, "Backup stopped. In-flight work was canceled to release resources quickly.")
+    }
+
+    func test_photo_library_transfer_service_reports_stop_again_when_stop_happens_during_start_handshake() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient(startDelayNanoseconds: 250_000_000)
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let startTask = Task {
+            await service.startTransfer(progress: { _ in })
+        }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        let stopReason = await service.stopTransfer(
+            current: TransferSnapshot(
+                transferredCount: 0,
+                totalCount: 1,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: nil,
+                statusMessage: "Stopping backup…",
+                guidanceMessage: "",
+                isIncompleteLibrary: false
+            )
+        )
+        let startSnapshot = await startTask.value
+        let startedAssetCount = await transferClient.startedAssetCount()
+        let completeSessionCallCount = await transferClient.completeSessionCallCount()
+        let completedInterruptionReason = await transferClient.completedInterruptionReason()
+
+        XCTAssertEqual(stopReason, .stoppedByUser)
+        XCTAssertEqual(startedAssetCount, 1)
+        XCTAssertEqual(completeSessionCallCount, 2)
+        XCTAssertEqual(completedInterruptionReason, "stopped_by_user")
+        XCTAssertEqual(startSnapshot.totalCount, 1)
+        XCTAssertEqual(startSnapshot.statusMessage, "Backup stopped. In-flight work was canceled to release resources quickly.")
+    }
 }
 
 private actor InMemoryTransferTrustedDesktopStore: TrustedDesktopStore {
@@ -777,6 +898,7 @@ private actor ChunkSizeRecorder {
 private actor RecordingMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
+    private let startDelayNanoseconds: UInt64
     private let uploadDelayNanoseconds: UInt64
     private var resolvedTransport: TransferTransport?
     private var liveTransports: [TransferTransport]?
@@ -789,22 +911,28 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
     private var completedTransferred: Int?
     private var completedFailed: Int?
     private var completedInterruptionReasonValue: String?
+    private var completeSessionCalls = 0
     private var preferredUploadTransports: [TransferTransport] = []
 
     init(
         existingAssetIDs: Set<String> = [],
         resolvedTransport: TransferTransport? = nil,
         liveTransports: [TransferTransport]? = nil,
+        startDelayNanoseconds: UInt64 = 0,
         uploadDelayNanoseconds: UInt64 = 0
     ) {
         self.existingAssetIDs = existingAssetIDs
         self.resolvedTransport = resolvedTransport
         self.liveTransports = liveTransports
+        self.startDelayNanoseconds = startDelayNanoseconds
         self.uploadDelayNanoseconds = uploadDelayNanoseconds
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
         XCTAssertEqual(desktop.desktopName, "Studio Mac")
+        if startDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: startDelayNanoseconds)
+        }
         startedCount = totalAssets
     }
 
@@ -897,6 +1025,7 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
         failedCount: Int,
         interruptionReason: String?
     ) async throws -> TransferServerResponse {
+        completeSessionCalls += 1
         completedTransferred = transferredCount
         completedFailed = failedCount
         completedInterruptionReasonValue = interruptionReason
@@ -951,6 +1080,10 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
         completedInterruptionReasonValue
     }
 
+    func completeSessionCallCount() -> Int {
+        completeSessionCalls
+    }
+
     func maxConcurrentUploadsObserved() -> Int {
         maxConcurrentUploadCount
     }
@@ -968,22 +1101,30 @@ private actor StaticTransferAssetSource: TransferAssetSource {
     private let descriptors: [TransferAssetDescriptor]
     private let failingAssetIDs: Set<String>
     private let exportedSizeByAssetID: [String: Int]
+    private let initialFetchDelayNanoseconds: UInt64
     private var observedBatchStarts: [Int] = []
     private var observedBatchSizes: [Int] = []
     private var releaseResourcesCount = 0
+    private var didApplyInitialFetchDelay = false
 
     init(
         descriptors: [TransferAssetDescriptor],
         failingAssetIDs: Set<String> = [],
-        exportedSizeByAssetID: [String: Int] = [:]
+        exportedSizeByAssetID: [String: Int] = [:],
+        initialFetchDelayNanoseconds: UInt64 = 0
     ) {
         self.descriptors = descriptors
         self.failingAssetIDs = failingAssetIDs
         self.exportedSizeByAssetID = exportedSizeByAssetID
+        self.initialFetchDelayNanoseconds = initialFetchDelayNanoseconds
     }
 
     func fetchAssetBatch(cursor: Int?, batchSize: Int) async throws -> TransferAssetBatch {
         let startIndex = max(cursor ?? 0, 0)
+        if !didApplyInitialFetchDelay, startIndex == 0, initialFetchDelayNanoseconds > 0 {
+            didApplyInitialFetchDelay = true
+            try? await Task.sleep(nanoseconds: initialFetchDelayNanoseconds)
+        }
         observedBatchStarts.append(startIndex)
         observedBatchSizes.append(batchSize)
         guard startIndex < descriptors.count else {

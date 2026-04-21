@@ -2003,7 +2003,7 @@ actor PhotoLibraryTransferService: TransferService {
         assetSource: TransferAssetSource,
         transferClient: MobileTransferClient,
         trustedDesktopStore: TrustedDesktopStore,
-        exportConcurrencyLimit: Int = 5,
+        exportConcurrencyLimit: Int = 2,
         uploadConcurrencyLimit: Int = 5
     ) {
         self.assetSource = assetSource
@@ -2024,21 +2024,11 @@ actor PhotoLibraryTransferService: TransferService {
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             return .stoppedByUser
         }
-        do {
-            _ = try await transferClient.completeSession(
-                desktop: trustedDesktop,
-                transferredCount: current.transferredCount,
-                failedCount: current.failedCount,
-                interruptionReason: "stopped_by_user"
-            )
-            TransferDebugLogger.info(
-                "Reported stopped transfer to desktop session_id=\(trustedDesktop.lastSessionID) transferred=\(current.transferredCount) failed=\(current.failedCount)"
-            )
-        } catch {
-            TransferDebugLogger.warning(
-                "Failed to report stopped transfer to desktop session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
-            )
-        }
+        _ = await reportStoppedTransferToDesktop(
+            desktop: trustedDesktop,
+            transferredCount: current.transferredCount,
+            failedCount: current.failedCount
+        )
         return .stoppedByUser
     }
 
@@ -2225,11 +2215,34 @@ actor PhotoLibraryTransferService: TransferService {
                 return await finalizingTransferRun(snapshotWithLiveTransports)
             }
             let totalCount = assetBatch.totalCount
+            if stopRequested {
+                let pausedSnapshot = await pausedSnapshotForStoppedTransfer(
+                    desktop: trustedDesktop,
+                    transferredCount: 0,
+                    totalCount: totalCount,
+                    failedCount: 0
+                )
+                return await finalizingTransferRun(pausedSnapshot)
+            }
 
             TransferDebugLogger.info(
                 "Starting backup run desktop=\(trustedDesktop.desktopName) session_id=\(trustedDesktop.lastSessionID) asset_count=\(totalCount) batch_size=\(Self.assetFetchBatchSize)"
             )
             try await transferClient.startSession(desktop: trustedDesktop, totalAssets: totalCount)
+            if stopRequested {
+                _ = await reportStoppedTransferToDesktop(
+                    desktop: trustedDesktop,
+                    transferredCount: 0,
+                    failedCount: 0
+                )
+                let pausedSnapshot = await pausedSnapshotForStoppedTransfer(
+                    desktop: trustedDesktop,
+                    transferredCount: 0,
+                    totalCount: totalCount,
+                    failedCount: 0
+                )
+                return await finalizingTransferRun(pausedSnapshot)
+            }
             resetTransferSpeedWindow()
             logTransferMemoryUsage(
                 event: "transfer_start",
@@ -2368,6 +2381,53 @@ actor PhotoLibraryTransferService: TransferService {
     private func finalizingTransferRun(_ snapshot: TransferSnapshot) async -> TransferSnapshot {
         await assetSource.releaseTransferRunResources()
         return snapshot
+    }
+
+    @discardableResult
+    private func reportStoppedTransferToDesktop(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        failedCount: Int
+    ) async -> Bool {
+        do {
+            _ = try await transferClient.completeSession(
+                desktop: desktop,
+                transferredCount: transferredCount,
+                failedCount: failedCount,
+                interruptionReason: "stopped_by_user"
+            )
+            TransferDebugLogger.info(
+                "Reported stopped transfer to desktop session_id=\(desktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount)"
+            )
+            return true
+        } catch {
+            TransferDebugLogger.warning(
+                "Failed to report stopped transfer to desktop session_id=\(desktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
+            )
+            return false
+        }
+    }
+
+    private func pausedSnapshotForStoppedTransfer(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int
+    ) async -> TransferSnapshot {
+        let currentTransport = await resolvedTransport(for: desktop)
+        let pausedSnapshot = makePausedSnapshot(
+            transport: currentTransport,
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount,
+            sessionID: desktop.lastSessionID
+        )
+        let pausedSnapshotWithLiveTransports = await applyingLiveTransports(
+            to: pausedSnapshot,
+            desktop: desktop
+        )
+        currentSnapshot = pausedSnapshotWithLiveTransports
+        return pausedSnapshotWithLiveTransports
     }
 
     private func processTransferPipeline(
@@ -2529,20 +2589,12 @@ actor PhotoLibraryTransferService: TransferService {
         _ = await producerTask.result
 
         if stopRequested {
-            let currentTransport = await resolvedTransport(for: desktop)
-            let pausedSnapshot = makePausedSnapshot(
-                transport: currentTransport,
+            return await pausedSnapshotForStoppedTransfer(
+                desktop: desktop,
                 transferredCount: transferredCount,
                 totalCount: totalCount,
-                failedCount: failedCount,
-                sessionID: desktop.lastSessionID
+                failedCount: failedCount
             )
-            let pausedSnapshotWithLiveTransports = await applyingLiveTransports(
-                to: pausedSnapshot,
-                desktop: desktop
-            )
-            currentSnapshot = pausedSnapshotWithLiveTransports
-            return pausedSnapshotWithLiveTransports
         }
 
         return nil
