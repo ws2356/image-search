@@ -363,7 +363,7 @@ _device = "cuda" if torch.cuda.is_available() else "cpu"
 _model = None
 _preprocess = None
 _tokenizer = None
-TOP_K = 10
+TOP_K = 100
 _model_loaded_event = threading.Event()
 
 @profile
