@@ -92,7 +92,8 @@ class TestDTSIndex(unittest.TestCase):
     @patch('dt_image_search.index.dts_index.faiss')
     @patch('os.path.exists')
     @patch('dt_image_search.index.dts_index._get_model')
-    def test_create_index_if_needed_new(self, mock_get_model, mock_exists, mock_faiss_local):
+    @patch('dt_image_search.index.dts_index._write_index_atomically')
+    def test_create_index_if_needed_new(self, mock_write_index_atomically, mock_get_model, mock_exists, mock_faiss_local):
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
         mock_model.visual.output_dim = 512
@@ -104,17 +105,18 @@ class TestDTSIndex(unittest.TestCase):
         # Reset mock to clear any calls during import
         mock_faiss_local.IndexFlatIP.reset_mock()
         mock_faiss_local.IndexIDMap2.reset_mock()
-        mock_faiss_local.write_index.reset_mock()
+        mock_write_index_atomically.reset_mock()
         
         dts_index.create_index_if_needed(index_path)
         
         mock_faiss_local.IndexFlatIP.assert_called_once_with(512)
         mock_faiss_local.IndexIDMap2.assert_called_once()
-        mock_faiss_local.write_index.assert_called_once()
+        mock_write_index_atomically.assert_called_once()
 
     @patch('dt_image_search.index.dts_index.faiss')
     @patch('os.path.exists')
-    def test_create_index_if_needed_exists(self, mock_exists, mock_faiss_local):
+    @patch('dt_image_search.index.dts_index._write_index_atomically')
+    def test_create_index_if_needed_exists(self, mock_write_index_atomically, mock_exists, mock_faiss_local):
         mock_exists.return_value = True
         index_path = "dummy_path.faiss"
         
@@ -123,6 +125,7 @@ class TestDTSIndex(unittest.TestCase):
         dts_index.create_index_if_needed(index_path)
         
         mock_faiss_local.IndexFlatIP.assert_not_called()
+        mock_write_index_atomically.assert_not_called()
 
     @patch('dt_image_search.index.dts_index.faiss')
     @patch('dt_image_search.index.dts_index._load_index')
@@ -246,6 +249,59 @@ class TestDTSIndex(unittest.TestCase):
         
         # Verify sorting (highest score first)
         self.assertEqual(results, [[101, 0.9], [102, 0.8]])
+
+    @patch('dt_image_search.index.dts_index._get_index')
+    def test_query_internal_returns_empty_when_index_is_corrupted(self, mock_get_index):
+        mock_get_index.side_effect = dts_index.CorruptFaissIndexError("corrupt index")
+
+        results = dts_index._query_internal("dummy_path.faiss", "query text", 5)
+
+        self.assertEqual(results, [])
+
+    @patch('dt_image_search.index.dts_index.faiss')
+    @patch('os.path.exists')
+    def test_load_index_raises_corrupt_error_when_faiss_read_fails(self, mock_exists, mock_faiss_local):
+        mock_exists.return_value = True
+        mock_faiss_local.read_index.side_effect = RuntimeError(
+            "Error in Index *faiss::read_index(IOReader *, int) ... "
+            "read error in /tmp/1.faiss: 81838 != 81920"
+        )
+
+        with self.assertRaises(dts_index.CorruptFaissIndexError):
+            dts_index._load_index("/tmp/1.faiss")
+
+    @patch('dt_image_search.index.dts_index.get_file_by_path')
+    @patch('dt_image_search.index.dts_index.create_db_conn')
+    @patch('dt_image_search.index.dts_index._add_to_index')
+    @patch('dt_image_search.index.dts_index.create_index_if_needed')
+    def test_append_to_index_handles_corrupt_index_without_crashing(
+        self,
+        _mock_create_index_if_needed,
+        mock_add_to_index,
+        mock_create_db_conn,
+        mock_get_file_by_path
+    ):
+        dts_index._model_loaded_event.set()
+        mock_add_to_index.side_effect = dts_index.CorruptFaissIndexError("corrupt index")
+        mock_file = MagicMock()
+        mock_file.status = 0
+        mock_get_file_by_path.return_value = mock_file
+        mock_conn = MagicMock()
+        mock_create_db_conn.return_value.__enter__.return_value = mock_conn
+
+        result = list(
+            dts_index.append_to_index(
+                self.ctx,
+                index_path="dummy_index.faiss",
+                folder_id=1,
+                file_paths=["/tmp/IMG_0001.JPG"]
+            )
+        )
+
+        self.assertEqual(len(result), 1)
+        self.assertFalse(result[0]["batch_result"])
+        self.assertEqual(result[0]["files_processed"], 0)
+        mock_add_to_index.assert_called_once_with(self.ctx, "dummy_index.faiss", 1, [mock_file])
 
 if __name__ == '__main__':
     unittest.main()

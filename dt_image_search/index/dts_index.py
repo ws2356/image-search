@@ -1,4 +1,5 @@
 import os
+import uuid
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -12,7 +13,7 @@ from torchvision import transforms
 import numpy as np
 import faiss
 import hf_xet
-from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path
+from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
@@ -58,7 +59,11 @@ def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str
 def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
     torch.set_grad_enabled(False)
     with torch.inference_mode():
-        index = _get_index(index_path)
+        try:
+            index = _get_index(index_path)
+        except CorruptFaissIndexError as exc:
+            log("error", "query", message=f"Failed to query corrupted FAISS index at {index_path}: {exc}")
+            return []
         _model, _, _tokenizer = _get_model()
         # --- Encode text query ---
         text_tokens = _tokenizer([query_text]).to(_device)
@@ -77,15 +82,10 @@ def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
 
 @profile
 def create_index_if_needed(index_path: str):
-    if os.path.exists(index_path):
-        return
-    # --- Create FAISS index ---
-    _model, _, _ = _get_model()
-    dim = _model.visual.output_dim
-    index = faiss.IndexFlatIP(dim)
-    index = faiss.IndexIDMap2(index)
-    # --- Save index to disk ---
-    faiss.write_index(index, index_path)
+    with _get_index_lock(index_path):
+        if os.path.exists(index_path):
+            return
+        _create_empty_index(index_path)
 
 
 # Global process pool that stays alive
@@ -100,6 +100,77 @@ def _get_index_lock(index_path: str) -> threading.Lock:
         if index_path not in _index_locks:
             _index_locks[index_path] = threading.Lock()
         return _index_locks[index_path]
+
+
+class CorruptFaissIndexError(RuntimeError):
+    pass
+
+
+def _is_faiss_read_error(error: Exception) -> bool:
+    if not isinstance(error, RuntimeError):
+        return False
+    error_text = str(error)
+    return "faiss::read_index" in error_text and "read error in" in error_text
+
+
+def _write_index_atomically(index, index_path: str):
+    temp_index_path = f"{index_path}.tmp-{uuid.uuid4().hex}"
+    try:
+        faiss.write_index(index, temp_index_path)
+        os.replace(temp_index_path, index_path)
+    finally:
+        if os.path.exists(temp_index_path):
+            try:
+                os.remove(temp_index_path)
+            except OSError:
+                pass
+
+
+def _create_empty_index(index_path: str):
+    _model, _, _ = _get_model()
+    dim = _model.visual.output_dim
+    index = faiss.IndexFlatIP(dim)
+    index = faiss.IndexIDMap2(index)
+    _write_index_atomically(index, index_path)
+
+
+def _recover_corrupted_index(ctx: BMContext, index_path: str, folder_id: int):
+    backup_path = None
+    with _get_index_lock(index_path):
+        if os.path.exists(index_path):
+            backup_path = f"{index_path}.corrupt-{int(time.time())}"
+            try:
+                os.replace(index_path, backup_path)
+            except OSError as exc:
+                log("warning", "index", message=f"Failed to backup corrupted FAISS index before recovery: {exc}")
+        _create_empty_index(index_path)
+
+    with create_db_conn(ctx=ctx) as conn:
+        conn.execute(
+            "UPDATE files SET clip_index = NULL, status = 0 WHERE folder_id = ? AND status != 2",
+            (folder_id,),
+        )
+        conn.commit()
+        update_folder_status(conn, folder_id, 1)
+
+    if backup_path:
+        log(
+            "warning",
+            "index",
+            message=(
+                f"Recovered corrupted FAISS index for folder {folder_id}. "
+                f"Backed up old index to {backup_path} and reset folder files for re-indexing."
+            ),
+        )
+    else:
+        log(
+            "warning",
+            "index",
+            message=(
+                f"Recovered corrupted FAISS index for folder {folder_id}. "
+                "Reset folder files for re-indexing."
+            ),
+        )
 
 def _calculate_worker_count():
     return 1
@@ -155,11 +226,15 @@ def _cleanup_process_pool():
         _process_pool = None
 
 @with_trace("_add_to_index")
-def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File]) -> bool:
+def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: typing.List[File]) -> bool:
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
     result = True
-    index = _get_index(index_path)
+    try:
+        index = _get_index(index_path)
+    except CorruptFaissIndexError:
+        _recover_corrupted_index(ctx, index_path, folder_id)
+        raise
     model, _, _ = _get_model()
     
     # Use persistent process pool
@@ -223,7 +298,7 @@ def _add_to_index(ctx: BMContext, index_path: str, image_files: typing.List[File
     log("info", message=f"Adding {len(features_np)} images to index with ids: {ids}")
     with _get_index_lock(index_path):
         index.add_with_ids(features_np, ids)
-        faiss.write_index(index, index_path)
+        _write_index_atomically(index, index_path)
     
     with create_db_conn(ctx=ctx) as conn:
         for file in valid_files:
@@ -270,8 +345,22 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
         
         batch_result = True
         if files_to_index:
-            batch_result = _add_to_index(ctx, index_path, files_to_index)
-            files_processed += len(files_to_index)
+            try:
+                batch_result = _add_to_index(ctx, index_path, folder_id, files_to_index)
+                files_processed += len(files_to_index)
+            except CorruptFaissIndexError:
+                log(
+                    "error",
+                    "index",
+                    message=(
+                        f"Corrupted FAISS index detected while building folder {folder_id}. "
+                        "Recovered index and scheduled full re-index."
+                    ),
+                )
+                batch_result = False
+            except Exception as exc:
+                log("error", "index", message=f"Unexpected indexing error for folder {folder_id}: {exc}")
+                batch_result = False
         else:
             log("info", message=f"No new files to index in slice {batch_start} to {batch_end}.")
         
@@ -312,7 +401,21 @@ def append_to_index(ctx: BMContext, index_path: str, folder_id: int, file_paths:
             log("debug", message=f"No new files to index in batch {i_slice} to {i_slice + step}.")
             batch_result = True
         else:
-            batch_result = _add_to_index(ctx, index_path, batch_file_objs)
+            try:
+                batch_result = _add_to_index(ctx, index_path, folder_id, batch_file_objs)
+            except CorruptFaissIndexError:
+                log(
+                    "error",
+                    "index",
+                    message=(
+                        f"Corrupted FAISS index detected while appending folder {folder_id}. "
+                        "Recovered index and scheduled full re-index."
+                    ),
+                )
+                batch_result = False
+            except Exception as exc:
+                log("error", "index", message=f"Unexpected append_to_index error for folder {folder_id}: {exc}")
+                batch_result = False
         files_processed += len(batch_files) if batch_result else 0
         yield {
             'batch_start': i_slice,
@@ -335,7 +438,12 @@ def _load_index(index_path: str):
     if not os.path.exists(index_path):
         raise FileNotFoundError(f"Index file '{index_path}' does not exist.")
     with _get_index_lock(index_path):
-        return faiss.read_index(index_path)
+        try:
+            return faiss.read_index(index_path)
+        except RuntimeError as exc:
+            if _is_faiss_read_error(exc):
+                raise CorruptFaissIndexError(str(exc)) from exc
+            raise
 
 @with_trace("delete_folder")
 def delete_folder(ctx: BMContext, folder_path: str):
