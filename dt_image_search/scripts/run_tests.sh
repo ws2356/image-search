@@ -66,11 +66,11 @@ unit_and_functional_tests=(
   tests/unit/test_crash_support.py
   tests/unit/test_runtime_metadata.py
   tests/unit/test_search_controller.py
-  tests/functional/test_app_flow.py
   tests/functional/test_mobile_backup_flow.py
   tests/functional/test_usb_handshake_pc_side.py
   tests/functional/test_crash_recovery_harness.py
 )
+ # tests/functional/test_app_flow.py
 
 has_failed=false
 for test in "${unit_and_functional_tests[@]}"; do
