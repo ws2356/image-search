@@ -11,6 +11,7 @@ from dt_image_search.telemetry.telemetry_client import log
 
 MOBILE_CAPABILITY_EXCHANGE_SCHEMA = "dtis.mobile-capabilities.v1"
 MOBILE_CAPABILITY_EXCHANGE_PATH = "/api/mobile/capabilities/exchange"
+MOBILE_CAPABILITY_EXCHANGE_PROOF_PURPOSE = "capabilities.exchange"
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,10 @@ class MobileCapabilityExchangeService:
                 )
             if not is_valid_trust_proof(
                 trust_key_b64=transfer_context.trust_key_b64,
-                payload=request_payload,
+                purpose=MOBILE_CAPABILITY_EXCHANGE_PROOF_PURPOSE,
+                schema=request.schema,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
                 trust_proof_b64=request.trust_proof,
             ):
                 return _response(

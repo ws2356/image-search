@@ -19,10 +19,14 @@ from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64, ensure_mobile_pairing_schema
 from dt_image_search.mobile.mobile_trust_proof import derive_trust_proof_b64
 from dt_image_search.mobile.mobile_transfer_service import (
+    MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
     MOBILE_TRANSFER_ASSET_PATH,
+    MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE,
     MOBILE_TRANSFER_COMPLETE_PATH,
+    MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE,
     MOBILE_TRANSFER_EXISTENCE_PATH,
     MOBILE_TRANSFER_SCHEMA,
+    MOBILE_TRANSFER_START_PROOF_PURPOSE,
     MOBILE_TRANSFER_STATE_UPDATED_EVENT,
     MOBILE_TRANSFER_STARTED_EVENT,
     MOBILE_TRANSFER_START_PATH,
@@ -533,7 +537,10 @@ class TestMobileTransferService(unittest.TestCase):
         endpoint = urlsplit(self._pairing_service.endpoint_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            normalized_payload = self._normalize_authenticated_payload(payload)
+            normalized_payload = self._normalize_authenticated_payload(
+                payload,
+                purpose=self._proof_purpose_for_path(path),
+            )
             encoded_payload = json.dumps(normalized_payload).encode("utf-8")
             connection.request(
                 "POST",
@@ -599,7 +606,10 @@ class TestMobileTransferService(unittest.TestCase):
     ) -> tuple[int, dict[str, object]]:
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
         try:
-            normalized_payload = self._normalize_authenticated_payload(payload)
+            normalized_payload = self._normalize_authenticated_payload(
+                payload,
+                purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
+            )
             encoded_payload = json.dumps(normalized_payload, separators=(",", ":")).encode("utf-8")
             connection.request(
                 "POST",
@@ -652,19 +662,32 @@ class TestMobileTransferService(unittest.TestCase):
         }
 
     @staticmethod
-    def _normalize_authenticated_payload(payload: dict[str, object]) -> dict[str, object]:
+    def _normalize_authenticated_payload(
+        payload: dict[str, object],
+        *,
+        purpose: str | None,
+    ) -> dict[str, object]:
         normalized_payload = dict(payload)
         raw_trust_key = normalized_payload.pop("trust_key", None)
-        if isinstance(raw_trust_key, str) and raw_trust_key:
-            proof_payload = dict(normalized_payload)
-            if proof_payload.get(TRANSFER_ASSET_STREAM_STATE_FIELD) == TRANSFER_ASSET_STREAM_STATE_START:
-                proof_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
-                proof_payload.pop("chunk_size", None)
+        if isinstance(raw_trust_key, str) and raw_trust_key and purpose is not None:
             normalized_payload["trust_proof"] = derive_trust_proof_b64(
                 trust_key_b64=raw_trust_key,
-                payload=proof_payload,
+                purpose=purpose,
+                schema=str(normalized_payload.get("schema", "")),
+                session_id=str(normalized_payload.get("session_id", "")),
+                device_uuid=str(normalized_payload.get("device_uuid", "")),
             )
         return normalized_payload
+
+    @staticmethod
+    def _proof_purpose_for_path(path: str) -> str | None:
+        if path == MOBILE_TRANSFER_START_PATH:
+            return MOBILE_TRANSFER_START_PROOF_PURPOSE
+        if path == MOBILE_TRANSFER_EXISTENCE_PATH:
+            return MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE
+        if path == MOBILE_TRANSFER_COMPLETE_PATH:
+            return MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE
+        return None
 
 
 if __name__ == "__main__":

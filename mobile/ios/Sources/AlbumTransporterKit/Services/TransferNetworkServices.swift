@@ -523,31 +523,37 @@ extension TransferExistenceResponse: TransferSchemaResponse {}
 enum TransferTrustProof {
     private static let context = "dtis.mobile-trust-proof.v1"
 
-    static func make<RequestBody: Encodable>(
-        for request: RequestBody,
-        trustKey: String
-    ) throws -> String {
-        let requestData = try JSONEncoder.pairingEncoder.encode(request)
-        let jsonObject = try JSONSerialization.jsonObject(with: requestData, options: [])
-        guard var requestDictionary = jsonObject as? [String: Any] else {
-            throw TransferClientError.transport(
-                message: "Desktop transfer request could not build a trust proof payload."
-            )
-        }
-        requestDictionary.removeValue(forKey: "trust_proof")
-        let canonicalData = try JSONSerialization.data(
-            withJSONObject: requestDictionary,
-            options: [.sortedKeys]
+    static func make(
+        trustKey: String,
+        purpose: String,
+        schema: String,
+        sessionID: String,
+        deviceUUID: String
+    ) -> String {
+        let material = Data(
+            [
+                context,
+                purpose,
+                schema,
+                sessionID,
+                deviceUUID,
+            ].joined(separator: "\n").utf8
         )
-        let payloadDigest = SHA256.hash(data: canonicalData)
-        let payloadDigestBase64 = Data(payloadDigest).base64URLEncodedString()
-        let material = Data("\(context)\n\(payloadDigestBase64)".utf8)
         let proof = HMAC<SHA256>.authenticationCode(
             for: material,
             using: SymmetricKey(data: Data(trustKey.utf8))
         )
         return Data(proof).base64URLEncodedString()
     }
+}
+
+enum TransferTrustProofPurpose {
+    static let transferStart = "transfer.start"
+    static let transferExistence = "transfer.existence"
+    static let transferAsset = "transfer.asset"
+    static let transferComplete = "transfer.complete"
+    static let capabilityExchange = "capabilities.exchange"
+    static let updatePrompt = "update.prompt"
 }
 
 private func normalizedSupportedCapabilityFlags(_ capabilityFlags: [String: Int]) -> [String: Int] {
@@ -694,7 +700,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             trustProof: "",
             totalAssets: totalAssets
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferStart,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let endpoint = transferURL(for: desktop, path: TransferProtocol.startPath)
         TransferDebugLogger.info(
             "Starting transfer session host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) total_assets=\(totalAssets)"
@@ -731,7 +743,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             trustProof: "",
             assets: candidates
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferExistence,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let endpoint = transferURL(for: desktop, path: TransferProtocol.existencePath)
         TransferDebugLogger.debug(
             "Checking desktop transfer signatures host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) asset_count=\(candidates.count)"
@@ -768,7 +786,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             trustProof: "",
             capabilities: normalizedSupportedCapabilityFlags(mobileCapabilities)
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.capabilityExchange,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let endpoint = transferURL(for: desktop, path: CapabilityExchangeProtocol.exchangePath)
         let response = try await postJSON(
             to: endpoint,
@@ -800,7 +824,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             bodyText: bodyText,
             updateDestination: updateDestination
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.updatePrompt,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let endpoint = transferURL(for: desktop, path: UpdatePromptProtocol.promptPath)
         let response = try await postJSON(
             to: endpoint,
@@ -833,7 +863,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             createdAt: asset.descriptor.createdAt,
             updatedAt: asset.descriptor.updatedAt
         )
-        metadata.trustProof = try TransferTrustProof.make(for: metadata, trustKey: desktop.sharedKeyBase64)
+        metadata.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferAsset,
+            schema: metadata.schema,
+            sessionID: metadata.sessionID,
+            deviceUUID: metadata.deviceUUID
+        )
         let requestID = UUID().uuidString.lowercased()
         let assetSummary = TransferDebugLogger.assetSummary(for: asset.descriptor)
         TransferDebugLogger.debug("Uploading asset \(assetSummary) request_id=\(requestID)")
@@ -1030,7 +1066,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             failedCount: failedCount,
             interruptionReason: interruptionReason
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferComplete,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let endpoint = transferURL(for: desktop, path: TransferProtocol.completePath)
         TransferDebugLogger.info(
             "Completing transfer session host=\(endpoint.host ?? "-") session_id=\(desktop.lastSessionID) transferred=\(transferredCount) failed=\(failedCount)"

@@ -906,7 +906,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
             trustProof: "",
             totalAssets: totalAssets
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferStart,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferStartOperation,
             request: request,
@@ -935,7 +941,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
             trustProof: "",
             assets: candidates
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferExistence,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferExistenceOperation,
             request: request,
@@ -963,7 +975,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
             createdAt: asset.descriptor.createdAt,
             updatedAt: asset.descriptor.updatedAt
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferAsset,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         do {
             let requestID = try await runtime.beginStreamingRequest(
                 operation: MobileTransportProtocol.transferAssetOperation,
@@ -1036,7 +1054,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
             failedCount: failedCount,
             interruptionReason: interruptionReason
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.transferComplete,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferCompleteOperation,
             request: request,
@@ -1062,7 +1086,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
             trustProof: "",
             capabilities: normalizedCapabilityExchangeFlags(mobileCapabilities)
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.capabilityExchange,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.capabilityExchangeOperation,
             request: request,
@@ -1092,7 +1122,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
             bodyText: bodyText,
             updateDestination: updateDestination
         )
-        request.trustProof = try TransferTrustProof.make(for: request, trustKey: desktop.sharedKeyBase64)
+        request.trustProof = TransferTrustProof.make(
+            trustKey: desktop.sharedKeyBase64,
+            purpose: TransferTrustProofPurpose.updatePrompt,
+            schema: request.schema,
+            sessionID: request.sessionID,
+            deviceUUID: request.deviceUUID
+        )
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.updatePromptOperation,
             request: request,

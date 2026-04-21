@@ -51,6 +51,10 @@ MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
 MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
 MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER = "stopped_by_user"
+MOBILE_TRANSFER_START_PROOF_PURPOSE = "transfer.start"
+MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE = "transfer.existence"
+MOBILE_TRANSFER_ASSET_PROOF_PURPOSE = "transfer.asset"
+MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE = "transfer.complete"
 
 
 @dataclass(frozen=True)
@@ -133,7 +137,10 @@ class MobileTransferService:
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
             if not is_valid_trust_proof(
                 trust_key_b64=transfer_context.trust_key_b64,
-                payload=request_payload,
+                purpose=MOBILE_TRANSFER_START_PROOF_PURPOSE,
+                schema=request.schema,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
                 trust_proof_b64=request.trust_proof,
             ):
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
@@ -210,7 +217,10 @@ class MobileTransferService:
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
             if not is_valid_trust_proof(
                 trust_key_b64=transfer_context.trust_key_b64,
-                payload=request_payload,
+                purpose=MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE,
+                schema=request.schema,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
                 trust_proof_b64=request.trust_proof,
             ):
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
@@ -308,7 +318,10 @@ class MobileTransferService:
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
             if not is_valid_trust_proof(
                 trust_key_b64=transfer_context.trust_key_b64,
-                payload=metadata_payload,
+                purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
+                schema=metadata.schema,
+                session_id=metadata.session_id,
+                device_uuid=metadata.device_uuid,
                 trust_proof_b64=metadata.trust_proof,
             ):
                 _cleanup_temp_upload_file(staged_temp_file_path)
@@ -497,7 +510,10 @@ class MobileTransferService:
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
             if not is_valid_trust_proof(
                 trust_key_b64=transfer_context.trust_key_b64,
-                payload=request_payload,
+                purpose=MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE,
+                schema=request.schema,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
                 trust_proof_b64=request.trust_proof,
             ):
                 return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")

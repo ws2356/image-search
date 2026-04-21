@@ -26,10 +26,12 @@ from dt_image_search.mobile.mobile_pairing_service import (
 )
 from dt_image_search.mobile.mobile_capability_exchange_service import (
     MOBILE_CAPABILITY_EXCHANGE_PATH,
+    MOBILE_CAPABILITY_EXCHANGE_PROOF_PURPOSE,
     MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
 )
 from dt_image_search.mobile.mobile_update_prompt_service import (
     MOBILE_UPDATE_PROMPT_PATH,
+    MOBILE_UPDATE_PROMPT_PROOF_PURPOSE,
     MOBILE_UPDATE_PROMPT_REQUESTED_EVENT,
     MOBILE_UPDATE_PROMPT_SCHEMA,
 )
@@ -1203,10 +1205,14 @@ class TestMobilePairingService(unittest.TestCase):
         try:
             normalized_payload = dict(payload)
             raw_trust_key = normalized_payload.pop("trust_key", None)
-            if isinstance(raw_trust_key, str) and raw_trust_key:
+            proof_purpose = self._proof_purpose_for_path(path)
+            if isinstance(raw_trust_key, str) and raw_trust_key and proof_purpose is not None:
                 normalized_payload["trust_proof"] = derive_trust_proof_b64(
                     trust_key_b64=raw_trust_key,
-                    payload=normalized_payload,
+                    purpose=proof_purpose,
+                    schema=str(normalized_payload.get("schema", "")),
+                    session_id=str(normalized_payload.get("session_id", "")),
+                    device_uuid=str(normalized_payload.get("device_uuid", "")),
                 )
             encoded_payload = json.dumps(normalized_payload).encode("utf-8")
             connection.request(
@@ -1223,3 +1229,11 @@ class TestMobilePairingService(unittest.TestCase):
             return response.status, json.loads(response_body)
         finally:
             connection.close()
+
+    @staticmethod
+    def _proof_purpose_for_path(path: str) -> str | None:
+        if path == MOBILE_CAPABILITY_EXCHANGE_PATH:
+            return MOBILE_CAPABILITY_EXCHANGE_PROOF_PURPOSE
+        if path == MOBILE_UPDATE_PROMPT_PATH:
+            return MOBILE_UPDATE_PROMPT_PROOF_PURPOSE
+        return None

@@ -14,6 +14,7 @@ from dt_image_search.tools.dts_event_bus import default_bus
 MOBILE_UPDATE_PROMPT_SCHEMA = "dtis.mobile-update.v1"
 MOBILE_UPDATE_PROMPT_PATH = "/api/mobile/update/prompt"
 MOBILE_UPDATE_PROMPT_REQUESTED_EVENT = "mobile_update_prompt_requested"
+MOBILE_UPDATE_PROMPT_PROOF_PURPOSE = "update.prompt"
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,10 @@ class MobileUpdatePromptService:
                 )
             if not is_valid_trust_proof(
                 trust_key_b64=transfer_context.trust_key_b64,
-                payload=request_payload,
+                purpose=MOBILE_UPDATE_PROMPT_PROOF_PURPOSE,
+                schema=request.schema,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
                 trust_proof_b64=request.trust_proof,
             ):
                 return _response(
