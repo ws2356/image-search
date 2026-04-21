@@ -2003,7 +2003,7 @@ actor PhotoLibraryTransferService: TransferService {
         assetSource: TransferAssetSource,
         transferClient: MobileTransferClient,
         trustedDesktopStore: TrustedDesktopStore,
-        exportConcurrencyLimit: Int = 2,
+        exportConcurrencyLimit: Int = 5,
         uploadConcurrencyLimit: Int = 5
     ) {
         self.assetSource = assetSource
