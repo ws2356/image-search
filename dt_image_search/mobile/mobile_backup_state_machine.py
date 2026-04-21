@@ -17,6 +17,8 @@ class MobileBackupState(str, Enum):
     PENDING_PAIRING = "pending_pairing"
     PAIRING_MISMATCHED = "pairing_mismatched"
     PAIRING_COMPLETED = "pairing_completed"
+    PAIRING_EXPIRED = "pairing_expired"
+    PAIRING_STOPPED = "pairing_stopped"
     TRANSFER_IN_PROGRESS = "transfer_in_progress"
     TRANSFER_STOPPED = "transfer_stopped"
     TRANSFER_COMPLETED = "transfer_completed"
@@ -27,6 +29,8 @@ class MobileBackupEvent(str, Enum):
     PAIRING_ACCEPTED = "pairing_accepted"
     PAIRING_MISMATCH_DETECTED = "pairing_mismatch_detected"
     PAIRING_MISMATCH_RESOLVED = "pairing_mismatch_resolved"
+    PAIRING_EXPIRED = "pairing_expired"
+    PAIRING_STOPPED = "pairing_stopped"
     TRANSFER_STARTED = "transfer_started"
     TRANSFER_STOPPED = "transfer_stopped"
     TRANSFER_COMPLETED = "transfer_completed"
@@ -40,9 +44,21 @@ class MobileBackupStateTransitionError(RuntimeError):
 _STATE_TRANSITIONS: dict[tuple[MobileBackupState, MobileBackupEvent], MobileBackupState] = {
     (MobileBackupState.PENDING_PAIRING, MobileBackupEvent.PAIRING_ACCEPTED): MobileBackupState.PAIRING_COMPLETED,
     (MobileBackupState.PENDING_PAIRING, MobileBackupEvent.PAIRING_MISMATCH_DETECTED): MobileBackupState.PAIRING_MISMATCHED,
+    (MobileBackupState.PENDING_PAIRING, MobileBackupEvent.PAIRING_EXPIRED): MobileBackupState.PAIRING_EXPIRED,
+    (MobileBackupState.PENDING_PAIRING, MobileBackupEvent.PAIRING_STOPPED): MobileBackupState.PAIRING_STOPPED,
     (MobileBackupState.PAIRING_MISMATCHED, MobileBackupEvent.PAIRING_MISMATCH_DETECTED): MobileBackupState.PAIRING_MISMATCHED,
     (MobileBackupState.PAIRING_MISMATCHED, MobileBackupEvent.PAIRING_MISMATCH_RESOLVED): MobileBackupState.PAIRING_COMPLETED,
+    (MobileBackupState.PAIRING_MISMATCHED, MobileBackupEvent.PAIRING_EXPIRED): MobileBackupState.PAIRING_EXPIRED,
+    (MobileBackupState.PAIRING_MISMATCHED, MobileBackupEvent.PAIRING_STOPPED): MobileBackupState.PAIRING_STOPPED,
     (MobileBackupState.PAIRING_COMPLETED, MobileBackupEvent.PAIRING_ACCEPTED): MobileBackupState.PAIRING_COMPLETED,
+    (MobileBackupState.PAIRING_COMPLETED, MobileBackupEvent.PAIRING_STOPPED): MobileBackupState.PAIRING_STOPPED,
+    (MobileBackupState.PAIRING_EXPIRED, MobileBackupEvent.PAIRING_EXPIRED): MobileBackupState.PAIRING_EXPIRED,
+    (MobileBackupState.PAIRING_EXPIRED, MobileBackupEvent.PAIRING_ACCEPTED): MobileBackupState.PAIRING_COMPLETED,
+    (MobileBackupState.PAIRING_EXPIRED, MobileBackupEvent.PAIRING_MISMATCH_DETECTED): MobileBackupState.PAIRING_MISMATCHED,
+    (MobileBackupState.PAIRING_EXPIRED, MobileBackupEvent.PAIRING_STOPPED): MobileBackupState.PAIRING_STOPPED,
+    (MobileBackupState.PAIRING_STOPPED, MobileBackupEvent.PAIRING_STOPPED): MobileBackupState.PAIRING_STOPPED,
+    (MobileBackupState.PAIRING_STOPPED, MobileBackupEvent.PAIRING_ACCEPTED): MobileBackupState.PAIRING_COMPLETED,
+    (MobileBackupState.PAIRING_STOPPED, MobileBackupEvent.PAIRING_MISMATCH_DETECTED): MobileBackupState.PAIRING_MISMATCHED,
     (MobileBackupState.PAIRING_COMPLETED, MobileBackupEvent.TRANSFER_STARTED): MobileBackupState.TRANSFER_IN_PROGRESS,
     (MobileBackupState.TRANSFER_IN_PROGRESS, MobileBackupEvent.TRANSFER_STARTED): MobileBackupState.TRANSFER_IN_PROGRESS,
     (MobileBackupState.TRANSFER_IN_PROGRESS, MobileBackupEvent.TRANSFER_STOPPED): MobileBackupState.TRANSFER_STOPPED,

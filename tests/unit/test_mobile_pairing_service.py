@@ -19,6 +19,7 @@ from dt_image_search.mobile.mobile_pairing_service import (
     MobileBackupAgainDecision,
     MobileBackupAgainSessionContext,
     MobilePairingService,
+    PAIRING_STATE_PATH,
     PairingResultState,
     _desktop_name_for_build,
     _is_ignorable_socket_disconnect,
@@ -35,6 +36,11 @@ from dt_image_search.mobile.mobile_update_prompt_service import (
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
 from dt_image_search.mobile.transport.lan_http_adapter import LanHttpEndpointInfo
+from dt_image_search.mobile.transport.contracts import (
+    PAIRING_STATE_OPERATION,
+    MobileTransportContext,
+    MobileTransportKind,
+)
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbBootstrapConfig,
     UsbTransportState,
@@ -138,7 +144,7 @@ class TestMobilePairingService(unittest.TestCase):
         )
 
         self.assertEqual(status_code, 200)
-        self.assertEqual(response_payload["status"], "accepted")
+        self.assertEqual(response_payload["backup_state"], "pairing_completed")
         self.assertEqual(response_payload["desktop_name"], "Studio Mac")
         self.assertEqual(response_payload["device_uuid"], "ios-device-001")
         self.assertEqual(response_payload["transport"], "lan")
@@ -191,6 +197,72 @@ class TestMobilePairingService(unittest.TestCase):
             ).fetchone()
             self.assertIsNotNone(session_row)
             self.assertEqual(session_row["status"], "paired")
+
+    def test_pairing_state_http_endpoint_returns_latest_pairing_state(self):
+        now = datetime(2026, 4, 10, 6, 30, tzinfo=timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+
+        status_code, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-state-001",
+                "device_name": "Alice iPhone",
+                "client_nonce": "pairing-state-client-nonce",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(status_code, 200)
+
+        poll_status, poll_payload = self._post_pairing_state_request(
+            session_id=session.session_id,
+            device_uuid="ios-device-state-001",
+        )
+
+        self.assertEqual(poll_status, 200)
+        self.assertEqual(poll_payload["backup_state"], "pairing_completed")
+        self.assertEqual(poll_payload["session_id"], session.session_id)
+        self.assertEqual(poll_payload["device_uuid"], "ios-device-state-001")
+
+    def test_pairing_state_transport_route_dispatches_usb_requests(self):
+        now = datetime(2026, 4, 10, 6, 45, tzinfo=timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+
+        status_code, _ = self._pairing_service.handle_pairing_request(
+            {
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "device_uuid": "ios-device-route-001",
+                "device_name": "Alice iPhone",
+                "client_nonce": "pairing-route-client-nonce",
+            },
+            now=now + timedelta(seconds=5),
+        )
+        self.assertEqual(status_code, 200)
+
+        dispatch_response = self._pairing_service._transport_router.dispatch(
+            operation=PAIRING_STATE_OPERATION,
+            payload={
+                "schema": "dtis.mobile-pairing.v1",
+                "session_id": session.session_id,
+                "device_uuid": "ios-device-route-001",
+            },
+            context=MobileTransportContext(
+                transport=MobileTransportKind.USB_WEBSOCKET,
+                operation=PAIRING_STATE_OPERATION,
+                request_id="pairing-state-route-001",
+                remote_address="usb://route",
+            ),
+        )
+
+        self.assertEqual(dispatch_response.status_code, 200)
+        self.assertEqual(dispatch_response.payload["backup_state"], "pairing_completed")
 
     def test_pairing_service_uses_event_bus_to_track_app_foreground_state(self):
         self.assertTrue(self._pairing_service._is_desktop_foreground())
@@ -260,7 +332,7 @@ class TestMobilePairingService(unittest.TestCase):
         )
 
         self.assertEqual(status_code, 410)
-        self.assertEqual(response_payload["status"], "expired")
+        self.assertEqual(response_payload["backup_state"], "pairing_expired")
         self.assertEqual(self._pairing_service.current_result().state, PairingResultState.EXPIRED)
 
     def test_is_ignorable_socket_disconnect_recognizes_client_disconnect_errors(self):
@@ -287,7 +359,7 @@ class TestMobilePairingService(unittest.TestCase):
         )
 
         self.assertEqual(status_code, 200)
-        self.assertEqual(response_payload["status"], "accepted")
+        self.assertEqual(response_payload["backup_state"], "pairing_completed")
         self.assertEqual(response_payload["session_id"], session.session_id)
 
     def test_live_pairing_http_endpoint_returns_json_for_unhandled_error(self):
@@ -309,7 +381,7 @@ class TestMobilePairingService(unittest.TestCase):
             )
 
         self.assertEqual(status_code, 500)
-        self.assertEqual(response_payload["status"], "rejected")
+        self.assertEqual(response_payload["backup_state"], "pending_pairing")
         self.assertIn("Desktop failed while processing the pairing request.", response_payload["message"])
 
     def test_live_capability_exchange_http_endpoint_accepts_authenticated_request(self):
@@ -518,7 +590,7 @@ class TestMobilePairingService(unittest.TestCase):
             now=now + timedelta(seconds=5),
         )
         self.assertEqual(first_status, 200)
-        self.assertEqual(first_response["status"], "accepted")
+        self.assertEqual(first_response["backup_state"], "pairing_completed")
 
         with create_db_conn(self._ctx) as conn:
             conn.execute(
@@ -563,7 +635,7 @@ class TestMobilePairingService(unittest.TestCase):
             now=now + timedelta(minutes=1, seconds=5),
         )
         self.assertEqual(second_status, 200)
-        self.assertEqual(second_response["status"], "accepted")
+        self.assertEqual(second_response["backup_state"], "pairing_completed")
 
     def test_start_pairing_session_includes_all_advertised_endpoints_in_qr_payload(self):
         pairing_service = MobilePairingService(
@@ -784,9 +856,15 @@ class TestMobilePairingService(unittest.TestCase):
             },
             now=now + timedelta(minutes=1, seconds=5),
         )
+        completed_payload = self._wait_for_pairing_state(
+            session_id=second_session.session_id,
+            device_uuid="ios-device-new-001",
+            expected_states={"pairing_completed"},
+        )
 
         self.assertEqual(second_status, 200)
-        self.assertEqual(second_payload["folder_path"], original_folder_row["folder_path"])
+        self.assertEqual(second_payload["backup_state"], "pairing_mismatched")
+        self.assertEqual(completed_payload["folder_path"], original_folder_row["folder_path"])
         self.assertEqual(len(observed_mismatch_contexts), 1)
         self.assertEqual(observed_mismatch_contexts[0].previous_device_uuid, "ios-device-old-001")
         self.assertEqual(observed_mismatch_contexts[0].replacement_device_uuid, "ios-device-new-001")
@@ -906,9 +984,15 @@ class TestMobilePairingService(unittest.TestCase):
             },
             now=now + timedelta(minutes=1, seconds=5),
         )
+        completed_payload = self._wait_for_pairing_state(
+            session_id=second_session.session_id,
+            device_uuid="ios-device-new-002",
+            expected_states={"pairing_completed"},
+        )
 
         self.assertEqual(second_status, 200)
-        self.assertNotEqual(second_payload["folder_path"], original_folder_row["folder_path"])
+        self.assertEqual(second_payload["backup_state"], "pairing_mismatched")
+        self.assertNotEqual(completed_payload["folder_path"], original_folder_row["folder_path"])
 
         with create_db_conn(self._ctx) as conn:
             old_binding = conn.execute(
@@ -1059,10 +1143,16 @@ class TestMobilePairingService(unittest.TestCase):
             },
             now=now + timedelta(minutes=1, seconds=5),
         )
+        stopped_payload = self._wait_for_pairing_state(
+            session_id=second_session.session_id,
+            device_uuid="ios-device-new-004",
+            expected_states={"pairing_stopped"},
+        )
 
-        self.assertEqual(second_status, 409)
-        self.assertEqual(second_payload["status"], "rejected")
-        self.assertIn("canceled", second_payload["message"].lower())
+        self.assertEqual(second_status, 200)
+        self.assertEqual(second_payload["backup_state"], "pairing_mismatched")
+        self.assertEqual(stopped_payload["backup_state"], "pairing_stopped")
+        self.assertIn("canceled", str(stopped_payload["message"]).lower())
 
         with create_db_conn(self._ctx) as conn:
             self.assertIsNotNone(
@@ -1075,6 +1165,48 @@ class TestMobilePairingService(unittest.TestCase):
     def _post_pairing_request(self, payload: dict[str, str]) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)
         return self._post_json_request(path=endpoint.path, payload=payload)
+
+    def _post_pairing_state_request(
+        self,
+        *,
+        session_id: str,
+        device_uuid: str,
+    ) -> tuple[int, dict[str, object]]:
+        return self._post_json_request(
+            path=PAIRING_STATE_PATH,
+            payload={
+                "schema": "dtis.mobile-pairing.v1",
+                "session_id": session_id,
+                "device_uuid": device_uuid,
+            },
+        )
+
+    def _wait_for_pairing_state(
+        self,
+        *,
+        session_id: str,
+        device_uuid: str,
+        expected_states: set[str],
+        max_attempts: int = 25,
+    ) -> dict[str, object]:
+        last_payload: dict[str, object] | None = None
+        for _ in range(max_attempts):
+            status_code, payload = self._post_pairing_state_request(
+                session_id=session_id,
+                device_uuid=device_uuid,
+            )
+            self.assertEqual(status_code, 200)
+            backup_state = payload.get("backup_state")
+            self.assertIsInstance(backup_state, str)
+            if isinstance(backup_state, str) and backup_state in expected_states:
+                return payload
+            last_payload = payload
+            threading.Event().wait(0.05)
+
+        self.fail(
+            "Desktop pairing state did not reach expected states "
+            f"{sorted(expected_states)}. Last payload: {last_payload}"
+        )
 
     def _post_json_request(self, *, path: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
         endpoint = urlsplit(self._pairing_service.endpoint_url)

@@ -24,6 +24,7 @@ struct DemoPairingService: PairingService {
 
         return PairingStatus(
             phase: .paired,
+            backupFlowState: .pairingCompleted,
             desktopName: desktopName,
             sessionID: payload.sessionID,
             transport: .lan,

@@ -19,6 +19,7 @@ from dt_image_search.mobile.transport.asset_upload_stream import (
 from dt_image_search.mobile.transport.contracts import (
     CAPABILITY_EXCHANGE_OPERATION,
     PAIRING_CLAIM_OPERATION,
+    PAIRING_STATE_OPERATION,
     TRANSFER_ASSET_OPERATION,
     TRANSFER_COMPLETE_OPERATION,
     TRANSFER_EXISTENCE_OPERATION,
@@ -61,6 +62,7 @@ class LanHttpTransportAdapter:
         resolve_advertised_hosts: Callable[[str | None], tuple[str, ...]],
         format_pairing_endpoint_url: Callable[[str, int], str],
         pairing_claim_path: str,
+        pairing_state_path: str,
         pairing_protocol_schema: str,
         pairing_rejected_status: str,
         transfer_schema: str,
@@ -80,6 +82,7 @@ class LanHttpTransportAdapter:
         self._resolve_advertised_hosts = resolve_advertised_hosts
         self._format_pairing_endpoint_url = format_pairing_endpoint_url
         self._pairing_claim_path = pairing_claim_path
+        self._pairing_state_path = pairing_state_path
         self._pairing_protocol_schema = pairing_protocol_schema
         self._pairing_rejected_status = pairing_rejected_status
         self._transfer_schema = transfer_schema
@@ -174,12 +177,26 @@ class LanHttpTransportAdapter:
                         request_payload = self._read_json_payload(
                             schema=adapter._pairing_protocol_schema,
                             status=adapter._pairing_rejected_status,
+                            state_field="backup_state",
                             parse_error_message="Desktop could not parse the pairing request JSON payload.",
                             object_error_message="Desktop requires JSON object payloads for pairing requests.",
                         )
                         if request_payload is None:
                             return
                         self._dispatch_operation(PAIRING_CLAIM_OPERATION, request_payload)
+                        return
+
+                    if parsed_path.path == adapter._pairing_state_path:
+                        request_payload = self._read_json_payload(
+                            schema=adapter._pairing_protocol_schema,
+                            status=adapter._pairing_rejected_status,
+                            state_field="backup_state",
+                            parse_error_message="Desktop could not parse the pairing state JSON payload.",
+                            object_error_message="Desktop requires JSON object payloads for pairing state requests.",
+                        )
+                        if request_payload is None:
+                            return
+                        self._dispatch_operation(PAIRING_STATE_OPERATION, request_payload)
                         return
 
                     if parsed_path.path == adapter._transfer_start_path:
@@ -399,7 +416,7 @@ class LanHttpTransportAdapter:
                         404,
                         {
                             "schema": adapter._pairing_protocol_schema,
-                            "status": adapter._pairing_rejected_status,
+                            "backup_state": adapter._pairing_rejected_status,
                             "message": "Unknown pairing endpoint.",
                         },
                     )
@@ -415,7 +432,7 @@ class LanHttpTransportAdapter:
                             500,
                             {
                                 "schema": adapter._pairing_protocol_schema,
-                                "status": adapter._pairing_rejected_status,
+                                "backup_state": adapter._pairing_rejected_status,
                                 "message": (
                                     "Desktop failed while processing the pairing request. "
                                     "Retry pairing and check desktop logs if the issue persists."
@@ -440,6 +457,7 @@ class LanHttpTransportAdapter:
                 *,
                 schema: str,
                 status: str,
+                state_field: str = "status",
                 parse_error_message: str,
                 object_error_message: str,
             ) -> dict[str, object] | None:
@@ -452,7 +470,7 @@ class LanHttpTransportAdapter:
                         400,
                         {
                             "schema": schema,
-                            "status": status,
+                            state_field: status,
                             "message": parse_error_message,
                         },
                     )
@@ -463,7 +481,7 @@ class LanHttpTransportAdapter:
                         400,
                         {
                             "schema": schema,
-                            "status": status,
+                            state_field: status,
                             "message": object_error_message,
                         },
                     )

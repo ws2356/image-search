@@ -21,12 +21,26 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
     }
 
     func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+        try await postPairingRequest(at: endpoint, requestBody: request)
+    }
+
+    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
+        guard let stateEndpoint = endpoint.pairingStateURL else {
+            throw PairingServiceError.transport(message: "Desktop pairing state endpoint is invalid.")
+        }
+        return try await postPairingRequest(at: stateEndpoint, requestBody: request)
+    }
+
+    private func postPairingRequest<RequestBody: Encodable>(
+        at endpoint: URL,
+        requestBody: RequestBody
+    ) async throws -> PairingClaimResponse {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.timeoutInterval = 5
-        urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(request)
+        urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(requestBody)
 
         let data: Data
         let response: URLResponse
@@ -52,12 +66,12 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
                 return decodedResponse
             }
 
-            switch decodedResponse.status {
-            case .expired:
+            switch decodedResponse.backupState {
+            case .pairingExpired:
                 throw PairingServiceError.expired(message: decodedResponse.message)
-            case .accepted:
+            case .pairingCompleted:
                 throw PairingServiceError.invalidAcceptedResponse
-            case .rejected:
+            case .pendingPairing, .pairingMismatched, .pairingStopped:
                 throw PairingServiceError.rejected(message: decodedResponse.message)
             }
         } catch let error as PairingServiceError {
@@ -119,6 +133,8 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
 }
 
 struct DesktopBootstrapPairingService: PairingService {
+    private static let pairingStatePollIntervalNanoseconds: UInt64 = 2_000_000_000
+
     let bootstrapClient: PairingBootstrapClient
     let usbBootstrapClient: PairingUSBBootstrapClient?
     let capabilityExchangeClient: (any MobileCapabilityExchangeClient)?
@@ -161,14 +177,41 @@ struct DesktopBootstrapPairingService: PairingService {
 
         do {
             let attempt = try await claimPairing(using: payload, request: request)
-            let response = attempt.response
-            switch response.status {
-            case .accepted:
+            var response = attempt.response
+            switch response.backupState {
+            case .pendingPairing, .pairingMismatched:
+                response = try await waitForPairingResolution(
+                    using: payload,
+                    attempt: attempt,
+                    request: PairingStateRequest(
+                        sessionID: request.sessionID,
+                        deviceUUID: request.deviceUUID
+                    )
+                )
+            case .pairingCompleted:
                 break
-            case .expired:
+            case .pairingExpired:
                 throw PairingServiceError.expired(message: response.message)
-            case .rejected:
-                throw PairingServiceError.rejected(message: response.message)
+            case .pairingStopped:
+                return PairingStatus(
+                    phase: .failed,
+                    backupFlowState: .pairingStopped,
+                    desktopName: nil,
+                    sessionID: request.sessionID,
+                    transport: nil,
+                    message: response.message
+                )
+            }
+
+            guard response.backupState == .pairingCompleted else {
+                return PairingStatus(
+                    phase: .failed,
+                    backupFlowState: .pairingStopped,
+                    desktopName: nil,
+                    sessionID: request.sessionID,
+                    transport: nil,
+                    message: response.message
+                )
             }
 
             guard let sessionID = response.sessionID,
@@ -202,6 +245,7 @@ struct DesktopBootstrapPairingService: PairingService {
 
             return PairingStatus(
                 phase: .paired,
+                backupFlowState: .pairingCompleted,
                 desktopName: desktopName,
                 sessionID: sessionID,
                 transport: transport,
@@ -210,6 +254,7 @@ struct DesktopBootstrapPairingService: PairingService {
         } catch let error as PairingServiceError {
             return PairingStatus(
                 phase: error.phase,
+                backupFlowState: error.backupFlowState,
                 desktopName: nil,
                 sessionID: nil,
                 transport: nil,
@@ -218,6 +263,7 @@ struct DesktopBootstrapPairingService: PairingService {
         } catch {
             return PairingStatus(
                 phase: .failed,
+                backupFlowState: .pendingPairing,
                 desktopName: nil,
                 sessionID: nil,
                 transport: nil,
@@ -235,7 +281,7 @@ struct DesktopBootstrapPairingService: PairingService {
         if let usbBootstrapClient, payload.suggestedUSBPort != nil {
             do {
                 let response = try await usbBootstrapClient.claimPairing(using: payload, request: request)
-                return PairingBootstrapAttempt(endpoint: payload.bootstrapURL, response: response)
+                return PairingBootstrapAttempt(endpoint: payload.bootstrapURL, response: response, transport: .usb)
             } catch let error as PairingServiceError {
                 switch error {
                 case .expired, .rejected:
@@ -252,7 +298,7 @@ struct DesktopBootstrapPairingService: PairingService {
         for endpoint in payload.bootstrapURLs {
             do {
                 let response = try await bootstrapClient.claimPairing(at: endpoint, request: request)
-                return PairingBootstrapAttempt(endpoint: endpoint, response: response)
+                return PairingBootstrapAttempt(endpoint: endpoint, response: response, transport: .lan)
             } catch let error as PairingServiceError {
                 switch error {
                 case .expired, .rejected:
@@ -268,6 +314,34 @@ struct DesktopBootstrapPairingService: PairingService {
         throw retryableError ?? PairingServiceError.transport(
             message: "Desktop pairing could not reach any advertised endpoint."
         )
+    }
+
+    private func waitForPairingResolution(
+        using payload: PairingQRCodePayload,
+        attempt: PairingBootstrapAttempt,
+        request: PairingStateRequest
+    ) async throws -> PairingClaimResponse {
+        while true {
+            let stateResponse: PairingClaimResponse
+            switch attempt.transport {
+            case .usb:
+                guard let usbBootstrapClient else {
+                    throw PairingServiceError.transport(message: "Desktop USB pairing state polling is unavailable.")
+                }
+                stateResponse = try await usbBootstrapClient.fetchPairingState(using: payload, request: request)
+            case .lan:
+                stateResponse = try await bootstrapClient.fetchPairingState(at: attempt.endpoint, request: request)
+            }
+
+            switch stateResponse.backupState {
+            case .pairingCompleted, .pairingStopped:
+                return stateResponse
+            case .pairingExpired:
+                throw PairingServiceError.expired(message: stateResponse.message)
+            case .pendingPairing, .pairingMismatched:
+                try? await Task.sleep(nanoseconds: Self.pairingStatePollIntervalNanoseconds)
+            }
+        }
     }
 
     private func derivePairingKeyBase64(
@@ -295,6 +369,7 @@ struct DesktopBootstrapPairingService: PairingService {
 private struct PairingBootstrapAttempt {
     let endpoint: URL
     let response: PairingClaimResponse
+    let transport: TransferTransport
 }
 
 private enum PairingDebugLogger {
@@ -322,6 +397,15 @@ private extension PairingServiceError {
         }
     }
 
+    var backupFlowState: MobileBackupFlowState {
+        switch self {
+        case .expired:
+            return .pairingExpired
+        default:
+            return .pendingPairing
+        }
+    }
+
     var message: String {
         switch self {
         case .invalidHTTPResponse:
@@ -346,6 +430,16 @@ private extension Data {
 }
 
 private extension URL {
+    var pairingStateURL: URL? {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.path = "/api/mobile/pairing/state"
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
     var isLikelyLocalNetworkEndpoint: Bool {
         guard let host else {
             return false

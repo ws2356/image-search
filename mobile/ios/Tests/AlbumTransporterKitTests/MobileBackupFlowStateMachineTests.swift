@@ -26,6 +26,21 @@ final class MobileBackupFlowStateMachineTests: XCTestCase {
         XCTAssertEqual(machine.state, .pairingCompleted)
     }
 
+    func test_pairing_stopped_state_is_reachable_from_mismatch() {
+        var machine = MobileBackupFlowStateMachine()
+
+        machine.transition(.pairingMismatchDetected)
+        machine.transition(.pairingStopped)
+
+        XCTAssertEqual(machine.state, .pairingStopped)
+    }
+
+    func test_pairing_expired_state_is_reachable_from_pending() {
+        var machine = MobileBackupFlowStateMachine()
+        machine.transition(.pairingExpired)
+        XCTAssertEqual(machine.state, .pairingExpired)
+    }
+
     func test_transfer_resume_from_non_active_states_returns_to_in_progress() {
         var stoppedMachine = MobileBackupFlowStateMachine(state: .transferStopped)
         stoppedMachine.transition(.transferStarted)

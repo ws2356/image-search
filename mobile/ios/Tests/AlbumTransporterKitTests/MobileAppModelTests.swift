@@ -48,6 +48,25 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertTrue(model.isShowingLowBatteryWarning)
     }
 
+    func test_begin_pairing_returns_home_when_desktop_stops_pairing() async {
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StoppedPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+
+        XCTAssertEqual(model.route, .home)
+        XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
+    }
+
     func test_start_backup_shows_full_media_access_reminder_before_continuing() async {
         let limitedAccessSummary = PermissionSummary(
             cameraGranted: true,
@@ -289,10 +308,24 @@ private struct StaticPairingService: PairingService {
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
         PairingStatus(
             phase: .paired,
+            backupFlowState: .pairingCompleted,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,
             transport: .lan,
             message: "Pairing succeeded for \(payload.sessionID)."
+        )
+    }
+}
+
+private struct StoppedPairingService: PairingService {
+    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
+        PairingStatus(
+            phase: .failed,
+            backupFlowState: .pairingStopped,
+            desktopName: "Studio Mac",
+            sessionID: payload.sessionID,
+            transport: nil,
+            message: "Desktop canceled this pairing request."
         )
     }
 }

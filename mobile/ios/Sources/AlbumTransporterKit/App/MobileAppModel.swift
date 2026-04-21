@@ -110,6 +110,7 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
             phase: .scanning,
+            backupFlowState: .pendingPairing,
             desktopName: homeSummary.desktopName,
             sessionID: nil,
             transport: nil,
@@ -124,6 +125,7 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
             phase: .pairing,
+            backupFlowState: .pendingPairing,
             desktopName: homeSummary.desktopName,
             sessionID: nil,
             transport: nil,
@@ -137,6 +139,7 @@ final class MobileAppModel: ObservableObject {
             if case .failure(let error) = payloadResult {
                 pairingStatus = PairingStatus(
                     phase: .failed,
+                    backupFlowState: .pendingPairing,
                     desktopName: homeSummary.desktopName,
                     sessionID: nil,
                     transport: nil,
@@ -153,6 +156,15 @@ final class MobileAppModel: ObservableObject {
         pairingStatus = result
         applyPairingStatusStateTransition(result)
         persistSnapshot()
+
+        if result.backupFlowState == .pairingStopped {
+            homeSummary.primaryAction = .scanDesktopQRCode
+            homeSummary.pendingItemCount = nil
+            route = .home
+            recordTelemetry(.pairingFailed)
+            persistSnapshot()
+            return
+        }
 
         guard result.phase == .paired else {
             recordTelemetry(.pairingFailed)
@@ -340,19 +352,25 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func applyPairingStatusStateTransition(_ status: PairingStatus) {
-        switch status.phase {
-        case .paired:
-            transitionBackupFlow(.pairingAccepted)
-        case .expired:
-            transitionBackupFlow(.pairingFailed)
-        case .failed:
-            if Self.isPairingMismatchStatusMessage(status.message) {
-                transitionBackupFlow(.pairingMismatchDetected)
-            } else {
-                transitionBackupFlow(.pairingFailed)
-            }
-        case .instructions, .scanning, .pairing:
+        switch status.backupFlowState {
+        case .pendingPairing:
             transitionBackupFlow(.pairingStarted)
+        case .pairingMismatched:
+            transitionBackupFlow(.pairingMismatchDetected)
+        case .pairingCompleted:
+            transitionBackupFlow(.pairingAccepted)
+        case .pairingExpired:
+            transitionBackupFlow(.pairingExpired)
+        case .pairingStopped:
+            transitionBackupFlow(.pairingStopped)
+        case .transferInProgress:
+            transitionBackupFlow(.transferStarted)
+        case .transferStopped:
+            transitionBackupFlow(.transferStopped)
+        case .transferCompleted:
+            transitionBackupFlow(.transferCompleted)
+        case .transferFailed:
+            transitionBackupFlow(.transferFailed)
         }
     }
 
@@ -367,15 +385,7 @@ final class MobileAppModel: ObservableObject {
         case .scanDesktopQRCode, .resumeBackup:
             break
         }
-        return snapshot.pairingStatus.phase == .paired ? .pairingCompleted : .pendingPairing
-    }
-
-    private static func isPairingMismatchStatusMessage(_ message: String) -> Bool {
-        let normalizedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedMessage.isEmpty else {
-            return false
-        }
-        return normalizedMessage.contains("no longer paired") || normalizedMessage.contains("mismatch")
+        return snapshot.pairingStatus.backupFlowState
     }
 
     private func persistSnapshot() {

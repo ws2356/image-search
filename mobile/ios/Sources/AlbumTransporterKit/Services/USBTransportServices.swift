@@ -8,6 +8,7 @@ enum MobileTransportProtocol {
     static let authChallengeOperation = "transport.auth.challenge"
     static let authChallengeBodySchema = "dtis.mobile-pairing.v1"
     static let pairingClaimOperation = "pairing.claim"
+    static let pairingStateOperation = "pairing.state"
     static let capabilityExchangeOperation = "capabilities.exchange"
     static let updatePromptOperation = "update.prompt"
     static let transferStartOperation = "transfer.start"
@@ -790,6 +791,26 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
     }
 
     func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+        try await sendPairingRequest(
+            using: payload,
+            operation: MobileTransportProtocol.pairingClaimOperation,
+            request: request
+        )
+    }
+
+    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse {
+        try await sendPairingRequest(
+            using: payload,
+            operation: MobileTransportProtocol.pairingStateOperation,
+            request: request
+        )
+    }
+
+    private func sendPairingRequest<RequestBody: Encodable & Sendable>(
+        using payload: PairingQRCodePayload,
+        operation: String,
+        request: RequestBody
+    ) async throws -> PairingClaimResponse {
         guard let suggestedUSBPort = payload.suggestedUSBPort else {
             throw PairingServiceError.transport(message: "The QR payload is missing the USB bootstrap port.")
         }
@@ -801,7 +822,7 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
                 suggestedPort: suggestedUSBPort
             )
             let runtimeResponse = try await runtime.sendRequest(
-                operation: MobileTransportProtocol.pairingClaimOperation,
+                operation: operation,
                 bodySchema: PairingProtocol.schema,
                 request: request,
                 timeout: responseTimeout
@@ -818,12 +839,12 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
                 return decodedResponse
             }
 
-            switch decodedResponse.status {
-            case .expired:
+            switch decodedResponse.backupState {
+            case .pairingExpired:
                 throw PairingServiceError.expired(message: decodedResponse.message)
-            case .accepted:
+            case .pairingCompleted:
                 throw PairingServiceError.invalidAcceptedResponse
-            case .rejected:
+            case .pendingPairing, .pairingMismatched, .pairingStopped:
                 throw PairingServiceError.rejected(message: decodedResponse.message)
             }
         } catch let error as PairingServiceError {

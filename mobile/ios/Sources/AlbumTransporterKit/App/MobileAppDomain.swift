@@ -121,13 +121,50 @@ enum PairingPhase: String, Equatable, Sendable, Codable {
 
 struct PairingStatus: Equatable, Sendable, Codable {
     var phase: PairingPhase
+    var backupFlowState: MobileBackupFlowState
     var desktopName: String?
     var sessionID: String?
     var transport: TransferTransport?
     var message: String
 
+    enum CodingKeys: String, CodingKey {
+        case phase
+        case backupFlowState
+        case desktopName
+        case sessionID
+        case transport
+        case message
+    }
+
+    init(
+        phase: PairingPhase,
+        backupFlowState: MobileBackupFlowState = .pendingPairing,
+        desktopName: String?,
+        sessionID: String?,
+        transport: TransferTransport?,
+        message: String
+    ) {
+        self.phase = phase
+        self.backupFlowState = backupFlowState
+        self.desktopName = desktopName
+        self.sessionID = sessionID
+        self.transport = transport
+        self.message = message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        phase = try container.decode(PairingPhase.self, forKey: .phase)
+        backupFlowState = try container.decodeIfPresent(MobileBackupFlowState.self, forKey: .backupFlowState) ?? .pendingPairing
+        desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName)
+        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
+        transport = try container.decodeIfPresent(TransferTransport.self, forKey: .transport)
+        message = try container.decode(String.self, forKey: .message)
+    }
+
     static let idle = PairingStatus(
         phase: .instructions,
+        backupFlowState: .pendingPairing,
         desktopName: nil,
         sessionID: nil,
         transport: nil,

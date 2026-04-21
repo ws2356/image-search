@@ -13,10 +13,12 @@ protocol PairingService: Sendable {
 protocol PairingBootstrapClient: Sendable {
     func primeInternetAccess() async
     func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse
+    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse
 }
 
 protocol PairingUSBBootstrapClient: Sendable {
     func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse
+    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse
 }
 
 protocol LocalDeviceIdentityProviding: Sendable {
@@ -79,6 +81,20 @@ extension PairingService {
 
 extension PairingBootstrapClient {
     func primeInternetAccess() async {}
+
+    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
+        _ = endpoint
+        _ = request
+        throw PairingServiceError.transport(message: "Desktop pairing state polling is unavailable.")
+    }
+}
+
+extension PairingUSBBootstrapClient {
+    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse {
+        _ = payload
+        _ = request
+        throw PairingServiceError.transport(message: "Desktop USB pairing state polling is unavailable.")
+    }
 }
 
 extension TransferService {
@@ -89,6 +105,29 @@ enum PairingBootstrapResponseStatus: String, Codable, Sendable {
     case accepted
     case rejected
     case expired
+}
+
+enum PairingWireState: String, Codable, Sendable {
+    case pendingPairing = "pending_pairing"
+    case pairingMismatched = "pairing_mismatched"
+    case pairingCompleted = "pairing_completed"
+    case pairingExpired = "pairing_expired"
+    case pairingStopped = "pairing_stopped"
+
+    var backupFlowState: MobileBackupFlowState {
+        switch self {
+        case .pendingPairing:
+            return .pendingPairing
+        case .pairingMismatched:
+            return .pairingMismatched
+        case .pairingCompleted:
+            return .pairingCompleted
+        case .pairingExpired:
+            return .pairingExpired
+        case .pairingStopped:
+            return .pairingStopped
+        }
+    }
 }
 
 struct PairingClaimRequest: Codable, Sendable {
@@ -113,9 +152,21 @@ struct PairingClaimRequest: Codable, Sendable {
     }
 }
 
+struct PairingStateRequest: Codable, Sendable {
+    var schema = PairingProtocol.schema
+    var sessionID: String
+    var deviceUUID: String
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case sessionID = "session_id"
+        case deviceUUID = "device_uuid"
+    }
+}
+
 struct PairingClaimResponse: Codable, Sendable {
     var schema: String
-    var status: PairingBootstrapResponseStatus
+    var backupState: PairingWireState
     var message: String
     var sessionID: String?
     var desktopDeviceID: String?
@@ -129,7 +180,9 @@ struct PairingClaimResponse: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case schema
-        case status
+        case backupState = "backup_state"
+        case legacyStatus = "status"
+        case legacyPairingState = "pairing_state"
         case message
         case sessionID = "session_id"
         case desktopDeviceID = "desktop_device_id"
@@ -140,6 +193,116 @@ struct PairingClaimResponse: Codable, Sendable {
         case transport
         case pairedAt = "paired_at"
         case serverNonce = "server_nonce"
+    }
+
+    init(
+        schema: String,
+        backupState: PairingWireState,
+        message: String,
+        sessionID: String?,
+        desktopDeviceID: String?,
+        desktopName: String?,
+        deviceUUID: String?,
+        folderID: Int?,
+        folderPath: String?,
+        transport: String?,
+        pairedAt: Date?,
+        serverNonce: String?
+    ) {
+        self.schema = schema
+        self.backupState = backupState
+        self.message = message
+        self.sessionID = sessionID
+        self.desktopDeviceID = desktopDeviceID
+        self.desktopName = desktopName
+        self.deviceUUID = deviceUUID
+        self.folderID = folderID
+        self.folderPath = folderPath
+        self.transport = transport
+        self.pairedAt = pairedAt
+        self.serverNonce = serverNonce
+    }
+
+    init(
+        schema: String,
+        status: PairingBootstrapResponseStatus,
+        pairingState: PairingWireState? = nil,
+        message: String,
+        sessionID: String?,
+        desktopDeviceID: String?,
+        desktopName: String?,
+        deviceUUID: String?,
+        folderID: Int?,
+        folderPath: String?,
+        transport: String?,
+        pairedAt: Date?,
+        serverNonce: String?
+    ) {
+        self.init(
+            schema: schema,
+            backupState: pairingState ?? PairingClaimResponse.backupState(from: status),
+            message: message,
+            sessionID: sessionID,
+            desktopDeviceID: desktopDeviceID,
+            desktopName: desktopName,
+            deviceUUID: deviceUUID,
+            folderID: folderID,
+            folderPath: folderPath,
+            transport: transport,
+            pairedAt: pairedAt,
+            serverNonce: serverNonce
+        )
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try container.decode(String.self, forKey: .schema)
+        if let explicitBackupState = try container.decodeIfPresent(PairingWireState.self, forKey: .backupState) {
+            backupState = explicitBackupState
+        } else if let legacyPairingState = try container.decodeIfPresent(PairingWireState.self, forKey: .legacyPairingState) {
+            backupState = legacyPairingState
+        } else if let legacyStatus = try container.decodeIfPresent(PairingBootstrapResponseStatus.self, forKey: .legacyStatus) {
+            backupState = PairingClaimResponse.backupState(from: legacyStatus)
+        } else {
+            throw PairingServiceError.decoding(message: "Desktop pairing response is missing backup_state.")
+        }
+        message = try container.decode(String.self, forKey: .message)
+        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
+        desktopDeviceID = try container.decodeIfPresent(String.self, forKey: .desktopDeviceID)
+        desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName)
+        deviceUUID = try container.decodeIfPresent(String.self, forKey: .deviceUUID)
+        folderID = try container.decodeIfPresent(Int.self, forKey: .folderID)
+        folderPath = try container.decodeIfPresent(String.self, forKey: .folderPath)
+        transport = try container.decodeIfPresent(String.self, forKey: .transport)
+        pairedAt = try container.decodeIfPresent(Date.self, forKey: .pairedAt)
+        serverNonce = try container.decodeIfPresent(String.self, forKey: .serverNonce)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schema, forKey: .schema)
+        try container.encode(backupState, forKey: .backupState)
+        try container.encode(message, forKey: .message)
+        try container.encodeIfPresent(sessionID, forKey: .sessionID)
+        try container.encodeIfPresent(desktopDeviceID, forKey: .desktopDeviceID)
+        try container.encodeIfPresent(desktopName, forKey: .desktopName)
+        try container.encodeIfPresent(deviceUUID, forKey: .deviceUUID)
+        try container.encodeIfPresent(folderID, forKey: .folderID)
+        try container.encodeIfPresent(folderPath, forKey: .folderPath)
+        try container.encodeIfPresent(transport, forKey: .transport)
+        try container.encodeIfPresent(pairedAt, forKey: .pairedAt)
+        try container.encodeIfPresent(serverNonce, forKey: .serverNonce)
+    }
+
+    private static func backupState(from status: PairingBootstrapResponseStatus) -> PairingWireState {
+        switch status {
+        case .accepted:
+            return .pairingCompleted
+        case .expired:
+            return .pairingExpired
+        case .rejected:
+            return .pairingStopped
+        }
     }
 }
 

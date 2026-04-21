@@ -38,6 +38,17 @@ class TestMobileBackupStateMachine(unittest.TestCase):
         machine = machine.transition(MobileBackupEvent.PAIRING_MISMATCH_RESOLVED)
         self.assertEqual(machine.state, MobileBackupState.PAIRING_COMPLETED)
 
+    def test_mismatch_path_can_transition_to_pairing_stopped(self):
+        machine = MobileBackupStateMachine()
+        machine = machine.transition(MobileBackupEvent.PAIRING_MISMATCH_DETECTED)
+        machine = machine.transition(MobileBackupEvent.PAIRING_STOPPED)
+        self.assertEqual(machine.state, MobileBackupState.PAIRING_STOPPED)
+
+    def test_pending_pairing_can_transition_to_pairing_expired(self):
+        machine = MobileBackupStateMachine()
+        machine = machine.transition(MobileBackupEvent.PAIRING_EXPIRED)
+        self.assertEqual(machine.state, MobileBackupState.PAIRING_EXPIRED)
+
     def test_transfer_stopped_state_maps_to_paired_folder_state(self):
         self.assertEqual(
             folder_transfer_state_from_backup_state(MobileBackupState.TRANSFER_STOPPED),

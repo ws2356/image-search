@@ -652,6 +652,8 @@ class MobileUsbPrerequisitesDialog(QDialog):
 class MobilePairingDialog(QDialog):
     _STATUS_COLORS = {
         PairingResultState.ACCEPTED: "#065f46",
+        PairingResultState.MISMATCHED: "#9A6400",
+        PairingResultState.STOPPED: "#991b1b",
         PairingResultState.EXPIRED: "#9A6400",
         PairingResultState.REJECTED: "#991b1b",
     }
@@ -815,6 +817,20 @@ class MobilePairingDialog(QDialog):
             self.session_status_label.setText(pairing_result.message)
             self.session_details_label.setText("Desktop rejected the request. Generate a fresh QR code and retry pairing.")
             color = self._STATUS_COLORS[PairingResultState.REJECTED]
+            self.session_status_label.setStyleSheet(f"font-weight: 600; color: {color}; font-size: 13px;")
+            return
+
+        if pairing_result.state == PairingResultState.MISMATCHED:
+            self.session_status_label.setText(pairing_result.message)
+            self.session_details_label.setText("Keep this dialog open while desktop resolves the pairing mismatch.")
+            color = self._STATUS_COLORS[PairingResultState.MISMATCHED]
+            self.session_status_label.setStyleSheet(f"font-weight: 600; color: {color}; font-size: 13px;")
+            return
+
+        if pairing_result.state == PairingResultState.STOPPED:
+            self.session_status_label.setText(pairing_result.message)
+            self.session_details_label.setText("Desktop stopped this pairing flow. Start Back Up Again to retry.")
+            color = self._STATUS_COLORS[PairingResultState.STOPPED]
             self.session_status_label.setStyleSheet(f"font-weight: 600; color: {color}; font-size: 13px;")
             return
 

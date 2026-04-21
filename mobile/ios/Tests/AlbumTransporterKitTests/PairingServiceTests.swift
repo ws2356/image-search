@@ -7,7 +7,7 @@ final class PairingServiceTests: XCTestCase {
         let responseData = """
         {
           "schema": "dtis.mobile-pairing.v1",
-          "status": "accepted",
+          "backup_state": "pairing_completed",
           "message": "Pairing accepted for Alice iPhone.",
           "session_id": "pairing-demo-001",
           "desktop_device_id": "desktop-device-001",
@@ -24,7 +24,7 @@ final class PairingServiceTests: XCTestCase {
         let decodedResponse = try JSONDecoder.pairingDecoder.decode(PairingClaimResponse.self, from: responseData)
 
         XCTAssertEqual(decodedResponse.schema, PairingProtocol.schema)
-        XCTAssertEqual(decodedResponse.status, .accepted)
+        XCTAssertEqual(decodedResponse.backupState, .pairingCompleted)
         XCTAssertEqual(decodedResponse.sessionID, "pairing-demo-001")
         XCTAssertEqual(decodedResponse.desktopName, "Studio Mac")
         XCTAssertEqual(decodedResponse.pairedAt?.timeIntervalSince1970 ?? 0, 1_775_838_184.577, accuracy: 0.001)
@@ -70,6 +70,7 @@ final class PairingServiceTests: XCTestCase {
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
         XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(result.desktopName, "Studio Mac")
         XCTAssertEqual(result.sessionID, "pairing-demo-001")
         XCTAssertEqual(result.transport, .lan)
@@ -165,6 +166,7 @@ final class PairingServiceTests: XCTestCase {
         let requestedEndpoints = await bootstrapClient.requestedEndpoints()
 
         XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(
             requestedEndpoints,
             [
@@ -218,6 +220,7 @@ final class PairingServiceTests: XCTestCase {
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
         XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(result.transport, .usb)
         XCTAssertEqual(lanRequestedEndpoints, [])
         XCTAssertEqual(trustedDesktop?.transport, .usb)
@@ -267,9 +270,127 @@ final class PairingServiceTests: XCTestCase {
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
         XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(result.transport, .lan)
         XCTAssertEqual(lanRequestedEndpoints, ["http://127.0.0.1:38933/api/mobile/pairing/claim"])
         XCTAssertEqual(trustedDesktop?.transport, .lan)
+    }
+
+    func test_desktop_bootstrap_pairing_service_polls_pairing_state_until_completed_after_mismatch() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let bootstrapClient = PollingPairingBootstrapClient(
+            claimResponse: PairingClaimResponse(
+                schema: PairingProtocol.schema,
+                status: .rejected,
+                pairingState: .pairingMismatched,
+                message: "Pairing mismatch detected.",
+                sessionID: "pairing-demo-001",
+                desktopDeviceID: nil,
+                desktopName: "Studio Mac",
+                deviceUUID: "ios-device-001",
+                folderID: nil,
+                folderPath: nil,
+                transport: "lan",
+                pairedAt: nil,
+                serverNonce: nil
+            ),
+            stateResponses: [
+                PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .accepted,
+                    pairingState: .pairingCompleted,
+                    message: "Pairing accepted for Alice iPhone.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: "desktop-device-001",
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: 1,
+                    folderPath: "/Users/demo/Alice iPhone",
+                    transport: "lan",
+                    pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    serverNonce: "server-nonce-001"
+                ),
+            ]
+        )
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: bootstrapClient,
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentity(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let result = await service.startPairing(using: .demo)
+        let stateRequestCount = await bootstrapClient.stateRequestCount()
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+
+        XCTAssertEqual(result.phase, .paired)
+        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
+        XCTAssertEqual(stateRequestCount, 1)
+        XCTAssertEqual(trustedDesktop?.desktopDeviceID, "desktop-device-001")
+    }
+
+    func test_desktop_bootstrap_pairing_service_returns_pairing_stopped_when_desktop_stops_mismatch_flow() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let bootstrapClient = PollingPairingBootstrapClient(
+            claimResponse: PairingClaimResponse(
+                schema: PairingProtocol.schema,
+                status: .rejected,
+                pairingState: .pairingMismatched,
+                message: "Pairing mismatch detected.",
+                sessionID: "pairing-demo-001",
+                desktopDeviceID: nil,
+                desktopName: "Studio Mac",
+                deviceUUID: "ios-device-001",
+                folderID: nil,
+                folderPath: nil,
+                transport: "lan",
+                pairedAt: nil,
+                serverNonce: nil
+            ),
+            stateResponses: [
+                PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .rejected,
+                    pairingState: .pairingStopped,
+                    message: "Desktop canceled this pairing request.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: nil,
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: nil,
+                    folderPath: nil,
+                    transport: "lan",
+                    pairedAt: nil,
+                    serverNonce: nil
+                ),
+            ]
+        )
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: bootstrapClient,
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentity(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let result = await service.startPairing(using: .demo)
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+
+        XCTAssertEqual(result.phase, .failed)
+        XCTAssertEqual(result.backupFlowState, .pairingStopped)
+        XCTAssertEqual(result.message, "Desktop canceled this pairing request.")
+        XCTAssertNil(trustedDesktop)
     }
 }
 
@@ -325,6 +446,38 @@ private actor RetryingPairingBootstrapClient: PairingBootstrapClient {
 
     func requestedEndpoints() -> [String] {
         endpointLog
+    }
+}
+
+private actor PollingPairingBootstrapClient: PairingBootstrapClient {
+    private let claimResponse: PairingClaimResponse
+    private var scriptedStateResponses: [PairingClaimResponse]
+    private var observedStateRequestCount = 0
+
+    init(claimResponse: PairingClaimResponse, stateResponses: [PairingClaimResponse]) {
+        self.claimResponse = claimResponse
+        scriptedStateResponses = stateResponses
+    }
+
+    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+        XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
+        XCTAssertEqual(request.deviceUUID, "ios-device-001")
+        return claimResponse
+    }
+
+    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
+        XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
+        XCTAssertEqual(request.sessionID, "pairing-demo-001")
+        XCTAssertEqual(request.deviceUUID, "ios-device-001")
+        observedStateRequestCount += 1
+        guard !scriptedStateResponses.isEmpty else {
+            throw PairingServiceError.transport(message: "Missing scripted pairing state response.")
+        }
+        return scriptedStateResponses.removeFirst()
+    }
+
+    func stateRequestCount() -> Int {
+        observedStateRequestCount
     }
 }
 
