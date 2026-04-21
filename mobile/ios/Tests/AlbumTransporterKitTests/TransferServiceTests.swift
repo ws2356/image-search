@@ -77,6 +77,7 @@ final class TransferServiceTests: XCTestCase {
         let startedAssetCount = await transferClient.startedAssetCount()
         let completedTransferredCount = await transferClient.completedTransferredCount()
         let completedFailedCount = await transferClient.completedFailedCount()
+        let releasedResourceCount = await assetSource.releaseTransferRunResourcesCount()
 
         XCTAssertEqual(startSnapshot.transferredCount, 2)
         XCTAssertEqual(startSnapshot.totalCount, 2)
@@ -85,6 +86,7 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(startedAssetCount, 2)
         XCTAssertEqual(completedTransferredCount, 2)
         XCTAssertEqual(completedFailedCount, 0)
+        XCTAssertEqual(releasedResourceCount, 1)
         XCTAssertEqual(
             completedSnapshot.statusMessage,
             "Desktop confirmed that this transfer session is complete."
@@ -92,16 +94,19 @@ final class TransferServiceTests: XCTestCase {
     }
 
     func test_photo_library_transfer_service_reports_missing_desktop_record() async {
+        let assetSource = StaticTransferAssetSource(descriptors: [])
         let service = PhotoLibraryTransferService(
-            assetSource: StaticTransferAssetSource(descriptors: []),
+            assetSource: assetSource,
             transferClient: RecordingMobileTransferClient(),
             trustedDesktopStore: InMemoryTransferTrustedDesktopStore(record: nil)
         )
 
         let snapshot = await service.startTransfer(progress: { _ in })
+        let releasedResourceCount = await assetSource.releaseTransferRunResourcesCount()
 
         XCTAssertEqual(snapshot.totalCount, 0)
         XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(releasedResourceCount, 1)
         XCTAssertEqual(
             snapshot.statusMessage,
             "No paired desktop record is available for transfer."
@@ -371,8 +376,9 @@ final class TransferServiceTests: XCTestCase {
             )
         }
         let transferClient = RecordingMobileTransferClient(uploadDelayNanoseconds: 50_000_000)
+        let assetSource = StaticTransferAssetSource(descriptors: descriptors)
         let service = PhotoLibraryTransferService(
-            assetSource: StaticTransferAssetSource(descriptors: descriptors),
+            assetSource: assetSource,
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore,
             uploadConcurrencyLimit: 5
@@ -382,9 +388,11 @@ final class TransferServiceTests: XCTestCase {
 
         let snapshot = await service.startTransfer(progress: { _ in })
         let maxConcurrentUploads = await transferClient.maxConcurrentUploadsObserved()
+        let releasedResourceCount = await assetSource.releaseTransferRunResourcesCount()
 
         XCTAssertEqual(snapshot.transferredCount, descriptors.count)
         XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(releasedResourceCount, 3)
         XCTAssertGreaterThan(maxConcurrentUploads, 1)
         XCTAssertLessThanOrEqual(maxConcurrentUploads, 3)
     }
@@ -962,6 +970,7 @@ private actor StaticTransferAssetSource: TransferAssetSource {
     private let exportedSizeByAssetID: [String: Int]
     private var observedBatchStarts: [Int] = []
     private var observedBatchSizes: [Int] = []
+    private var releaseResourcesCount = 0
 
     init(
         descriptors: [TransferAssetDescriptor],
@@ -1013,12 +1022,20 @@ private actor StaticTransferAssetSource: TransferAssetSource {
         )
     }
 
+    func releaseTransferRunResources() async {
+        releaseResourcesCount += 1
+    }
+
     func batchStarts() -> [Int] {
         observedBatchStarts
     }
 
     func batchSizes() -> [Int] {
         observedBatchSizes
+    }
+
+    func releaseTransferRunResourcesCount() -> Int {
+        releaseResourcesCount
     }
 }
 

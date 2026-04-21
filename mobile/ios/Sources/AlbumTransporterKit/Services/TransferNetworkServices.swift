@@ -424,6 +424,11 @@ enum TransferAssetChunkStreamer {
 protocol TransferAssetSource: Sendable {
     func fetchAssetBatch(cursor: Int?, batchSize: Int) async throws -> TransferAssetBatch
     func exportAsset(_ descriptor: TransferAssetDescriptor) async throws -> ExportedTransferAsset
+    func releaseTransferRunResources() async
+}
+
+extension TransferAssetSource {
+    func releaseTransferRunResources() async {}
 }
 
 protocol MobileTransferClient: Sendable {
@@ -675,6 +680,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
             TransferDebugLogger.error(
                 "Transfer start failed session_id=\(desktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
+            await releaseSession(for: desktop)
             throw error
         }
     }
@@ -1218,6 +1224,10 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
             "Prepared transferable asset cursor total_count=\(fetchResult.count)"
         )
         return fetchResult
+    }
+
+    func releaseTransferRunResources() async {
+        cachedFetchResult = nil
     }
 
     func exportAsset(_ descriptor: TransferAssetDescriptor) async throws -> ExportedTransferAsset {
@@ -2116,6 +2126,7 @@ actor PhotoLibraryTransferService: TransferService {
         TransferDebugLogger.warning(
             "iOS memory warning received upload_concurrency_limit=\(uploadConcurrencyLimit)"
         )
+        await assetSource.releaseTransferRunResources()
         logTransferMemoryUsage(event: "memory_warning")
     }
 
@@ -2130,7 +2141,7 @@ actor PhotoLibraryTransferService: TransferService {
 
         let fetchedAssets = PHAsset.fetchAssets(withLocalIdentifiers: candidateAssetIDs, options: nil)
         guard fetchedAssets.count > 0 else {
-            successfullyTransferredAssetIDs.removeAll(keepingCapacity: true)
+            successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
             return .skipped
         }
 
@@ -2155,7 +2166,7 @@ actor PhotoLibraryTransferService: TransferService {
                 }
             }
             let removedCount = fetchedAssets.count
-            successfullyTransferredAssetIDs.removeAll(keepingCapacity: true)
+            successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
             TransferDebugLogger.info(
                 "Moved transferred assets to Recently Removed removed_count=\(removedCount)"
             )
@@ -2171,7 +2182,7 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func runTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         stopRequested = false
-        successfullyTransferredAssetIDs.removeAll(keepingCapacity: true)
+        successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
 
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             let failedSnapshot = TransferSnapshot(
@@ -2185,7 +2196,7 @@ actor PhotoLibraryTransferService: TransferService {
                 isIncompleteLibrary: false
             )
             currentSnapshot = failedSnapshot
-            return failedSnapshot
+            return await finalizingTransferRun(failedSnapshot)
         }
 
         do {
@@ -2211,7 +2222,7 @@ actor PhotoLibraryTransferService: TransferService {
                     desktop: trustedDesktop
                 )
                 currentSnapshot = snapshotWithLiveTransports
-                return snapshotWithLiveTransports
+                return await finalizingTransferRun(snapshotWithLiveTransports)
             }
             let totalCount = assetBatch.totalCount
 
@@ -2265,7 +2276,7 @@ actor PhotoLibraryTransferService: TransferService {
                         runDurationSeconds: transferRunDurationSeconds,
                         stageMetrics: stageMetrics
                     )
-                    return pausedSnapshot
+                    return await finalizingTransferRun(pausedSnapshot)
                 }
 
                 guard let nextCursor = assetBatch.nextCursor else {
@@ -2308,7 +2319,7 @@ actor PhotoLibraryTransferService: TransferService {
                 stageMetrics: stageMetrics
             )
             currentSnapshot = completedSnapshotWithLiveTransports
-            return completedSnapshotWithLiveTransports
+            return await finalizingTransferRun(completedSnapshotWithLiveTransports)
         } catch let error as TransferClientError {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
@@ -2329,7 +2340,7 @@ actor PhotoLibraryTransferService: TransferService {
                 desktop: trustedDesktop
             )
             currentSnapshot = failedSnapshotWithLiveTransports
-            return failedSnapshotWithLiveTransports
+            return await finalizingTransferRun(failedSnapshotWithLiveTransports)
         } catch {
             TransferDebugLogger.error(
                 "Transfer run failed before asset upload session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
@@ -2350,8 +2361,13 @@ actor PhotoLibraryTransferService: TransferService {
                 desktop: trustedDesktop
             )
             currentSnapshot = failedSnapshotWithLiveTransports
-            return failedSnapshotWithLiveTransports
+            return await finalizingTransferRun(failedSnapshotWithLiveTransports)
         }
+    }
+
+    private func finalizingTransferRun(_ snapshot: TransferSnapshot) async -> TransferSnapshot {
+        await assetSource.releaseTransferRunResources()
+        return snapshot
     }
 
     private func processTransferPipeline(
@@ -2968,7 +2984,7 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     private func resetTransferSpeedWindow() {
-        transferSpeedSamples.removeAll(keepingCapacity: true)
+        transferSpeedSamples.removeAll(keepingCapacity: false)
     }
 
     private func recordTransferredBytes(_ bytes: Int) {
