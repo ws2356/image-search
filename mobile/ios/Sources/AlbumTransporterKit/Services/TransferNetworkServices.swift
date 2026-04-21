@@ -1253,32 +1253,66 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
             from: resources,
             fallback: descriptor.filename
         )
+        let exportStart = ProcessInfo.processInfo.systemUptime
+        let exportMemoryBefore = ProcessMemorySnapshot.capture()
         let preparedExport: PreparedExportFile
-        if asset.mediaType == .image, hasAdjustmentData {
-            preparedExport = try await Self.exportCurrentImage(
-                asset: asset,
-                descriptor: descriptor,
-                sourceFilename: sourceFilename,
-                renderedFilename: resource.originalFilename
-            )
-        } else if asset.mediaType == .video, hasAdjustmentData {
-            preparedExport = try await Self.exportCurrentVideo(
-                asset: asset,
-                descriptor: descriptor,
-                sourceFilename: sourceFilename,
-                renderedFilename: resource.originalFilename
-            )
-        } else {
-            if asset.mediaType == .image {
+        let exportStrategy: String
+        do {
+            if asset.mediaType == .image, hasAdjustmentData {
+                exportStrategy = "current_image"
                 TransferDebugLogger.debug(
-                    "Exporting unedited image via resource stream \(TransferDebugLogger.assetSummary(for: descriptor))"
+                    "Exporting edited image via current-render pipeline \(TransferDebugLogger.assetSummary(for: descriptor))"
+                )
+                preparedExport = try await Self.exportCurrentImage(
+                    asset: asset,
+                    descriptor: descriptor,
+                    sourceFilename: sourceFilename,
+                    renderedFilename: resource.originalFilename
+                )
+            } else if asset.mediaType == .video, hasAdjustmentData {
+                exportStrategy = "current_video"
+                TransferDebugLogger.debug(
+                    "Exporting edited video via AVAssetExportSession \(TransferDebugLogger.assetSummary(for: descriptor))"
+                )
+                preparedExport = try await Self.exportCurrentVideo(
+                    asset: asset,
+                    descriptor: descriptor,
+                    sourceFilename: sourceFilename,
+                    renderedFilename: resource.originalFilename
+                )
+            } else {
+                exportStrategy = "resource_stream"
+                if asset.mediaType == .image {
+                    TransferDebugLogger.debug(
+                        "Exporting unedited image via resource stream \(TransferDebugLogger.assetSummary(for: descriptor))"
+                    )
+                }
+                preparedExport = try await Self.exportResource(
+                    resource: resource,
+                    descriptor: descriptor
                 )
             }
-            preparedExport = try await Self.exportResource(
-                resource: resource,
-                descriptor: descriptor
+        } catch {
+            let exportDurationSeconds = ProcessInfo.processInfo.systemUptime - exportStart
+            logExportMemorySpikeIfNeeded(
+                descriptor: descriptor,
+                memoryBefore: exportMemoryBefore,
+                memoryAfter: ProcessMemorySnapshot.capture(),
+                exportDurationSeconds: exportDurationSeconds,
+                didSucceed: false,
+                context: "asset_export:failed"
             )
+            throw error
         }
+        let exportDurationSeconds = ProcessInfo.processInfo.systemUptime - exportStart
+        logExportMemorySpikeIfNeeded(
+            descriptor: descriptor,
+            memoryBefore: exportMemoryBefore,
+            memoryAfter: ProcessMemorySnapshot.capture(),
+            exportDurationSeconds: exportDurationSeconds,
+            didSucceed: true,
+            context: "asset_export:\(exportStrategy)"
+        )
 
         let fileSize = (try? preparedExport.fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         let contentSHA1: String
@@ -1391,8 +1425,8 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
         requestOptions.deliveryMode = .highQualityFormat
         requestOptions.isNetworkAccessAllowed = true
         requestOptions.version = .current
-        let renderedImage = try await withCheckedThrowingContinuation {
-            (continuation: CheckedContinuation<(Data, String?), Error>) in
+        return try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<PreparedExportFile, Error>) in
             PHImageManager.default().requestImageDataAndOrientation(for: asset, options: requestOptions) {
                 data, dataUTI, _, info in
                 if let error = info?[PHImageErrorKey] as? NSError {
@@ -1423,26 +1457,33 @@ actor PhotoLibraryAssetSource: TransferAssetSource {
                     )
                     return
                 }
-                continuation.resume(returning: (data, dataUTI))
+                do {
+                    let renderedType = dataUTI.flatMap(UTType.init)
+                    let outputExtension = renderedType?.preferredFilenameExtension ?? (descriptor.filename as NSString).pathExtension
+                    let exportURL = temporaryExportURL(pathExtension: outputExtension)
+                    try autoreleasepool {
+                        try data.write(to: exportURL)
+                    }
+                    let exportedFilename = editedExportFilename(
+                        sourceFilename: sourceFilename,
+                        renderedFilename: renderedFilename,
+                        pathExtension: outputExtension
+                    )
+                    TransferDebugLogger.debug(
+                        "Exported image with current edits \(TransferDebugLogger.assetSummary(for: descriptor)) source_filename=\(sourceFilename) rendered_filename=\(renderedFilename) data_uti=\(dataUTI ?? "-")"
+                    )
+                    continuation.resume(
+                        returning: PreparedExportFile(
+                            fileURL: exportURL,
+                            mimeType: renderedType?.preferredMIMEType,
+                            filename: exportedFilename
+                        )
+                    )
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
         }
-        let renderedType = renderedImage.1.flatMap(UTType.init)
-        let outputExtension = renderedType?.preferredFilenameExtension ?? (descriptor.filename as NSString).pathExtension
-        let exportURL = temporaryExportURL(pathExtension: outputExtension)
-        try renderedImage.0.write(to: exportURL, options: .atomic)
-        let exportedFilename = editedExportFilename(
-            sourceFilename: sourceFilename,
-            renderedFilename: renderedFilename,
-            pathExtension: outputExtension
-        )
-        TransferDebugLogger.debug(
-            "Exported image with current edits \(TransferDebugLogger.assetSummary(for: descriptor)) source_filename=\(sourceFilename) rendered_filename=\(renderedFilename) data_uti=\(renderedImage.1 ?? "-")"
-        )
-        return PreparedExportFile(
-            fileURL: exportURL,
-            mimeType: renderedType?.preferredMIMEType,
-            filename: exportedFilename
-        )
     }
 
     private static func exportCurrentVideo(
@@ -1949,6 +1990,7 @@ private func exportPipelineResult(
     exportSource: TransferAssetSource
 ) async -> ExportPipelineResult {
     let exportStart = ProcessInfo.processInfo.systemUptime
+    let memoryBefore = ProcessMemorySnapshot.capture()
     do {
         try Task.checkCancellation()
         let exportedAsset = try await exportSource.exportAsset(descriptor)
@@ -1956,20 +1998,72 @@ private func exportPipelineResult(
             try? FileManager.default.removeItem(at: exportedAsset.fileURL)
             throw CancellationError()
         }
+        let exportDurationSeconds = ProcessInfo.processInfo.systemUptime - exportStart
+        logExportMemorySpikeIfNeeded(
+            descriptor: descriptor,
+            memoryBefore: memoryBefore,
+            memoryAfter: ProcessMemorySnapshot.capture(),
+            exportDurationSeconds: exportDurationSeconds,
+            didSucceed: true,
+            context: "pipeline_result"
+        )
         return ExportPipelineResult(
             descriptor: descriptor,
             preparedAsset: PreparedTransferAsset(exportedAsset: exportedAsset),
             errorDescription: nil,
-            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
+            exportDurationSeconds: exportDurationSeconds
         )
     } catch {
+        let exportDurationSeconds = ProcessInfo.processInfo.systemUptime - exportStart
+        logExportMemorySpikeIfNeeded(
+            descriptor: descriptor,
+            memoryBefore: memoryBefore,
+            memoryAfter: ProcessMemorySnapshot.capture(),
+            exportDurationSeconds: exportDurationSeconds,
+            didSucceed: false,
+            context: "pipeline_result"
+        )
         return ExportPipelineResult(
             descriptor: descriptor,
             preparedAsset: nil,
             errorDescription: TransferDebugLogger.describe(error),
-            exportDurationSeconds: ProcessInfo.processInfo.systemUptime - exportStart
+            exportDurationSeconds: exportDurationSeconds
         )
     }
+}
+
+private let exportMemorySpikeThresholdBytes: Int64 = 256 * 1024 * 1024
+
+private func logExportMemorySpikeIfNeeded(
+    descriptor: TransferAssetDescriptor,
+    memoryBefore: ProcessMemorySnapshot?,
+    memoryAfter: ProcessMemorySnapshot?,
+    exportDurationSeconds: Double,
+    didSucceed: Bool,
+    context: String
+) {
+    guard let memoryBefore, let memoryAfter else {
+        return
+    }
+    let footprintDeltaBytes = Int64(memoryAfter.physicalFootprintBytes) - Int64(memoryBefore.physicalFootprintBytes)
+    guard footprintDeltaBytes >= exportMemorySpikeThresholdBytes else {
+        return
+    }
+    let footprintDeltaMB = Double(footprintDeltaBytes) / 1_048_576
+    let footprintAfterMB = Double(memoryAfter.physicalFootprintBytes) / 1_048_576
+    let residentAfterMB = Double(memoryAfter.residentSizeBytes) / 1_048_576
+    TransferDebugLogger.warning(
+        String(
+            format: "Transfer export memory spike context=%@ asset=%@ status=%@ delta=%.1fMB footprint=%.1fMB resident=%.1fMB duration=%.2fs",
+            context,
+            TransferDebugLogger.assetSummary(for: descriptor),
+            didSucceed ? "succeeded" : "failed",
+            footprintDeltaMB,
+            footprintAfterMB,
+            residentAfterMB,
+            exportDurationSeconds
+        )
+    )
 }
 
 actor PhotoLibraryTransferService: TransferService {
