@@ -54,7 +54,7 @@ struct SystemPermissionService: PermissionService {
         case .authorized:
             return nil
         default:
-            return "Media access is required before Album Transporter can send local photos and videos to the paired desktop."
+            return "Media access is required before AuBackup can send local photos and videos to the paired desktop."
         }
     }
 

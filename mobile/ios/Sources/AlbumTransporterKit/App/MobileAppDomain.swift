@@ -275,7 +275,7 @@ enum InterruptionReason: String, Equatable, Sendable, Codable {
         case .stoppedByUser:
             return "No additional items will be sent. The desktop may continue indexing media that already arrived."
         case .pausedBySystem:
-            return "The app was moved to the background. Return to Album Transporter to continue."
+            return "The app was moved to the background. Return to AuBackup to continue."
         case .wifiLost:
             return "Wi-Fi disconnected. Your progress is saved — reconnect or plug in USB to continue."
         case .desktopUnreachable:

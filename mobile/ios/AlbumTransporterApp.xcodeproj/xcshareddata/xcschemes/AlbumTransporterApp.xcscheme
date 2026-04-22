@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "DF65746996E798111BB25E06"
-               BuildableName = "AlbumTransporterApp.app"
+               BuildableName = "Aurora.app"
                BlueprintName = "AlbumTransporterApp"
                ReferencedContainer = "container:AlbumTransporterApp.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DF65746996E798111BB25E06"
-            BuildableName = "AlbumTransporterApp.app"
+            BuildableName = "Aurora.app"
             BlueprintName = "AlbumTransporterApp"
             ReferencedContainer = "container:AlbumTransporterApp.xcodeproj">
          </BuildableReference>
@@ -54,7 +54,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DF65746996E798111BB25E06"
-            BuildableName = "AlbumTransporterApp.app"
+            BuildableName = "Aurora.app"
             BlueprintName = "AlbumTransporterApp"
             ReferencedContainer = "container:AlbumTransporterApp.xcodeproj">
          </BuildableReference>
@@ -71,7 +71,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "DF65746996E798111BB25E06"
-            BuildableName = "AlbumTransporterApp.app"
+            BuildableName = "Aurora.app"
             BlueprintName = "AlbumTransporterApp"
             ReferencedContainer = "container:AlbumTransporterApp.xcodeproj">
          </BuildableReference>

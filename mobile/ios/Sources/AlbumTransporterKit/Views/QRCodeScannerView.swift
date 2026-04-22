@@ -365,7 +365,7 @@ private final class QRCodeCameraViewController: UIViewController {
                 self.startSession()
             } catch {
                 DispatchQueue.main.async {
-                    self.onError("Album Transporter couldn't start the live camera scanner right now.")
+                    self.onError("AuBackup couldn't start the live camera scanner right now.")
                 }
             }
         }

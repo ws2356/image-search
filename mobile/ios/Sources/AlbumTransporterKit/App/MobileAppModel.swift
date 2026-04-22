@@ -18,7 +18,7 @@ final class MobileAppModel: ObservableObject {
     @Published var isShowingStopConfirmation = false
     @Published var isShowingLowBatteryWarning = false
     @Published var isShowingMediaAccessAlert = false
-    @Published var mediaAccessAlertMessage = "Full Library Access is recommended so Album Transporter can include all local photos and videos."
+    @Published var mediaAccessAlertMessage = "Full Library Access is recommended so AuBackup can include all local photos and videos."
 
     private var hasLoaded = false
     private var transferProgressPollingTask: Task<Void, Never>?
@@ -68,7 +68,7 @@ final class MobileAppModel: ObservableObject {
     var navigationTitle: String {
         switch route {
         case .home:
-            return "Album Transporter"
+            return "AuBackup"
         case .scanAndPair:
             return "Scan & Pair"
         case .permissions:
@@ -436,11 +436,11 @@ final class MobileAppModel: ObservableObject {
     private func mediaAccessAlertMessage(for scope: PermissionScope) -> String {
         switch scope {
         case .full:
-            return "Album Transporter already has Full Library Access."
+            return "AuBackup already has Full Library Access."
         case .limited:
-            return "Full Library Access is recommended so Album Transporter can include your complete library. You can continue now, or open Settings to upgrade Photos access."
+            return "Full Library Access is recommended so AuBackup can include your complete library. You can continue now, or open Settings to upgrade Photos access."
         case .photosOnly, .videosOnly, .denied:
-            return "Full Library Access is recommended so Album Transporter can include all local photos and videos. You can continue now, or open Settings to grant broader access."
+            return "Full Library Access is recommended so AuBackup can include all local photos and videos. You can continue now, or open Settings to grant broader access."
         }
     }
 

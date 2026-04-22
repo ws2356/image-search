@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>$(PRODUCT_NAME)</string>
 	<key>PHPhotoLibraryPreventAutomaticLimitedAccessAlert</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -28,11 +30,11 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Album Transporter connects directly to your desktop on the local network during pairing and transfer.</string>
+	<string>AuBackup connects directly to your desktop on the local network during pairing and transfer.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Album Transporter uses the camera to scan the desktop pairing QR code and start a local backup session.</string>
+	<string>AuBackup uses the camera to scan the desktop pairing QR code and start a local backup session.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Album Transporter reads your local photos and videos so it can transfer them directly to your paired desktop.</string>
+	<string>AuBackup reads your local photos and videos so it can transfer them directly to your paired desktop.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 </dict>

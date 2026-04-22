@@ -6,7 +6,7 @@ struct HomeView: View {
     let onScanDesktop: () -> Void
 
     private let setupSteps = [
-        SetupStep(id: "open-desktop", number: 1, title: "Open DTImageSearch", detail: "Install or open the desktop app on your PC"),
+        SetupStep(id: "open-desktop", number: 1, title: "Open AuSearch", detail: "Open https://f.boldman.net/2 in your desktop browser. Then install and launch AuSearch."),
         SetupStep(id: "add-mobile-folder", number: 2, title: "Add a Mobile Folder", detail: "Click Add Folder → Mobile Device in the PC app"),
         SetupStep(id: "scan-qr", number: 3, title: "Scan the QR code", detail: "A QR code appears on screen — scan it below to pair"),
     ]
@@ -149,7 +149,7 @@ struct HomeView: View {
                     Image(systemName: "cable.connector")
                         .foregroundStyle(Color(hex: 0x3B5FC0))
                         .font(.system(size: 13))
-                    Text("USB backups are usually up to 5× faster than Wi-Fi. Plug in anytime—Album Transporter will switch to USB automatically.")
+                    Text("USB backups are usually up to 5× faster than Wi-Fi. Plug in anytime—AuBackup will switch to USB automatically.")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(hex: 0x3B5FC0))
                         .lineSpacing(2)
@@ -195,7 +195,7 @@ struct HomeView: View {
                     .foregroundStyle(.white)
             }
 
-            Text("Album Transporter")
+            Text("AuBackup")
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(Color(hex: 0x1C1C1E))
 

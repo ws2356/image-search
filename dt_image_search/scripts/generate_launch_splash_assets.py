@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 ASSETS_ROOT = REPO_ROOT / "mobile/ios/App/Assets.xcassets"
 
 BACKGROUND_SET = ASSETS_ROOT / "LaunchSplashBackground.imageset"
@@ -125,7 +125,7 @@ def _draw_content(scale: int) -> Image.Image:
     title_font = ImageFont.truetype(FONT_BOLD, 28 * scale)
     subtitle_font = ImageFont.truetype(FONT_REGULAR, 14 * scale)
 
-    title = "Album Transporter"
+    title = "AuBackup"
     subtitle = "Your photos, backed up to your PC"
 
     title_y = icon_y + icon_size + 24 * scale
