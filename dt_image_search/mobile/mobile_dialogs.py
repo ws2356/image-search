@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -717,6 +718,31 @@ class MobilePairingDialog(QDialog):
         self.session_status_label.setStyleSheet("font-weight: 600; color: #1f2937; font-size: 13px;")
         layout.addWidget(self.session_status_label)
 
+        self.transfer_wait_spinner = QProgressBar()
+        self.transfer_wait_spinner.setRange(0, 0)
+        self.transfer_wait_spinner.setTextVisible(False)
+        self.transfer_wait_spinner.setFixedHeight(10)
+        self.transfer_wait_spinner.setStyleSheet(
+            """
+            QProgressBar {
+                border: 1px solid #d1d5db;
+                border-radius: 5px;
+                background: #f3f4f6;
+            }
+            QProgressBar::chunk {
+                background: #007AFF;
+            }
+            """
+        )
+        self.transfer_wait_spinner.hide()
+        layout.addWidget(self.transfer_wait_spinner)
+
+        self.transfer_wait_message_label = QLabel("")
+        self.transfer_wait_message_label.setWordWrap(True)
+        self.transfer_wait_message_label.setStyleSheet("color: #374151; font-size: 12px;")
+        self.transfer_wait_message_label.hide()
+        layout.addWidget(self.transfer_wait_message_label)
+
         self.session_details_label = QLabel(_endpoint_urls_detail(pairing_service.endpoint_urls))
         self.session_details_label.setWordWrap(True)
         self.session_details_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -743,7 +769,6 @@ class MobilePairingDialog(QDialog):
         self._clock_timer = QTimer(self)
         self._clock_timer.setInterval(1000)
         self._clock_timer.timeout.connect(self._update_clock)
-        self._auto_accept_requested = False
         self._clock_timer.start()
         self._update_clock()
 
@@ -779,32 +804,32 @@ class MobilePairingDialog(QDialog):
     def _update_pairing_result(self) -> None:
         pairing_result = self._pairing_service.current_result()
         if pairing_result.state == PairingResultState.ACCEPTED:
-            self.session_status_label.setText("✓  " + pairing_result.message)
+            self.qr_card.hide()
+            self.transfer_wait_spinner.show()
+            self.transfer_wait_message_label.setText(
+                "On your mobile device, grant photo/library permissions if prompted, "
+                "then continue to start transfer."
+            )
+            self.transfer_wait_message_label.show()
+            self.session_status_label.setText("Pairing complete. Waiting for transfer to start…")
             details = [
                 f"Device: {pairing_result.device_name or 'Unknown'}",
                 f"Transport: {pairing_result.transport or 'Unknown'}",
             ]
             if pairing_result.folder_path:
                 details.append(f"Desktop folder: {pairing_result.folder_path}")
+            details.append("This window closes automatically as soon as transfer starts.")
             self.session_details_label.setText("\n".join(details))
             color = self._STATUS_COLORS[PairingResultState.ACCEPTED]
             self.session_status_label.setStyleSheet(f"font-weight: 600; color: {color}; font-size: 13px;")
-            self.close_button.setText("Done")
-            self.close_button.setStyleSheet(
-                """
-                QPushButton {
-                    background: #007AFF; color: white; border: none; border-radius: 6px;
-                    padding: 6px 20px; font-size: 13px; font-weight: 600;
-                }
-                QPushButton:hover { background: #0070ef; }
-                """
-            )
+            self.close_button.setText("Close")
             self.qr_card.refresh_overlay_button.setEnabled(False)
             self.qr_card.refresh_overlay_button.hide()
-            if not self._auto_accept_requested:
-                self._auto_accept_requested = True
-                QTimer.singleShot(0, self.accept)
             return
+
+        self.qr_card.show()
+        self.transfer_wait_spinner.hide()
+        self.transfer_wait_message_label.hide()
 
         if pairing_result.state == PairingResultState.EXPIRED:
             self.session_status_label.setText(pairing_result.message)
@@ -843,9 +868,6 @@ class MobilePairingDialog(QDialog):
         super().accept()
 
     def reject(self) -> None:
-        if self._pairing_service.current_result().state == PairingResultState.ACCEPTED:
-            self.accept()
-            return
         should_close = QMessageBox.question(
             self,
             "Close Pairing",
