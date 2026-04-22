@@ -94,7 +94,7 @@ enum TransferTransport: String, Equatable, Hashable, Sendable, Codable {
     var title: String {
         switch self {
         case .lan:
-            return "Wi-Fi LAN"
+            return "Wi-Fi"
         case .usb:
             return "USB"
         }
@@ -402,7 +402,7 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
         transferSpeedText: "4.80 MB/s",
         etaDescription: "17 min remaining",
         statusMessage: "Backing up local photos and videos to the paired desktop.",
-        guidanceMessage: "USB is generally faster and more stable than Wi-Fi LAN. Once desktop support lands, the app should prefer USB when it is available.",
+        guidanceMessage: "USB is generally faster and more stable than Wi-Fi. Once desktop support lands, the app should prefer USB when it is available.",
         isIncompleteLibrary: true
     )
 }
