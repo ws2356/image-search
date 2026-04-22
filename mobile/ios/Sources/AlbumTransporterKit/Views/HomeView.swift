@@ -32,7 +32,6 @@ struct HomeView: View {
         VStack(spacing: 24) {
             heroSection
             setupSection
-            disclaimerCard
 
             Button(action: onPrimaryAction) {
                 HStack(spacing: 8) {
@@ -200,7 +199,7 @@ struct HomeView: View {
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(Color(hex: 0x1C1C1E))
 
-            Text("Back up your photos & videos to your PC securely over Wi-Fi or USB")
+            Text("Back up your photos & videos to your PC securely over Wi-Fi or USB or both")
                 .font(.subheadline)
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .multilineTextAlignment(.center)
@@ -256,19 +255,6 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
         }
-    }
-
-    private var disclaimerCard: some View {
-        Text("v1 backs up your complete eligible photo & video library. Album selection is not available. Interrupted sessions resume safely — already-transferred items won't be resent.")
-            .font(.system(size: 14))
-            .foregroundStyle(Color(hex: 0x6E6E73))
-            .lineSpacing(3)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
     }
 
     private var statsCard: some View {
