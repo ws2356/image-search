@@ -10,16 +10,16 @@
   - Replace immediate post-claim QR dialog dismissal with a pending-transfer state (spinner + waiting message), then dismiss once transfer start is confirmed
   - Device mismatch handling during reconnect flows, with user-friendly error messaging and clear recovery paths
 - **Phase 3**
-  - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
-- **Phase 4**
-  - Service discovery to support backup resume from mobile without needing to scan QR code again
-- **Phase 5**
   - Encrypted transfer with key exchange and verification on both devices
-- **Phase 6 (GA)**
+- **Phase 4 (GA)**
   - Deep-link onboarding from desktop to mobile app store
   - Android companion app with similar capabilities to iOS version, with platform-specific adjustments as needed
   - ETA calculation and display based on transfer speed and remaining data
   - Automatic USB preference and in-session handoff when a supported mobile device is connected via USB during backup
+- **Phase 5**
+  - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
+- **Phase 6**
+  - Service discovery to support backup resume from mobile without needing to scan QR code again
 
 - **Backlog**
   - Stronger platform-specific background transfer strategies where policy-compliant
