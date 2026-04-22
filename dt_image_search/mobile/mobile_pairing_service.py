@@ -1033,6 +1033,7 @@ class MobilePairingService:
             transfer_asset_path=MOBILE_TRANSFER_ASSET_PATH,
             transfer_complete_path=MOBILE_TRANSFER_COMPLETE_PATH,
             log_handler=_log,
+            handle_transfer_asset_stream_error=self._transfer_service.handle_asset_upload_stream_error,
         )
         usb_transport = UsbWebSocketTransportAdapter(
             router=self._transport_router,

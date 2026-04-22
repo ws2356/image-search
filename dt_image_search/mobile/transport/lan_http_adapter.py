@@ -75,6 +75,7 @@ class LanHttpTransportAdapter:
         transfer_asset_path: str,
         transfer_complete_path: str,
         log_handler: Callable[..., None],
+        handle_transfer_asset_stream_error: Callable[[dict[str, object] | None, OSError], tuple[int, dict[str, object]]] | None = None,
     ):
         self._listen_host = listen_host
         self._advertised_host = advertised_host
@@ -95,6 +96,7 @@ class LanHttpTransportAdapter:
         self._transfer_asset_path = transfer_asset_path
         self._transfer_complete_path = transfer_complete_path
         self._log_handler = log_handler
+        self._handle_transfer_asset_stream_error = handle_transfer_asset_stream_error
 
         self._lock = threading.RLock()
         self._asset_upload_stream = TransferAssetUploadStream()
@@ -289,11 +291,19 @@ class LanHttpTransportAdapter:
                             metadata_payload = dict(request_payload)
                             metadata_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
                             metadata_payload.pop("chunk_size", None)
-                            with adapter._lock:
-                                adapter._asset_upload_stream.start(
-                                    request_id=request_id,
+                            try:
+                                with adapter._lock:
+                                    adapter._asset_upload_stream.start(
+                                        request_id=request_id,
+                                        metadata_payload=metadata_payload,
+                                    )
+                            except OSError as exc:
+                                self._write_transfer_asset_stream_error_response(
+                                    request_id=None,
                                     metadata_payload=metadata_payload,
+                                    error=exc,
                                 )
+                                return
                             self._write_json_response(
                                 200,
                                 {
@@ -341,7 +351,15 @@ class LanHttpTransportAdapter:
                                     },
                                 )
                                 return
-                            chunk = self.rfile.read(content_length)
+                            try:
+                                chunk = self.rfile.read(content_length)
+                            except OSError as exc:
+                                self._write_transfer_asset_stream_error_response(
+                                    request_id=request_id,
+                                    metadata_payload=None,
+                                    error=exc,
+                                )
+                                return
                             if len(chunk) != content_length:
                                 self._write_json_response(
                                     400,
@@ -352,11 +370,20 @@ class LanHttpTransportAdapter:
                                     },
                                 )
                                 return
-                            with adapter._lock:
-                                append_error = adapter._asset_upload_stream.append_chunk(
-                                    chunk=chunk,
+                            append_error = None
+                            try:
+                                with adapter._lock:
+                                    append_error = adapter._asset_upload_stream.append_chunk(
+                                        chunk=chunk,
+                                        request_id=request_id,
+                                    )
+                            except OSError as exc:
+                                self._write_transfer_asset_stream_error_response(
                                     request_id=request_id,
+                                    metadata_payload=None,
+                                    error=exc,
                                 )
+                                return
                             if append_error is not None:
                                 self._write_json_response(
                                     400,
@@ -379,10 +406,18 @@ class LanHttpTransportAdapter:
                             return
 
                         if stream_state == TRANSFER_ASSET_STREAM_STATE_COMPLETE:
-                            with adapter._lock:
-                                payload_or_error = adapter._asset_upload_stream.complete(
+                            try:
+                                with adapter._lock:
+                                    payload_or_error = adapter._asset_upload_stream.complete(
+                                        request_id=request_id,
+                                    )
+                            except OSError as exc:
+                                self._write_transfer_asset_stream_error_response(
                                     request_id=request_id,
+                                    metadata_payload=None,
+                                    error=exc,
                                 )
+                                return
                             if isinstance(payload_or_error, str):
                                 self._write_json_response(
                                     400,
@@ -451,6 +486,26 @@ class LanHttpTransportAdapter:
                     context=context,
                 )
                 self._write_json_response(response.status_code, response.payload)
+
+            def _write_transfer_asset_stream_error_response(
+                self,
+                *,
+                request_id: str | None,
+                metadata_payload: dict[str, object] | None,
+                error: OSError,
+            ) -> None:
+                if request_id is not None:
+                    with adapter._lock:
+                        discarded_payload = adapter._asset_upload_stream.discard(request_id=request_id)
+                    if metadata_payload is None:
+                        metadata_payload = discarded_payload
+                if adapter._handle_transfer_asset_stream_error is None:
+                    raise error
+                status_code, response_payload = adapter._handle_transfer_asset_stream_error(
+                    metadata_payload=metadata_payload,
+                    error=error,
+                )
+                self._write_json_response(status_code, response_payload)
 
             def _read_json_payload(
                 self,

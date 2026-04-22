@@ -51,6 +51,7 @@ MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
 MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
 MOBILE_TRANSFER_DISK_FULL_EVENT = "mobile_transfer_disk_full"
+MOBILE_TRANSFER_DISK_FULL_MESSAGE = "Desktop storage is full. Free up disk space on this PC and retry the mobile backup."
 MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER = "stopped_by_user"
 MOBILE_TRANSFER_START_PROOF_PURPOSE = "transfer.start"
 MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE = "transfer.existence"
@@ -423,45 +424,20 @@ class MobileTransferService:
                     )
             except OSError as exc:
                 _cleanup_temp_upload_file(staged_temp_file_path)
-                folder_transfer_state = folder_transfer_state_from_backup_state(
-                    resolve_next_backup_state(
-                        current_folder_transfer_state=transfer_context.folder_transfer_state,
-                        event=MobileBackupEvent.TRANSFER_FAILED,
-                        fallback_state=MobileBackupState.TRANSFER_IN_PROGRESS,
-                    )
-                )
-                update_mobile_transfer_state(
-                    conn,
-                    session_id=metadata.session_id,
-                    device_uuid=metadata.device_uuid,
-                    session_status=MOBILE_BACKUP_SESSION_STATUS_FAILED,
-                    folder_transfer_state=folder_transfer_state,
-                    updated_at=current_time,
-                    ended_at=current_time,
-                )
-                default_bus.publish(
-                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
-                    session_id=metadata.session_id,
-                    device_uuid=metadata.device_uuid,
-                    folder_path=transfer_context.folder_path,
-                    transfer_state=folder_transfer_state,
-                )
                 disk_full_failure = _is_disk_full_os_error(exc)
+                self._mark_transfer_failed(
+                    conn=conn,
+                    transfer_context=transfer_context,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    current_time=current_time,
+                    publish_disk_full_event=disk_full_failure,
+                )
                 if disk_full_failure:
-                    user_message = (
-                        "Desktop storage is full. Free up disk space on this PC and retry the mobile backup."
-                    )
-                    default_bus.publish(
-                        MOBILE_TRANSFER_DISK_FULL_EVENT,
-                        session_id=metadata.session_id,
-                        device_uuid=metadata.device_uuid,
-                        folder_path=transfer_context.folder_path,
-                        message=user_message,
-                    )
                     return _response(
                         status_code=507,
                         status="rejected",
-                        message=user_message,
+                        message=MOBILE_TRANSFER_DISK_FULL_MESSAGE,
                         failure_code=MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL,
                     )
                 return _response(
@@ -594,6 +570,101 @@ class MobileTransferService:
                 "device_uuid": request.device_uuid,
             },
         )
+
+    def handle_asset_upload_stream_error(
+        self,
+        *,
+        metadata_payload: dict[str, object] | None,
+        error: OSError,
+        now: datetime | None = None,
+    ) -> tuple[int, dict[str, object]]:
+        if _is_disk_full_os_error(error):
+            metadata: MobileTransferAssetMetadata | None = None
+            if isinstance(metadata_payload, dict):
+                try:
+                    metadata = _parse_transfer_asset_metadata(metadata_payload)
+                except ValueError:
+                    metadata = None
+
+            if metadata is not None and metadata.schema == MOBILE_TRANSFER_SCHEMA:
+                current_time = _utc_now(now)
+                with create_db_conn(ctx=self._ctx) as conn:
+                    transfer_context = get_mobile_transfer_context(
+                        conn,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                    )
+                    if transfer_context is not None and is_valid_trust_proof(
+                        trust_key_b64=transfer_context.trust_key_b64,
+                        purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
+                        schema=metadata.schema,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                        trust_proof_b64=metadata.trust_proof,
+                    ):
+                        self._mark_transfer_failed(
+                            conn=conn,
+                            transfer_context=transfer_context,
+                            session_id=metadata.session_id,
+                            device_uuid=metadata.device_uuid,
+                            current_time=current_time,
+                            publish_disk_full_event=True,
+                        )
+            return _response(
+                status_code=507,
+                status="rejected",
+                message=MOBILE_TRANSFER_DISK_FULL_MESSAGE,
+                failure_code=MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL,
+            )
+        return _response(
+            status_code=500,
+            status="rejected",
+            message=f"Desktop failed while receiving transfer asset stream content: {error}",
+        )
+
+    @staticmethod
+    def _mark_transfer_failed(
+        *,
+        conn,
+        transfer_context,
+        session_id: str,
+        device_uuid: str,
+        current_time: datetime,
+        publish_disk_full_event: bool,
+    ) -> None:
+        folder_transfer_state = folder_transfer_state_from_backup_state(
+            resolve_next_backup_state(
+                current_folder_transfer_state=transfer_context.folder_transfer_state,
+                event=MobileBackupEvent.TRANSFER_FAILED,
+                fallback_state=MobileBackupState.TRANSFER_IN_PROGRESS,
+            )
+        )
+        was_already_failed = transfer_context.folder_transfer_state == folder_transfer_state
+        update_mobile_transfer_state(
+            conn,
+            session_id=session_id,
+            device_uuid=device_uuid,
+            session_status=MOBILE_BACKUP_SESSION_STATUS_FAILED,
+            folder_transfer_state=folder_transfer_state,
+            updated_at=current_time,
+            ended_at=current_time,
+        )
+        if not was_already_failed:
+            default_bus.publish(
+                MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                session_id=session_id,
+                device_uuid=device_uuid,
+                folder_path=transfer_context.folder_path,
+                transfer_state=folder_transfer_state,
+            )
+            if publish_disk_full_event:
+                default_bus.publish(
+                    MOBILE_TRANSFER_DISK_FULL_EVENT,
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                    folder_path=transfer_context.folder_path,
+                    message=MOBILE_TRANSFER_DISK_FULL_MESSAGE,
+                )
 
 
 def decode_transfer_asset_metadata(encoded_metadata: str) -> dict[str, object]:

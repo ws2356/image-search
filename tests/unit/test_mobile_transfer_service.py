@@ -452,6 +452,111 @@ class TestMobileTransferService(unittest.TestCase):
             self.assertIsNotNone(folder_row)
             self.assertEqual(folder_row["transfer_state"], "failed")
 
+    def test_asset_stream_start_disk_full_returns_failure_code_and_marks_failed(self):
+        pairing_context = self._pair_device()
+        transfer_state_events: list[dict[str, object]] = []
+        disk_full_events: list[dict[str, object]] = []
+        transfer_state_subscription = default_bus.subscribe(
+            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+            lambda **event: transfer_state_events.append(event),
+        )
+        self.addCleanup(transfer_state_subscription.dispose)
+        disk_full_subscription = default_bus.subscribe(
+            MOBILE_TRANSFER_DISK_FULL_EVENT,
+            lambda **event: disk_full_events.append(event),
+        )
+        self.addCleanup(disk_full_subscription.dispose)
+
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "total_assets": 1,
+            },
+        )
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+
+        endpoint = urlsplit(self._pairing_service.endpoint_url)
+        request_id = uuid.uuid4().hex
+        start_payload = {
+            "schema": MOBILE_TRANSFER_SCHEMA,
+            "session_id": pairing_context["session_id"],
+            "device_uuid": pairing_context["device_uuid"],
+            "trust_key": pairing_context["trust_key_b64"],
+            "asset_id": "ph://asset-stream-start-disk-full",
+            "asset_version": "2026-04-09T12:30:00+00:00",
+            "filename": "IMG_STREAM_START_DISK_FULL.JPG",
+            "media_type": "image",
+            "created_at": "2026-04-09T12:00:00+00:00",
+            "updated_at": "2026-04-09T12:30:00+00:00",
+            TRANSFER_ASSET_STREAM_STATE_FIELD: TRANSFER_ASSET_STREAM_STATE_START,
+            "chunk_size": TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
+        }
+        with patch(
+            "dt_image_search.mobile.transport.asset_upload_stream.TransferAssetUploadStream.start",
+            side_effect=OSError(errno.ENOSPC, "No space left on device"),
+        ):
+            stream_start_status, stream_start_response = self._post_transfer_asset_json(
+                endpoint=endpoint,
+                request_id=request_id,
+                stream_state=TRANSFER_ASSET_STREAM_STATE_START,
+                payload=start_payload,
+            )
+
+        self.assertEqual(stream_start_status, 507)
+        self.assertEqual(stream_start_response["status"], "rejected")
+        self.assertEqual(stream_start_response["failure_code"], MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL)
+        self.assertIn("storage is full", stream_start_response["message"])
+
+        self.assertEqual(
+            transfer_state_events,
+            [
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "transfer_state": "transferring",
+                },
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "transfer_state": "failed",
+                },
+            ],
+        )
+        self.assertEqual(
+            disk_full_events,
+            [
+                {
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "folder_path": pairing_context["folder_path"],
+                    "message": "Desktop storage is full. Free up disk space on this PC and retry the mobile backup.",
+                }
+            ],
+        )
+
+        with create_db_conn(self._ctx) as conn:
+            session_row = conn.execute(
+                "SELECT status, ended_at FROM mobile_backup_sessions WHERE session_id = ?",
+                (pairing_context["session_id"],),
+            ).fetchone()
+            self.assertIsNotNone(session_row)
+            self.assertEqual(session_row["status"], "failed")
+            self.assertIsNotNone(session_row["ended_at"])
+
+            folder_row = conn.execute(
+                "SELECT transfer_state FROM mobile_folders WHERE device_uuid = ?",
+                (pairing_context["device_uuid"],),
+            ).fetchone()
+            self.assertIsNotNone(folder_row)
+            self.assertEqual(folder_row["transfer_state"], "failed")
+
     def test_live_transfer_http_endpoints_skip_by_signature_tuple_for_different_asset_id(self):
         pairing_context = self._pair_device()
 

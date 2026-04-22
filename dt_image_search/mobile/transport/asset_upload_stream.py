@@ -159,6 +159,16 @@ class TransferAssetUploadStream:
             self._active_request_id = None
         return pending_upload.to_payload()
 
+    def discard(self, *, request_id: str) -> dict[str, object] | None:
+        pending_upload = self._pending_by_request_id.pop(request_id, None)
+        if pending_upload is None:
+            return None
+        if self._active_request_id == request_id:
+            self._active_request_id = None
+        metadata_payload = dict(pending_upload.metadata_payload)
+        pending_upload.close()
+        return metadata_payload
+
     def clear(self) -> None:
         pending_uploads = list(self._pending_by_request_id.values())
         self._pending_by_request_id = {}
