@@ -260,6 +260,65 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertTrue(snapshot.guidanceMessage.contains("MobileTransfer device logs"))
     }
 
+    func test_photo_library_transfer_service_aborts_immediately_on_disk_full_terminal_failure() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-002",
+                    assetVersion: "v2",
+                    filename: "IMG_0002.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_710),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_710)
+                ),
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient(
+            uploadErrorByAssetID: [
+                "ph://asset-001": .terminalFailure(
+                    code: .diskFull,
+                    message: "Desktop storage is full. Free up disk space on this PC and retry mobile backup."
+                ),
+            ]
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore,
+            uploadConcurrencyLimit: 1
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let uploadedIDs = await transferClient.uploadedAssetIDs()
+
+        XCTAssertEqual(snapshot.transferredCount, 0)
+        XCTAssertEqual(snapshot.totalCount, 2)
+        XCTAssertEqual(snapshot.failedCount, 1)
+        XCTAssertTrue(snapshot.statusMessage.contains("storage is full"))
+        XCTAssertTrue(snapshot.guidanceMessage.contains("Free up disk space"))
+        XCTAssertEqual(uploadedIDs, [])
+    }
+
     func test_photo_library_transfer_service_emits_progress_updates_during_transfer() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -961,6 +1020,7 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
     private var completeSessionCalls = 0
     private var preferredUploadTransports: [TransferTransport] = []
     private let simulatedChunkTransferSizes: [Int]
+    private let uploadErrorByAssetID: [String: TransferClientError]
 
     init(
         existingAssetIDs: Set<String> = [],
@@ -968,7 +1028,8 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
         liveTransports: [TransferTransport]? = nil,
         startDelayNanoseconds: UInt64 = 0,
         uploadDelayNanoseconds: UInt64 = 0,
-        simulatedChunkTransferSizes: [Int] = []
+        simulatedChunkTransferSizes: [Int] = [],
+        uploadErrorByAssetID: [String: TransferClientError] = [:]
     ) {
         self.existingAssetIDs = existingAssetIDs
         self.resolvedTransport = resolvedTransport
@@ -976,6 +1037,7 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
         self.startDelayNanoseconds = startDelayNanoseconds
         self.uploadDelayNanoseconds = uploadDelayNanoseconds
         self.simulatedChunkTransferSizes = simulatedChunkTransferSizes
+        self.uploadErrorByAssetID = uploadErrorByAssetID
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
@@ -1095,6 +1157,9 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
                 }
             }
             activeUploadCount -= 1
+        }
+        if let uploadError = uploadErrorByAssetID[asset.descriptor.assetID] {
+            throw uploadError
         }
         if uploadDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: uploadDelayNanoseconds)

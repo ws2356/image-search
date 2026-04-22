@@ -922,7 +922,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         case .accepted:
             return
         case .rejected:
-            throw TransferClientError.rejected(message: response.message)
+            throw response.rejectionError
         case .stored, .skipped, .completed:
             throw TransferClientError.rejected(message: "Desktop returned an unexpected transfer start response.")
         }
@@ -1042,13 +1042,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
                     throw TransferClientError.unsupportedResponseSchema
                 }
                 guard (200 ..< 300).contains(runtimeResponse.statusCode) else {
-                    throw TransferClientError.rejected(message: decodedResponse.message)
+                    throw decodedResponse.rejectionError
                 }
                 switch decodedResponse.status {
                 case .stored, .skipped:
                     return decodedResponse
                 case .rejected:
-                    throw TransferClientError.rejected(message: decodedResponse.message)
+                    throw decodedResponse.rejectionError
                 case .accepted, .completed:
                     throw TransferClientError.rejected(message: "Desktop returned an unexpected transfer asset response.")
                 }
@@ -1097,7 +1097,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         case .completed:
             return response
         case .rejected:
-            throw TransferClientError.rejected(message: response.message)
+            throw response.rejectionError
         case .accepted, .stored, .skipped:
             throw TransferClientError.rejected(message: "Desktop returned an unexpected transfer completion response.")
         }
@@ -1196,6 +1196,9 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
 
             if (200 ..< 300).contains(runtimeResponse.statusCode) {
                 return decodedResponse
+            }
+            if let transferResponse = decodedResponse as? TransferServerResponse {
+                throw transferResponse.rejectionError
             }
             throw TransferClientError.rejected(message: decodedResponse.message)
         } catch let error as TransferClientError {

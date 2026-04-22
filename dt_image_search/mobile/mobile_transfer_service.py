@@ -50,11 +50,13 @@ MOBILE_TRANSFER_ASSET_PATH = "/api/mobile/transfer/asset"
 MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
 MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
+MOBILE_TRANSFER_DISK_FULL_EVENT = "mobile_transfer_disk_full"
 MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER = "stopped_by_user"
 MOBILE_TRANSFER_START_PROOF_PURPOSE = "transfer.start"
 MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE = "transfer.existence"
 MOBILE_TRANSFER_ASSET_PROOF_PURPOSE = "transfer.asset"
 MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE = "transfer.complete"
+MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL = "disk_full"
 
 
 @dataclass(frozen=True)
@@ -444,6 +446,24 @@ class MobileTransferService:
                     folder_path=transfer_context.folder_path,
                     transfer_state=folder_transfer_state,
                 )
+                disk_full_failure = _is_disk_full_os_error(exc)
+                if disk_full_failure:
+                    user_message = (
+                        "Desktop storage is full. Free up disk space on this PC and retry the mobile backup."
+                    )
+                    default_bus.publish(
+                        MOBILE_TRANSFER_DISK_FULL_EVENT,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                        folder_path=transfer_context.folder_path,
+                        message=user_message,
+                    )
+                    return _response(
+                        status_code=507,
+                        status="rejected",
+                        message=user_message,
+                        failure_code=MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL,
+                    )
                 return _response(
                     status_code=500,
                     status="rejected",
@@ -889,17 +909,44 @@ def _utc_now(now: datetime | None = None) -> datetime:
     return now.astimezone(timezone.utc)
 
 
+def _is_disk_full_os_error(error: BaseException) -> bool:
+    pending_errors: list[BaseException] = [error]
+    inspected_ids: set[int] = set()
+    while pending_errors:
+        current_error = pending_errors.pop()
+        current_error_id = id(current_error)
+        if current_error_id in inspected_ids:
+            continue
+        inspected_ids.add(current_error_id)
+        if isinstance(current_error, OSError):
+            if getattr(current_error, "errno", None) == errno.ENOSPC:
+                return True
+            if getattr(current_error, "winerror", None) == 112:
+                return True
+        cause = getattr(current_error, "__cause__", None)
+        if isinstance(cause, BaseException):
+            pending_errors.append(cause)
+        context = getattr(current_error, "__context__", None)
+        if isinstance(context, BaseException):
+            pending_errors.append(context)
+    return False
+
+
 def _response(
     *,
     status_code: int,
     status: str,
     message: str,
+    failure_code: str | None = None,
 ) -> tuple[int, dict[str, object]]:
+    payload: dict[str, object] = {
+        "schema": MOBILE_TRANSFER_SCHEMA,
+        "status": status,
+        "message": message,
+    }
+    if failure_code:
+        payload["failure_code"] = failure_code
     return (
         status_code,
-        {
-            "schema": MOBILE_TRANSFER_SCHEMA,
-            "status": status,
-            "message": message,
-        },
+        payload,
     )

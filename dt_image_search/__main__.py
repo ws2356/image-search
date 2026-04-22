@@ -29,7 +29,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle, QSystemTrayIcon
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from dt_image_search.build_flavor import get_build_type
@@ -66,6 +66,7 @@ from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
 from dt_image_search.mobile import MobileFolderCoordinator, MobileSourceType
 from dt_image_search.mobile.mobile_pairing_service import MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT
+from dt_image_search.mobile.mobile_transfer_service import MOBILE_TRANSFER_DISK_FULL_EVENT
 from dt_image_search.mobile.mobile_update_prompt_service import MOBILE_UPDATE_PROMPT_REQUESTED_EVENT
 from dt_image_search.telemetry.crash_support import CrashRecoveryManager
 from dt_image_search.tools.dts_event_bus import default_bus
@@ -167,6 +168,7 @@ def setup_activation_server(ctx: BMContext, window: QMainWindow) -> None:
 
 class MainWindow(QMainWindow):
     show_update_prompt_signal = Signal(bool, str, str)
+    show_mobile_transfer_disk_full_signal = Signal(str)
 
     def __init__(self, ctx: BMContext):
         super().__init__()
@@ -183,6 +185,22 @@ class MainWindow(QMainWindow):
             self._on_update_prompt_requested,
         )
         self.show_update_prompt_signal.connect(self._show_update_prompt_dialog)
+        self._mobile_transfer_disk_full_subscription = default_bus.subscribe(
+            MOBILE_TRANSFER_DISK_FULL_EVENT,
+            self._on_mobile_transfer_disk_full_requested,
+        )
+        self.show_mobile_transfer_disk_full_signal.connect(
+            self._show_mobile_transfer_disk_full_notification
+        )
+        self._notification_tray_icon: QSystemTrayIcon | None = None
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self._notification_tray_icon = QSystemTrayIcon(self)
+            tray_icon = self.windowIcon()
+            if tray_icon.isNull():
+                tray_icon = self.style().standardIcon(QStyle.SP_MessageBoxWarning)
+            self._notification_tray_icon.setIcon(tray_icon)
+            self._notification_tray_icon.setToolTip("DTImageSearch")
+            self._notification_tray_icon.show()
 
         self.browse_controller = BrowseController(ctx=self.ctx)
         self.controller = self.browse_controller
@@ -286,6 +304,30 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         dialog.exec()
+
+    def _on_mobile_transfer_disk_full_requested(
+        self,
+        *,
+        message: object = None,
+        **_: object,
+    ) -> None:
+        notification_message = (
+            message
+            if isinstance(message, str) and message.strip()
+            else "Desktop storage is full. Free up disk space and retry mobile backup."
+        )
+        self.show_mobile_transfer_disk_full_signal.emit(notification_message)
+
+    @Slot(str)
+    def _show_mobile_transfer_disk_full_notification(self, message: str) -> None:
+        self.statusBar().showMessage(message)
+        if self._notification_tray_icon is not None and self._notification_tray_icon.supportsMessages():
+            self._notification_tray_icon.showMessage(
+                "Mobile Backup Failed",
+                message,
+                QSystemTrayIcon.MessageIcon.Warning,
+                15000,
+            )
 
     @property
     def image_list_view(self):
@@ -549,6 +591,12 @@ class MainWindow(QMainWindow):
         if self._update_prompt_subscription is not None:
             self._update_prompt_subscription.dispose()
             self._update_prompt_subscription = None
+        if self._mobile_transfer_disk_full_subscription is not None:
+            self._mobile_transfer_disk_full_subscription.dispose()
+            self._mobile_transfer_disk_full_subscription = None
+        if self._notification_tray_icon is not None:
+            self._notification_tray_icon.hide()
+            self._notification_tray_icon = None
         super().closeEvent(event)
 
 # Global exception handler functions (defined outside main block for testing)

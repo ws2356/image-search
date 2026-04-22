@@ -144,6 +144,10 @@ enum UpdatePromptResponseStatus: String, Codable, Sendable {
     case rejected
 }
 
+enum TransferFailureCode: String, Codable, Sendable {
+    case diskFull = "disk_full"
+}
+
 struct TransferServerResponse: Codable, Sendable {
     var schema: String
     var status: TransferResponseStatus
@@ -152,6 +156,7 @@ struct TransferServerResponse: Codable, Sendable {
     var deviceUUID: String?
     var totalAssets: Int?
     var localRelativePath: String?
+    var failureCode: TransferFailureCode? = nil
 
     enum CodingKeys: String, CodingKey {
         case schema
@@ -161,6 +166,7 @@ struct TransferServerResponse: Codable, Sendable {
         case deviceUUID = "device_uuid"
         case totalAssets = "total_assets"
         case localRelativePath = "local_relative_path"
+        case failureCode = "failure_code"
     }
 }
 
@@ -508,6 +514,7 @@ enum TransferClientError: Error, Sendable {
     case invalidHTTPResponse
     case unsupportedResponseSchema
     case rejected(message: String)
+    case terminalFailure(code: TransferFailureCode, message: String)
     case transport(message: String)
     case decoding(message: String)
 
@@ -517,9 +524,16 @@ enum TransferClientError: Error, Sendable {
             return "Desktop transfer returned an invalid network response."
         case .unsupportedResponseSchema:
             return "Desktop transfer returned an unsupported response schema."
-        case .rejected(let message), .transport(let message), .decoding(let message):
+        case .rejected(let message), .terminalFailure(_, let message), .transport(let message), .decoding(let message):
             return message
         }
+    }
+
+    var terminalFailureCode: TransferFailureCode? {
+        guard case .terminalFailure(let code, _) = self else {
+            return nil
+        }
+        return code
     }
 }
 
@@ -536,6 +550,15 @@ protocol TransferSchemaResponse: Decodable {
 
 extension TransferServerResponse: TransferSchemaResponse {}
 extension TransferExistenceResponse: TransferSchemaResponse {}
+
+extension TransferServerResponse {
+    var rejectionError: TransferClientError {
+        guard let failureCode else {
+            return .rejected(message: message)
+        }
+        return .terminalFailure(code: failureCode, message: message)
+    }
+}
 
 enum TransferTrustProof {
     private static let context = "dtis.mobile-trust-proof.v1"
@@ -963,7 +986,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             case .accepted, .completed:
                 throw TransferClientError.rejected(message: "Desktop returned an unexpected transfer asset response.")
             case .rejected:
-                throw TransferClientError.rejected(message: response.message)
+                throw response.rejectionError
             }
         } catch let chunkError as TransferAssetChunkStreamError {
             throw TransferClientError.transport(message: chunkError.message)
@@ -1016,7 +1039,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             using: session
         )
         guard response.status == .accepted else {
-            throw TransferClientError.rejected(message: response.message)
+            throw response.rejectionError
         }
     }
 
@@ -1050,7 +1073,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             session: session
         )
         guard response.status == .accepted else {
-            throw TransferClientError.rejected(message: response.message)
+            throw response.rejectionError
         }
     }
 
@@ -1076,7 +1099,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             session: session
         )
         guard response.status == .accepted else {
-            throw TransferClientError.rejected(message: response.message)
+            throw response.rejectionError
         }
     }
 
@@ -1255,6 +1278,9 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             TransferDebugLogger.error(
                 "Desktop rejected transfer request http_status=\(httpResponse.statusCode) message=\(decodedResponse.message.replacingOccurrences(of: "\n", with: "\\n"))"
             )
+            if let transferResponse = decodedResponse as? TransferServerResponse {
+                throw transferResponse.rejectionError
+            }
             throw TransferClientError.rejected(message: decodedResponse.message)
         } catch let error as TransferClientError {
             throw error
@@ -1925,6 +1951,8 @@ private struct PreparedTransferUploadResult: Sendable {
     let existingMatch: TransferAssetExistenceMatch?
     let response: TransferServerResponse?
     let errorDescription: String?
+    let terminalFailureCode: TransferFailureCode?
+    let terminalFailureMessage: String?
     let existenceCheckDurationSeconds: Double
     let uploadDurationSeconds: Double
 }
@@ -2103,6 +2131,8 @@ private func performPreparedAssetUpload(
                     existingMatch: existingMatch,
                     response: nil,
                     errorDescription: nil,
+                    terminalFailureCode: nil,
+                    terminalFailureMessage: nil,
                     existenceCheckDurationSeconds: existenceCheckDurationSeconds,
                     uploadDurationSeconds: uploadDurationSeconds
                 )
@@ -2123,6 +2153,19 @@ private func performPreparedAssetUpload(
             existingMatch: nil,
             response: response,
             errorDescription: nil,
+            terminalFailureCode: nil,
+            terminalFailureMessage: nil,
+            existenceCheckDurationSeconds: existenceCheckDurationSeconds,
+            uploadDurationSeconds: uploadDurationSeconds
+        )
+    } catch let error as TransferClientError {
+        return PreparedTransferUploadResult(
+            preparedAsset: preparedAsset,
+            existingMatch: nil,
+            response: nil,
+            errorDescription: TransferDebugLogger.describe(error),
+            terminalFailureCode: error.terminalFailureCode,
+            terminalFailureMessage: error.message,
             existenceCheckDurationSeconds: existenceCheckDurationSeconds,
             uploadDurationSeconds: uploadDurationSeconds
         )
@@ -2132,6 +2175,8 @@ private func performPreparedAssetUpload(
             existingMatch: nil,
             response: nil,
             errorDescription: TransferDebugLogger.describe(error),
+            terminalFailureCode: nil,
+            terminalFailureMessage: nil,
             existenceCheckDurationSeconds: existenceCheckDurationSeconds,
             uploadDurationSeconds: uploadDurationSeconds
         )
@@ -2701,6 +2746,7 @@ actor PhotoLibraryTransferService: TransferService {
         var inFlightUploadCountByLane: [Int: Int] = [:]
         var nextUploadLaneIndex = 0
         var stopHandled = false
+        var terminalFailureSnapshot: TransferSnapshot? = nil
         let uploadClient = transferClient
 
         await withTaskGroup(of: (Int, PreparedTransferUploadResult).self) { uploadGroup in
@@ -2787,7 +2833,7 @@ actor PhotoLibraryTransferService: TransferService {
                             cleanupExportedAsset(uploadResult.preparedAsset.exportedAsset)
                             continue
                         }
-                        await processUploadResult(
+                        if let terminalSnapshot = await processUploadResult(
                             uploadResult,
                             desktop: desktop,
                             totalCount: totalCount,
@@ -2795,7 +2841,16 @@ actor PhotoLibraryTransferService: TransferService {
                             failedCount: &failedCount,
                             stageMetrics: &stageMetrics,
                             progress: progress
-                        )
+                        ) {
+                            terminalFailureSnapshot = terminalSnapshot
+                            progress(terminalSnapshot)
+                            stopRequested = true
+                            stopHandled = true
+                            producerTask.cancel()
+                            uploadGroup.cancelAll()
+                            cleanupPreparedAssets(bufferedUploads)
+                            bufferedUploads.removeAll(keepingCapacity: false)
+                        }
                         continue
                     }
                     inFlightUploadCount = 0
@@ -2840,6 +2895,10 @@ actor PhotoLibraryTransferService: TransferService {
         }
 
         _ = await producerTask.result
+
+        if let terminalFailureSnapshot {
+            return terminalFailureSnapshot
+        }
 
         if stopRequested {
             return await pausedSnapshotForStoppedTransfer(
@@ -2986,7 +3045,7 @@ actor PhotoLibraryTransferService: TransferService {
         failedCount: inout Int,
         stageMetrics: inout TransferStageMetrics,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
-    ) async {
+    ) async -> TransferSnapshot? {
         if uploadResult.existenceCheckDurationSeconds > 0 {
             stageMetrics.existenceCheckDurations.append(uploadResult.existenceCheckDurationSeconds)
         }
@@ -2994,6 +3053,20 @@ actor PhotoLibraryTransferService: TransferService {
             stageMetrics.uploadDurations.append(uploadResult.uploadDurationSeconds)
         }
         let assetSummary = TransferDebugLogger.assetSummary(for: uploadResult.preparedAsset.exportedAsset.descriptor)
+        if uploadResult.terminalFailureCode == .diskFull {
+            failedCount += 1
+            let diskFullMessage = uploadResult.terminalFailureMessage
+                ?? "Desktop storage is full. Free up disk space on this PC and retry mobile backup."
+            TransferDebugLogger.error("Transfer failed for \(assetSummary) error=\(diskFullMessage)")
+            cleanupExportedAsset(uploadResult.preparedAsset.exportedAsset)
+            return await makeTerminalFailureSnapshot(
+                desktop: desktop,
+                transferredCount: transferredCount,
+                totalCount: totalCount,
+                failedCount: failedCount,
+                message: diskFullMessage
+            )
+        }
         if let existingMatch = uploadResult.existingMatch {
             transferredCount += 1
             TransferDebugLogger.debug(
@@ -3037,6 +3110,7 @@ actor PhotoLibraryTransferService: TransferService {
             failedCount: failedCount,
             progress: progress
         )
+        return nil
     }
 
     private func makePausedSnapshot(
@@ -3060,6 +3134,33 @@ actor PhotoLibraryTransferService: TransferService {
             guidanceMessage: "Start a new backup session to continue sending any remaining accessible items.",
             isIncompleteLibrary: false
         )
+    }
+
+    private func makeTerminalFailureSnapshot(
+        desktop: TrustedDesktopRecord,
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int,
+        message: String
+    ) async -> TransferSnapshot {
+        let transport = await resolvedTransport(for: desktop)
+        let failedSnapshot = TransferSnapshot(
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount,
+            transport: transport,
+            transferSpeedText: currentTransferSpeedText(),
+            etaDescription: nil,
+            statusMessage: message,
+            guidanceMessage: "Free up disk space on the desktop, then start a new backup session.",
+            isIncompleteLibrary: false
+        )
+        let failedSnapshotWithLiveTransports = await applyingLiveTransports(
+            to: failedSnapshot,
+            desktop: desktop
+        )
+        currentSnapshot = failedSnapshotWithLiveTransports
+        return failedSnapshotWithLiveTransports
     }
 
     private func recordProgressUpdate(
