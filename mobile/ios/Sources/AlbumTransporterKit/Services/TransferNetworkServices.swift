@@ -475,6 +475,23 @@ protocol PreferredTransportMobileTransferClient: MobileTransferClient {
     ) async throws -> TransferServerResponse
 }
 
+protocol ChunkProgressMobileTransferClient: MobileTransferClient {
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse
+}
+
+protocol ChunkProgressPreferredTransportMobileTransferClient: PreferredTransportMobileTransferClient {
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse
+}
+
 protocol TransferTransportResolving: Sendable {
     func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport
 }
@@ -678,7 +695,7 @@ private actor TransferSessionURLSessionStore {
     }
 }
 
-struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient {
+struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient {
     private let defaultSession: URLSession
     private let usePerBackupEphemeralSession: Bool
     private let sessionStore: TransferSessionURLSessionStore
@@ -848,6 +865,30 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
+        try await uploadAssetInternal(
+            asset,
+            desktop: desktop,
+            onChunkTransferred: nil
+        )
+    }
+
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetInternal(
+            asset,
+            desktop: desktop,
+            onChunkTransferred: onChunkTransferred
+        )
+    }
+
+    private func uploadAssetInternal(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        onChunkTransferred: (@Sendable (Int) async -> Void)?
+    ) async throws -> TransferServerResponse {
         let activeSession = await activeSession(for: desktop)
         try Task.checkCancellation()
         var metadata = TransferAssetUploadMetadata(
@@ -887,6 +928,9 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
                     requestID: requestID,
                     session: activeSession
                 )
+                if let onChunkTransferred {
+                    await onChunkTransferred(asset.fileSize)
+                }
             } else {
                 try await TransferAssetChunkStreamer.streamFile(
                     fileURL: asset.fileURL,
@@ -900,6 +944,9 @@ struct URLSessionMobileTransferClient: MobileTransferClient, MobileCapabilityExc
                         requestID: requestID,
                         session: activeSession
                     )
+                    if let onChunkTransferred {
+                        await onChunkTransferred(chunkData.count)
+                    }
                 }
             }
             let response = try await finishChunkedAssetUpload(
@@ -1998,13 +2045,33 @@ private func uploadPreparedAsset(
     transferClient: MobileTransferClient,
     asset: ExportedTransferAsset,
     desktop: TrustedDesktopRecord,
-    preferredTransport: TransferTransport?
+    preferredTransport: TransferTransport?,
+    onChunkTransferred: (@Sendable (Int) async -> Void)? = nil
 ) async throws -> TransferServerResponse {
+    if let chunkPreferredTransportClient = transferClient as? any ChunkProgressPreferredTransportMobileTransferClient,
+       let onChunkTransferred
+    {
+        return try await chunkPreferredTransportClient.uploadAsset(
+            asset,
+            desktop: desktop,
+            preferredTransport: preferredTransport,
+            onChunkTransferred: onChunkTransferred
+        )
+    }
     if let preferredTransportClient = transferClient as? any PreferredTransportMobileTransferClient {
         return try await preferredTransportClient.uploadAsset(
             asset,
             desktop: desktop,
             preferredTransport: preferredTransport
+        )
+    }
+    if let chunkTransferClient = transferClient as? any ChunkProgressMobileTransferClient,
+       let onChunkTransferred
+    {
+        return try await chunkTransferClient.uploadAsset(
+            asset,
+            desktop: desktop,
+            onChunkTransferred: onChunkTransferred
         )
     }
     return try await transferClient.uploadAsset(asset, desktop: desktop)
@@ -2014,7 +2081,8 @@ private func performPreparedAssetUpload(
     preparedAsset: PreparedTransferAsset,
     desktop: TrustedDesktopRecord,
     transferClient: MobileTransferClient,
-    preferredTransport: TransferTransport?
+    preferredTransport: TransferTransport?,
+    onChunkTransferred: (@Sendable (Int) async -> Void)? = nil
 ) async -> PreparedTransferUploadResult {
     var existenceCheckDurationSeconds = 0.0
     var uploadDurationSeconds = 0.0
@@ -2046,7 +2114,8 @@ private func performPreparedAssetUpload(
             transferClient: transferClient,
             asset: preparedAsset.exportedAsset,
             desktop: desktop,
-            preferredTransport: preferredTransport
+            preferredTransport: preferredTransport,
+            onChunkTransferred: onChunkTransferred
         )
         uploadDurationSeconds = ProcessInfo.processInfo.systemUptime - uploadStart
         return PreparedTransferUploadResult(
@@ -2691,7 +2760,13 @@ actor PhotoLibraryTransferService: TransferService {
                                     preparedAsset: preparedAsset,
                                     desktop: desktop,
                                     transferClient: uploadClient,
-                                    preferredTransport: lane.preferredTransport
+                                    preferredTransport: lane.preferredTransport,
+                                    onChunkTransferred: { [self] bytes in
+                                        await recordChunkTransferProgress(
+                                            bytes: bytes,
+                                            progress: progress
+                                        )
+                                    }
                                 )
                             )
                         }
@@ -2931,7 +3006,6 @@ actor PhotoLibraryTransferService: TransferService {
                 case .stored:
                     transferredCount += 1
                     successfullyTransferredAssetIDs.append(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
-                    recordTransferredBytes(uploadResult.preparedAsset.exportedAsset.fileSize)
                     TransferDebugLogger.debug(
                         "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
                     )
@@ -3019,6 +3093,22 @@ actor PhotoLibraryTransferService: TransferService {
         )
         currentSnapshot = updatedSnapshotWithLiveTransports
         progress(updatedSnapshotWithLiveTransports)
+    }
+
+    private func recordChunkTransferProgress(
+        bytes: Int,
+        progress: @escaping @Sendable (TransferSnapshot) -> Void
+    ) async {
+        guard bytes > 0, !stopRequested else {
+            return
+        }
+        recordTransferredBytes(bytes)
+        guard var snapshot = currentSnapshot else {
+            return
+        }
+        snapshot.transferSpeedText = currentTransferSpeedText()
+        currentSnapshot = snapshot
+        progress(snapshot)
     }
 
     private func resolvedTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {

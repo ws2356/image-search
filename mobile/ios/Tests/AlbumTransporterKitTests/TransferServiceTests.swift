@@ -312,6 +312,53 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(finalSnapshot.totalCount, 2)
     }
 
+    func test_photo_library_transfer_service_updates_speed_on_chunk_completion() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                ),
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient(
+            simulatedChunkTransferSizes: [5 * 1_024 * 1_024, 5 * 1_024 * 1_024]
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+        let recorder = ProgressSnapshotRecorder()
+
+        let finalSnapshot = await service.startTransfer { snapshot in
+            recorder.record(snapshot)
+        }
+        let recordedSnapshots = recorder.snapshots()
+        let pendingSnapshots = recordedSnapshots.filter { $0.transferredCount == 0 }
+
+        XCTAssertGreaterThanOrEqual(pendingSnapshots.count, 2)
+        XCTAssertGreaterThan(Set(pendingSnapshots.compactMap(\.transferSpeedText)).count, 1)
+        XCTAssertEqual(finalSnapshot.transferredCount, 1)
+        XCTAssertEqual(finalSnapshot.totalCount, 1)
+    }
+
     func test_photo_library_transfer_service_limits_lan_upload_concurrency_to_three_assets() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -895,7 +942,7 @@ private actor ChunkSizeRecorder {
     }
 }
 
-private actor RecordingMobileTransferClient: PreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving {
+private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
     private let startDelayNanoseconds: UInt64
@@ -913,19 +960,22 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
     private var completedInterruptionReasonValue: String?
     private var completeSessionCalls = 0
     private var preferredUploadTransports: [TransferTransport] = []
+    private let simulatedChunkTransferSizes: [Int]
 
     init(
         existingAssetIDs: Set<String> = [],
         resolvedTransport: TransferTransport? = nil,
         liveTransports: [TransferTransport]? = nil,
         startDelayNanoseconds: UInt64 = 0,
-        uploadDelayNanoseconds: UInt64 = 0
+        uploadDelayNanoseconds: UInt64 = 0,
+        simulatedChunkTransferSizes: [Int] = []
     ) {
         self.existingAssetIDs = existingAssetIDs
         self.resolvedTransport = resolvedTransport
         self.liveTransports = liveTransports
         self.startDelayNanoseconds = startDelayNanoseconds
         self.uploadDelayNanoseconds = uploadDelayNanoseconds
+        self.simulatedChunkTransferSizes = simulatedChunkTransferSizes
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
@@ -966,10 +1016,24 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
-        try await uploadAsset(
+        try await uploadAssetInternal(
             asset,
             desktop: desktop,
-            preferredTransport: nil
+            preferredTransport: nil,
+            onChunkTransferred: nil
+        )
+    }
+
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetInternal(
+            asset,
+            desktop: desktop,
+            preferredTransport: nil,
+            onChunkTransferred: onChunkTransferred
         )
     }
 
@@ -977,6 +1041,34 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
         _ asset: ExportedTransferAsset,
         desktop: TrustedDesktopRecord,
         preferredTransport: TransferTransport?
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetInternal(
+            asset,
+            desktop: desktop,
+            preferredTransport: preferredTransport,
+            onChunkTransferred: nil
+        )
+    }
+
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetInternal(
+            asset,
+            desktop: desktop,
+            preferredTransport: preferredTransport,
+            onChunkTransferred: onChunkTransferred
+        )
+    }
+
+    private func uploadAssetInternal(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?,
+        onChunkTransferred: (@Sendable (Int) async -> Void)?
     ) async throws -> TransferServerResponse {
         if let preferredTransport {
             let transportKey = preferredTransport.rawValue
@@ -1006,6 +1098,11 @@ private actor RecordingMobileTransferClient: PreferredTransportMobileTransferCli
         }
         if uploadDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: uploadDelayNanoseconds)
+        }
+        if let onChunkTransferred {
+            for chunkSize in simulatedChunkTransferSizes {
+                await onChunkTransferred(chunkSize)
+            }
         }
         uploadedIDs.append(asset.descriptor.assetID)
         return TransferServerResponse(

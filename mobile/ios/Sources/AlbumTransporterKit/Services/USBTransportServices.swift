@@ -887,7 +887,7 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
     }
 }
 
-struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, USBTransportConnectivityChecking {
+struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, USBTransportConnectivityChecking {
     let runtime: USBWebSocketTransportRuntime
     let responseTimeout: TimeInterval
 
@@ -962,6 +962,30 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
     }
 
     func uploadAsset(_ asset: ExportedTransferAsset, desktop: TrustedDesktopRecord) async throws -> TransferServerResponse {
+        try await uploadAssetInternal(
+            asset,
+            desktop: desktop,
+            onChunkTransferred: nil
+        )
+    }
+
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetInternal(
+            asset,
+            desktop: desktop,
+            onChunkTransferred: onChunkTransferred
+        )
+    }
+
+    private func uploadAssetInternal(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        onChunkTransferred: (@Sendable (Int) async -> Void)?
+    ) async throws -> TransferServerResponse {
         var request = USBTransferAssetUploadRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -1001,6 +1025,9 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
                         chunk: chunkData,
                         timeout: responseTimeout
                     )
+                    if let onChunkTransferred {
+                        await onChunkTransferred(chunkData.count)
+                    }
                 }
                 let runtimeResponse = try await runtime.finishStreamingRequest(
                     operation: MobileTransportProtocol.transferAssetOperation,
@@ -1181,7 +1208,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, MobileCapabilityExch
     }
 }
 
-actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving {
+actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving {
     private static let preferredTransportRetryCooldownSeconds: TimeInterval = 3
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
@@ -1254,7 +1281,48 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Mobi
     func uploadAsset(
         _ asset: ExportedTransferAsset,
         desktop: TrustedDesktopRecord,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetWithChunkProgress(
+            asset,
+            desktop: desktop,
+            preferredTransport: nil,
+            onChunkTransferred: onChunkTransferred
+        )
+    }
+
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
         preferredTransport: TransferTransport?
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetWithChunkProgress(
+            asset,
+            desktop: desktop,
+            preferredTransport: preferredTransport,
+            onChunkTransferred: nil
+        )
+    }
+
+    func uploadAsset(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?,
+        onChunkTransferred: @escaping @Sendable (Int) async -> Void
+    ) async throws -> TransferServerResponse {
+        try await uploadAssetWithChunkProgress(
+            asset,
+            desktop: desktop,
+            preferredTransport: preferredTransport,
+            onChunkTransferred: onChunkTransferred
+        )
+    }
+
+    private func uploadAssetWithChunkProgress(
+        _ asset: ExportedTransferAsset,
+        desktop: TrustedDesktopRecord,
+        preferredTransport: TransferTransport?,
+        onChunkTransferred: (@Sendable (Int) async -> Void)?
     ) async throws -> TransferServerResponse {
         try await executeWithFallback(
             operationName: MobileTransportProtocol.transferAssetOperation,
@@ -1262,10 +1330,28 @@ actor AdaptiveMobileTransferClient: PreferredTransportMobileTransferClient, Mobi
             preferredTransport: preferredTransport,
             usbOperation: {
                 let usbDesktop = desktopWithResolvedTransport(desktop, transport: .usb)
+                if let onChunkTransferred,
+                   let chunkClient = usbClient as? any ChunkProgressMobileTransferClient
+                {
+                    return try await chunkClient.uploadAsset(
+                        asset,
+                        desktop: usbDesktop,
+                        onChunkTransferred: onChunkTransferred
+                    )
+                }
                 return try await usbClient.uploadAsset(asset, desktop: usbDesktop)
             },
             lanOperation: {
                 let lanDesktop = desktopWithResolvedTransport(desktop, transport: .lan)
+                if let onChunkTransferred,
+                   let chunkClient = lanClient as? any ChunkProgressMobileTransferClient
+                {
+                    return try await chunkClient.uploadAsset(
+                        asset,
+                        desktop: lanDesktop,
+                        onChunkTransferred: onChunkTransferred
+                    )
+                }
                 return try await lanClient.uploadAsset(asset, desktop: lanDesktop)
             }
         )
