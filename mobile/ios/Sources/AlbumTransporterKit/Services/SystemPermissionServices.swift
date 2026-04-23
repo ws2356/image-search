@@ -3,19 +3,17 @@ import Photos
 #if os(iOS)
 import AVFoundation
 import UIKit
-import UserNotifications
 #endif
 
 struct SystemPermissionService: PermissionService {
     func loadPermissionSummary() async -> PermissionSummary {
         let mediaAuthorization = await currentMediaAuthorization()
         let cameraGranted = currentCameraAuthorization()
-        let notificationsGranted = await currentNotificationAuthorization()
         let batteryState = currentBatteryState()
 
         return PermissionSummary(
             cameraGranted: cameraGranted,
-            notificationsGranted: notificationsGranted,
+            notificationsGranted: false,
             mediaScope: permissionScope(for: mediaAuthorization),
             excludedCategoryDescription: excludedCategoryDescription(for: mediaAuthorization),
             lowBatteryWarningNeeded: batteryState.lowBatteryWarningNeeded,
@@ -56,15 +54,6 @@ struct SystemPermissionService: PermissionService {
         default:
             return "Media access is required before AuBackup can send local photos and videos to the paired desktop."
         }
-    }
-
-    private func currentNotificationAuthorization() async -> Bool {
-#if os(iOS)
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        return settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
-#else
-        return false
-#endif
     }
 
     private func currentCameraAuthorization() -> Bool {

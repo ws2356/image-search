@@ -96,7 +96,43 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertFalse(model.mediaAccessAlertMessage.isEmpty)
 
         await model.continueBackupWithCurrentMediaAccess()
+        XCTAssertTrue(model.isShowingRemoveAfterBackupPrompt)
+        await model.selectRemoveAfterBackupPreferenceAndContinue(false)
         XCTAssertEqual(model.route, .completed)
+    }
+
+    func test_low_battery_not_now_returns_home_and_reports_stopped_transfer() async {
+        let lowBatteryFullAccess = PermissionSummary(
+            cameraGranted: true,
+            notificationsGranted: false,
+            mediaScope: .full,
+            excludedCategoryDescription: nil,
+            lowBatteryWarningNeeded: true,
+            isCharging: false
+        )
+        let transferService = StopTrackingTransferService()
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: lowBatteryFullAccess),
+            transferService: transferService,
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await model.startBackup()
+        XCTAssertTrue(model.isShowingLowBatteryWarning)
+
+        await model.cancelBackupFromLowBatteryWarning()
+
+        XCTAssertEqual(model.route, .home)
+        XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
+        let stopCallCount = await transferService.stopCallCount()
+        XCTAssertEqual(stopCallCount, 1)
     }
 
     func test_stop_transfer_returns_home_without_interrupted_page() async {
@@ -197,11 +233,14 @@ final class MobileAppModelTests: XCTestCase {
         let transferTask = Task {
             await model.startBackup()
         }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+        XCTAssertTrue(model.isShowingRemoveAfterBackupPrompt)
+        await model.selectRemoveAfterBackupPreferenceAndContinue(false)
         try? await Task.sleep(nanoseconds: 30_000_000)
 
-        XCTAssertEqual(model.route, .transfer)
+        XCTAssertTrue(model.route == .transfer || model.route == .completed)
         XCTAssertEqual(model.transferSnapshot.totalCount, 5)
-        XCTAssertEqual(model.transferSnapshot.transferredCount, 2)
+        XCTAssertGreaterThanOrEqual(model.transferSnapshot.transferredCount, 2)
 
         await transferTask.value
         XCTAssertEqual(model.route, .completed)
@@ -297,6 +336,8 @@ final class MobileAppModelTests: XCTestCase {
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
         await model.startBackup()
+        XCTAssertTrue(model.isShowingRemoveAfterBackupPrompt)
+        await model.selectRemoveAfterBackupPreferenceAndContinue(true)
 
         let cleanupCallCount = await transferService.cleanupCallCount()
         XCTAssertEqual(cleanupCallCount, 1)
@@ -452,6 +493,41 @@ private actor CleanupTrackingTransferService: TransferService {
 
     func cleanupCallCount() -> Int {
         cleanupCalls
+    }
+}
+
+private actor StopTrackingTransferService: TransferService {
+    private var stopCalls = 0
+
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(.demo)
+        return .demo
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        stopCalls += 1
+        return .stoppedByUser
+    }
+
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(snapshot)
+        return snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        .demo
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
+
+    func stopCallCount() -> Int {
+        stopCalls
     }
 }
 

@@ -18,6 +18,7 @@ final class MobileAppModel: ObservableObject {
     @Published var isShowingStopConfirmation = false
     @Published var isShowingLowBatteryWarning = false
     @Published var isShowingMediaAccessAlert = false
+    @Published var isShowingRemoveAfterBackupPrompt = false
     @Published var mediaAccessAlertMessage = "Full Library Access is recommended so AuBackup can include all local photos and videos."
 
     private var hasLoaded = false
@@ -25,6 +26,9 @@ final class MobileAppModel: ObservableObject {
     private let transferProgressPollingIntervalNanoseconds: UInt64
     private var transferStartedAt: Date?
     private var isAwaitingMediaAccessDecision = false
+    private var isAwaitingLowBatteryDecision = false
+    private var isAwaitingRemoveAfterBackupDecision = false
+    private var isRunningPermissionsPreflight = false
     private let stateStore: AppStateStore
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
     private let pairingService: PairingService
@@ -180,7 +184,18 @@ final class MobileAppModel: ObservableObject {
     }
 
     func startBackup() async {
+        guard route == .permissions else {
+            return
+        }
+        guard !isRunningPermissionsPreflight else {
+            return
+        }
+        isRunningPermissionsPreflight = true
+        isAwaitingLowBatteryDecision = false
+        isAwaitingRemoveAfterBackupDecision = false
         isShowingMediaAccessAlert = false
+        isShowingLowBatteryWarning = false
+        isShowingRemoveAfterBackupPrompt = false
         isAwaitingMediaAccessDecision = false
         permissionSummary = await permissionService.loadPermissionSummary()
         guard permissionSummary.mediaScope == .full else {
@@ -191,7 +206,7 @@ final class MobileAppModel: ObservableObject {
             return
         }
 
-        await beginTransferAfterPreflightChecks()
+        await continueBackupPreflight()
     }
 
     func continueBackupWithCurrentMediaAccess() async {
@@ -200,7 +215,7 @@ final class MobileAppModel: ObservableObject {
         }
         isAwaitingMediaAccessDecision = false
         isShowingMediaAccessAlert = false
-        await beginTransferAfterPreflightChecks()
+        await continueBackupPreflight()
     }
 
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
@@ -211,19 +226,77 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    private func beginTransferAfterPreflightChecks() async {
+    private func continueBackupPreflight() async {
         if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
+            isAwaitingLowBatteryDecision = true
             persistSnapshot()
             return
         }
 
-        await startTransfer()
+        presentRemoveAfterBackupPrompt()
+    }
+
+    private func presentRemoveAfterBackupPrompt() {
+        isShowingRemoveAfterBackupPrompt = true
+        isAwaitingRemoveAfterBackupDecision = true
+        persistSnapshot()
     }
 
     func continuePastLowBatteryWarning() async {
+        guard isAwaitingLowBatteryDecision else {
+            return
+        }
+        isAwaitingLowBatteryDecision = false
         isShowingLowBatteryWarning = false
+        presentRemoveAfterBackupPrompt()
+    }
+
+    func cancelBackupFromLowBatteryWarning() async {
+        guard isAwaitingLowBatteryDecision else {
+            return
+        }
+        isAwaitingLowBatteryDecision = false
+        isShowingLowBatteryWarning = false
+        await abortPreflightAndReturnHome()
+    }
+
+    func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async {
+        guard isAwaitingRemoveAfterBackupDecision else {
+            return
+        }
+        isAwaitingRemoveAfterBackupDecision = false
+        isShowingRemoveAfterBackupPrompt = false
+        setRemoveAfterBackupEnabled(isEnabled)
+        isRunningPermissionsPreflight = false
         await startTransfer()
+    }
+
+    private func abortPreflightAndReturnHome() async {
+        isRunningPermissionsPreflight = false
+        isAwaitingMediaAccessDecision = false
+        isAwaitingLowBatteryDecision = false
+        isAwaitingRemoveAfterBackupDecision = false
+        isShowingMediaAccessAlert = false
+        isShowingLowBatteryWarning = false
+        isShowingRemoveAfterBackupPrompt = false
+        let interruptionSnapshot = TransferSnapshot(
+            transferredCount: 0,
+            totalCount: 0,
+            failedCount: 0,
+            transport: pairingStatus.transport ?? .lan,
+            etaDescription: nil,
+            statusMessage: "Backup canceled before transfer started.",
+            guidanceMessage: "Scan again when you are ready to start another backup session.",
+            isIncompleteLibrary: permissionSummary.mediaScope != .full
+        )
+        _ = await transferService.stopTransfer(current: interruptionSnapshot)
+        transferSnapshot = interruptionSnapshot
+        transitionBackupFlow(.transferStopped)
+        updateHomeSummaryAfterStoppedTransfer()
+        route = .home
+        recordTelemetry(.transferStopped)
+        persistSnapshot()
     }
 
     func requestStopTransfer() {
@@ -285,12 +358,26 @@ final class MobileAppModel: ObservableObject {
     func returnHome() async {
         stopTransferProgressPolling()
         transferStartedAt = nil
+        isRunningPermissionsPreflight = false
+        isAwaitingMediaAccessDecision = false
+        isAwaitingLowBatteryDecision = false
+        isAwaitingRemoveAfterBackupDecision = false
+        isShowingMediaAccessAlert = false
+        isShowingLowBatteryWarning = false
+        isShowingRemoveAfterBackupPrompt = false
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
         persistSnapshot()
     }
 
     private func startTransfer() async {
+        isRunningPermissionsPreflight = false
+        isAwaitingMediaAccessDecision = false
+        isAwaitingLowBatteryDecision = false
+        isAwaitingRemoveAfterBackupDecision = false
+        isShowingMediaAccessAlert = false
+        isShowingLowBatteryWarning = false
+        isShowingRemoveAfterBackupPrompt = false
         transferStartedAt = Date()
         transitionBackupFlow(.transferStarted)
         route = .transfer

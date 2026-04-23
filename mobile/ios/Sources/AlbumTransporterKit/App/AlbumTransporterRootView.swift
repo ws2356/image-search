@@ -38,7 +38,11 @@ public struct AlbumTransporterRootView: View {
                         await model.continuePastLowBatteryWarning()
                     }
                 }
-                Button("Not Now", role: .cancel) {}
+                Button("Not Now", role: .cancel) {
+                    Task {
+                        await model.cancelBackupFromLowBatteryWarning()
+                    }
+                }
             } message: {
                 Text("Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.")
             }
@@ -58,6 +62,20 @@ public struct AlbumTransporterRootView: View {
                 }
             } message: {
                 Text(model.mediaAccessAlertMessage)
+            }
+            .alert("After backup, remove transferred media?", isPresented: $model.isShowingRemoveAfterBackupPrompt) {
+                Button("Remove") {
+                    Task {
+                        await model.selectRemoveAfterBackupPreferenceAndContinue(true)
+                    }
+                }
+                Button("Keep", role: .cancel) {
+                    Task {
+                        await model.selectRemoveAfterBackupPreferenceAndContinue(false)
+                    }
+                }
+            } message: {
+                Text("Choose whether successfully transferred photos and videos should be moved to Recently Removed on this device after backup completes.")
             }
     }
 
@@ -132,19 +150,9 @@ public struct AlbumTransporterRootView: View {
         case .permissions:
             let permissionsViewModel = PermissionsPageViewModel(model: model)
             PermissionsGateView(
-                summary: permissionsViewModel.summary,
-                removeAfterBackupEnabled: permissionsViewModel.removeAfterBackupEnabled,
-                onRemoveAfterBackupChanged: { isEnabled in
-                    permissionsViewModel.setRemoveAfterBackupEnabled(isEnabled)
-                },
-                onContinue: {
+                onStartPreflight: {
                     Task {
                         await permissionsViewModel.startBackup()
-                    }
-                },
-                onBack: {
-                    Task {
-                        await permissionsViewModel.goBack()
                     }
                 }
             )

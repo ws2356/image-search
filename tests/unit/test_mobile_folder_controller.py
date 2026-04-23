@@ -33,9 +33,13 @@ class _FakePairingDialog:
         self.pairing_session = pairing_session
         self.parent = parent
         self.exec_called = False
+        self.accept_called = False
 
     def exec(self):
         self.exec_called = True
+
+    def accept(self):
+        self.accept_called = True
 
 
 class _FakePairingService:
@@ -275,6 +279,34 @@ class TestMobileFolderCoordinator(unittest.TestCase):
             decision = coordinator._resolve_backup_again_mismatch(mismatch_context)
 
         self.assertEqual(decision, MobileBackupAgainDecision.CONTINUE_IN_SELECTED_FOLDER)
+
+    def test_transfer_state_update_closes_active_dialog_after_pairing_accepts(self):
+        destination_parent = Path(self._temp_dir.name).resolve().as_posix()
+        pairing_session = MobilePairingSessionDraft.create(
+            destination_parent=destination_parent,
+            desktop_endpoint_url="http://127.0.0.1:54921/api/mobile/pairing/claim",
+        )
+        fake_pairing_service = _FakePairingService(pairing_session)
+        fake_pairing_service._result = MobilePairingResult(
+            state=PairingResultState.ACCEPTED,
+            message="Paired successfully.",
+            session_id=pairing_session.session_id,
+        )
+        fake_dialog = _FakePairingDialog(pairing_service=fake_pairing_service, pairing_session=pairing_session)
+
+        with patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()):
+            coordinator = mobile_folder_controller_module.MobileFolderCoordinator(self._ctx)
+
+        coordinator._pairing_service = fake_pairing_service
+        coordinator._active_dialog = fake_dialog
+
+        coordinator._handle_transfer_state_updated_on_main_thread(
+            pairing_session.session_id,
+            pairing_session.destination_parent,
+            "disconnected",
+        )
+
+        self.assertTrue(fake_dialog.accept_called)
 
 
 if __name__ == "__main__":
