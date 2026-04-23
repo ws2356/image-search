@@ -304,9 +304,9 @@ struct HomeView: View {
     private func setupStepDetail(_ step: SetupStep) -> some View {
         if let link = step.link {
             (
-                Text("Open ").foregroundStyle(Color(hex: 0x6E6E73))
-                + Text(link).foregroundStyle(Color(hex: 0x007AFF))
-                + Text(" in your desktop browser. Then install and launch AuSearch.").foregroundStyle(Color(hex: 0x6E6E73))
+                Text("Open ").foregroundColor(Color(hex: 0x6E6E73))
+                + Text(link).foregroundColor(Color(hex: 0x007AFF))
+                + Text(" in your desktop browser. Then install and launch AuSearch.").foregroundColor(Color(hex: 0x6E6E73))
             )
             .font(.system(size: 13))
             .textSelection(.enabled)
