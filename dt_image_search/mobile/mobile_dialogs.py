@@ -78,8 +78,8 @@ class SourceSelectionDialog(QDialog):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "**Local Device** create index for semantic search for images in a folder on this computer.\n"
-            "**Mobile Device** starts a paired backup flow over USB or Wi-Fi LAN, before creating an index."
+            "<b>Local Device</b> create index for semantic search for images in a folder on this computer.<br>"
+            "<b>Mobile Device</b> starts a paired backup flow over USB or Wi-Fi LAN, before creating an index."
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 12px;")
