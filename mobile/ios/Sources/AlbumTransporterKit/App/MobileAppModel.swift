@@ -19,7 +19,7 @@ final class MobileAppModel: ObservableObject {
     @Published var isShowingLowBatteryWarning = false
     @Published var isShowingMediaAccessAlert = false
     @Published var isShowingRemoveAfterBackupPrompt = false
-    @Published var mediaAccessAlertMessage = "Full Library Access is recommended so AuBackup can include all local photos and videos."
+    @Published var mediaAccessAlertMessage = "Do you want to expand access permission to back up more or all media files in your photo library?"
 
     private var hasLoaded = false
     private var transferProgressPollingTask: Task<Void, Never>?
@@ -199,7 +199,6 @@ final class MobileAppModel: ObservableObject {
         isAwaitingMediaAccessDecision = false
         permissionSummary = await permissionService.loadPermissionSummary()
         guard permissionSummary.mediaScope == .full else {
-            mediaAccessAlertMessage = mediaAccessAlertMessage(for: permissionSummary.mediaScope)
             isShowingMediaAccessAlert = true
             isAwaitingMediaAccessDecision = true
             persistSnapshot()
@@ -209,7 +208,7 @@ final class MobileAppModel: ObservableObject {
         await continueBackupPreflight()
     }
 
-    func continueBackupWithCurrentMediaAccess() async {
+    func continueBackupFromMediaAccess() async {
         guard isAwaitingMediaAccessDecision else {
             return
         }
@@ -217,7 +216,7 @@ final class MobileAppModel: ObservableObject {
         isShowingMediaAccessAlert = false
         await continueBackupPreflight()
     }
-
+    
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
         guard removeAfterBackupEnabled != isEnabled else {
             return
@@ -226,7 +225,7 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    private func continueBackupPreflight() async {
+    func continueBackupPreflight() async {
         if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
             isAwaitingLowBatteryDecision = true
@@ -517,17 +516,6 @@ final class MobileAppModel: ObservableObject {
         let transferService = transferService
         Task.detached(priority: .utility) {
             await transferService.handleMemoryWarning()
-        }
-    }
-
-    private func mediaAccessAlertMessage(for scope: PermissionScope) -> String {
-        switch scope {
-        case .full:
-            return "AuBackup already has Full Library Access."
-        case .limited:
-            return "Full Library Access is recommended so AuBackup can include your complete library. You can continue now, or open Settings to upgrade Photos access."
-        case .photosOnly, .videosOnly, .denied:
-            return "Full Library Access is recommended so AuBackup can include all local photos and videos. You can continue now, or open Settings to grant broader access."
         }
     }
 

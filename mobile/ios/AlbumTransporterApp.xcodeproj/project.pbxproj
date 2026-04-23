@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D9BBC222F9A6934002FE667 /* PhotosUI.framework */; };
 		78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
 		A5C56128C12EEED37FC3210A /* AlbumTransporterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */; };
 		B033F686D41CC0B658E2B4EF /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5AC8CE28919C9157AC9030D9 /* Foundation.framework */; };
@@ -16,6 +17,7 @@
 
 /* Begin PBXFileReference section */
 		1A5D5D04B6A631A962A9E1F7 /* AuBackup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuBackup.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D9BBC222F9A6934002FE667 /* PhotosUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PhotosUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/PhotosUI.framework; sourceTree = DEVELOPER_DIR; };
 		5AC8CE28919C9157AC9030D9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		79D12E02C504AEC5A27313AF /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
 		963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterApp.swift; path = App/AlbumTransporterApp.swift; sourceTree = "<group>"; };
@@ -28,6 +30,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */,
 				B033F686D41CC0B658E2B4EF /* Foundation.framework in Frameworks */,
 				78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */,
 			);
@@ -75,6 +78,7 @@
 		B46D19DE7AA467B3DA18E326 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				3D9BBC222F9A6934002FE667 /* PhotosUI.framework */,
 				A4C0EE31F316DC22D2B1D5DE /* iOS */,
 			);
 			name = Frameworks;

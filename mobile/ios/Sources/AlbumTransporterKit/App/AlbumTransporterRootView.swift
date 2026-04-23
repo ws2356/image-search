@@ -3,6 +3,7 @@ import SwiftUI
 #if os(iOS)
 import UIKit
 #endif
+import Photos
 
 @MainActor
 public struct AlbumTransporterRootView: View {
@@ -48,16 +49,19 @@ public struct AlbumTransporterRootView: View {
             }
             .alert("Full media access recommended", isPresented: $model.isShowingMediaAccessAlert) {
 #if os(iOS)
-                Button("Open Settings") {
-                    guard let url = URL(string: UIApplication.openSettingsURLString) else {
-                        return
+                Button("Update") {
+                    Task {
+                        PHPhotoLibrary.showLimitedPicker { _ in
+                            Task {
+                                await model.continueBackupFromMediaAccess()
+                            }
+                        }
                     }
-                    UIApplication.shared.open(url)
                 }
 #endif
                 Button("Not now", role: .cancel) {
                     Task {
-                        await model.continueBackupWithCurrentMediaAccess()
+                        await model.continueBackupFromMediaAccess()
                     }
                 }
             } message: {
