@@ -9,7 +9,7 @@ struct HomeView: View {
         SetupStep(
             id: "open-desktop",
             number: 1,
-            title: "Open AuSearch",
+            title: "Open AuSearch on your PC",
             detail: "Open in your desktop browser. Then install and launch AuSearch.",
             link: "https://f.boldman.net/2"
         ),
