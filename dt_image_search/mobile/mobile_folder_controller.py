@@ -239,7 +239,7 @@ class MobileFolderCoordinator(QObject):
             return
         if dialog.pairing_session.session_id != session_id:
             return
-        if transfer_state in {"paired", ""}:
+        if transfer_state == "":
             return
         if self._pairing_service is None:
             return

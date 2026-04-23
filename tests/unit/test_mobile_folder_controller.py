@@ -303,7 +303,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         coordinator._handle_transfer_state_updated_on_main_thread(
             pairing_session.session_id,
             pairing_session.destination_parent,
-            "disconnected",
+            "paired",
         )
 
         self.assertTrue(fake_dialog.accept_called)
