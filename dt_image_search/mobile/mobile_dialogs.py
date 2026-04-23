@@ -62,7 +62,7 @@ class SourceSelectionDialog(QDialog):
         self._selected_source: MobileSourceType | None = None
         self.setWindowTitle("Add Folder")
         self.setModal(True)
-        self.resize(500, 300)
+        self.resize(500, 340)
         self.setStyleSheet("QDialog { background: #f5f5f5; border-radius: 12px; }")
 
         layout = QVBoxLayout(self)
@@ -104,6 +104,7 @@ class SourceSelectionDialog(QDialog):
             )
         )
         layout.addLayout(button_row)
+        layout.addStretch(1)
 
         bottom_row = QHBoxLayout()
         bottom_row.addStretch()
