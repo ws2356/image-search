@@ -197,7 +197,7 @@ class ParentFolderSelectionDialog(QDialog):
         title.setStyleSheet("color: #1f2937;")
         layout.addWidget(title)
 
-        subtitle = QLabel("Select where images from your mobile device will be stored.")
+        subtitle = QLabel("Select the containing folder where your mobile backup folder will reside.")
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 13px;")
         layout.addWidget(subtitle)
@@ -216,15 +216,13 @@ class ParentFolderSelectionDialog(QDialog):
 
         info_text = QLabel(
             "Your mobile photos will be transferred directly over your local network and stored on this computer.\n"
-            "This keeps your images private and allows AuSearch to index them for fast semantic search.\n"
-            "No cloud upload required."
-        )
+            "This keeps your images private and allows AuSearch to index them for fast semantic search.")
         info_text.setWordWrap(True)
         info_text.setStyleSheet("color: #3a5a9c; font-size: 12px; line-height: 1.5;")
         info_layout.addWidget(info_text, stretch=1)
         layout.addWidget(info_banner)
 
-        destination_label = QLabel("Destination Folder")
+        destination_label = QLabel("Containing Folder")
         destination_label.setStyleSheet("font-size: 12px; font-weight: 600; color: #444;")
         layout.addWidget(destination_label)
 
@@ -317,7 +315,7 @@ class ParentFolderSelectionDialog(QDialog):
         initial_directory = self._path_input.text().strip() or self._selected_directory
         selected_directory = QFileDialog.getExistingDirectory(
             self,
-            "Select Mobile Backup Parent Folder",
+            "Select Mobile Backup Containing Folder",
             initial_directory,
         )
         if not selected_directory:
@@ -336,8 +334,8 @@ class ParentFolderSelectionDialog(QDialog):
         if not Path(normalized_directory).is_dir():
             QMessageBox.warning(
                 self,
-                "Invalid Destination Folder",
-                "The selected destination folder does not exist. Please choose an existing folder.",
+                "Invalid Containing Folder",
+                "The selected containing folder does not exist. Please choose an existing folder.",
             )
             return
 
