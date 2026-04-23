@@ -6,9 +6,15 @@ struct HomeView: View {
     let onScanDesktop: () -> Void
 
     private let setupSteps = [
-        SetupStep(id: "open-desktop", number: 1, title: "Open AuSearch", detail: "Open https://f.boldman.net/2 in your desktop browser. Then install and launch AuSearch."),
-        SetupStep(id: "add-mobile-folder", number: 2, title: "Add a Mobile Folder", detail: "Click Add Folder → Mobile Device in the PC app"),
-        SetupStep(id: "scan-qr", number: 3, title: "Scan the QR code", detail: "A QR code appears on screen — scan it below to pair"),
+        SetupStep(
+            id: "open-desktop",
+            number: 1,
+            title: "Open AuSearch",
+            detail: "Open in your desktop browser. Then install and launch AuSearch.",
+            link: "https://f.boldman.net/2"
+        ),
+        SetupStep(id: "add-mobile-folder", number: 2, title: "Add a Mobile Folder", detail: "Click Add Folder → Mobile Device in the PC app", link: nil),
+        SetupStep(id: "scan-qr", number: 3, title: "Scan the QR code", detail: "A QR code appears on screen — scan it below to pair", link: nil),
     ]
 
     var body: some View {
@@ -235,10 +241,7 @@ struct HomeView: View {
                             Text(step.title)
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(Color(hex: 0x1C1C1E))
-                            Text(step.detail)
-                                .font(.system(size: 13))
-                                .foregroundStyle(Color(hex: 0x6E6E73))
-                                .fixedSize(horizontal: false, vertical: true)
+                            setupStepDetail(step)
                         }
                         Spacer(minLength: 0)
                     }
@@ -295,6 +298,25 @@ struct HomeView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+
+    @ViewBuilder
+    private func setupStepDetail(_ step: SetupStep) -> some View {
+        if let link = step.link {
+            (
+                Text("Open ").foregroundStyle(Color(hex: 0x6E6E73))
+                + Text(link).foregroundStyle(Color(hex: 0x007AFF))
+                + Text(" in your desktop browser. Then install and launch AuSearch.").foregroundStyle(Color(hex: 0x6E6E73))
+            )
+            .font(.system(size: 13))
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(step.detail)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func statsRow(
@@ -359,6 +381,7 @@ private struct SetupStep: Identifiable {
     let number: Int
     let title: String
     let detail: String
+    let link: String?
 }
 
 extension Color {
