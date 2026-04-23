@@ -16,7 +16,7 @@
     </Resources>
     <Applications>
         <Application Id="DTImageSearch" Executable="DTImageSearch\DTImageSearch.exe" EntryPoint="Windows.FullTrustApplication">
-            <uap:VisualElements DisplayName="AI Image Viewer" Description="Image search application" Square150x150Logo="icon.png" Square44x44Logo="icon.png" BackgroundColor="transparent" />
+            <uap:VisualElements DisplayName="AuSearch" Description="Image search application" Square150x150Logo="icon.png" Square44x44Logo="icon.png" BackgroundColor="transparent" />
             <Extensions>
                 <desktop:Extension Category="windows.fullTrustProcess" />
             </Extensions>

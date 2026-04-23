@@ -215,7 +215,7 @@ class ParentFolderSelectionDialog(QDialog):
 
         info_text = QLabel(
             "Your mobile photos will be transferred directly over your local network and stored on this computer.\n"
-            "This keeps your images private and allows DTImageSearch to index them for fast semantic search.\n"
+            "This keeps your images private and allows AuSearch to index them for fast semantic search.\n"
             "No cloud upload required."
         )
         info_text.setWordWrap(True)

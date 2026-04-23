@@ -14,10 +14,10 @@ python -m nuitka \
   --enable-plugin=pyside6 \
   --windows-icon-from-ico=dt_image_search/resources/icon.ico \
   --windows-company-name="Song Wan" \
-  --windows-product-name="DTImageSearch" \
+  --windows-product-name="AuSearch" \
   --windows-file-version="1.0.0" \
   --output-dir=build \
-  --output-filename=DTImageSearch \
+  --output-filename=AuSearch \
   --include-package=opentelemetry.context \
   --include-package=opentelemetry.trace \
   --include-package=opentelemetry.metrics \
