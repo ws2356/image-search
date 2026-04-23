@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct HomeView: View {
     let summary: HomeSummary
@@ -303,14 +308,26 @@ struct HomeView: View {
     @ViewBuilder
     private func setupStepDetail(_ step: SetupStep) -> some View {
         if let link = step.link {
-            (
-                Text("Open ").foregroundColor(Color(hex: 0x6E6E73))
-                + Text(link).foregroundColor(Color(hex: 0x007AFF))
-                + Text(" in your desktop browser. Then install and launch AuSearch.").foregroundColor(Color(hex: 0x6E6E73))
-            )
-            .font(.system(size: 13))
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Open")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: 0x6E6E73))
+                Menu {
+                    Button("复制链接") {
+                        copyLinkToClipboard(link)
+                    }
+                } label: {
+                    Text(link)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0x007AFF))
+                        .underline()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("in your desktop browser. Then install and launch AuSearch.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color(hex: 0x6E6E73))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         } else {
             Text(step.detail)
                 .font(.system(size: 13))
@@ -374,6 +391,15 @@ struct HomeView: View {
         .background(Color(hex: 0xFFF3CD).opacity(0.6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
+}
+
+private func copyLinkToClipboard(_ link: String) {
+#if canImport(UIKit)
+    UIPasteboard.general.string = link
+#elseif canImport(AppKit)
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(link, forType: .string)
+#endif
 }
 
 private struct SetupStep: Identifiable {
