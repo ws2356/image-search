@@ -6,8 +6,8 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ASSETS_ROOT = REPO_ROOT / "mobile/ios/App/Assets.xcassets"
+IOS_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_ROOT = IOS_ROOT / "App/Assets.xcassets"
 
 BACKGROUND_SET = ASSETS_ROOT / "LaunchSplashBackground.imageset"
 CONTENT_SET = ASSETS_ROOT / "LaunchSplashContent.imageset"

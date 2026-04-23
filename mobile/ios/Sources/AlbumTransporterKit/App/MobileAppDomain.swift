@@ -72,7 +72,7 @@ enum PermissionScope: String, Equatable, Sendable, Codable {
         case .full:
             return "The app can include all eligible local photos and videos."
         case .limited:
-            return "Only the items currently granted by iOS will be backed up."
+            return "Only selected photos and videos are included. Grant full access to include your entire eligible library in this backup."
         case .photosOnly:
             return "Videos are excluded until video access is granted."
         case .videosOnly:
