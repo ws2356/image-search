@@ -126,7 +126,7 @@ def _draw_content(scale: int) -> Image.Image:
     subtitle_font = ImageFont.truetype(FONT_REGULAR, 14 * scale)
 
     title = "AuBackup"
-    subtitle = "Your photos, backed up to your PC"
+    subtitle = "Back up & search your photos, locally"
 
     title_y = icon_y + icon_size + 24 * scale
     title_box = draw.textbbox((0, 0), title, font=title_font)
