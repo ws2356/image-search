@@ -136,3 +136,50 @@ bash dt_image_search/scripts/staple_dmg.sh \
 | `notarize.sh` exits non-zero, prints Apple log | Fix the issues listed in the log (usually unsigned nested binary or missing entitlement), then re-run from step 2b. |
 | `stapler validate` fails with `The file … does not have a ticket stapled to it` | Notarization may not have completed. Re-run `notarize.sh` first. |
 | macOS firewall prompt blocks the server | Users must click **Allow** when prompted. Entitlements do not suppress this prompt. |
+
+---
+
+## Re-signing after a Python or dependency update
+
+Any change to binaries inside the bundle — including updating Python itself or
+adding/upgrading a pip package — invalidates the existing code signature.  You
+must rebuild and go through the full distribution pipeline again.
+
+### Why this is necessary
+
+macOS enforces that every Mach-O file inside a signed `.app` matches the
+signature recorded in the bundle seal.  If a dylib or `.so` file is replaced
+(even by a byte-identical file with a different timestamp), the seal breaks and
+Gatekeeper will reject the app.  There is no way to re-sign only part of the
+bundle without redoing the whole signing + notarization chain.
+
+### Steps
+
+1. **Update the dependency** in your Python environment as usual
+   (`pip install -U <package>`).
+
+2. **Rebuild the .app** — this pulls in the new binaries:
+
+   ```bash
+   bash dt_image_search/scripts/build_pyinstaller.sh --build-type prod
+   ```
+
+3. **Re-run the full distribution pipeline:**
+
+   ```bash
+   bash dt_image_search/scripts/distribute_macos.sh \
+       --app-path pyinstaller-dist-prod/AuSearch.app \
+       --version  <new-or-same-version> \
+       --output   dist/AuSearch-<version>.dmg
+   ```
+
+   This re-patches Info.plist, re-signs all binaries, creates a fresh DMG,
+   re-notarizes with Apple, and staples the new ticket.
+
+### Checklist before releasing
+
+- [ ] `pip list` or `pip freeze` reviewed — no unintended upgrades
+- [ ] App launches and connects to iPhone on a clean macOS account
+- [ ] `codesign --verify --deep --strict AuSearch.app` exits 0
+- [ ] `spctl --assess --type execute AuSearch.app` exits 0 (after notarization)
+- [ ] DMG mounts and drag-to-/Applications works on a test machine
