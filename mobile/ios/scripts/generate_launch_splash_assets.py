@@ -10,7 +10,27 @@ IOS_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_ROOT = IOS_ROOT / "App/Assets.xcassets"
 
 BACKGROUND_SET = ASSETS_ROOT / "LaunchSplashBackground.imageset"
-CONTENT_SET = ASSETS_ROOT / "LaunchSplashContent.imageset"
+CONTENT_SET    = ASSETS_ROOT / "LaunchSplashContent.imageset"
+ICON_SET       = ASSETS_ROOT / "AppIcon.appiconset"
+
+# (filename, actual pixel dimension)
+_APP_ICON_SPECS: list[tuple[str, int]] = [
+    ("AppIcon-20@1x.png",    20),
+    ("AppIcon-20@2x.png",    40),
+    ("AppIcon-20@3x.png",    60),
+    ("AppIcon-29@1x.png",    29),
+    ("AppIcon-29@2x.png",    58),
+    ("AppIcon-29@3x.png",    87),
+    ("AppIcon-40@1x.png",    40),
+    ("AppIcon-40@2x.png",    80),
+    ("AppIcon-40@3x.png",   120),
+    ("AppIcon-60@2x.png",   120),
+    ("AppIcon-60@3x.png",   180),
+    ("AppIcon-76@1x.png",    76),
+    ("AppIcon-76@2x.png",   152),
+    ("AppIcon-83.5@2x.png", 167),
+    ("AppIcon-1024.png",   1024),
+]
 
 FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 FONT_REGULAR = "/System/Library/Fonts/Supplemental/Arial.ttf"
@@ -316,14 +336,14 @@ def _draw_content(scale: int) -> Image.Image:
     title_y = icon_y + icon_size + 24 * scale
     tb = draw.textbbox((0, 0), title, font=title_font)
     draw.text(
-        ((width - (tb[2] - tb[0])) // 2, title_y),
+        ((width - (tb[2] - tb[0])) // 2 - tb[0], title_y - tb[1]),
         title, font=title_font, fill=(28, 28, 30, 255),
     )
 
     subtitle_y = title_y + 42 * scale
     sb = draw.textbbox((0, 0), subtitle, font=subtitle_font)
     draw.text(
-        ((width - (sb[2] - sb[0])) // 2, subtitle_y),
+        ((width - (sb[2] - sb[0])) // 2 - sb[0], subtitle_y - sb[1]),
         subtitle, font=subtitle_font, fill=(110, 110, 115, 255),
     )
 
@@ -358,12 +378,50 @@ def _draw_content(scale: int) -> Image.Image:
         pb = draw.textbbox((0, 0), text, font=pill_font)
         tw, th = pb[2] - pb[0], pb[3] - pb[1]
         draw.text(
-            (current_x + (pw - tw) // 2, pill_y + (pill_height - th) // 2 - scale // 2),
+            (current_x + (pw - tw) // 2 - pb[0], pill_y + (pill_height - th) // 2 - pb[1]),
             text, font=pill_font, fill=text_color,
         )
         current_x += pw + pill_gap
 
     return image
+
+
+def _draw_app_icon(px: int) -> Image.Image:
+    """Render the app icon at *px* × *px* pixels.
+
+    Returns an RGB image — iOS clips icons to its own rounded shape,
+    so the asset itself must be a plain square with no transparency.
+    """
+    blue_top    = (0, 122, 255)
+    blue_bottom = (0, 85, 212)
+
+    image = Image.new("RGBA", (px, px), (0, 0, 0, 255))
+    draw = ImageDraw.Draw(image, "RGBA")
+    for y in range(px):
+        col = _blend(blue_top, blue_bottom, y / max(1, px - 1))
+        draw.line([(0, y), (px - 1, y)], fill=(*col, 255))
+
+    _draw_shield_art(
+        image,
+        shield_cx=px / 2.0,
+        shield_cy=px / 2.0,
+        unit=px / 100.0 * 0.88,
+        shield_fill_top=(255, 255, 255),
+        shield_fill_bottom=(206, 227, 255),
+        shield_border_alpha=105,
+        shadow_alpha=130,
+    )
+
+    # Top-half shine
+    shine = Image.new("RGBA", (px, px), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shine, "RGBA")
+    half = px // 2
+    for y in range(half):
+        alpha = int(50 * (1.0 - y / half))
+        sd.line([(0, y), (px - 1, y)], fill=(255, 255, 255, alpha))
+    image.alpha_composite(shine)
+
+    return image.convert("RGB")
 
 
 def _write_contents_json(asset_dir: Path, *, base_name: str) -> None:
@@ -394,6 +452,13 @@ def main() -> None:
     ):
         _draw_background(size).save(BACKGROUND_SET / f"LaunchSplashBackground{suffix}.png")
         _draw_content(scale).save(CONTENT_SET / f"LaunchSplashContent{suffix}.png")
+
+    # App icon — cache by pixel size to avoid regenerating the same image
+    icon_cache: dict[int, Image.Image] = {}
+    for filename, px in _APP_ICON_SPECS:
+        if px not in icon_cache:
+            icon_cache[px] = _draw_app_icon(px)
+        icon_cache[px].save(ICON_SET / filename)
 
 
 if __name__ == "__main__":
