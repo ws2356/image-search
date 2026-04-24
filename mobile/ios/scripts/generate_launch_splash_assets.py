@@ -35,6 +35,10 @@ _APP_ICON_SPECS: list[tuple[str, int]] = [
 FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 FONT_REGULAR = "/System/Library/Fonts/Supplemental/Arial.ttf"
 
+# Supersampling factor for shield rendering — higher = smoother edges, more memory.
+# 2 gives smooth anti-aliased edges for all icon sizes up to 1024px.
+_SHIELD_SSAA = 2
+
 
 # ── colour helpers ─────────────────────────────────────────────────────────────
 
@@ -190,63 +194,76 @@ def _draw_shield_art(
     shield_border_alpha: int = 100,
     shadow_alpha: int = 150,
 ) -> None:
-    """Draw shield + stacked photo cards onto *image* (RGBA, in-place)."""
-    w, h = image.size
-    # Visual centre of shield in 0–100 space: x=50, y=51.5
-    origin_x = shield_cx - 50.0 * unit
-    origin_y = shield_cy - 51.5 * unit
+    """Draw shield + stacked photo cards onto *image* (RGBA, in-place).
 
-    poly = _shield_polygon(origin_x, origin_y, unit)
+    All layers are rendered at _SHIELD_SSAA× resolution and downsampled with
+    LANCZOS before compositing, giving smooth anti-aliased shield edges.
+    """
+    w, h = image.size
+    s = _SHIELD_SSAA
+    sw, sh = w * s, h * s
+
+    # Supersampled coordinates
+    su = unit * s
+    sorigin_x = shield_cx * s - 50.0 * su
+    sorigin_y = shield_cy * s - 51.5 * su  # 51.5 = visual centre Y of shield in 0–100 space
+
+    poly = _shield_polygon(sorigin_x, sorigin_y, su, n=24)
     ys = [pt[1] for pt in poly]
     y_min, y_max = min(ys), max(ys)
 
+    art = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+
     # ── drop shadow ───────────────────────────────────────────────────────────
-    shadow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     ImageDraw.Draw(shadow).polygon(poly, fill=(0, 30, 90, shadow_alpha))
-    blur_r = max(2, int(unit * 2.5))
+    blur_r = max(2, int(su * 2.5))
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=blur_r))
-    shadow = ImageChops.offset(shadow, 0, max(1, int(unit * 1.5)))
-    image.alpha_composite(shadow)
+    shadow = ImageChops.offset(shadow, 0, max(1, int(su * 1.5)))
+    art.alpha_composite(shadow)
 
     # ── shield gradient fill ──────────────────────────────────────────────────
-    grad = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    grad = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     gd = ImageDraw.Draw(grad, "RGBA")
-    for y in range(max(0, y_min - 1), min(h, y_max + 2)):
+    for y in range(max(0, y_min - 1), min(sh, y_max + 2)):
         t = (y - y_min) / max(1, y_max - y_min)
         col = _blend(shield_fill_top, shield_fill_bottom, t)
-        gd.line([(0, y), (w - 1, y)], fill=(*col, 255))
-    shield_mask = Image.new("L", (w, h), 0)
+        gd.line([(0, y), (sw - 1, y)], fill=(*col, 255))
+    shield_mask = Image.new("L", (sw, sh), 0)
     ImageDraw.Draw(shield_mask).polygon(poly, fill=255)
     grad.putalpha(shield_mask)
-    image.alpha_composite(grad)
+    art.alpha_composite(grad)
 
     # ── photo stack (clipped to shield) ───────────────────────────────────────
     card_l, card_t = 25.0, 28.0
     card_w_n, card_h_n, corner_n = 50.0, 35.0, 3.0
-    card_w_px = max(4, int(card_w_n * unit))
-    card_h_px = max(3, int(card_h_n * unit))
-    corner_px = max(1, int(corner_n * unit))
-    card_cx = int(origin_x + (card_l + card_w_n / 2.0) * unit)
-    card_cy = int(origin_y + (card_t + card_h_n / 2.0) * unit)
+    card_w_px = max(4, int(card_w_n * su))
+    card_h_px = max(3, int(card_h_n * su))
+    corner_px = max(1, int(corner_n * su))
+    card_cx = int(sorigin_x + (card_l + card_w_n / 2.0) * su)
+    card_cy = int(sorigin_y + (card_t + card_h_n / 2.0) * su)
 
     card_img = _make_card_image(card_w_px, card_h_px, corner_px)
-    cards = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    cards = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     for angle in (-9.0, -4.0, 0.0):
         _paste_rotated(cards, card_img, (card_cx, card_cy), angle)
 
     # Clip card stack to shield shape
     cr, cg, cb, ca = cards.split()
-    clipped_a = Image.composite(ca, Image.new("L", (w, h), 0), shield_mask)
-    image.alpha_composite(Image.merge("RGBA", (cr, cg, cb, clipped_a)))
+    clipped_a = Image.composite(ca, Image.new("L", (sw, sh), 0), shield_mask)
+    art.alpha_composite(Image.merge("RGBA", (cr, cg, cb, clipped_a)))
 
     # ── shield rim highlight ───────────────────────────────────────────────────
-    rim = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    rim = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     ImageDraw.Draw(rim).polygon(
         poly,
         outline=(255, 255, 255, shield_border_alpha),
-        width=max(1, int(unit * 0.5)),
+        width=max(1, int(su * 0.5)),
     )
-    image.alpha_composite(rim)
+    art.alpha_composite(rim)
+
+    # Downsample to native resolution and composite
+    image.alpha_composite(art.resize((w, h), Image.LANCZOS))
 
 
 # ── public drawing functions ───────────────────────────────────────────────────
