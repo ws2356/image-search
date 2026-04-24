@@ -32,12 +32,18 @@ Write-Host "Running PyInstaller..."
 $previousBuildType = $env:DTIS_BUILD_TYPE
 $env:DTIS_BUILD_TYPE = $BuildType
 try {
-    $pyinstallerProcess = Start-Process -FilePath "pyinstaller" -ArgumentList "dt_image_search/DTImageSearch.spec" -Wait -PassThru -NoNewWindow
-    if ($pyinstallerProcess.ExitCode -ne 0) {
-        Write-Error "PyInstaller failed with exit code: $($pyinstallerProcess.ExitCode)"
+    # Invoke <scriptDir>\build_pyinstaller.sh with the current build type
+    $pyInstallerScript = Join-Path $scriptDir "build_pyinstaller.sh"
+    if (Test-Path $pyInstallerScript) {
+        & bash "./dt_image_search/scripts/build_pyinstaller.sh" --build-type $BuildType
+        if ($LASTEXITCODE -ne 0) {
+            throw "build_pyinstaller.sh exited with code $LASTEXITCODE"
+        }
+        Write-Host "PyInstaller completed successfully"
+    } else {
+        Write-Error "PyInstaller build script not found at: $pyInstallerScript"
         exit 1
     }
-    Write-Host "PyInstaller completed successfully"
 } catch {
     Write-Error "Failed to run PyInstaller: $($_.Exception.Message)"
     exit 1
