@@ -14,3 +14,4 @@ node_modules
 xcuserdata/
 obj/
 .build/
+.env

@@ -17,14 +17,12 @@ set -euo pipefail
 # Omit both to create an unsigned DMG (not recommended for distribution).
 
 APP_PATH=""
-OUTPUT_DMG=""
 VOLUME_NAME=""
 IDENTITY="${DEVELOPER_ID_IDENTITY:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --app-path)    APP_PATH="$2";    shift 2 ;;
-        --output)      OUTPUT_DMG="$2";  shift 2 ;;
         --volume-name) VOLUME_NAME="$2"; shift 2 ;;
         --identity)    IDENTITY="$2";    shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
@@ -32,9 +30,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required" >&2; exit 1; }
-[[ -z "$OUTPUT_DMG" ]] && { echo "Error: --output is required"   >&2; exit 1; }
 [[ -d "$APP_PATH"   ]] || { echo "Error: .app not found: $APP_PATH" >&2; exit 1; }
 [[ -z "$VOLUME_NAME" ]] && VOLUME_NAME="$(basename "$APP_PATH" .app)"
+
+if [[ "$APP_PATH" != /* ]]; then
+    APP_PATH="$(pwd)/$APP_PATH"
+fi
+
+OUTPUT_DMG="${APP_PATH}.dmg"
+
+if [[ -f "$OUTPUT_DMG" ]]; then
+    mv "$OUTPUT_DMG" "${OUTPUT_DMG}.bak"
+fi
 
 mkdir -p "$(dirname "$OUTPUT_DMG")"
 
