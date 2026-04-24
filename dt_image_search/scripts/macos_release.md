@@ -24,6 +24,22 @@ export APPLE_TEAM_ID="ABCDE12345"
 
 ---
 
+## Step 0 — Update the version
+
+Edit `dt_image_search/resources/AppInfo.plist` and set the new version string, then commit it:
+
+```xml
+<key>CFBundleShortVersionString</key>
+<string>1.2.3</string>
+
+<key>CFBundleVersion</key>
+<string>1.2.3</string>
+```
+
+The spec reads this file at build time; no patching scripts are needed.
+
+---
+
 ## Step 1 — Build the .app bundle
 
 ```bash
@@ -33,31 +49,26 @@ cd /path/to/image-search
 bash dt_image_search/scripts/build_pyinstaller.sh --build-type prod
 ```
 
-> **Note:** UPX is automatically disabled on macOS (it would break code signatures).  
-> The output directory is `pyinstaller-dist-prod/`.
+> **Note:** UPX is automatically disabled on macOS (it would break code signatures).
 
 ---
 
 ## Step 2 — Full distribution pipeline (recommended)
 
 The `distribute_macos.sh` script runs all remaining steps in order:
-patch → codesign → package DMG → notarize → staple.
+codesign → package DMG → notarize → staple.
 
 ```bash
 bash dt_image_search/scripts/distribute_macos.sh \
     --app-path pyinstaller-dist-prod/AuSearch.app \
-    --version  1.2.3 \
     --output   dist/AuSearch-1.2.3.dmg
 ```
-
-The finished, stapled DMG is at `dist/AuSearch-1.2.3.dmg`.
 
 Use `--skip-notarize` to build and sign locally without submitting to Apple:
 
 ```bash
 bash dt_image_search/scripts/distribute_macos.sh \
     --app-path pyinstaller-dist-prod/AuSearch.app \
-    --version  1.2.3 \
     --output   dist/AuSearch-1.2.3.dmg \
     --skip-notarize
 ```
@@ -66,22 +77,9 @@ bash dt_image_search/scripts/distribute_macos.sh \
 
 ## Step-by-step (individual scripts)
 
-Run the steps manually when you need finer control.
+Run these when you need finer control over each phase.
 
-### 2a — Patch Info.plist
-
-Must run **before** codesigning — editing Info.plist after signing invalidates the signature.
-
-```bash
-bash dt_image_search/scripts/setup_bundle_metadata.sh \
-    --app-path pyinstaller-dist-prod/AuSearch.app \
-    --version  1.2.3
-```
-
-Adds/updates: `CFBundleShortVersionString`, `CFBundleVersion`,
-`CFBundleDisplayName`, and `NSLocalNetworkUsageDescription`.
-
-### 2b — Codesign
+### 2a — Codesign
 
 Signs all Mach-O binaries inside-out with Hardened Runtime.
 
@@ -91,9 +89,9 @@ bash dt_image_search/scripts/codesign_app.sh \
 # identity read from $DEVELOPER_ID_IDENTITY
 ```
 
-Entitlements file used: `dt_image_search/scripts/AuSearch.entitlements`
+Entitlements: `dt_image_search/scripts/AuSearch.entitlements`
 
-### 2c — Package DMG
+### 2b — Package DMG
 
 Creates a compressed DMG with a drag-to-/Applications layout, then signs it.
 
@@ -103,7 +101,7 @@ bash dt_image_search/scripts/package_dmg.sh \
     --output   dist/AuSearch-1.2.3.dmg
 ```
 
-### 2d — Notarize
+### 2c — Notarize
 
 Submits the DMG to Apple and waits for an `Accepted` result.
 The Apple rejection log is printed automatically on failure.
@@ -114,9 +112,7 @@ bash dt_image_search/scripts/notarize.sh \
 # requires APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
 ```
 
-Typical turnaround: 1–5 minutes.
-
-### 2e — Staple
+### 2d — Staple
 
 Embeds the notarization ticket so users can verify offline.
 
@@ -124,18 +120,6 @@ Embeds the notarization ticket so users can verify offline.
 bash dt_image_search/scripts/staple_dmg.sh \
     --dmg-path dist/AuSearch-1.2.3.dmg
 ```
-
----
-
-## Troubleshooting
-
-| Symptom | Cause / Fix |
-|---|---|
-| `codesign_app.sh` — `WARNING: could not sign …` | Non-Mach-O files that `file` matched as Mach-O (rare). Verify with `codesign -dvvv <file>`. |
-| `spctl --assess` fails after `codesign_app.sh` | Expected — Gatekeeper only passes after notarization. |
-| `notarize.sh` exits non-zero, prints Apple log | Fix the issues listed in the log (usually unsigned nested binary or missing entitlement), then re-run from step 2b. |
-| `stapler validate` fails with `The file … does not have a ticket stapled to it` | Notarization may not have completed. Re-run `notarize.sh` first. |
-| macOS firewall prompt blocks the server | Users must click **Allow** when prompted. Entitlements do not suppress this prompt. |
 
 ---
 
@@ -169,16 +153,27 @@ bundle without redoing the whole signing + notarization chain.
    ```bash
    bash dt_image_search/scripts/distribute_macos.sh \
        --app-path pyinstaller-dist-prod/AuSearch.app \
-       --version  <new-or-same-version> \
        --output   dist/AuSearch-<version>.dmg
    ```
 
-   This re-patches Info.plist, re-signs all binaries, creates a fresh DMG,
-   re-notarizes with Apple, and staples the new ticket.
+---
 
-### Checklist before releasing
+## Troubleshooting
 
-- [ ] `pip list` or `pip freeze` reviewed — no unintended upgrades
+| Symptom | Cause / Fix |
+|---|---|
+| `codesign_app.sh` — `WARNING: could not sign …` | Non-Mach-O files that `file` matched (rare). Verify with `codesign -dvvv <file>`. |
+| `spctl --assess` fails after `codesign_app.sh` | Expected — Gatekeeper only passes after notarization. |
+| `notarize.sh` exits non-zero, prints Apple log | Fix the issues in the log (usually unsigned nested binary or missing entitlement), then re-run from step 2a. |
+| `stapler validate` fails | Notarization may not have completed. Re-run `notarize.sh` first. |
+| macOS firewall prompt blocks the server | Users must click **Allow**. Entitlements do not suppress this prompt. |
+
+---
+
+## Pre-release checklist
+
+- [ ] `dt_image_search/resources/AppInfo.plist` version updated and committed
+- [ ] `pip list` reviewed — no unintended dependency upgrades
 - [ ] App launches and connects to iPhone on a clean macOS account
 - [ ] `codesign --verify --deep --strict AuSearch.app` exits 0
 - [ ] `spctl --assess --type execute AuSearch.app` exits 0 (after notarization)

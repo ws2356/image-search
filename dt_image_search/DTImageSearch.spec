@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import plistlib
 import sys
 import tempfile
 from pathlib import Path
@@ -75,4 +76,7 @@ app = BUNDLE(
     name=f"{app_name}.app",
     icon='resources/appicon.icns',
     bundle_identifier=bundle_identifier,
+    info_plist=plistlib.loads(
+        Path("dt_image_search/resources/AppInfo.plist").read_bytes()
+    ),
 )

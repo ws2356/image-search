@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Update CFBundleShortVersionString and CFBundleVersion before each release,
+      then commit this file so the version is tracked in source control.
+    -->
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1.0.0</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>AuSearch</string>
+
+    <!--
+      Required on macOS 10.15+ when the app accesses the local network.
+      Shown in the system permission prompt the first time the app connects.
+    -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>AuSearch uses your local network to receive photo backups from your iPhone.</string>
+</dict>
+</plist>
