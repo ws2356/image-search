@@ -1,22 +1,16 @@
-<!doctype html>
-<html lang="en" data-lang="en">
-<head>
-  <meta charset="utf-8">
+<!DOCTYPE html>
+<!-- saved from url=(0071)file:///Users/ws2356/dev/image-search-test/web/src/index.html#downloads -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AuSearch & AuBackup | Official downloads</title>
-  <meta
-    name="description"
-    content="Official bilingual landing page for AuSearch desktop and AuBackup iOS, with product overview, downloads, screenshots, privacy, support, and FAQ."
-  >
+  <title>AuSearch &amp; AuBackup | Official downloads</title>
+  <meta name="description" content="Official bilingual landing page for AuSearch desktop and AuBackup mobile downloads, screenshots, and privacy notice.">
   <style>
     :root {
       color-scheme: dark;
       --bg: #08101d;
-      --bg-soft: #111a2c;
       --panel: rgba(15, 22, 36, 0.78);
-      --panel-strong: rgba(11, 17, 29, 0.92);
       --line: rgba(255, 255, 255, 0.1);
-      --line-strong: rgba(255, 255, 255, 0.18);
       --text: #f5f8fc;
       --muted: #a4b3c9;
       --brand-a: #007aff;
@@ -28,7 +22,6 @@
       --radius-xl: 28px;
       --radius-lg: 22px;
       --radius-md: 16px;
-      --radius-sm: 12px;
     }
 
     * {
@@ -125,70 +118,10 @@
       color: var(--text);
     }
 
-    .lang-toggle,
-    .button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 48px;
-      padding: 0 18px;
-      border-radius: 14px;
-      border: 1px solid transparent;
-      font-weight: 700;
-      transition: transform 0.16s ease, opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-    }
-
-    .lang-toggle {
-      min-height: 42px;
-      background: rgba(255, 255, 255, 0.06);
-      border-color: var(--line);
-      color: var(--text);
-      cursor: pointer;
-    }
-
-    .lang-toggle:hover,
-    .button:hover {
-      transform: translateY(-1px);
-    }
-
-    .button {
-      background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-      color: #06111c;
-    }
-
-    .button--ghost {
-      background: transparent;
-      border-color: var(--line);
-      color: var(--text);
-    }
-
-    .button--muted {
-      background: rgba(255, 255, 255, 0.06);
-      border-color: var(--line);
-      color: var(--muted);
-    }
-
-    .button[aria-disabled="true"],
-    .button:disabled {
-      pointer-events: none;
-      opacity: 0.58;
-      filter: saturate(0.75);
-    }
-
-    .hero {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 24px;
-      padding: 18px 0 22px;
-    }
-
-    .hero__copy,
-    .hero__visual,
-    .card,
+    .hero,
     .download,
     .shot,
-    .faq details,
-    .info-panel {
+    .privacy-panel {
       border: 1px solid var(--line);
       border-radius: var(--radius-xl);
       background: var(--panel);
@@ -196,8 +129,9 @@
       box-shadow: var(--shadow);
     }
 
-    .hero__copy {
-      padding: 32px;
+    .hero {
+      padding: 40px 36px;
+      margin-bottom: 28px;
     }
 
     .eyebrow {
@@ -227,145 +161,20 @@
       font-size: clamp(38px, 7vw, 64px);
       line-height: 1.03;
       letter-spacing: -0.03em;
+      max-width: 10ch;
     }
 
     .lead {
-      max-width: 62ch;
+      max-width: 68ch;
       margin: 0;
       color: var(--muted);
       font-size: 18px;
-      line-height: 1.7;
-    }
-
-    .hero__actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 26px;
-    }
-
-    .hero__meta {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin: 28px 0 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .hero__meta li {
-      padding: 14px 16px;
-      border-radius: 18px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .meta__label {
-      display: block;
-      margin-bottom: 4px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .hero__visual {
-      padding: 22px;
-      display: grid;
-      gap: 16px;
-    }
-
-    .device {
-      overflow: hidden;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-    }
-
-    .device--desktop {
-      min-height: 350px;
-      border-radius: 24px;
-    }
-
-    .device--phone {
-      justify-self: end;
-      width: min(240px, 62%);
-      min-height: 280px;
-      border-radius: 34px;
-    }
-
-    .device__chrome {
-      display: flex;
-      gap: 8px;
-      padding: 14px 18px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .device__chrome span {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.24);
-    }
-
-    .mock-search {
-      padding: 22px;
-    }
-
-    .mock-bar {
-      display: flex;
-      align-items: center;
-      height: 48px;
-      padding: 0 16px;
-      margin-bottom: 16px;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .mock-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .mock-tile {
-      aspect-ratio: 1 / 1.12;
-      border-radius: 18px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background:
-        radial-gradient(circle at top, rgba(52, 170, 220, 0.36), transparent 44%),
-        linear-gradient(180deg, rgba(0, 122, 255, 0.2), rgba(0, 85, 212, 0.2));
-    }
-
-    .mock-pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 16px;
-    }
-
-    .mock-pill {
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.07);
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .mock-phone {
-      padding: 18px;
-      display: grid;
-      gap: 12px;
-    }
-
-    .mock-phone__card {
-      min-height: 86px;
-      border-radius: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.07);
+      line-height: 1.75;
     }
 
     .section {
-      padding-top: 28px;
+      padding-top: 8px;
+      margin-top: 28px;
     }
 
     .section__intro {
@@ -386,74 +195,29 @@
       line-height: 1.75;
     }
 
-    .grid {
+    .downloads {
       display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 18px;
     }
 
-    .grid--2 {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .card,
     .download,
-    .info-panel {
+    .privacy-panel {
       padding: 24px;
     }
 
-    .card h3,
     .download h3,
-    .info-panel h3 {
+    .privacy-panel h2 {
       margin: 0 0 10px;
       font-size: 22px;
       line-height: 1.2;
     }
 
-    .card p,
     .download p,
-    .info-panel p {
+    .privacy-panel p {
       margin: 0;
       color: var(--muted);
       line-height: 1.75;
-    }
-
-    .feature-list {
-      display: grid;
-      gap: 10px;
-      margin: 18px 0 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .feature-list li {
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-    }
-
-    .feature-list strong {
-      display: block;
-      margin-bottom: 2px;
-      color: var(--text);
-    }
-
-    .feature-list span:last-child {
-      color: var(--muted);
-    }
-
-    .dot {
-      flex: none;
-      width: 10px;
-      height: 10px;
-      margin-top: 8px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, var(--success), var(--brand-a));
-    }
-
-    .downloads {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 18px;
     }
 
     .pill {
@@ -487,8 +251,35 @@
       background: rgba(255, 159, 10, 0.12);
     }
 
-    .download__actions {
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 18px;
       margin-top: 18px;
+      border-radius: 14px;
+      border: 1px solid transparent;
+      background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
+      color: #06111c;
+      font-weight: 700;
+      transition: transform 0.16s ease, opacity 0.16s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+    }
+
+    .button--muted {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--line);
+      color: var(--muted);
+    }
+
+    .button:disabled {
+      pointer-events: none;
+      opacity: 0.58;
+      filter: saturate(0.75);
     }
 
     .shots {
@@ -557,32 +348,6 @@
       line-height: 1.6;
     }
 
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px;
-    }
-
-    .faq {
-      display: grid;
-      gap: 14px;
-    }
-
-    .faq details {
-      padding: 18px 20px;
-    }
-
-    .faq summary {
-      cursor: pointer;
-      font-weight: 700;
-    }
-
-    .faq p {
-      margin: 12px 0 0;
-      color: var(--muted);
-      line-height: 1.75;
-    }
-
     .footer {
       display: flex;
       align-items: center;
@@ -595,33 +360,13 @@
       font-size: 14px;
     }
 
-    .footer__links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-    }
-
-    .footer__links a:hover {
-      color: var(--text);
-    }
-
     @media (max-width: 980px) {
-      .hero,
-      .grid--2,
-      .info-grid {
-        grid-template-columns: 1fr;
-      }
-
       .downloads {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .shots {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .device--phone {
-        justify-self: start;
       }
     }
 
@@ -635,24 +380,17 @@
         flex-wrap: wrap;
       }
 
-      .topnav {
-        display: none;
-      }
-
-      .hero__copy,
-      .hero__visual,
-      .card,
-      .download,
-      .info-panel,
-      .faq details {
-        border-radius: 24px;
-      }
-
-      .hero__meta,
+      .topnav,
       .downloads,
-      .shots,
-      .info-grid {
+      .shots {
         grid-template-columns: 1fr;
+      }
+
+      .hero,
+      .download,
+      .shot,
+      .privacy-panel {
+        border-radius: 24px;
       }
 
       .footer {
@@ -665,428 +403,168 @@
 <body>
   <div class="site-shell">
     <header class="topbar">
-      <a class="brand" href="#top">
+      <a class="brand" href="file:///Users/ws2356/dev/image-search-test/web/src/index.html#top">
         <span class="brand__mark">A</span>
         <span>
           <strong>AuSearch &amp; AuBackup</strong>
-          <small data-en="Official app downloads" data-zh="官方应用下载"></small>
+          <small data-en="Official app downloads" data-zh="官方应用下载">Official app downloads</small>
         </span>
       </a>
       <nav class="topnav" aria-label="Primary">
-        <a href="#products" data-en="Products" data-zh="产品"></a>
-        <a href="#downloads" data-en="Downloads" data-zh="下载"></a>
-        <a href="#screenshots" data-en="Screenshots" data-zh="截图"></a>
-        <a href="#faq" data-en="FAQ" data-zh="常见问题"></a>
+        <a href="file:///Users/ws2356/dev/image-search-test/web/src/index.html#downloads" data-en="Downloads" data-zh="下载">Downloads</a>
+        <a href="file:///Users/ws2356/dev/image-search-test/web/src/index.html#screenshots" data-en="Screenshots" data-zh="截图">Screenshots</a>
+        <a href="file:///Users/ws2356/dev/image-search-test/web/src/index.html#privacy" data-en="Privacy" data-zh="隐私">Privacy</a>
       </nav>
-      <button id="lang-toggle" class="lang-toggle" type="button" aria-label="切换到中文">中文</button>
     </header>
 
     <main id="top">
       <section class="hero">
-        <div class="hero__copy">
-          <span class="eyebrow" data-en="Official distribution site" data-zh="官方分发站点"></span>
-          <h1
-            data-en="Fast visual search on desktop. Reliable photo backup on iPhone."
-            data-zh="桌面端快速视觉搜索，iPhone 端可靠照片备份。"
-          ></h1>
-          <p
-            class="lead"
-            data-en="AuSearch helps you find local images with AI-powered similarity search. AuBackup keeps photo transfer and backup on iPhone simple, fast, and easy to understand."
-            data-zh="AuSearch 通过 AI 相似检索帮助你快速找到本地图片。AuBackup 让 iPhone 照片传输与备份更直接、更快速，也更易理解。"
-          ></p>
-          <div class="hero__actions">
-            <a
-              class="button"
-              href="https://apps.microsoft.com/detail/9n5n8gvnrzdn"
-              target="_blank"
-              rel="noreferrer"
-              data-en="Get it from Microsoft Store"
-              data-zh="从 Microsoft Store 获取"
-            ></a>
-            <a class="button button--ghost" href="#downloads" data-en="See all downloads" data-zh="查看所有下载"></a>
-          </div>
-          <ul class="hero__meta">
-            <li>
-              <span class="meta__label" data-en="Desktop app" data-zh="桌面应用"></span>
-              <span data-en="AuSearch for Windows and macOS" data-zh="AuSearch 支持 Windows 与 macOS"></span>
-            </li>
-            <li>
-              <span class="meta__label" data-en="Mobile app" data-zh="移动应用"></span>
-              <span data-en="AuBackup for iPhone" data-zh="AuBackup 支持 iPhone"></span>
-            </li>
-            <li>
-              <span class="meta__label" data-en="Current status" data-zh="当前状态"></span>
-              <span data-en="Windows available, macOS and iOS links pending" data-zh="Windows 已上线，macOS 与 iOS 链接待补充"></span>
-            </li>
-            <li>
-              <span class="meta__label" data-en="Android" data-zh="Android"></span>
-              <span data-en="Coming soon" data-zh="即将推出"></span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="hero__visual" aria-hidden="true">
-          <div class="device device--desktop">
-            <div class="device__chrome"><span></span><span></span><span></span></div>
-            <div class="mock-search">
-              <div class="mock-bar" data-en="Search by image, keyword, or similarity…" data-zh="按图片、关键词或相似度搜索…"></div>
-              <div class="mock-grid">
-                <div class="mock-tile"></div>
-                <div class="mock-tile"></div>
-                <div class="mock-tile"></div>
-                <div class="mock-tile"></div>
-                <div class="mock-tile"></div>
-                <div class="mock-tile"></div>
-              </div>
-              <div class="mock-pill-row">
-                <span class="mock-pill">AI Search</span>
-                <span class="mock-pill">Local Library</span>
-                <span class="mock-pill">Fast Preview</span>
-              </div>
-            </div>
-          </div>
-          <div class="device device--phone">
-            <div class="device__chrome"><span></span><span></span><span></span></div>
-            <div class="mock-phone">
-              <div class="mock-phone__card"></div>
-              <div class="mock-phone__card"></div>
-              <div class="mock-phone__card"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="products" class="section">
-        <div class="section__intro">
-          <span class="eyebrow" data-en="Products" data-zh="产品"></span>
-          <h2 data-en="Two apps, one consistent experience" data-zh="两个应用，一套一致体验"></h2>
-          <p
-            data-en="The website uses a desktop-and-iOS friendly visual language: dark glass panels, Apple-inspired blue accents, rounded hardware-inspired surfaces, and compact utility-first content blocks."
-            data-zh="网站采用兼容桌面端与 iOS 的视觉语言：深色玻璃质感面板、Apple 风格蓝色点缀、带硬件感的圆角表面，以及紧凑的功能型内容布局。"
-          ></p>
-        </div>
-
-        <div class="grid grid--2">
-          <article class="card">
-            <h3 data-en="AuSearch" data-zh="AuSearch"></h3>
-            <p
-              data-en="AI-powered local image search for desktop. Built for fast browsing, visual similarity search, and practical library management."
-              data-zh="面向桌面端的 AI 本地图片搜索工具，适合快速浏览、视觉相似检索与高效图库管理。"
-            ></p>
-            <ul class="feature-list">
-              <li>
-                <span class="dot"></span>
-                <span>
-                  <strong data-en="Visual similarity search" data-zh="视觉相似搜索"></strong>
-                  <span data-en="Find related images without relying only on filenames." data-zh="不只依赖文件名，也能找到相似图片。"></span>
-                </span>
-              </li>
-              <li>
-                <span class="dot"></span>
-                <span>
-                  <strong data-en="Desktop-first workflow" data-zh="桌面优先工作流"></strong>
-                  <span data-en="Designed for larger libraries, previews, and repeated search tasks." data-zh="为大图库、预览操作和高频搜索场景而设计。"></span>
-                </span>
-              </li>
-              <li>
-                <span class="dot"></span>
-                <span>
-                  <strong data-en="Clean utility UI" data-zh="清爽高效界面"></strong>
-                  <span data-en="Focused controls that stay close to the app’s native visual language." data-zh="控制项简洁直接，与应用原生风格保持一致。"></span>
-                </span>
-              </li>
-            </ul>
-          </article>
-
-          <article class="card">
-            <h3 data-en="AuBackup" data-zh="AuBackup"></h3>
-            <p
-              data-en="An iPhone companion app for transferring and backing up photos with a simple, reliable flow that matches the desktop ecosystem."
-              data-zh="面向 iPhone 的配套应用，用更简单、更可靠的流程完成照片传输与备份，并与桌面端生态保持一致。"
-            ></p>
-            <ul class="feature-list">
-              <li>
-                <span class="dot"></span>
-                <span>
-                  <strong data-en="iPhone-oriented experience" data-zh="面向 iPhone 的体验"></strong>
-                  <span data-en="Compact screens, clear status, and touch-friendly actions." data-zh="界面紧凑、状态明确、操作适合触控。"></span>
-                </span>
-              </li>
-              <li>
-                <span class="dot"></span>
-                <span>
-                  <strong data-en="Transfer clarity" data-zh="传输流程清晰"></strong>
-                  <span data-en="Emphasizes confidence during photo movement and backup tasks." data-zh="在照片迁移与备份时提供更明确的操作反馈。"></span>
-                </span>
-              </li>
-              <li>
-                <span class="dot"></span>
-                <span>
-                  <strong data-en="Consistent branding" data-zh="统一品牌语言"></strong>
-                  <span data-en="Pairs naturally with AuSearch in layout, tone, and interface rhythm." data-zh="在布局、语气和界面节奏上与 AuSearch 自然衔接。"></span>
-                </span>
-              </li>
-            </ul>
-          </article>
-        </div>
+        
+        <h1 data-en="AuSearch &amp; AuBackup" data-zh="AuSearch 与 AuBackup">AuSearch &amp; AuBackup</h1>
+        <p class="lead" data-en="Use AuSearch to find local images with AI-powered similarity search. Use AuBackup to back up your media files on Mobile phone to your PC fast, secure and searchable by AuSearch." data-zh="使用 AuSearch 通过 AI 相似检索查找本地图片。使用 AuBackup 可将手机中的媒体文件快速、安全地备份到电脑，并让这些内容可被 AuSearch 检索。">Use AuSearch to find local images with AI-powered similarity search. Use AuBackup to back up your media files on Mobile phone to your PC fast, secure and searchable by AuSearch.</p>
       </section>
 
       <section id="downloads" class="section">
         <div class="section__intro">
-          <span class="eyebrow" data-en="Downloads" data-zh="下载"></span>
-          <h2 data-en="Choose your platform" data-zh="选择你的平台"></h2>
-          <p
-            data-en="Windows is available now. macOS and iOS remain visible so the official distribution page can stay stable while final store and package links are still pending."
-            data-zh="Windows 现已可用。macOS 与 iOS 保持可见，但暂不开放链接，以便在最终商店页和安装包地址确定前，官网结构保持稳定。"
-          ></p>
+          
+          <h2 data-en="Download links" data-zh="下载链接">Download links</h2>
+          <p data-en="Official client links remain in one place for desktop and mobile." data-zh="桌面端与移动端的官方入口统一展示在这里。">Official client links remain in one place for desktop and mobile.</p>
         </div>
 
         <div class="downloads">
           <article class="download">
-            <span class="pill pill--live" data-en="Live now" data-zh="现已上线"></span>
-            <h3 data-en="AuSearch for Windows" data-zh="AuSearch Windows 版"></h3>
-            <p
-              data-en="Official Microsoft Store listing for the current Windows release."
-              data-zh="当前 Windows 版本的官方 Microsoft Store 页面。"
-            ></p>
-            <div class="download__actions">
-              <a
-                class="button"
-                href="https://apps.microsoft.com/detail/9n5n8gvnrzdn"
-                target="_blank"
-                rel="noreferrer"
-                data-en="Get it from Microsoft Store"
-                data-zh="从 Microsoft Store 获取"
-              ></a>
-            </div>
+            <span class="pill pill--live" data-en="Live now" data-zh="现已上线">Live now</span>
+            <h3 data-en="AuSearch for Windows" data-zh="AuSearch Windows 版">AuSearch for Windows</h3>
+            <p data-en="Official Microsoft Store listing for the current Windows release." data-zh="当前 Windows 版本的官方 Microsoft Store 页面。">Official Microsoft Store listing for the current Windows release.</p>
+            <a class="button" href="https://apps.microsoft.com/detail/9n5n8gvnrzdn" target="_blank" rel="noreferrer" data-en="Get it from Microsoft Store" data-zh="从 Microsoft Store 获取">Get it from Microsoft Store</a>
           </article>
 
           <article class="download">
-            <span class="pill pill--pending" data-en="Link pending" data-zh="链接待补充"></span>
-            <h3 data-en="AuSearch for macOS" data-zh="AuSearch macOS 版"></h3>
-            <p
-              data-en="The direct macOS package slot is reserved here for the public installer."
-              data-zh="这里预留了 macOS 公开安装包的官方下载位置。"
-            ></p>
-            <div class="download__actions">
-              <button class="button button--muted" type="button" disabled data-en="macOS version coming soon" data-zh="macOS 版本即将推出"></button>
-            </div>
+            <span class="pill pill--pending" data-en="Link pending" data-zh="链接待补充">Link pending</span>
+            <h3 data-en="AuSearch for macOS" data-zh="AuSearch macOS 版">AuSearch for macOS</h3>
+            <p data-en="The direct macOS package slot is reserved here for the public installer." data-zh="这里预留了 macOS 公开安装包的官方下载位置。">The direct macOS package slot is reserved here for the public installer.</p>
+            <button class="button button--muted" type="button" disabled="" data-en="macOS version coming soon" data-zh="macOS 版本即将推出">macOS version coming soon</button>
           </article>
 
           <article class="download">
-            <span class="pill pill--pending" data-en="Link pending" data-zh="链接待补充"></span>
-            <h3 data-en="AuBackup for iPhone" data-zh="AuBackup iPhone 版"></h3>
-            <p
-              data-en="The App Store slot is ready and can be activated as soon as the official listing is available."
-              data-zh="App Store 位置已经预留，官方页面上线后即可启用。"
-            ></p>
-            <div class="download__actions">
-              <button class="button button--muted" type="button" disabled data-en="App Store link coming soon" data-zh="App Store 链接即将补充"></button>
-            </div>
+            <span class="pill pill--pending" data-en="Link pending" data-zh="链接待补充">Link pending</span>
+            <h3 data-en="AuBackup for iPhone" data-zh="AuBackup iPhone 版">AuBackup for iPhone</h3>
+            <p data-en="The App Store slot is ready and can be activated as soon as the official listing is available." data-zh="App Store 位置已经预留，官方页面上线后即可启用。">The App Store slot is ready and can be activated as soon as the official listing is available.</p>
+            <button class="button button--muted" type="button" disabled="" data-en="App Store link coming soon" data-zh="App Store 链接即将补充">App Store link coming soon</button>
           </article>
 
           <article class="download">
-            <span class="pill pill--pending" data-en="In development" data-zh="开发中"></span>
-            <h3 data-en="Android" data-zh="Android"></h3>
-            <p
-              data-en="Android support stays visible on the site as an upcoming platform."
-              data-zh="Android 作为即将支持的平台，保留在官网中展示。"
-            ></p>
-            <div class="download__actions">
-              <button class="button button--muted" type="button" disabled data-en="Coming soon" data-zh="即将推出"></button>
-            </div>
+            <span class="pill pill--pending" data-en="In development" data-zh="开发中">In development</span>
+            <h3 data-en="Android" data-zh="Android">Android</h3>
+            <p data-en="Android support stays visible on the site as an upcoming platform." data-zh="Android 作为即将支持的平台，保留在官网中展示。">Android support stays visible on the site as an upcoming platform.</p>
+            <button class="button button--muted" type="button" disabled="" data-en="Coming soon" data-zh="即将推出">Coming soon</button>
           </article>
         </div>
       </section>
 
       <section id="screenshots" class="section">
         <div class="section__intro">
-          <span class="eyebrow" data-en="Screenshots" data-zh="截图"></span>
-          <h2 data-en="Preview the experience" data-zh="界面预览"></h2>
-          <p
-            data-en="The layout is prepared for six screenshots using a 3 + 3 split: three for AuSearch and three for AuBackup. Drop files into web/src/assets/screenshots using the default filenames below and they will replace the placeholders automatically."
-            data-zh="页面已按 3 + 3 方式预留六张截图：三张用于 AuSearch，三张用于 AuBackup。将文件按下列默认文件名放入 web/src/assets/screenshots 后，占位图会自动被替换。"
-          ></p>
+          
+          <h2 data-en="Preview" data-zh="预览">Preview</h2>
+          <p data-en="Drop six files into web/src/assets/screenshots using the default filenames below and the placeholders will be replaced automatically." data-zh="将六张截图按下列默认文件名放入 web/src/assets/screenshots 后，占位图会自动被替换。">Drop six files into web/src/assets/screenshots using the default filenames below and the placeholders will be replaced automatically.</p>
         </div>
 
         <div class="shots">
           <figure class="shot">
             <div class="shot__frame">
-              <img src="./assets/screenshots/ausearch-desktop-1.png" alt="AuSearch desktop screenshot 1" loading="lazy">
+              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-1.png" alt="AuSearch desktop screenshot 1" loading="lazy">
               <div class="shot__placeholder">
-                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览"></span>
+                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
                 <strong class="shot__filename">ausearch-desktop-1.png</strong>
               </div>
             </div>
-            <figcaption data-en="Recommended hero screenshot: main search or library overview." data-zh="推荐作为主视觉截图：主搜索界面或图库总览。"></figcaption>
+            <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
           </figure>
 
           <figure class="shot">
             <div class="shot__frame">
-              <img src="./assets/screenshots/ausearch-desktop-2.png" alt="AuSearch desktop screenshot 2" loading="lazy">
+              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-2.png" alt="AuSearch desktop screenshot 2" loading="lazy">
               <div class="shot__placeholder">
-                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览"></span>
+                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
                 <strong class="shot__filename">ausearch-desktop-2.png</strong>
               </div>
             </div>
-            <figcaption data-en="Secondary desktop view: filters, results, or compare mode." data-zh="第二张桌面图建议展示筛选、结果列表或对比模式。"></figcaption>
+            <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
           </figure>
 
           <figure class="shot">
             <div class="shot__frame">
-              <img src="./assets/screenshots/ausearch-desktop-3.png" alt="AuSearch desktop screenshot 3" loading="lazy">
+              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-3.png" alt="AuSearch desktop screenshot 3" loading="lazy">
               <div class="shot__placeholder">
-                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览"></span>
+                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
                 <strong class="shot__filename">ausearch-desktop-3.png</strong>
               </div>
             </div>
-            <figcaption data-en="Third desktop view: details panel, preview flow, or library management." data-zh="第三张桌面图建议展示详情面板、预览流程或图库管理。"></figcaption>
+            <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
           </figure>
 
           <figure class="shot">
             <div class="shot__frame">
-              <img src="./assets/screenshots/aubackup-ios-1.png" alt="AuBackup iPhone screenshot 1" loading="lazy">
+              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-1.png" alt="AuBackup iPhone screenshot 1" loading="lazy">
               <div class="shot__placeholder">
-                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览"></span>
+                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
                 <strong class="shot__filename">aubackup-ios-1.png</strong>
               </div>
             </div>
-            <figcaption data-en="Main mobile screen: entry point, pairing, or transfer overview." data-zh="首张手机图建议展示入口页、配对页或传输总览。"></figcaption>
+            <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
           </figure>
 
           <figure class="shot">
             <div class="shot__frame">
-              <img src="./assets/screenshots/aubackup-ios-2.png" alt="AuBackup iPhone screenshot 2" loading="lazy">
+              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-2.png" alt="AuBackup iPhone screenshot 2" loading="lazy">
               <div class="shot__placeholder">
-                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览"></span>
+                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
                 <strong class="shot__filename">aubackup-ios-2.png</strong>
               </div>
             </div>
-            <figcaption data-en="Second mobile view: progress state, folder picker, or permission flow." data-zh="第二张手机图建议展示进度状态、文件夹选择或权限流程。"></figcaption>
+            <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
           </figure>
 
           <figure class="shot">
             <div class="shot__frame">
-              <img src="./assets/screenshots/aubackup-ios-3.png" alt="AuBackup iPhone screenshot 3" loading="lazy">
+              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-3.png" alt="AuBackup iPhone screenshot 3" loading="lazy">
               <div class="shot__placeholder">
-                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览"></span>
+                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
                 <strong class="shot__filename">aubackup-ios-3.png</strong>
               </div>
             </div>
-            <figcaption data-en="Third mobile view: success state, summary, or backup history." data-zh="第三张手机图建议展示完成页、摘要页或备份历史。"></figcaption>
+            <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
           </figure>
         </div>
       </section>
 
-      <section class="section">
-        <div class="section__intro">
-          <span class="eyebrow" data-en="Privacy and support" data-zh="隐私与支持"></span>
-          <h2 data-en="Simple public information, without clutter" data-zh="公开信息简洁清晰，不做堆砌"></h2>
-        </div>
-
-        <div class="info-grid">
-          <article id="privacy" class="info-panel">
-            <h3 data-en="Privacy" data-zh="隐私"></h3>
-            <p
-              data-en="This page is designed as a straightforward distribution surface. Product messaging focuses on local workflows, direct downloads, and clear store destinations rather than intrusive marketing patterns."
-              data-zh="本页面被设计为直接的官方分发表面。产品说明聚焦于本地工作流、直接下载入口和明确的商店目的地，而不是侵入式营销设计。"
-            ></p>
-          </article>
-
-          <article id="support" class="info-panel">
-            <h3 data-en="Support" data-zh="支持"></h3>
-            <p
-              data-en="Support contact details can be added later without changing the site structure. For now, the page keeps the support section visible so the public layout remains stable when release channels expand."
-              data-zh="支持联系方式可以稍后补充，而无需改变页面结构。当前先保留支持区域，方便后续在发布渠道扩展时继续沿用同一页面布局。"
-            ></p>
-          </article>
-
-          <article class="info-panel">
-            <h3 data-en="Availability" data-zh="可用性"></h3>
-            <p
-              data-en="Windows is linked now. macOS and App Store entries remain intentionally disabled until you confirm the final package and listing URLs. Android stays marked as coming soon."
-              data-zh="Windows 链接已启用。macOS 与 App Store 入口会在你确认最终安装包和商店地址后启用。Android 当前保持“即将推出”状态。"
-            ></p>
-          </article>
-        </div>
-      </section>
-
-      <section id="faq" class="section">
-        <div class="section__intro">
-          <span class="eyebrow" data-en="FAQ" data-zh="常见问题"></span>
-          <h2 data-en="Questions users are likely to ask first" data-zh="用户最先可能会问的问题"></h2>
-        </div>
-
-        <div class="faq">
-          <details>
-            <summary data-en="Where do I download AuSearch for Windows?" data-zh="在哪里下载 Windows 版 AuSearch？"></summary>
-            <p
-              data-en="Use the Microsoft Store button on this page. It points to the official AuSearch listing."
-              data-zh="使用本页面中的 Microsoft Store 按钮即可，它会指向官方 AuSearch 页面。"
-            ></p>
-          </details>
-
-          <details>
-            <summary data-en="Why are the macOS and iPhone buttons disabled?" data-zh="为什么 macOS 和 iPhone 按钮是灰色不可点击的？"></summary>
-            <p
-              data-en="Those placements are already reserved in the design, but their final public URLs have not been confirmed yet."
-              data-zh="这些位置已经在官网设计中预留，但最终公开链接还没有确定。"
-            ></p>
-          </details>
-
-          <details>
-            <summary data-en="Will Android be supported?" data-zh="会支持 Android 吗？"></summary>
-            <p
-              data-en="Yes. Android is currently represented as a coming-soon platform so the official page can communicate roadmap visibility without promising a release date."
-              data-zh="会支持。当前页面将 Android 标记为“即将推出”，以便展示平台规划，但不提前承诺具体发布日期。"
-            ></p>
-          </details>
-        </div>
+      <section id="privacy" class="section">
+        <article class="privacy-panel">
+          
+          <h2 data-en="Simple and local-first" data-zh="简洁且以本地为先">Simple and local-first</h2>
+          <p data-en="This website is a simple official distribution page. It highlights local workflows, direct downloads, and clear store destinations. Final macOS and iPhone links will be enabled after their public release links are confirmed." data-zh="本网站是一个简洁的官方分发页面，重点说明本地工作流、直接下载入口和明确的商店去向。macOS 与 iPhone 的正式链接会在公开发布地址确认后启用。">This website is a simple official distribution page. It highlights local workflows, direct downloads, and clear store destinations. Final macOS and iPhone links will be enabled after their public release links are confirmed.</p>
+        </article>
       </section>
     </main>
 
     <footer class="footer">
       <span>© 2026 AuSearch &amp; AuBackup. All rights reserved.</span>
-      <div class="footer__links">
-        <a href="#privacy" data-en="Privacy" data-zh="隐私"></a>
-        <a href="#support" data-en="Support" data-zh="支持"></a>
-        <a href="#faq" data-en="FAQ" data-zh="常见问题"></a>
-      </div>
     </footer>
   </div>
 
   <script>
     (() => {
-      const storageKey = "aus-site-lang";
+      const useZh = navigator.language && navigator.language.toLowerCase().startsWith("zh");
       const root = document.documentElement;
-      const toggle = document.getElementById("lang-toggle");
+      root.lang = useZh ? "zh-CN" : "en";
 
-      const applyLanguage = (lang) => {
-        const useZh = lang === "zh";
-        root.dataset.lang = lang;
-        root.lang = useZh ? "zh-CN" : "en";
-
-        document.querySelectorAll("[data-en]").forEach((node) => {
-          node.textContent = useZh ? node.dataset.zh : node.dataset.en;
-        });
-
-        document.title = useZh
-          ? "AuSearch & AuBackup | 官方下载"
-          : "AuSearch & AuBackup | Official downloads";
-
-        toggle.textContent = useZh ? "EN" : "中文";
-        toggle.setAttribute("aria-label", useZh ? "Switch to English" : "切换到中文");
-
-        localStorage.setItem(storageKey, lang);
-      };
-
-      const savedLang = localStorage.getItem(storageKey);
-      const autoLang = navigator.language && navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
-      applyLanguage(savedLang || autoLang);
-
-      toggle.addEventListener("click", () => {
-        applyLanguage(root.dataset.lang === "zh" ? "en" : "zh");
+      document.querySelectorAll("[data-en]").forEach((node) => {
+        node.textContent = useZh ? node.dataset.zh : node.dataset.en;
       });
+
+      document.title = useZh
+        ? "AuSearch 与 AuBackup | 官方下载"
+        : "AuSearch & AuBackup | Official downloads";
 
       document.querySelectorAll(".shot").forEach((card) => {
         const image = card.querySelector("img");
@@ -1107,5 +585,6 @@
       });
     })();
   </script>
-</body>
-</html>
+
+
+</body></html>
