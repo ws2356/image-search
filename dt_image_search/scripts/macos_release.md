@@ -13,7 +13,7 @@ End-to-end workflow for building and distributing a signed, notarized AuSearch D
 | Apple Team ID | [developer.apple.com/account](https://developer.apple.com/account) → Membership |
 | Python 3.10 venv | `source /path/to/.venv_python3.10/bin/activate` |
 
-Export the three notarization secrets before running any distribution step:
+Export these before running any distribution step:
 
 ```bash
 export DEVELOPER_ID_IDENTITY="Developer ID Application: First Last (TEAMID)"
@@ -21,22 +21,6 @@ export APPLE_ID="you@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
 export APPLE_TEAM_ID="ABCDE12345"
 ```
-
----
-
-## Step 0 — Update the version
-
-Edit `dt_image_search/resources/AppInfo.plist` and set the new version string, then commit it:
-
-```xml
-<key>CFBundleShortVersionString</key>
-<string>1.2.3</string>
-
-<key>CFBundleVersion</key>
-<string>1.2.3</string>
-```
-
-The spec reads this file at build time; no patching scripts are needed.
 
 ---
 
@@ -50,13 +34,16 @@ bash dt_image_search/scripts/build_pyinstaller.sh --build-type prod
 ```
 
 > **Note:** UPX is automatically disabled on macOS (it would break code signatures).
+> Version and display-name keys come from `dt_image_search/resources/AppInfo.plist`,
+> which is read by the spec at build time.  Update that file and commit it before
+> building a release.
 
 ---
 
 ## Step 2 — Full distribution pipeline (recommended)
 
-The `distribute_macos.sh` script runs all remaining steps in order:
-codesign → package DMG → notarize → staple.
+`distribute_macos.sh` runs all remaining steps in order:
+**codesign → package & sign DMG → notarize → staple**.
 
 ```bash
 bash dt_image_search/scripts/distribute_macos.sh \
@@ -77,11 +64,9 @@ bash dt_image_search/scripts/distribute_macos.sh \
 
 ## Step-by-step (individual scripts)
 
-Run these when you need finer control over each phase.
+### 2a — Codesign the .app
 
-### 2a — Codesign
-
-Signs all Mach-O binaries inside-out with Hardened Runtime.
+Signs all Mach-O binaries inside-out with Hardened Runtime (no deprecated `--deep` flag).
 
 ```bash
 bash dt_image_search/scripts/codesign_app.sh \
@@ -91,19 +76,21 @@ bash dt_image_search/scripts/codesign_app.sh \
 
 Entitlements: `dt_image_search/scripts/AuSearch.entitlements`
 
-### 2b — Package DMG
+### 2b — Package and sign the DMG
 
-Creates a compressed DMG with a drag-to-/Applications layout, then signs it.
+Creates a compressed DMG (.app + /Applications symlink) and codesigns it.
+**The DMG must be signed before submitting to Apple for notarization.**
 
 ```bash
 bash dt_image_search/scripts/package_dmg.sh \
     --app-path pyinstaller-dist-prod/AuSearch.app \
     --output   dist/AuSearch-1.2.3.dmg
+# identity read from $DEVELOPER_ID_IDENTITY
 ```
 
 ### 2c — Notarize
 
-Submits the DMG to Apple and waits for an `Accepted` result.
+Submits the **signed** DMG to Apple and waits for an `Accepted` result.
 The Apple rejection log is printed automatically on failure.
 
 ```bash
@@ -111,6 +98,8 @@ bash dt_image_search/scripts/notarize.sh \
     --dmg-path dist/AuSearch-1.2.3.dmg
 # requires APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
 ```
+
+Typical turnaround: 1–5 minutes.
 
 ### 2d — Staple
 
@@ -162,10 +151,10 @@ bundle without redoing the whole signing + notarization chain.
 
 | Symptom | Cause / Fix |
 |---|---|
-| `codesign_app.sh` — `WARNING: could not sign …` | Non-Mach-O files that `file` matched (rare). Verify with `codesign -dvvv <file>`. |
+| `codesign_app.sh` — `WARNING: could not sign …` | Non-Mach-O file detected by `file` (rare). Verify with `codesign -dvvv <file>`. |
 | `spctl --assess` fails after `codesign_app.sh` | Expected — Gatekeeper only passes after notarization. |
-| `notarize.sh` exits non-zero, prints Apple log | Fix the issues in the log (usually unsigned nested binary or missing entitlement), then re-run from step 2a. |
-| `stapler validate` fails | Notarization may not have completed. Re-run `notarize.sh` first. |
+| `notarize.sh` exits non-zero, prints Apple log | Fix the issues listed in the log (usually unsigned nested binary or missing entitlement), then re-run from step 2a. |
+| `stapler validate` fails | Notarization not yet complete. Re-run `notarize.sh` first. |
 | macOS firewall prompt blocks the server | Users must click **Allow**. Entitlements do not suppress this prompt. |
 
 ---
