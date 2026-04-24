@@ -29,6 +29,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$APP_PATH" != /* ]]; then
+    APP_PATH="$(pwd)/$APP_PATH"
+fi
+
 [[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required" >&2; exit 1; }
 [[ -d "$APP_PATH"   ]] || { echo "Error: .app not found: $APP_PATH" >&2; exit 1; }
 [[ -z "$VOLUME_NAME" ]] && VOLUME_NAME="$(basename "$APP_PATH" .app)"
@@ -37,7 +41,7 @@ if [[ "$APP_PATH" != /* ]]; then
     APP_PATH="$(pwd)/$APP_PATH"
 fi
 
-OUTPUT_DMG="${APP_PATH}.dmg"
+OUTPUT_DMG="$(dirname "$APP_PATH")/$(basename "$APP_PATH" .app).dmg"
 
 if [[ -f "$OUTPUT_DMG" ]]; then
     mv "$OUTPUT_DMG" "${OUTPUT_DMG}.bak"

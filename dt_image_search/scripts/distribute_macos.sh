@@ -14,7 +14,6 @@ set -euo pipefail
 # Usage:
 #   distribute_macos.sh \
 #       --app-path  ./pyinstaller-dist-prod/AuSearch.app \
-#       --output    ./dist/AuSearch-1.2.3.dmg \
 #       [--identity "Developer ID Application: NAME (TEAMID)"] \
 #       [--skip-notarize]
 #
@@ -28,14 +27,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 APP_PATH=""
-OUTPUT_DMG=""
 IDENTITY="${DEVELOPER_ID_IDENTITY:-}"
 SKIP_NOTARIZE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --app-path)      APP_PATH="$2";   shift 2 ;;
-        --output)        OUTPUT_DMG="$2"; shift 2 ;;
         --identity)      IDENTITY="$2";   shift 2 ;;
         --skip-notarize) SKIP_NOTARIZE=true; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
@@ -43,7 +40,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required"  >&2; exit 1; }
-[[ -z "$OUTPUT_DMG" ]] && { echo "Error: --output is required"    >&2; exit 1; }
+if [[ "$APP_PATH" != /* ]]; then
+    APP_PATH="$(pwd)/$APP_PATH"
+fi
+OUTPUT_DMG="$(dirname "$APP_PATH")/$(basename "$APP_PATH" .app).dmg"
+
 
 echo "╔══════════════════════════════════════════╗"
 echo "║  macOS Distribution Pipeline             ║"
@@ -63,7 +64,7 @@ echo ""
 # ── Step 2 ────────────────────────────────────────────────────────────────────
 echo "──── Step 2: Package DMG ────"
 VOLNAME="$(basename "$APP_PATH" .app)"
-DMG_ARGS=(--app-path "$APP_PATH" --output "$OUTPUT_DMG" --volume-name "$VOLNAME")
+DMG_ARGS=(--app-path "$APP_PATH" --volume-name "$VOLNAME")
 [[ -n "$IDENTITY" ]] && DMG_ARGS+=(--identity "$IDENTITY")
 "$SCRIPT_DIR/package_dmg.sh" "${DMG_ARGS[@]}"
 echo ""
