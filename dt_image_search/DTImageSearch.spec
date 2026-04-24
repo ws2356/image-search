@@ -22,6 +22,10 @@ build_vars_path = Path(tempfile.gettempdir()) / f"dtis_build_vars_{build_type}"
 build_vars_path.write_text(f"build_type={build_type}\n", encoding="utf-8")
 datas += [(str(build_vars_path), "dt_image_search/resources")]
 
+# UPX is disabled on macOS: UPX modifies Mach-O headers in a way that breaks
+# code signatures and notarization.  Enable it only on non-macOS platforms.
+upx_enabled = sys.platform != "darwin"
+
 a = Analysis(
     ['__main__.py'],
     pathex=[],
@@ -49,8 +53,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    console=False,
+    upx=upx_enabled,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -62,7 +65,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=upx_enabled,
     upx_exclude=[],
     name=app_name,
 )
