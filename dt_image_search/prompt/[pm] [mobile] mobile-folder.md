@@ -1,4 +1,4 @@
-Create a PM spec for the new mobile companion app (tentatively named "Album Transporter") to be built that work with the desktop app to transfer photos and videos from mobile to desktop. Refer to the existing [PM spec - image search](../specs/%5Bpm%5D%20%5Bpc%5D%20image-search.md) and [PM spec - mobile folder](../specs/%5Bpm%5D%20%5Bpc%5D%20mobile-folder.md) for the desktop app for background and context.
+Create a PM spec for the new AuBackup app (tentatively named "Album Transporter") to be built that work with the desktop app to transfer photos and videos from mobile to desktop. Refer to the existing [PM spec - image search](../specs/%5Bpm%5D%20%5Bpc%5D%20image-search.md) and [PM spec - mobile folder](../specs/%5Bpm%5D%20%5Bpc%5D%20mobile-folder.md) for the desktop app for background and context.
 
 ## Entry Points
 - PC first flow: The user initiate `Add Folder` or `Reconnect` flow from PC and shows the QR code page. Then user can scan the QR code with either system camera or the in-app camera in the Album Transporter app to kick off the backup and indexing process.

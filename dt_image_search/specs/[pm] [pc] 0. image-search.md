@@ -1,5 +1,5 @@
 ## Product Overview
-This image search app features a local image indexing and search engine built with OpenCLIP and FAISS, wrapped in a PySide6 desktop application. It allows users to quickly find images on their local machine based on visual similarity. Basic image viewing and management features are included.
+This image search app (officially renamed to `AuSearch`) features a local image indexing and search engine built with OpenCLIP and FAISS, wrapped in a PySide6 desktop application. It allows users to quickly find images on their local machine based on visual similarity. Basic image viewing and management features are included.
 ### The main UI components are:
 - **Folder Tree View**: Displays list of folders being indexed.
     - Bottom of the view has an "Add Folder" button to select new folders for indexing.

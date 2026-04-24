@@ -61,7 +61,7 @@ PRD: Mobile Folder
 3.3 Role-based access
 
  - Desktop user: Can choose the source type, select a parent destination path, initiate pairing, start reconnect flows, and view transfer state.
- - Paired mobile companion app: Can request device media permissions, scan the QR code, participate in authenticated pairing, enumerate eligible media, and send media only after explicit OS-level and in-app consent.
+ - Paired AuBackup app: Can request device media permissions, scan the QR code, participate in authenticated pairing, enumerate eligible media, and send media only after explicit OS-level and in-app consent.
  - Telemetry service (optional): May receive aggregated operational metrics such as session start, pairing outcome, transport type, time to first transferred item, and failure category, but must never receive media content, thumbnails, filenames, full paths, or raw 
 file hashes.
 
@@ -149,4 +149,4 @@ visible with a reconnect path, so the user can continue later without starting o
 8. Corner cases and constraints
  - The same desktop may run multiple mobile backup sessions concurrently.
  - A device may reconnect over a different transport channel than the previous session.
- - Users can stop the backup process only from the mobile companion app, which will not stop desktop indexing of already transferred items.
+ - Users can stop the backup process only from the AuBackup app, which will not stop desktop indexing of already transferred items.

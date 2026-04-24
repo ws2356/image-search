@@ -1,9 +1,9 @@
-# PRD: Mobile Folder (Mobile Companion App)
+# PRD: Mobile Folder (AuBackup App)
 
 ## 1. Executive Summary
 
 - **Problem Statement**: The desktop product can already index local folders, but mobile users still face a manual export-and-transfer step before their photos and videos become searchable. That extra step makes first-time setup fragile and makes repeat backups easy to postpone or abandon.
-- **Proposed Solution**: Build a mobile companion app, tentatively named **Album Transporter**, that pairs with the desktop app through QR scanning and performs secure local-only transfer of the phone's eligible media library to the desktop-managed mobile folder. The mobile app should optimize for reliable full-library backup, clear interruption recovery, and transparent communication about permission, battery, or transport limitations.
+- **Proposed Solution**: Build a AuBackup app, tentatively named **Album Transporter**, that pairs with the desktop app through QR scanning and performs secure local-only transfer of the phone's eligible media library to the desktop-managed mobile folder. The mobile app should optimize for reliable full-library backup, clear interruption recovery, and transparent communication about permission, battery, or transport limitations.
 - **Success Criteria**:
   - **Draft KPI**: At least 85% of mobile sessions that complete QR pairing transfer the first eligible item within 2 minutes on USB and within 4 minutes on Wi-Fi LAN.
   - **Draft KPI**: At least 95% of interrupted sessions that were previously paired can resume through reconnect without requiring a brand-new Add Folder setup.

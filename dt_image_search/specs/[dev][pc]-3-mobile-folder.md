@@ -4,7 +4,7 @@ Status: Draft v0.2 (iteration 2, roadmap and schema feedback applied)
 
 ## 1. Purpose
 
-This document defines the desktop-side design for Mobile Folder on PC, based on the desktop PRD, the mobile companion PRD, the provided UI mockups, and the mobile-folder feature roadmap.
+This document defines the desktop-side design for Mobile Folder on PC, based on the desktop PRD, the AuBackup PRD, the provided UI mockups, and the mobile-folder feature roadmap.
 
 This draft uses the roadmap as the implementation sequence when it differs from the PRD priority ordering:
 
