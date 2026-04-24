@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from importlib.resources import as_file, files
 
 from PySide6.QtCore import QRect, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPixmap
 from PySide6.QtWidgets import QAbstractItemView, QStyle, QStyleOptionViewItem, QStyledItemDelegate
 
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
@@ -11,6 +12,9 @@ from dt_image_search.base.FolderTreeModel import FolderTreeModel
 _TREE_DEFAULT_ROW_BACKGROUND_COLOR = QColor("#FFFFFF")
 _TREE_SELECTED_ROW_BACKGROUND_COLOR = QColor("#E8F0FD")
 _TREE_ROW_DIVIDER_COLOR = QColor("#D8E6FB")
+_IOS_PLATFORM_ICON_FILENAME = "ios_bitten_apple_gray.png"
+_IOS_PLATFORM_ICON_CACHE: QPixmap | None = None
+_IOS_PLATFORM_ICON_LOAD_ATTEMPTED = False
 
 
 class FolderTreeItemDelegate(QStyledItemDelegate):
@@ -100,7 +104,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
 
         content_rect = option.rect.adjusted(0, 3, -8, -4)
-        icon_text = _platform_icon(platform)
+        icon_pixmap = _platform_icon_pixmap(platform)
 
         title_font = QFont(option.font)
         title_font.setPointSize(max(title_font.pointSize(), 10))
@@ -109,10 +113,21 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         painter.setPen(QColor("#1A1A1A"))
 
         title_rect = QRect(content_rect.left(), content_rect.top(), content_rect.width(), 18)
+        if icon_pixmap is not None:
+            icon_size = 16
+            icon_rect = QRect(content_rect.left(), title_rect.center().y() - (icon_size // 2), icon_size, icon_size)
+            scaled_icon = icon_pixmap.scaled(icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            icon_x = icon_rect.left() + max((icon_rect.width() - scaled_icon.width()) // 2, 0)
+            icon_y = icon_rect.top() + max((icon_rect.height() - scaled_icon.height()) // 2, 0)
+            painter.drawPixmap(icon_x, icon_y, scaled_icon)
+            title_rect.setLeft(icon_rect.right() + 5)
+            title_with_icon = title_text
+        else:
+            icon_text = _platform_icon(platform)
+            title_with_icon = f"{icon_text} {title_text}".strip()
         if transfer_state == "transferring":
             badge_rect = self._draw_transferring_badge(painter, content_rect)
             title_rect.setRight(badge_rect.left() - 6)
-        title_with_icon = f"{icon_text} {title_text}".strip()
         elided_title = QFontMetrics(title_font).elidedText(title_with_icon, Qt.ElideRight, max(title_rect.width(), 0))
         painter.drawText(title_rect, Qt.AlignLeft | Qt.AlignVCenter, elided_title)
 
@@ -282,3 +297,28 @@ def _platform_icon(platform: str) -> str:
 
 def _local_folder_icon() -> str:
     return "\U0001F4C1"
+
+
+def _platform_icon_pixmap(platform: str) -> QPixmap | None:
+    normalized_platform = platform.strip().lower()
+    if normalized_platform != "ios":
+        return None
+
+    global _IOS_PLATFORM_ICON_LOAD_ATTEMPTED
+    global _IOS_PLATFORM_ICON_CACHE
+
+    if _IOS_PLATFORM_ICON_LOAD_ATTEMPTED:
+        return _IOS_PLATFORM_ICON_CACHE
+
+    _IOS_PLATFORM_ICON_LOAD_ATTEMPTED = True
+    resource = files("dt_image_search").joinpath("resources", _IOS_PLATFORM_ICON_FILENAME)
+    if not resource.is_file():
+        return None
+
+    with as_file(resource) as resource_path:
+        loaded_icon = QPixmap(str(resource_path))
+    if loaded_icon.isNull():
+        return None
+
+    _IOS_PLATFORM_ICON_CACHE = loaded_icon
+    return _IOS_PLATFORM_ICON_CACHE
