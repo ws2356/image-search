@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0071)file:///Users/ws2356/dev/image-search-test/web/src/index.html#downloads -->
+<!-- saved from url=(0069)file:///Users/ws2356/dev/image-search-test/web/src/index.html#privacy -->
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -8,20 +8,17 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #08101d;
       --panel: rgba(15, 22, 36, 0.78);
       --line: rgba(255, 255, 255, 0.1);
       --text: #f5f8fc;
       --muted: #a4b3c9;
       --brand-a: #007aff;
       --brand-b: #34aadc;
-      --brand-c: #0055d4;
       --success: #30d158;
       --warn: #ff9f0a;
       --shadow: 0 28px 60px rgba(0, 0, 0, 0.35);
       --radius-xl: 28px;
       --radius-lg: 22px;
-      --radius-md: 16px;
     }
 
     * {
@@ -109,6 +106,7 @@
 
     .topnav {
       display: flex;
+      flex-wrap: wrap;
       gap: 14px;
       color: var(--muted);
       font-size: 14px;
@@ -119,8 +117,7 @@
     }
 
     .hero,
-    .download,
-    .shot,
+    .screenshots-panel,
     .privacy-panel {
       border: 1px solid var(--line);
       border-radius: var(--radius-xl);
@@ -134,34 +131,11 @@
       margin-bottom: 28px;
     }
 
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 13px;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-    }
-
-    .eyebrow::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-    }
-
     h1 {
-      margin: 18px 0 16px;
+      margin: 0 0 16px;
       font-size: clamp(38px, 7vw, 64px);
       line-height: 1.03;
       letter-spacing: -0.03em;
-      max-width: 10ch;
     }
 
     .lead {
@@ -173,17 +147,17 @@
     }
 
     .section {
-      padding-top: 8px;
       margin-top: 28px;
+      scroll-margin-top: 108px;
     }
 
     .section__intro {
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
 
     .section__intro h2 {
-      margin: 12px 0 10px;
-      font-size: clamp(30px, 4vw, 42px);
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 40px);
       line-height: 1.08;
       letter-spacing: -0.03em;
     }
@@ -195,101 +169,72 @@
       line-height: 1.75;
     }
 
-    .downloads {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 18px;
+    .platform-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
     }
 
-    .download,
-    .privacy-panel {
-      padding: 24px;
-    }
-
-    .download h3,
-    .privacy-panel h2 {
-      margin: 0 0 10px;
-      font-size: 22px;
-      line-height: 1.2;
-    }
-
-    .download p,
-    .privacy-panel p {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.75;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.06);
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .pill::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: currentColor;
-    }
-
-    .pill--live {
-      color: #d1fae5;
-      background: rgba(48, 209, 88, 0.12);
-    }
-
-    .pill--pending {
-      color: #fde68a;
-      background: rgba(255, 159, 10, 0.12);
-    }
-
-    .button {
+    .platform-link {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 48px;
-      padding: 0 18px;
-      margin-top: 18px;
-      border-radius: 14px;
+      min-height: 52px;
+      min-width: 136px;
+      padding: 0 20px;
+      border-radius: 16px;
       border: 1px solid transparent;
       background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
       color: #06111c;
       font-weight: 700;
-      transition: transform 0.16s ease, opacity 0.16s ease;
+      transition: transform 0.16s ease, opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease;
     }
 
-    .button:hover {
+    .platform-link:hover {
       transform: translateY(-1px);
     }
 
-    .button--muted {
+    .platform-link--muted {
       background: rgba(255, 255, 255, 0.06);
       border-color: var(--line);
       color: var(--muted);
     }
 
-    .button:disabled {
-      pointer-events: none;
-      opacity: 0.58;
-      filter: saturate(0.75);
+    .platform-link--live::before,
+    .platform-link--muted::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      margin-right: 10px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    .platform-link--live::before {
+      color: var(--success);
+    }
+
+    .platform-link--muted::before {
+      color: var(--warn);
+    }
+
+    .screenshots-panel,
+    .privacy-panel {
+      padding: 24px;
     }
 
     .shots {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 18px;
+      margin-top: 18px;
     }
 
     .shot {
       overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .shot__frame {
@@ -348,6 +293,33 @@
       line-height: 1.6;
     }
 
+    .privacy-panel h2 {
+      margin: 0 0 18px;
+      font-size: clamp(28px, 4vw, 40px);
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+    }
+
+    .privacy-panel h3 {
+      margin: 20px 0 8px;
+      font-size: 18px;
+    }
+
+    .privacy-panel p,
+    .privacy-panel li {
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    .privacy-panel p {
+      margin: 0 0 10px;
+    }
+
+    .privacy-panel ul {
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }
+
     .footer {
       display: flex;
       align-items: center;
@@ -361,10 +333,6 @@
     }
 
     @media (max-width: 980px) {
-      .downloads {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
       .shots {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -377,19 +345,19 @@
 
       .topbar {
         position: static;
-        flex-wrap: wrap;
+        flex-direction: column;
+        align-items: flex-start;
       }
 
-      .topnav,
-      .downloads,
+      .platform-links,
       .shots {
         grid-template-columns: 1fr;
       }
 
       .hero,
-      .download,
-      .shot,
-      .privacy-panel {
+      .screenshots-panel,
+      .privacy-panel,
+      .shot {
         border-radius: 24px;
       }
 
@@ -419,130 +387,123 @@
 
     <main id="top">
       <section class="hero">
-        
         <h1 data-en="AuSearch &amp; AuBackup" data-zh="AuSearch 与 AuBackup">AuSearch &amp; AuBackup</h1>
         <p class="lead" data-en="Use AuSearch to find local images with AI-powered similarity search. Use AuBackup to back up your media files on Mobile phone to your PC fast, secure and searchable by AuSearch." data-zh="使用 AuSearch 通过 AI 相似检索查找本地图片。使用 AuBackup 可将手机中的媒体文件快速、安全地备份到电脑，并让这些内容可被 AuSearch 检索。">Use AuSearch to find local images with AI-powered similarity search. Use AuBackup to back up your media files on Mobile phone to your PC fast, secure and searchable by AuSearch.</p>
       </section>
 
       <section id="downloads" class="section">
         <div class="section__intro">
+          <h2 data-en="Downloads" data-zh="下载">Downloads</h2>
           
-          <h2 data-en="Download links" data-zh="下载链接">Download links</h2>
-          <p data-en="Official client links remain in one place for desktop and mobile." data-zh="桌面端与移动端的官方入口统一展示在这里。">Official client links remain in one place for desktop and mobile.</p>
         </div>
 
-        <div class="downloads">
-          <article class="download">
-            <span class="pill pill--live" data-en="Live now" data-zh="现已上线">Live now</span>
-            <h3 data-en="AuSearch for Windows" data-zh="AuSearch Windows 版">AuSearch for Windows</h3>
-            <p data-en="Official Microsoft Store listing for the current Windows release." data-zh="当前 Windows 版本的官方 Microsoft Store 页面。">Official Microsoft Store listing for the current Windows release.</p>
-            <a class="button" href="https://apps.microsoft.com/detail/9n5n8gvnrzdn" target="_blank" rel="noreferrer" data-en="Get it from Microsoft Store" data-zh="从 Microsoft Store 获取">Get it from Microsoft Store</a>
-          </article>
-
-          <article class="download">
-            <span class="pill pill--pending" data-en="Link pending" data-zh="链接待补充">Link pending</span>
-            <h3 data-en="AuSearch for macOS" data-zh="AuSearch macOS 版">AuSearch for macOS</h3>
-            <p data-en="The direct macOS package slot is reserved here for the public installer." data-zh="这里预留了 macOS 公开安装包的官方下载位置。">The direct macOS package slot is reserved here for the public installer.</p>
-            <button class="button button--muted" type="button" disabled="" data-en="macOS version coming soon" data-zh="macOS 版本即将推出">macOS version coming soon</button>
-          </article>
-
-          <article class="download">
-            <span class="pill pill--pending" data-en="Link pending" data-zh="链接待补充">Link pending</span>
-            <h3 data-en="AuBackup for iPhone" data-zh="AuBackup iPhone 版">AuBackup for iPhone</h3>
-            <p data-en="The App Store slot is ready and can be activated as soon as the official listing is available." data-zh="App Store 位置已经预留，官方页面上线后即可启用。">The App Store slot is ready and can be activated as soon as the official listing is available.</p>
-            <button class="button button--muted" type="button" disabled="" data-en="App Store link coming soon" data-zh="App Store 链接即将补充">App Store link coming soon</button>
-          </article>
-
-          <article class="download">
-            <span class="pill pill--pending" data-en="In development" data-zh="开发中">In development</span>
-            <h3 data-en="Android" data-zh="Android">Android</h3>
-            <p data-en="Android support stays visible on the site as an upcoming platform." data-zh="Android 作为即将支持的平台，保留在官网中展示。">Android support stays visible on the site as an upcoming platform.</p>
-            <button class="button button--muted" type="button" disabled="" data-en="Coming soon" data-zh="即将推出">Coming soon</button>
-          </article>
+        <div class="platform-links">
+          <a class="platform-link platform-link--live" href="https://apps.microsoft.com/detail/9n5n8gvnrzdn" target="_blank" rel="noreferrer" data-en="Windows" data-zh="Windows" data-title-en="Open the Microsoft Store listing" data-title-zh="打开 Microsoft Store 页面" title="Open the Microsoft Store listing">Windows</a>
+          <span class="platform-link platform-link--muted" data-en="macOS" data-zh="macOS" data-title-en="Coming soon" data-title-zh="即将推出" title="Coming soon">macOS</span>
+          <span class="platform-link platform-link--muted" data-en="iPhone" data-zh="iPhone" data-title-en="Coming soon" data-title-zh="即将推出" title="Coming soon">iPhone</span>
+          <span class="platform-link platform-link--muted" data-en="Android" data-zh="Android" data-title-en="Coming soon" data-title-zh="即将推出" title="Coming soon">Android</span>
         </div>
       </section>
 
       <section id="screenshots" class="section">
-        <div class="section__intro">
-          
-          <h2 data-en="Preview" data-zh="预览">Preview</h2>
-          <p data-en="Drop six files into web/src/assets/screenshots using the default filenames below and the placeholders will be replaced automatically." data-zh="将六张截图按下列默认文件名放入 web/src/assets/screenshots 后，占位图会自动被替换。">Drop six files into web/src/assets/screenshots using the default filenames below and the placeholders will be replaced automatically.</p>
-        </div>
+        <div class="screenshots-panel">
+          <div class="section__intro">
+            <h2 data-en="Preview" data-zh="预览">Preview</h2>
+            
+          </div>
 
-        <div class="shots">
-          <figure class="shot">
-            <div class="shot__frame">
-              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-1.png" alt="AuSearch desktop screenshot 1" loading="lazy">
-              <div class="shot__placeholder">
-                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
-                <strong class="shot__filename">ausearch-desktop-1.png</strong>
+          <div class="shots">
+            <figure class="shot">
+              <div class="shot__frame">
+                <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-1.png" alt="AuSearch desktop screenshot 1" loading="lazy">
+                <div class="shot__placeholder">
+                  <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
+                  <strong class="shot__filename">ausearch-desktop-1.png</strong>
+                </div>
               </div>
-            </div>
-            <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
-          </figure>
+              <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
+            </figure>
 
-          <figure class="shot">
-            <div class="shot__frame">
-              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-2.png" alt="AuSearch desktop screenshot 2" loading="lazy">
-              <div class="shot__placeholder">
-                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
-                <strong class="shot__filename">ausearch-desktop-2.png</strong>
+            <figure class="shot">
+              <div class="shot__frame">
+                <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-2.png" alt="AuSearch desktop screenshot 2" loading="lazy">
+                <div class="shot__placeholder">
+                  <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
+                  <strong class="shot__filename">ausearch-desktop-2.png</strong>
+                </div>
               </div>
-            </div>
-            <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
-          </figure>
+              <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
+            </figure>
 
-          <figure class="shot">
-            <div class="shot__frame">
-              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-3.png" alt="AuSearch desktop screenshot 3" loading="lazy">
-              <div class="shot__placeholder">
-                <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
-                <strong class="shot__filename">ausearch-desktop-3.png</strong>
+            <figure class="shot">
+              <div class="shot__frame">
+                <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/ausearch-desktop-3.png" alt="AuSearch desktop screenshot 3" loading="lazy">
+                <div class="shot__placeholder">
+                  <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
+                  <strong class="shot__filename">ausearch-desktop-3.png</strong>
+                </div>
               </div>
-            </div>
-            <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
-          </figure>
+              <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
+            </figure>
 
-          <figure class="shot">
-            <div class="shot__frame">
-              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-1.png" alt="AuBackup iPhone screenshot 1" loading="lazy">
-              <div class="shot__placeholder">
-                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
-                <strong class="shot__filename">aubackup-ios-1.png</strong>
+            <figure class="shot">
+              <div class="shot__frame">
+                <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-1.png" alt="AuBackup iPhone screenshot 1" loading="lazy">
+                <div class="shot__placeholder">
+                  <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
+                  <strong class="shot__filename">aubackup-ios-1.png</strong>
+                </div>
               </div>
-            </div>
-            <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
-          </figure>
+              <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
+            </figure>
 
-          <figure class="shot">
-            <div class="shot__frame">
-              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-2.png" alt="AuBackup iPhone screenshot 2" loading="lazy">
-              <div class="shot__placeholder">
-                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
-                <strong class="shot__filename">aubackup-ios-2.png</strong>
+            <figure class="shot">
+              <div class="shot__frame">
+                <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-2.png" alt="AuBackup iPhone screenshot 2" loading="lazy">
+                <div class="shot__placeholder">
+                  <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
+                  <strong class="shot__filename">aubackup-ios-2.png</strong>
+                </div>
               </div>
-            </div>
-            <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
-          </figure>
+              <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
+            </figure>
 
-          <figure class="shot">
-            <div class="shot__frame">
-              <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-3.png" alt="AuBackup iPhone screenshot 3" loading="lazy">
-              <div class="shot__placeholder">
-                <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
-                <strong class="shot__filename">aubackup-ios-3.png</strong>
+            <figure class="shot">
+              <div class="shot__frame">
+                <img src="file:///Users/ws2356/dev/image-search-test/web/src/assets/screenshots/aubackup-ios-3.png" alt="AuBackup iPhone screenshot 3" loading="lazy">
+                <div class="shot__placeholder">
+                  <span data-en="AuBackup iPhone preview" data-zh="AuBackup iPhone 预览">AuBackup iPhone preview</span>
+                  <strong class="shot__filename">aubackup-ios-3.png</strong>
+                </div>
               </div>
-            </div>
-            <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
-          </figure>
+              <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
+            </figure>
+          </div>
         </div>
       </section>
 
       <section id="privacy" class="section">
         <article class="privacy-panel">
-          
-          <h2 data-en="Simple and local-first" data-zh="简洁且以本地为先">Simple and local-first</h2>
-          <p data-en="This website is a simple official distribution page. It highlights local workflows, direct downloads, and clear store destinations. Final macOS and iPhone links will be enabled after their public release links are confirmed." data-zh="本网站是一个简洁的官方分发页面，重点说明本地工作流、直接下载入口和明确的商店去向。macOS 与 iPhone 的正式链接会在公开发布地址确认后启用。">This website is a simple official distribution page. It highlights local workflows, direct downloads, and clear store destinations. Final macOS and iPhone links will be enabled after their public release links are confirmed.</p>
+          <h2 data-en="Privacy Notice" data-zh="隐私说明">Privacy Notice</h2>
+
+          <h3 data-en="1. Scope" data-zh="1. 适用范围">1. Scope</h3>
+          <p data-en="This notice applies to the AuSearch and AuBackup official website and to public distribution of the AuSearch desktop app and the AuBackup mobile app. It explains the kinds of data that may be processed when you visit this site, download the apps, or use product features." data-zh="本说明适用于 AuSearch 与 AuBackup 官方网站，以及 AuSearch 桌面应用和 AuBackup 移动应用的公开分发场景。它说明当你访问本站、下载应用或使用相关功能时，可能涉及的数据处理方式。">This notice applies to the AuSearch and AuBackup official website and to public distribution of the AuSearch desktop app and the AuBackup mobile app. It explains the kinds of data that may be processed when you visit this site, download the apps, or use product features.</p>
+
+          <h3 data-en="2. Website data" data-zh="2. 网站数据">2. Website data</h3>
+          <p data-en="This website is designed as a simple product and download page. It does not ask you to create an account, does not provide a contact form, and is not intended to collect personal profile data directly from you through page fields. As with most websites, the hosting environment or delivery network may still process basic technical data such as IP address, browser type, device information, requested pages, timestamps, and standard server logs to deliver the site, keep it secure, and diagnose service issues." data-zh="本网站是一个简洁的产品与下载页面。它不要求你创建账号，不提供联系表单，也不计划通过页面字段直接收集你的个人资料。与大多数网站一样，托管环境或内容分发网络仍可能出于页面交付、安全保障和故障排查的目的，处理基础技术数据，例如 IP 地址、浏览器类型、设备信息、访问页面、访问时间以及标准服务器日志。">This website is designed as a simple product and download page. It does not ask you to create an account, does not provide a contact form, and is not intended to collect personal profile data directly from you through page fields. As with most websites, the hosting environment or delivery network may still process basic technical data such as IP address, browser type, device information, requested pages, timestamps, and standard server logs to deliver the site, keep it secure, and diagnose service issues.</p>
+
+          <h3 data-en="3. App data and local content" data-zh="3. 应用数据与本地内容">3. App data and local content</h3>
+          <p data-en="AuSearch is intended to help you search local images using on-device or locally managed workflows. AuBackup is intended to help you move or back up media files from a mobile phone to a PC. Depending on how you use the apps, they may access local files, folders, media libraries, transfer metadata, and device-level permissions that are necessary to complete search, transfer, indexing, preview, or backup tasks. The purpose of this access is to provide the product features you request." data-zh="AuSearch 的目标是通过设备端或本地管理流程帮助你搜索本地图片。AuBackup 的目标是帮助你将手机中的媒体文件传输或备份到电脑。根据你的使用方式，应用可能访问完成搜索、传输、索引、预览或备份任务所需的本地文件、文件夹、媒体库、传输元数据和系统权限。此类访问仅用于实现你主动使用的产品功能。">AuSearch is intended to help you search local images using on-device or locally managed workflows. AuBackup is intended to help you move or back up media files from a mobile phone to a PC. Depending on how you use the apps, they may access local files, folders, media libraries, transfer metadata, and device-level permissions that are necessary to complete search, transfer, indexing, preview, or backup tasks. The purpose of this access is to provide the product features you request.</p>
+          <p data-en="Unless a specific feature clearly tells you otherwise, your local media files are meant to remain under your control and within your own devices, storage locations, or selected transfer paths. You should review device permission prompts carefully and only grant access that matches your intended use." data-zh="除非某项功能明确另行说明，你的本地媒体文件应始终由你控制，并保留在你自己的设备、存储位置或你主动选择的传输路径中。请仔细查看系统权限提示，并仅授予与你使用目的相符的访问权限。">Unless a specific feature clearly tells you otherwise, your local media files are meant to remain under your control and within your own devices, storage locations, or selected transfer paths. You should review device permission prompts carefully and only grant access that matches your intended use.</p>
+
+          <h3 data-en="4. App stores and third parties" data-zh="4. 应用商店与第三方">4. App stores and third parties</h3>
+          <p data-en="If you use Microsoft Store, Apple App Store, or any future distribution platform to obtain the apps, those platforms may collect and process data under their own privacy terms. That may include account information, payment data, download history, device identifiers, crash reports, store analytics, or fraud-prevention records. Their handling of data is governed by their own policies rather than this site alone." data-zh="如果你通过 Microsoft Store、Apple App Store 或未来的其他分发平台获取应用，这些平台可能会依据各自的隐私条款收集和处理数据。这可能包括账号信息、支付数据、下载记录、设备标识符、崩溃报告、商店分析数据或反欺诈记录。此类数据处理受相应平台自身政策约束，而不只由本站决定。">If you use Microsoft Store, Apple App Store, or any future distribution platform to obtain the apps, those platforms may collect and process data under their own privacy terms. That may include account information, payment data, download history, device identifiers, crash reports, store analytics, or fraud-prevention records. Their handling of data is governed by their own policies rather than this site alone.</p>
+
+          <h3 data-en="5. Sharing, retention, and security" data-zh="5. 共享、保存与安全">5. Sharing, retention, and security</h3>
+          <p data-en="Personal data is not sold through this website. Basic technical logs may be retained for security, reliability, troubleshooting, or legal compliance. Any retention period should be limited to what is reasonably necessary for those purposes. Reasonable technical and organizational measures should be used to protect systems and distribution channels, but no internet-based service can promise absolute security." data-zh="本网站不会出售个人数据。基础技术日志可能会因安全、稳定性、故障排查或法律合规要求而保留。其保存期限应以实现这些目的所合理必要的范围为限。系统和分发渠道应采取合理的技术与管理措施进行保护，但任何基于互联网的服务都无法承诺绝对安全。">Personal data is not sold through this website. Basic technical logs may be retained for security, reliability, troubleshooting, or legal compliance. Any retention period should be limited to what is reasonably necessary for those purposes. Reasonable technical and organizational measures should be used to protect systems and distribution channels, but no internet-based service can promise absolute security.</p>
+
+          <h3 data-en="6. Children and updates" data-zh="6. 未成年人与更新">6. Children and updates</h3>
+          <p data-en="This website and these products are not intended to knowingly collect personal data from children in violation of applicable law. If the distribution model, analytics setup, support workflow, or in-app network behavior changes materially, this notice should be updated to reflect the new handling." data-zh="本网站和这些产品无意以违反适用法律的方式主动收集未成年人的个人数据。如果分发模式、统计方案、支持流程或应用内网络行为发生实质性变化，本说明应同步更新，以反映新的数据处理情况。">This website and these products are not intended to knowingly collect personal data from children in violation of applicable law. If the distribution model, analytics setup, support workflow, or in-app network behavior changes materially, this notice should be updated to reflect the new handling.</p>
         </article>
       </section>
     </main>
@@ -560,6 +521,10 @@
 
       document.querySelectorAll("[data-en]").forEach((node) => {
         node.textContent = useZh ? node.dataset.zh : node.dataset.en;
+      });
+
+      document.querySelectorAll("[data-title-en]").forEach((node) => {
+        node.title = useZh ? node.dataset.titleZh : node.dataset.titleEn;
       });
 
       document.title = useZh
