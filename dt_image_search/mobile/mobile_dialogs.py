@@ -37,7 +37,10 @@ from dt_image_search.mobile.mobile_pairing_session import (
 )
 from dt_image_search.telemetry.telemetry_client import log
 
-import qrcode
+try:
+    import qrcode
+except Exception:
+    qrcode = None
 
 
 def _endpoint_urls_detail(endpoint_urls: tuple[str, ...]) -> str:
