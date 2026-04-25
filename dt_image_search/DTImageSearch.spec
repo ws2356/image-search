@@ -13,8 +13,6 @@ datas += collect_data_files("open_clip", includes=["bpe_simple_vocab_16e6.txt.gz
 datas += copy_metadata('hf_xet')
 heif_datas, heif_binaries, heif_hiddenimports = collect_all("pillow_heif")
 datas += heif_datas
-pmd_datas, pmd_binaries, pmd_hiddenimports = collect_all("pymobiledevice3")
-datas += pmd_datas
 
 build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
 if build_type not in {"prod", "dev"}:
@@ -32,12 +30,16 @@ upx_enabled = sys.platform != "darwin"
 a = Analysis(
     ['__main__.py'],
     pathex=[],
-    binaries=heif_binaries + pmd_binaries,
+    binaries=heif_binaries,
     datas=datas,
     hiddenimports=[
         'hf_xet',
+        # Import only the modules the desktop app uses. collect_all("pymobiledevice3")
+        # also bundles sslpsk_pmd3's OpenSSL dylibs, which can shadow Python's
+        # own libcrypto/libssl inside the app bundle and break import ssl.
+        'pymobiledevice3.exceptions',
+        'pymobiledevice3.usbmux',
         *heif_hiddenimports,
-        *pmd_hiddenimports,
     ],
     hookspath=[],
     hooksconfig={},
