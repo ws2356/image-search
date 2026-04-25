@@ -25,12 +25,15 @@ let package = Package(
                 .product(name: "Factory", package: "Factory"),
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
                 .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-                .product(name: "StdoutExporter", package: "opentelemetry-swift-core"),
             ]
         ),
         .testTarget(
             name: "AlbumTransporterKitTests",
-            dependencies: ["AlbumTransporterKit"]
+            dependencies: [
+                "AlbumTransporterKit",
+                .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+                .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+            ]
         ),
     ]
 )

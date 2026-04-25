@@ -343,6 +343,101 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(cleanupCallCount, 1)
         XCTAssertTrue(model.completionSummary.message.contains("Moved 3 transferred items to Recently Removed"))
     }
+
+    func test_begin_pairing_records_invalid_qr_failure_reason() async {
+        let telemetryClient = RecordingTelemetryClient()
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: FailingQRCodePayloadDecoder(error: .invalidURL),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            telemetryClient: telemetryClient
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = "not-a-valid-payload"
+        await model.beginPairing()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
+        XCTAssertEqual(
+            failureRecord?.attributes["pairing.failure_reason"],
+            .string("invalid_qr_payload")
+        )
+        XCTAssertEqual(
+            failureRecord?.attributes["pairing.failure_message"],
+            .string(QRCodePayloadDecoderError.invalidURL.message)
+        )
+        XCTAssertEqual(
+            failureRecord?.attributes["app.route"],
+            .string(AppRoute.scanAndPair.rawValue)
+        )
+    }
+
+    func test_start_backup_records_preflight_and_completion_telemetry_context() async {
+        let completedSnapshot = TransferSnapshot(
+            transferredCount: 3,
+            totalCount: 3,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
+            guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
+            isIncompleteLibrary: false
+        )
+        let telemetryClient = RecordingTelemetryClient()
+        let transferService = CleanupTrackingTransferService(completedSnapshot: completedSnapshot)
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: transferService,
+            telemetryClient: telemetryClient
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await model.startBackup()
+        await model.selectRemoveAfterBackupPreferenceAndContinue(true)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let preflightRecord = await telemetryClient.latestRecord(for: .backupPreflightStarted)
+        XCTAssertEqual(
+            preflightRecord?.attributes["permission.media_scope"],
+            .string(PermissionScope.full.rawValue)
+        )
+        XCTAssertEqual(
+            preflightRecord?.attributes["app.route"],
+            .string(AppRoute.permissions.rawValue)
+        )
+
+        let completionRecord = await telemetryClient.latestRecord(for: .transferCompleted)
+        XCTAssertEqual(
+            completionRecord?.attributes["transfer.cleanup_result"],
+            .string("removed")
+        )
+        XCTAssertEqual(
+            completionRecord?.attributes["transfer.cleanup_removed_count"],
+            .int(3)
+        )
+        XCTAssertEqual(
+            completionRecord?.attributes["transfer.total_count"],
+            .int(3)
+        )
+        XCTAssertEqual(
+            completionRecord?.attributes["transfer.transport"],
+            .string(TransferTransport.lan.rawValue)
+        )
+        XCTAssertEqual(
+            completionRecord?.attributes["backup.remove_after_backup_enabled"],
+            .bool(true)
+        )
+    }
 }
 
 private struct StaticPairingService: PairingService {
@@ -374,6 +469,14 @@ private struct StoppedPairingService: PairingService {
 private struct StaticQRCodePayloadDecoder: QRCodePayloadDecoding {
     func decode(scannedValue: String) -> Result<PairingQRCodePayload, QRCodePayloadDecoderError> {
         .success(.demo)
+    }
+}
+
+private struct FailingQRCodePayloadDecoder: QRCodePayloadDecoding {
+    let error: QRCodePayloadDecoderError
+
+    func decode(scannedValue: String) -> Result<PairingQRCodePayload, QRCodePayloadDecoderError> {
+        .failure(error)
     }
 }
 
@@ -414,7 +517,20 @@ private struct StaticTransferService: TransferService {
 }
 
 private actor RecordingTelemetryClient: TelemetryClient {
-    func record(event: MobileTelemetryEvent) async {}
+    private var records: [RecordedTelemetry] = []
+
+    func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
+        records.append(
+            RecordedTelemetry(
+                event: event,
+                attributes: attributes
+            )
+        )
+    }
+
+    func latestRecord(for event: MobileTelemetryEvent) -> RecordedTelemetry? {
+        records.last(where: { $0.event == event })
+    }
 }
 
 private actor PollingTransferService: TransferService {
@@ -556,7 +672,13 @@ private actor SlowTelemetryClient: TelemetryClient {
         self.recordDelay = recordDelay
     }
 
-    func record(event: MobileTelemetryEvent) async {
+    func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
+        _ = attributes
         try? await Task.sleep(for: recordDelay)
     }
+}
+
+private struct RecordedTelemetry: Equatable {
+    let event: MobileTelemetryEvent
+    let attributes: MobileTelemetryAttributes
 }

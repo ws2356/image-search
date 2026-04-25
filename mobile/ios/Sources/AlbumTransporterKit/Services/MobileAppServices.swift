@@ -55,7 +55,13 @@ enum TransferAssetCleanupResult: Equatable, Sendable {
 }
 
 protocol TelemetryClient: Sendable {
-    func record(event: MobileTelemetryEvent) async
+    func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async
+}
+
+extension TelemetryClient {
+    func record(event: MobileTelemetryEvent) async {
+        await record(event: event, attributes: [:])
+    }
 }
 
 enum MobileTelemetryEvent: String, Sendable {
@@ -64,11 +70,29 @@ enum MobileTelemetryEvent: String, Sendable {
     case pairingStarted
     case pairingSucceeded
     case pairingFailed
+    case backupPreflightStarted
+    case mediaAccessPromptShown
+    case mediaAccessContinued
+    case lowBatteryPromptShown
+    case lowBatteryContinued
+    case lowBatteryCanceled
+    case removeAfterBackupPromptShown
+    case removeAfterBackupPreferenceSelected
     case transferStarted
+    case transferStopRequested
     case memoryWarningReceived
     case transferStopped
     case resumeTapped
     case transferCompleted
+}
+
+typealias MobileTelemetryAttributes = [String: MobileTelemetryAttributeValue]
+
+enum MobileTelemetryAttributeValue: Equatable, Sendable {
+    case string(String)
+    case bool(Bool)
+    case int(Int)
+    case double(Double)
 }
 
 enum PairingProtocol {

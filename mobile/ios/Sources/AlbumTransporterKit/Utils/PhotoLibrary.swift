@@ -7,7 +7,6 @@
 
 #if os(iOS)
 import UIKit
-#endif
 import Photos
 import PhotosUI
 
@@ -30,3 +29,4 @@ extension PHPhotoLibrary {
         }
     }
 }
+#endif

@@ -73,7 +73,7 @@ public struct AlbumTransporterRootView: View {
                         await model.selectRemoveAfterBackupPreferenceAndContinue(true)
                     }
                 }
-                Button("Keep", role: .cancel) {
+                Button("Do not remove", role: .cancel) {
                     Task {
                         await model.selectRemoveAfterBackupPreferenceAndContinue(false)
                     }

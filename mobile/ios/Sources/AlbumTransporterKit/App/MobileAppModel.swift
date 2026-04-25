@@ -104,6 +104,12 @@ final class MobileAppModel: ObservableObject {
         case .scanDesktopQRCode:
             await openScanFlow()
         case .resumeBackup:
+            recordTelemetry(
+                .resumeTapped,
+                attributes: [
+                    "resume.pending_item_count": .int(homeSummary.pendingItemCount ?? 0)
+                ]
+            )
             await openScanFlow()
         case .backupPendingItems:
             await startTransfer()
@@ -141,17 +147,24 @@ final class MobileAppModel: ObservableObject {
 
         guard case .success(let payload) = payloadResult else {
             if case .failure(let error) = payloadResult {
+                let failureMessage = error.message
                 pairingStatus = PairingStatus(
                     phase: .failed,
                     backupFlowState: .pendingPairing,
                     desktopName: homeSummary.desktopName,
                     sessionID: nil,
                     transport: nil,
-                    message: error.message
+                    message: failureMessage
                 )
                 applyPairingStatusStateTransition(pairingStatus)
+                recordTelemetry(
+                    .pairingFailed,
+                    attributes: [
+                        "pairing.failure_reason": .string("invalid_qr_payload"),
+                        "pairing.failure_message": .string(failureMessage)
+                    ]
+                )
             }
-            recordTelemetry(.pairingFailed)
             persistSnapshot()
             return
         }
@@ -165,13 +178,24 @@ final class MobileAppModel: ObservableObject {
             homeSummary.primaryAction = .scanDesktopQRCode
             homeSummary.pendingItemCount = nil
             route = .home
-            recordTelemetry(.pairingFailed)
+            recordTelemetry(
+                .pairingFailed,
+                attributes: [
+                    "pairing.failure_reason": .string("desktop_stopped_pairing")
+                ]
+            )
             persistSnapshot()
             return
         }
 
         guard result.phase == .paired else {
-            recordTelemetry(.pairingFailed)
+            recordTelemetry(
+                .pairingFailed,
+                attributes: [
+                    "pairing.failure_reason": .string("unexpected_pairing_phase"),
+                    "pairing.result_phase": .string(result.phase.rawValue)
+                ]
+            )
             return
         }
 
@@ -198,9 +222,16 @@ final class MobileAppModel: ObservableObject {
         isShowingRemoveAfterBackupPrompt = false
         isAwaitingMediaAccessDecision = false
         permissionSummary = await permissionService.loadPermissionSummary()
+        recordTelemetry(.backupPreflightStarted)
         guard permissionSummary.mediaScope == .full else {
             isShowingMediaAccessAlert = true
             isAwaitingMediaAccessDecision = true
+            recordTelemetry(
+                .mediaAccessPromptShown,
+                attributes: [
+                    "permission.excluded_category_present": .bool(permissionSummary.excludedCategoryDescription != nil)
+                ]
+            )
             persistSnapshot()
             return
         }
@@ -214,7 +245,12 @@ final class MobileAppModel: ObservableObject {
         }
         isAwaitingMediaAccessDecision = false
         isShowingMediaAccessAlert = false
+        recordTelemetry(.mediaAccessContinued)
         await continueBackupPreflight()
+    }
+
+    func continueBackupWithCurrentMediaAccess() async {
+        await continueBackupFromMediaAccess()
     }
     
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
@@ -229,6 +265,7 @@ final class MobileAppModel: ObservableObject {
         if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
             isAwaitingLowBatteryDecision = true
+            recordTelemetry(.lowBatteryPromptShown)
             persistSnapshot()
             return
         }
@@ -239,6 +276,7 @@ final class MobileAppModel: ObservableObject {
     private func presentRemoveAfterBackupPrompt() {
         isShowingRemoveAfterBackupPrompt = true
         isAwaitingRemoveAfterBackupDecision = true
+        recordTelemetry(.removeAfterBackupPromptShown)
         persistSnapshot()
     }
 
@@ -248,6 +286,7 @@ final class MobileAppModel: ObservableObject {
         }
         isAwaitingLowBatteryDecision = false
         isShowingLowBatteryWarning = false
+        recordTelemetry(.lowBatteryContinued)
         presentRemoveAfterBackupPrompt()
     }
 
@@ -257,7 +296,8 @@ final class MobileAppModel: ObservableObject {
         }
         isAwaitingLowBatteryDecision = false
         isShowingLowBatteryWarning = false
-        await abortPreflightAndReturnHome()
+        recordTelemetry(.lowBatteryCanceled)
+        await abortPreflightAndReturnHome(reason: "low_battery_declined")
     }
 
     func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async {
@@ -266,12 +306,18 @@ final class MobileAppModel: ObservableObject {
         }
         isAwaitingRemoveAfterBackupDecision = false
         isShowingRemoveAfterBackupPrompt = false
+        recordTelemetry(
+            .removeAfterBackupPreferenceSelected,
+            attributes: [
+                "backup.remove_after_backup_enabled": .bool(isEnabled)
+            ]
+        )
         setRemoveAfterBackupEnabled(isEnabled)
         isRunningPermissionsPreflight = false
         await startTransfer()
     }
 
-    private func abortPreflightAndReturnHome() async {
+    private func abortPreflightAndReturnHome(reason: String) async {
         isRunningPermissionsPreflight = false
         isAwaitingMediaAccessDecision = false
         isAwaitingLowBatteryDecision = false
@@ -294,12 +340,18 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.transferStopped)
         updateHomeSummaryAfterStoppedTransfer()
         route = .home
-        recordTelemetry(.transferStopped)
+        recordTelemetry(
+            .transferStopped,
+            attributes: [
+                "transfer.stop_reason": .string(reason)
+            ]
+        )
         persistSnapshot()
     }
 
     func requestStopTransfer() {
         isShowingStopConfirmation = true
+        recordTelemetry(.transferStopRequested)
     }
 
     func confirmStopTransfer() async {
@@ -311,7 +363,12 @@ final class MobileAppModel: ObservableObject {
         transferStartedAt = nil
         route = .home
 
-        recordTelemetry(.transferStopped)
+        recordTelemetry(
+            .transferStopped,
+            attributes: [
+                "transfer.stop_reason": .string("user_requested")
+            ]
+        )
         persistSnapshot()
     }
 
@@ -350,7 +407,26 @@ final class MobileAppModel: ObservableObject {
         transferStartedAt = nil
         route = .completed
 
-        recordTelemetry(.transferCompleted)
+        var completionAttributes: MobileTelemetryAttributes = [
+            "transfer.transferred_count": .int(transferSnapshot.transferredCount),
+            "transfer.total_count": .int(transferSnapshot.totalCount),
+            "transfer.failed_count": .int(transferSnapshot.failedCount),
+            "transfer.remove_after_backup_enabled": .bool(removeAfterBackupEnabled)
+        ]
+        if let sessionDuration {
+            completionAttributes["transfer.session_duration_seconds"] = .double(sessionDuration)
+        }
+        switch cleanupResult {
+        case .skipped:
+            completionAttributes["transfer.cleanup_result"] = .string("skipped")
+        case .removed(let removedCount):
+            completionAttributes["transfer.cleanup_result"] = .string("removed")
+            completionAttributes["transfer.cleanup_removed_count"] = .int(removedCount)
+        case .failed(let message):
+            completionAttributes["transfer.cleanup_result"] = .string("failed")
+            completionAttributes["transfer.cleanup_failure_message"] = .string(message)
+        }
+        recordTelemetry(.transferCompleted, attributes: completionAttributes)
         persistSnapshot()
     }
 
@@ -390,7 +466,12 @@ final class MobileAppModel: ObservableObject {
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: permissionSummary.mediaScope != .full
         )
-        recordTelemetry(.transferStarted)
+        recordTelemetry(
+            .transferStarted,
+            attributes: [
+                "transfer.is_incomplete_library": .bool(permissionSummary.mediaScope != .full)
+            ]
+        )
         persistSnapshot()
         startTransferProgressPolling()
         transferSnapshot = await transferService.startTransfer(progress: { _ in })
@@ -488,10 +569,58 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
-    private func recordTelemetry(_ event: MobileTelemetryEvent) {
+    private func recordTelemetry(
+        _ event: MobileTelemetryEvent,
+        attributes: MobileTelemetryAttributes = [:]
+    ) {
         let worker = sideEffectWorker
+        var mergedAttributes = telemetryContextAttributes()
+        for (key, value) in attributes {
+            mergedAttributes[key] = value
+        }
         Task.detached(priority: .utility) {
-            await worker.record(event: event)
+            await worker.record(event: event, attributes: mergedAttributes)
+        }
+    }
+
+    private func telemetryContextAttributes() -> MobileTelemetryAttributes {
+        var attributes: MobileTelemetryAttributes = [
+            "app.route": .string(route.rawValue),
+            "home.primary_action": .string(telemetryPrimaryActionName(homeSummary.primaryAction)),
+            "backup.flow_state": .string(pairingStatus.backupFlowState.rawValue),
+            "pairing.phase": .string(pairingStatus.phase.rawValue),
+            "permission.media_scope": .string(permissionSummary.mediaScope.rawValue),
+            "permission.camera_granted": .bool(permissionSummary.cameraGranted),
+            "permission.notifications_granted": .bool(permissionSummary.notificationsGranted),
+            "permission.low_battery_warning_needed": .bool(permissionSummary.lowBatteryWarningNeeded),
+            "permission.is_charging": .bool(permissionSummary.isCharging),
+            "backup.remove_after_backup_enabled": .bool(removeAfterBackupEnabled),
+            "app.has_paired_desktop": .bool(pairingStatus.desktopName?.isEmpty == false),
+            "transfer.transferred_count": .int(transferSnapshot.transferredCount),
+            "transfer.total_count": .int(transferSnapshot.totalCount),
+            "transfer.failed_count": .int(transferSnapshot.failedCount)
+        ]
+        if let transport = pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
+            attributes["transfer.transport"] = .string(transport.rawValue)
+        }
+        if let pendingItemCount = homeSummary.pendingItemCount {
+            attributes["home.pending_item_count"] = .int(pendingItemCount)
+        }
+        if let desktopName = pairingStatus.desktopName, !desktopName.isEmpty {
+            attributes["pairing.desktop_name_present"] = .bool(true)
+            attributes["pairing.desktop_name_length"] = .int(desktopName.count)
+        }
+        return attributes
+    }
+
+    private func telemetryPrimaryActionName(_ action: HomePrimaryAction) -> String {
+        switch action {
+        case .scanDesktopQRCode:
+            return "scan_desktop_qr"
+        case .resumeBackup:
+            return "resume_backup"
+        case .backupPendingItems:
+            return "backup_pending_items"
         }
     }
 
@@ -512,7 +641,12 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func handleMemoryWarningNotification() {
-        recordTelemetry(.memoryWarningReceived)
+        recordTelemetry(
+            .memoryWarningReceived,
+            attributes: [
+                "transfer.is_active": .bool(route == .transfer)
+            ]
+        )
         let transferService = transferService
         Task.detached(priority: .utility) {
             await transferService.handleMemoryWarning()
@@ -590,7 +724,7 @@ actor MobileAppSideEffectWorker {
         await stateStore.saveLaunchSnapshot(snapshot)
     }
 
-    func record(event: MobileTelemetryEvent) async {
-        await telemetryClient.record(event: event)
+    func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
+        await telemetryClient.record(event: event, attributes: attributes)
     }
 }
