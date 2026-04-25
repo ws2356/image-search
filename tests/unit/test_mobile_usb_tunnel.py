@@ -312,16 +312,5 @@ class TestPymobiledevice3UsbTunnelProvider(unittest.TestCase):
         self.assertEqual(usbmux_module.last_select_connection_type, None)
         connected_socket.close()
 
-    def test_missing_pymobiledevice3_raises_unavailable_error(self):
-        with patch(
-            "dt_image_search.mobile.transport.usb_tunnel.importlib.import_module",
-            side_effect=ImportError("No module named pymobiledevice3"),
-        ):
-            provider = Pymobiledevice3UsbTunnelProvider()
-
-            with self.assertRaises(UsbTunnelUnavailableError):
-                provider.list_usb_devices()
-
-
 if __name__ == "__main__":
     unittest.main()

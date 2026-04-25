@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-import importlib
 import inspect
 import socket
 import sys
 from typing import Any, Protocol
+
+import pymobiledevice3.exceptions as _pymd_exceptions
+import pymobiledevice3.usbmux as _pymd_usbmux
 
 
 class UsbTunnelUnavailableError(RuntimeError):
@@ -213,14 +215,7 @@ class Pymobiledevice3UsbTunnelProvider:
         if self._usbmux_module is not None:
             self._ensure_usbmux_stream_compat(self._usbmux_module)
             return self._usbmux_module
-
-        try:
-            self._usbmux_module = importlib.import_module("pymobiledevice3.usbmux")
-        except ImportError as exc:
-            raise UsbTunnelUnavailableError(
-                "Desktop USB transport requires pymobiledevice3 "
-                "(install with `python3 -m pip install pymobiledevice3`).",
-            ) from exc
+        self._usbmux_module = _pymd_usbmux
         self._ensure_usbmux_stream_compat(self._usbmux_module)
         return self._usbmux_module
 
@@ -248,12 +243,7 @@ class Pymobiledevice3UsbTunnelProvider:
     def _require_exceptions_module(self) -> Any:
         if self._exceptions_module is not None:
             return self._exceptions_module
-        try:
-            self._exceptions_module = importlib.import_module("pymobiledevice3.exceptions")
-        except ImportError as exc:
-            raise UsbTunnelUnavailableError(
-                "Desktop USB transport requires pymobiledevice3 exception classes.",
-            ) from exc
+        self._exceptions_module = _pymd_exceptions
         return self._exceptions_module
 
     @staticmethod
