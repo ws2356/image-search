@@ -19,7 +19,7 @@ class TestFolderTreeItemDelegateMobileSubtitle(unittest.TestCase):
         )
         self.assertRegex(subtitle, r"^Backup stopped: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
 
-    def test_subtitle_text_keeps_last_backup_fallback_when_not_stopped(self):
+    def test_subtitle_text_formats_completed_backup_timestamp_when_last_transfer_completed(self):
         subtitle = FolderTreeItemDelegate._subtitle_text(
             transfer_state="",
             transferred_count=0,
@@ -27,7 +27,17 @@ class TestFolderTreeItemDelegateMobileSubtitle(unittest.TestCase):
             last_transfer_status="completed",
             last_transfer_at="2026-04-09T12:34:56+00:00",
         )
-        self.assertEqual(subtitle, "Not backup yet")
+        self.assertRegex(subtitle, r"^Last backup: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+
+    def test_subtitle_text_formats_failed_backup_timestamp(self):
+        subtitle = FolderTreeItemDelegate._subtitle_text(
+            transfer_state="",
+            transferred_count=181,
+            last_backup_at=None,
+            last_transfer_status="failed",
+            last_transfer_at="2026-04-09T12:34:56+00:00",
+        )
+        self.assertRegex(subtitle, r"^Backup failed: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
 
     def test_subtitle_text_prioritizes_transferring_state(self):
         subtitle = FolderTreeItemDelegate._subtitle_text(

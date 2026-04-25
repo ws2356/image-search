@@ -245,17 +245,37 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
             return f"{max(transferred_count, 0)} files transferred"
         if isinstance(last_transfer_status, str) and last_transfer_status == "stopped_by_mobile":
             return _stopped_backup_subtitle(last_transfer_at)
+        if isinstance(last_transfer_status, str) and last_transfer_status == "failed":
+            return _failed_backup_subtitle(last_transfer_at)
+        if isinstance(last_transfer_status, str) and last_transfer_status == "completed":
+            return _completed_backup_subtitle(last_backup_at, last_transfer_at)
         return _last_backup_subtitle(last_backup_at)
 
 
 def _stopped_backup_subtitle(last_transfer_at: object) -> str:
-    if not isinstance(last_transfer_at, str) or not last_transfer_at:
-        return "Backup stopped"
+    return _timestamped_backup_subtitle(
+        last_transfer_at,
+        prefix="Backup stopped",
+        fallback="Backup stopped",
+    )
 
-    parsed_time = _parse_iso_datetime(last_transfer_at)
-    if parsed_time is None:
-        return "Backup stopped"
-    return f"Backup stopped: {parsed_time.strftime('%Y-%m-%d %H:%M:%S')}"
+
+def _failed_backup_subtitle(last_transfer_at: object) -> str:
+    return _timestamped_backup_subtitle(
+        last_transfer_at,
+        prefix="Backup failed",
+        fallback="Backup failed",
+    )
+
+
+def _completed_backup_subtitle(last_backup_at: object, last_transfer_at: object) -> str:
+    if isinstance(last_backup_at, str) and last_backup_at:
+        return _last_backup_subtitle(last_backup_at)
+    return _timestamped_backup_subtitle(
+        last_transfer_at,
+        prefix="Last backup",
+        fallback="Not backup yet",
+    )
 
 
 def _last_backup_subtitle(last_backup_at: object) -> str:
@@ -266,6 +286,21 @@ def _last_backup_subtitle(last_backup_at: object) -> str:
     if parsed_time is None:
         return "Not backup yet"
     return f"Last backup: {parsed_time.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
+def _timestamped_backup_subtitle(
+    iso_value: object,
+    *,
+    prefix: str,
+    fallback: str,
+) -> str:
+    if not isinstance(iso_value, str) or not iso_value:
+        return fallback
+
+    parsed_time = _parse_iso_datetime(iso_value)
+    if parsed_time is None:
+        return fallback
+    return f"{prefix}: {parsed_time.strftime('%Y-%m-%d %H:%M:%S')}"
 
 
 def _parse_iso_datetime(iso_value: str) -> datetime | None:
