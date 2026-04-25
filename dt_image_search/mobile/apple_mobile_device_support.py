@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import base64
 from dataclasses import dataclass
 from importlib.resources import as_file, files
@@ -332,8 +333,6 @@ def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def _run_shell_execute(file_path: str, parameters: str) -> int:
-    import ctypes
-
     return int(
         ctypes.windll.shell32.ShellExecuteW(
             None,

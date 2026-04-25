@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import psutil
 
 PAIRING_ADVERTISED_HOST_LIMIT = 5
 _EXCLUDED_ADDRESS_NETWORKS = (
@@ -47,11 +48,6 @@ def discover_advertised_hosts(*, limit: int = PAIRING_ADVERTISED_HOST_LIMIT) -> 
 
 
 def _discover_hosts_from_interfaces(*, limit: int) -> tuple[str, ...]:
-    try:
-        import psutil
-    except ImportError:
-        return tuple()
-
     return _select_advertised_hosts_from_netif_data(
         interface_addresses=psutil.net_if_addrs(),
         interface_stats=psutil.net_if_stats(),
