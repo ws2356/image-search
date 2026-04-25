@@ -13,4 +13,4 @@ if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   npm run build
 fi
 
-rsync -avz --delete dist/ "tc:${REMOTE_PATH%/}/"
+rsync -avz --delete --exclude='.DS_Store' dist/ "tc:${REMOTE_PATH%/}/"
