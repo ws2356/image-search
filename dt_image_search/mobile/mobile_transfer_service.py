@@ -40,7 +40,7 @@ from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
 )
 from dt_image_search.model.dts_db import create_db_conn
-from dt_image_search.telemetry.telemetry_client import log
+from dt_image_search.telemetry.telemetry_client import add_span, log
 from dt_image_search.tools.dts_event_bus import default_bus
 
 MOBILE_TRANSFER_SCHEMA = "dtis.mobile-transfer.v1"
@@ -127,76 +127,92 @@ class MobileTransferService:
         except ValueError as exc:
             return _response(status_code=400, status="rejected", message=str(exc))
 
-        if request.schema != MOBILE_TRANSFER_SCHEMA:
-            return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
-
-        with create_db_conn(ctx=self._ctx) as conn:
-            transfer_context = get_mobile_transfer_context(
-                conn,
+        with add_span(
+            "mobile.desktop.transfer.start",
+            attributes=_transfer_telemetry_attributes(
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
-            )
-            if transfer_context is None:
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
-            if not is_valid_trust_proof(
-                trust_key_b64=transfer_context.trust_key_b64,
-                purpose=MOBILE_TRANSFER_START_PROOF_PURPOSE,
-                schema=request.schema,
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-                trust_proof_b64=request.trust_proof,
-            ):
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
-
-            folder_transfer_state = folder_transfer_state_from_backup_state(
-                resolve_next_backup_state(
-                    current_folder_transfer_state=transfer_context.folder_transfer_state,
-                    event=MobileBackupEvent.TRANSFER_STARTED,
-                    fallback_state=MobileBackupState.PAIRING_COMPLETED,
-                )
-            )
-            update_mobile_transfer_state(
-                conn,
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-                session_status=MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
-                folder_transfer_state=folder_transfer_state,
-                updated_at=current_time,
-                transferred_count=0,
-                failed_count=0,
-            )
-
-        default_bus.publish(
-            MOBILE_TRANSFER_STARTED_EVENT,
-            session_id=request.session_id,
-            device_uuid=request.device_uuid,
-            folder_path=transfer_context.folder_path,
-        )
-        default_bus.publish(
-            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
-            session_id=request.session_id,
-            device_uuid=request.device_uuid,
-            folder_path=transfer_context.folder_path,
-            transfer_state=folder_transfer_state,
-        )
-        log(
-            "info",
-            message=(
-                "MobileTransferService/handle_start_request: ready for transfer session "
-                f"{request.session_id} with {request.total_assets or 0} assets"
+                total_assets=request.total_assets,
             ),
-        )
-        return (
-            200,
-            {
-                "schema": MOBILE_TRANSFER_SCHEMA,
-                "status": "accepted",
-                "message": f"Desktop is ready to receive {request.total_assets or 0} assets.",
-                "session_id": request.session_id,
-                "device_uuid": request.device_uuid,
-                "total_assets": request.total_assets or 0,
-            },
-        )
+            carrier=request_payload,
+        ):
+            if request.schema != MOBILE_TRANSFER_SCHEMA:
+                return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
+
+            with create_db_conn(ctx=self._ctx) as conn:
+                transfer_context = get_mobile_transfer_context(
+                    conn,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                )
+                if transfer_context is None:
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if not is_valid_trust_proof(
+                    trust_key_b64=transfer_context.trust_key_b64,
+                    purpose=MOBILE_TRANSFER_START_PROOF_PURPOSE,
+                    schema=request.schema,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    trust_proof_b64=request.trust_proof,
+                ):
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+
+                folder_transfer_state = folder_transfer_state_from_backup_state(
+                    resolve_next_backup_state(
+                        current_folder_transfer_state=transfer_context.folder_transfer_state,
+                        event=MobileBackupEvent.TRANSFER_STARTED,
+                        fallback_state=MobileBackupState.PAIRING_COMPLETED,
+                    )
+                )
+                update_mobile_transfer_state(
+                    conn,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    session_status=MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
+                    folder_transfer_state=folder_transfer_state,
+                    updated_at=current_time,
+                    transferred_count=0,
+                    failed_count=0,
+                )
+
+            default_bus.publish(
+                MOBILE_TRANSFER_STARTED_EVENT,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
+                folder_path=transfer_context.folder_path,
+            )
+            default_bus.publish(
+                MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
+                folder_path=transfer_context.folder_path,
+                transfer_state=folder_transfer_state,
+            )
+            log(
+                "info",
+                message=(
+                    "MobileTransferService/handle_start_request: ready for transfer session "
+                    f"{request.session_id} with {request.total_assets or 0} assets"
+                ),
+                attributes=_transfer_telemetry_attributes(
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    total_assets=request.total_assets,
+                    folder_transfer_state=folder_transfer_state,
+                    result="accepted",
+                ),
+            )
+            return (
+                200,
+                {
+                    "schema": MOBILE_TRANSFER_SCHEMA,
+                    "status": "accepted",
+                    "message": f"Desktop is ready to receive {request.total_assets or 0} assets.",
+                    "session_id": request.session_id,
+                    "device_uuid": request.device_uuid,
+                    "total_assets": request.total_assets or 0,
+                },
+            )
 
     def handle_asset_existence_request(
         self,
@@ -207,70 +223,79 @@ class MobileTransferService:
         except ValueError as exc:
             return _response(status_code=400, status="rejected", message=str(exc))
 
-        if request.schema != MOBILE_TRANSFER_SCHEMA:
-            return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
-
-        with create_db_conn(ctx=self._ctx) as conn:
-            transfer_context = get_mobile_transfer_context(
-                conn,
+        with add_span(
+            "mobile.desktop.transfer.existence",
+            attributes=_transfer_telemetry_attributes(
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
-            )
-            if transfer_context is None:
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
-            if not is_valid_trust_proof(
-                trust_key_b64=transfer_context.trust_key_b64,
-                purpose=MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE,
-                schema=request.schema,
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-                trust_proof_b64=request.trust_proof,
-            ):
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                asset_count=len(request.assets),
+            ),
+            carrier=request_payload,
+        ):
+            if request.schema != MOBILE_TRANSFER_SCHEMA:
+                return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
 
-            matching_assets = get_mobile_asset_records_by_signatures(
-                conn,
-                device_uuid=request.device_uuid,
-                signature_keys=[
-                    mobile_asset_signature_key(
-                        content_sha1=asset.content_sha1,
-                        file_size_bytes=asset.file_size_bytes,
-                        asset_created_at=asset.created_at,
-                    )
-                    for asset in request.assets
-                ],
-            )
+            with create_db_conn(ctx=self._ctx) as conn:
+                transfer_context = get_mobile_transfer_context(
+                    conn,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                )
+                if transfer_context is None:
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if not is_valid_trust_proof(
+                    trust_key_b64=transfer_context.trust_key_b64,
+                    purpose=MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE,
+                    schema=request.schema,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    trust_proof_b64=request.trust_proof,
+                ):
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
-        matched_assets_payload = []
-        for asset in request.assets:
-            signature_key = mobile_asset_signature_key(
-                content_sha1=asset.content_sha1,
-                file_size_bytes=asset.file_size_bytes,
-                asset_created_at=asset.created_at,
-            )
-            match = matching_assets.get(signature_key)
-            if match is None:
-                continue
-            matched_assets_payload.append(
+                matching_assets = get_mobile_asset_records_by_signatures(
+                    conn,
+                    device_uuid=request.device_uuid,
+                    signature_keys=[
+                        mobile_asset_signature_key(
+                            content_sha1=asset.content_sha1,
+                            file_size_bytes=asset.file_size_bytes,
+                            asset_created_at=asset.created_at,
+                        )
+                        for asset in request.assets
+                    ],
+                )
+
+            matched_assets_payload = []
+            for asset in request.assets:
+                signature_key = mobile_asset_signature_key(
+                    content_sha1=asset.content_sha1,
+                    file_size_bytes=asset.file_size_bytes,
+                    asset_created_at=asset.created_at,
+                )
+                match = matching_assets.get(signature_key)
+                if match is None:
+                    continue
+                matched_assets_payload.append(
+                    {
+                        "asset_id": asset.asset_id,
+                        "local_relative_path": match["local_relative_path"],
+                    }
+                )
+
+            return (
+                200,
                 {
-                    "asset_id": asset.asset_id,
-                    "local_relative_path": match["local_relative_path"],
-                }
+                    "schema": MOBILE_TRANSFER_SCHEMA,
+                    "status": "checked",
+                    "message": (
+                        f"Desktop matched {len(matched_assets_payload)} of {len(request.assets)} candidate transfer assets."
+                    ),
+                    "session_id": request.session_id,
+                    "device_uuid": request.device_uuid,
+                    "matches": matched_assets_payload,
+                },
             )
-
-        return (
-            200,
-            {
-                "schema": MOBILE_TRANSFER_SCHEMA,
-                "status": "checked",
-                "message": (
-                    f"Desktop matched {len(matched_assets_payload)} of {len(request.assets)} candidate transfer assets."
-                ),
-                "session_id": request.session_id,
-                "device_uuid": request.device_uuid,
-                "matches": matched_assets_payload,
-            },
-        )
 
     def handle_asset_upload(
         self,
@@ -310,176 +335,250 @@ class MobileTransferService:
                 message="Desktop received an asset body whose content length did not match the declared file size.",
             )
 
-        with create_db_conn(ctx=self._ctx) as conn:
-            transfer_context = get_mobile_transfer_context(
-                conn,
+        with add_span(
+            "mobile.desktop.transfer.asset",
+            attributes=_transfer_telemetry_attributes(
                 session_id=metadata.session_id,
                 device_uuid=metadata.device_uuid,
-            )
-            if transfer_context is None:
-                _cleanup_temp_upload_file(staged_temp_file_path)
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
-            if not is_valid_trust_proof(
-                trust_key_b64=transfer_context.trust_key_b64,
-                purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
-                schema=metadata.schema,
-                session_id=metadata.session_id,
-                device_uuid=metadata.device_uuid,
-                trust_proof_b64=metadata.trust_proof,
-            ):
-                _cleanup_temp_upload_file(staged_temp_file_path)
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
-
-            existing_signature_asset = None
-            if metadata.content_sha1 is not None and metadata.file_size_bytes is not None and metadata.created_at is not None:
-                existing_signature_asset = get_mobile_asset_record_by_signature(
-                    conn,
-                    device_uuid=metadata.device_uuid,
-                    content_sha1=metadata.content_sha1,
-                    file_size_bytes=metadata.file_size_bytes,
-                    asset_created_at=metadata.created_at,
-                )
-            if existing_signature_asset is not None:
-                _cleanup_temp_upload_file(staged_temp_file_path)
-                increment_mobile_backup_session_transferred_count(
+                asset_id=metadata.asset_id,
+                asset_filename=metadata.filename,
+                file_size_bytes=content_length,
+            ),
+            carrier=metadata_payload,
+        ):
+            with create_db_conn(ctx=self._ctx) as conn:
+                transfer_context = get_mobile_transfer_context(
                     conn,
                     session_id=metadata.session_id,
                     device_uuid=metadata.device_uuid,
-                    delta=1,
                 )
-                default_bus.publish(
-                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                if transfer_context is None:
+                    _cleanup_temp_upload_file(staged_temp_file_path)
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if not is_valid_trust_proof(
+                    trust_key_b64=transfer_context.trust_key_b64,
+                    purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
+                    schema=metadata.schema,
                     session_id=metadata.session_id,
                     device_uuid=metadata.device_uuid,
-                    folder_path=transfer_context.folder_path,
-                    transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
-                )
-                return (
-                    200,
-                    {
-                        "schema": MOBILE_TRANSFER_SCHEMA,
-                        "status": "skipped",
-                        "message": "Desktop already has the transferred asset content.",
-                        "local_relative_path": existing_signature_asset["local_relative_path"],
-                    },
-                )
+                    trust_proof_b64=metadata.trust_proof,
+                ):
+                    _cleanup_temp_upload_file(staged_temp_file_path)
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
-            existing_asset = get_mobile_asset_record(
-                conn,
-                device_uuid=metadata.device_uuid,
-                remote_asset_id=metadata.asset_id,
-            )
-            if (
-                existing_asset is not None
-                and existing_asset["remote_asset_version"] == metadata.asset_version
-                and (Path(transfer_context.folder_path) / existing_asset["local_relative_path"]).exists()
-            ):
-                _cleanup_temp_upload_file(staged_temp_file_path)
-                increment_mobile_backup_session_transferred_count(
-                    conn,
-                    session_id=metadata.session_id,
-                    device_uuid=metadata.device_uuid,
-                    delta=1,
-                )
-                default_bus.publish(
-                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
-                    session_id=metadata.session_id,
-                    device_uuid=metadata.device_uuid,
-                    folder_path=transfer_context.folder_path,
-                    transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
-                )
-                return (
-                    200,
-                    {
-                        "schema": MOBILE_TRANSFER_SCHEMA,
-                        "status": "skipped",
-                        "message": "Desktop already has the current asset version.",
-                        "local_relative_path": existing_asset["local_relative_path"],
-                    },
-                )
-
-            try:
-                if staged_temp_file_path is not None:
-                    stored_asset = _move_staged_asset_to_folder(
-                        folder_path=transfer_context.folder_path,
-                        filename=metadata.filename,
-                        created_at=metadata.created_at,
-                        updated_at=metadata.updated_at,
-                        staged_file_path=staged_temp_file_path,
-                        content_length=content_length,
-                        provided_content_sha1=content_sha1,
-                        expected_content_sha1=metadata.content_sha1,
+                existing_signature_asset = None
+                if metadata.content_sha1 is not None and metadata.file_size_bytes is not None and metadata.created_at is not None:
+                    existing_signature_asset = get_mobile_asset_record_by_signature(
+                        conn,
+                        device_uuid=metadata.device_uuid,
+                        content_sha1=metadata.content_sha1,
+                        file_size_bytes=metadata.file_size_bytes,
+                        asset_created_at=metadata.created_at,
                     )
-                    staged_temp_file_path = None
-                else:
-                    if body_stream is None:
-                        raise OSError("Desktop did not receive transfer asset stream content.")
-                    stored_asset = _write_asset_to_folder(
-                        folder_path=transfer_context.folder_path,
-                        filename=metadata.filename,
-                        created_at=metadata.created_at,
-                        updated_at=metadata.updated_at,
-                        body_stream=body_stream,
-                        content_length=content_length,
+                if existing_signature_asset is not None:
+                    _cleanup_temp_upload_file(staged_temp_file_path)
+                    increment_mobile_backup_session_transferred_count(
+                        conn,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                        delta=1,
                     )
-            except OSError as exc:
-                _cleanup_temp_upload_file(staged_temp_file_path)
-                disk_full_failure = _is_disk_full_os_error(exc)
-                self._mark_transfer_failed(
-                    conn=conn,
-                    transfer_context=transfer_context,
-                    session_id=metadata.session_id,
+                    default_bus.publish(
+                        MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                        folder_path=transfer_context.folder_path,
+                        transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
+                    )
+                    log(
+                        "info",
+                        message=(
+                            "MobileTransferService/handle_asset_upload: skipped duplicate asset "
+                            f"{metadata.asset_id} for session {metadata.session_id}"
+                        ),
+                        attributes=_transfer_telemetry_attributes(
+                            session_id=metadata.session_id,
+                            device_uuid=metadata.device_uuid,
+                            asset_id=metadata.asset_id,
+                            asset_filename=metadata.filename,
+                            local_relative_path=existing_signature_asset["local_relative_path"],
+                            result="skipped_signature_match",
+                        ),
+                    )
+                    return (
+                        200,
+                        {
+                            "schema": MOBILE_TRANSFER_SCHEMA,
+                            "status": "skipped",
+                            "message": "Desktop already has the transferred asset content.",
+                            "local_relative_path": existing_signature_asset["local_relative_path"],
+                        },
+                    )
+
+                existing_asset = get_mobile_asset_record(
+                    conn,
                     device_uuid=metadata.device_uuid,
-                    current_time=current_time,
-                    publish_disk_full_event=disk_full_failure,
+                    remote_asset_id=metadata.asset_id,
                 )
-                if disk_full_failure:
+                if (
+                    existing_asset is not None
+                    and existing_asset["remote_asset_version"] == metadata.asset_version
+                    and (Path(transfer_context.folder_path) / existing_asset["local_relative_path"]).exists()
+                ):
+                    _cleanup_temp_upload_file(staged_temp_file_path)
+                    increment_mobile_backup_session_transferred_count(
+                        conn,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                        delta=1,
+                    )
+                    default_bus.publish(
+                        MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                        folder_path=transfer_context.folder_path,
+                        transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
+                    )
+                    log(
+                        "info",
+                        message=(
+                            "MobileTransferService/handle_asset_upload: skipped current asset version "
+                            f"{metadata.asset_id} for session {metadata.session_id}"
+                        ),
+                        attributes=_transfer_telemetry_attributes(
+                            session_id=metadata.session_id,
+                            device_uuid=metadata.device_uuid,
+                            asset_id=metadata.asset_id,
+                            asset_filename=metadata.filename,
+                            local_relative_path=existing_asset["local_relative_path"],
+                            result="skipped_existing_version",
+                        ),
+                    )
+                    return (
+                        200,
+                        {
+                            "schema": MOBILE_TRANSFER_SCHEMA,
+                            "status": "skipped",
+                            "message": "Desktop already has the current asset version.",
+                            "local_relative_path": existing_asset["local_relative_path"],
+                        },
+                    )
+
+                try:
+                    if staged_temp_file_path is not None:
+                        stored_asset = _move_staged_asset_to_folder(
+                            folder_path=transfer_context.folder_path,
+                            filename=metadata.filename,
+                            created_at=metadata.created_at,
+                            updated_at=metadata.updated_at,
+                            staged_file_path=staged_temp_file_path,
+                            content_length=content_length,
+                            provided_content_sha1=content_sha1,
+                            expected_content_sha1=metadata.content_sha1,
+                        )
+                        staged_temp_file_path = None
+                    else:
+                        if body_stream is None:
+                            raise OSError("Desktop did not receive transfer asset stream content.")
+                        stored_asset = _write_asset_to_folder(
+                            folder_path=transfer_context.folder_path,
+                            filename=metadata.filename,
+                            created_at=metadata.created_at,
+                            updated_at=metadata.updated_at,
+                            body_stream=body_stream,
+                            content_length=content_length,
+                        )
+                except OSError as exc:
+                    _cleanup_temp_upload_file(staged_temp_file_path)
+                    disk_full_failure = _is_disk_full_os_error(exc)
+                    self._mark_transfer_failed(
+                        conn=conn,
+                        transfer_context=transfer_context,
+                        session_id=metadata.session_id,
+                        device_uuid=metadata.device_uuid,
+                        current_time=current_time,
+                        publish_disk_full_event=disk_full_failure,
+                    )
+                    log(
+                        "error",
+                        error_type=type(exc).__name__,
+                        message=f"MobileTransferService/handle_asset_upload: failed to store asset: {exc}",
+                        attributes=_transfer_telemetry_attributes(
+                            session_id=metadata.session_id,
+                            device_uuid=metadata.device_uuid,
+                            asset_id=metadata.asset_id,
+                            asset_filename=metadata.filename,
+                            failure_code=(
+                                MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL
+                                if disk_full_failure
+                                else "asset_write_failed"
+                            ),
+                            result="failed",
+                        ),
+                    )
+                    if disk_full_failure:
+                        return _response(
+                            status_code=507,
+                            status="rejected",
+                            message=MOBILE_TRANSFER_DISK_FULL_MESSAGE,
+                            failure_code=MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL,
+                        )
                     return _response(
-                        status_code=507,
+                        status_code=500,
                         status="rejected",
-                        message=MOBILE_TRANSFER_DISK_FULL_MESSAGE,
-                        failure_code=MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL,
+                        message=f"Desktop failed while writing the incoming asset: {exc}",
                     )
-                return _response(
-                    status_code=500,
-                    status="rejected",
-                    message=f"Desktop failed while writing the incoming asset: {exc}",
+
+                upsert_mobile_asset_record(
+                    conn,
+                    device_uuid=metadata.device_uuid,
+                    remote_asset_id=metadata.asset_id,
+                    remote_asset_version=metadata.asset_version,
+                    content_sha1=stored_asset.content_sha1,
+                    file_size_bytes=stored_asset.file_size_bytes,
+                    asset_created_at=metadata.created_at,
+                    local_relative_path=stored_asset.local_relative_path,
+                    last_transferred_at=current_time,
+                )
+                increment_mobile_backup_session_transferred_count(
+                    conn,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    delta=1,
+                )
+                default_bus.publish(
+                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    folder_path=transfer_context.folder_path,
+                    transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
                 )
 
-            upsert_mobile_asset_record(
-                conn,
-                device_uuid=metadata.device_uuid,
-                remote_asset_id=metadata.asset_id,
-                remote_asset_version=metadata.asset_version,
-                content_sha1=stored_asset.content_sha1,
-                file_size_bytes=stored_asset.file_size_bytes,
-                asset_created_at=metadata.created_at,
-                local_relative_path=stored_asset.local_relative_path,
-                last_transferred_at=current_time,
+            log(
+                "info",
+                message=(
+                    "MobileTransferService/handle_asset_upload: stored asset "
+                    f"{metadata.asset_id} for session {metadata.session_id}"
+                ),
+                attributes=_transfer_telemetry_attributes(
+                    session_id=metadata.session_id,
+                    device_uuid=metadata.device_uuid,
+                    asset_id=metadata.asset_id,
+                    asset_filename=metadata.filename,
+                    file_size_bytes=stored_asset.file_size_bytes,
+                    local_relative_path=stored_asset.local_relative_path,
+                    result="stored",
+                ),
             )
-            increment_mobile_backup_session_transferred_count(
-                conn,
-                session_id=metadata.session_id,
-                device_uuid=metadata.device_uuid,
-                delta=1,
+            return (
+                200,
+                {
+                    "schema": MOBILE_TRANSFER_SCHEMA,
+                    "status": "stored",
+                    "message": "Desktop stored the asset successfully.",
+                    "local_relative_path": stored_asset.local_relative_path,
+                },
             )
-            default_bus.publish(
-                MOBILE_TRANSFER_STATE_UPDATED_EVENT,
-                session_id=metadata.session_id,
-                device_uuid=metadata.device_uuid,
-                folder_path=transfer_context.folder_path,
-                transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
-            )
-
-        return (
-            200,
-            {
-                "schema": MOBILE_TRANSFER_SCHEMA,
-                "status": "stored",
-                "message": "Desktop stored the asset successfully.",
-                "local_relative_path": stored_asset.local_relative_path,
-            },
-        )
 
     def handle_complete_request(
         self,
@@ -493,83 +592,109 @@ class MobileTransferService:
         except ValueError as exc:
             return _response(status_code=400, status="rejected", message=str(exc))
 
-        if request.schema != MOBILE_TRANSFER_SCHEMA:
-            return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
+        with add_span(
+            "mobile.desktop.transfer.complete",
+            attributes=_transfer_telemetry_attributes(
+                session_id=request.session_id,
+                device_uuid=request.device_uuid,
+                transferred_count=request.transferred_count,
+                failed_count=request.failed_count,
+            ),
+            carrier=request_payload,
+        ):
+            if request.schema != MOBILE_TRANSFER_SCHEMA:
+                return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
 
-        with create_db_conn(ctx=self._ctx) as conn:
-            transfer_context = get_mobile_transfer_context(
-                conn,
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-            )
-            if transfer_context is None:
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
-            if not is_valid_trust_proof(
-                trust_key_b64=transfer_context.trust_key_b64,
-                purpose=MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE,
-                schema=request.schema,
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-                trust_proof_b64=request.trust_proof,
-            ):
-                return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+            with create_db_conn(ctx=self._ctx) as conn:
+                transfer_context = get_mobile_transfer_context(
+                    conn,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                )
+                if transfer_context is None:
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if not is_valid_trust_proof(
+                    trust_key_b64=transfer_context.trust_key_b64,
+                    purpose=MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE,
+                    schema=request.schema,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    trust_proof_b64=request.trust_proof,
+                ):
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
 
-            failed_count = request.failed_count or 0
-            interruption_reason = _optional_non_empty_string(request_payload, "interruption_reason")
-            if interruption_reason == MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER:
-                session_status = MOBILE_BACKUP_SESSION_STATUS_STOPPED
-                transition_event = MobileBackupEvent.TRANSFER_STOPPED
-                response_message = (
-                    "Desktop marked the transfer session as stopped after receiving "
-                    f"{request.transferred_count or 0} assets with {request.failed_count or 0} failures."
+                failed_count = request.failed_count or 0
+                interruption_reason = _optional_non_empty_string(request_payload, "interruption_reason")
+                if interruption_reason == MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER:
+                    session_status = MOBILE_BACKUP_SESSION_STATUS_STOPPED
+                    transition_event = MobileBackupEvent.TRANSFER_STOPPED
+                    response_message = (
+                        "Desktop marked the transfer session as stopped after receiving "
+                        f"{request.transferred_count or 0} assets with {request.failed_count or 0} failures."
+                    )
+                else:
+                    session_status = MOBILE_BACKUP_SESSION_STATUS_COMPLETED if failed_count == 0 else MOBILE_BACKUP_SESSION_STATUS_FAILED
+                    transition_event = (
+                        MobileBackupEvent.TRANSFER_COMPLETED
+                        if failed_count == 0
+                        else MobileBackupEvent.TRANSFER_FAILED
+                    )
+                    response_message = (
+                        f"Desktop finished the transfer session after receiving {request.transferred_count or 0} assets "
+                        f"with {request.failed_count or 0} failures."
+                    )
+                folder_transfer_state = folder_transfer_state_from_backup_state(
+                    resolve_next_backup_state(
+                        current_folder_transfer_state=transfer_context.folder_transfer_state,
+                        event=transition_event,
+                        fallback_state=MobileBackupState.TRANSFER_IN_PROGRESS,
+                    )
                 )
-            else:
-                session_status = MOBILE_BACKUP_SESSION_STATUS_COMPLETED if failed_count == 0 else MOBILE_BACKUP_SESSION_STATUS_FAILED
-                transition_event = (
-                    MobileBackupEvent.TRANSFER_COMPLETED
-                    if failed_count == 0
-                    else MobileBackupEvent.TRANSFER_FAILED
+                update_mobile_transfer_state(
+                    conn,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    session_status=session_status,
+                    folder_transfer_state=folder_transfer_state,
+                    updated_at=current_time,
+                    ended_at=current_time,
+                    transferred_count=request.transferred_count or 0,
+                    failed_count=failed_count,
                 )
-                response_message = (
-                    f"Desktop finished the transfer session after receiving {request.transferred_count or 0} assets "
-                    f"with {request.failed_count or 0} failures."
+                default_bus.publish(
+                    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    folder_path=transfer_context.folder_path,
+                    transfer_state=folder_transfer_state,
                 )
-            folder_transfer_state = folder_transfer_state_from_backup_state(
-                resolve_next_backup_state(
-                    current_folder_transfer_state=transfer_context.folder_transfer_state,
-                    event=transition_event,
-                    fallback_state=MobileBackupState.TRANSFER_IN_PROGRESS,
-                )
-            )
-            update_mobile_transfer_state(
-                conn,
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-                session_status=session_status,
-                folder_transfer_state=folder_transfer_state,
-                updated_at=current_time,
-                ended_at=current_time,
-                transferred_count=request.transferred_count or 0,
-                failed_count=failed_count,
-            )
-            default_bus.publish(
-                MOBILE_TRANSFER_STATE_UPDATED_EVENT,
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-                folder_path=transfer_context.folder_path,
-                transfer_state=folder_transfer_state,
-            )
 
-        return (
-            200,
-            {
-                "schema": MOBILE_TRANSFER_SCHEMA,
-                "status": "completed",
-                "message": response_message,
-                "session_id": request.session_id,
-                "device_uuid": request.device_uuid,
-            },
-        )
+            log(
+                "info",
+                message=(
+                    "MobileTransferService/handle_complete_request: finished transfer session "
+                    f"{request.session_id}"
+                ),
+                attributes=_transfer_telemetry_attributes(
+                    session_id=request.session_id,
+                    device_uuid=request.device_uuid,
+                    transferred_count=request.transferred_count,
+                    failed_count=failed_count,
+                    folder_transfer_state=folder_transfer_state,
+                    interruption_reason=interruption_reason,
+                    result=session_status,
+                ),
+            )
+            return (
+                200,
+                {
+                    "schema": MOBILE_TRANSFER_SCHEMA,
+                    "status": "completed",
+                    "message": response_message,
+                    "session_id": request.session_id,
+                    "device_uuid": request.device_uuid,
+                },
+            )
 
     def handle_asset_upload_stream_error(
         self,
@@ -587,29 +712,57 @@ class MobileTransferService:
                     metadata = None
 
             if metadata is not None and metadata.schema == MOBILE_TRANSFER_SCHEMA:
-                current_time = _utc_now(now)
-                with create_db_conn(ctx=self._ctx) as conn:
-                    transfer_context = get_mobile_transfer_context(
-                        conn,
+                with add_span(
+                    "mobile.desktop.transfer.asset_stream_error",
+                    attributes=_transfer_telemetry_attributes(
                         session_id=metadata.session_id,
                         device_uuid=metadata.device_uuid,
-                    )
-                    if transfer_context is not None and is_valid_trust_proof(
-                        trust_key_b64=transfer_context.trust_key_b64,
-                        purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
-                        schema=metadata.schema,
-                        session_id=metadata.session_id,
-                        device_uuid=metadata.device_uuid,
-                        trust_proof_b64=metadata.trust_proof,
-                    ):
-                        self._mark_transfer_failed(
-                            conn=conn,
-                            transfer_context=transfer_context,
+                        asset_id=metadata.asset_id,
+                        asset_filename=metadata.filename,
+                        failure_code=MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL,
+                        result="failed",
+                    ),
+                    carrier=metadata_payload,
+                ):
+                    current_time = _utc_now(now)
+                    with create_db_conn(ctx=self._ctx) as conn:
+                        transfer_context = get_mobile_transfer_context(
+                            conn,
                             session_id=metadata.session_id,
                             device_uuid=metadata.device_uuid,
-                            current_time=current_time,
-                            publish_disk_full_event=True,
                         )
+                        if transfer_context is not None and is_valid_trust_proof(
+                            trust_key_b64=transfer_context.trust_key_b64,
+                            purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
+                            schema=metadata.schema,
+                            session_id=metadata.session_id,
+                            device_uuid=metadata.device_uuid,
+                            trust_proof_b64=metadata.trust_proof,
+                        ):
+                            self._mark_transfer_failed(
+                                conn=conn,
+                                transfer_context=transfer_context,
+                                session_id=metadata.session_id,
+                                device_uuid=metadata.device_uuid,
+                                current_time=current_time,
+                                publish_disk_full_event=True,
+                            )
+                    log(
+                        "error",
+                        error_type=type(error).__name__,
+                        message=(
+                            "MobileTransferService/handle_asset_upload_stream_error: "
+                            f"disk full while receiving asset stream: {error}"
+                        ),
+                        attributes=_transfer_telemetry_attributes(
+                            session_id=metadata.session_id,
+                            device_uuid=metadata.device_uuid,
+                            asset_id=metadata.asset_id,
+                            asset_filename=metadata.filename,
+                            failure_code=MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL,
+                            result="failed",
+                        ),
+                    )
             return _response(
                 status_code=507,
                 status="rejected",
@@ -650,6 +803,24 @@ class MobileTransferService:
             ended_at=current_time,
         )
         if not was_already_failed:
+            log(
+                "warning",
+                message=(
+                    "MobileTransferService/_mark_transfer_failed: marked transfer session as failed "
+                    f"for {session_id}"
+                ),
+                attributes=_transfer_telemetry_attributes(
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                    folder_transfer_state=folder_transfer_state,
+                    failure_code=(
+                        MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL
+                        if publish_disk_full_event
+                        else "transfer_failed"
+                    ),
+                    result=MOBILE_BACKUP_SESSION_STATUS_FAILED,
+                ),
+            )
             default_bus.publish(
                 MOBILE_TRANSFER_STATE_UPDATED_EVENT,
                 session_id=session_id,
@@ -752,6 +923,55 @@ def _parse_transfer_asset_existence_request(
         trust_proof=session_request.trust_proof,
         assets=tuple(parsed_assets),
     )
+
+
+def _transfer_telemetry_attributes(
+    *,
+    session_id: str,
+    device_uuid: str,
+    total_assets: int | None = None,
+    asset_count: int | None = None,
+    transferred_count: int | None = None,
+    failed_count: int | None = None,
+    asset_id: str | None = None,
+    asset_filename: str | None = None,
+    file_size_bytes: int | None = None,
+    local_relative_path: str | None = None,
+    folder_transfer_state: str | None = None,
+    interruption_reason: str | None = None,
+    failure_code: str | None = None,
+    result: str | None = None,
+) -> dict[str, object]:
+    attributes: dict[str, object] = {
+        "correlation.session_id": session_id,
+        "mobile.device.uuid": device_uuid,
+        "mobile.backup.side": "desktop",
+    }
+    if total_assets is not None:
+        attributes["backup.total_assets"] = total_assets
+    if asset_count is not None:
+        attributes["backup.asset_count"] = asset_count
+    if transferred_count is not None:
+        attributes["backup.transferred_count"] = transferred_count
+    if failed_count is not None:
+        attributes["backup.failed_count"] = failed_count
+    if asset_id is not None:
+        attributes["mobile.asset.id"] = asset_id
+    if asset_filename is not None:
+        attributes["mobile.asset.filename"] = asset_filename
+    if file_size_bytes is not None:
+        attributes["mobile.asset.file_size_bytes"] = file_size_bytes
+    if local_relative_path is not None:
+        attributes["mobile.asset.local_relative_path"] = local_relative_path
+    if folder_transfer_state is not None:
+        attributes["backup.state"] = folder_transfer_state
+    if interruption_reason is not None:
+        attributes["transfer.stop_reason"] = interruption_reason
+    if failure_code is not None:
+        attributes["backup.failure_reason"] = failure_code
+    if result is not None:
+        attributes["backup.result"] = result
+    return attributes
 
 
 def _write_asset_to_folder(

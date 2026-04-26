@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from functools import wraps
 import logging
 import os
@@ -10,6 +11,7 @@ from urllib.parse import urlparse
 import opentelemetry.context.contextvars_context
 
 from opentelemetry import trace, metrics
+from opentelemetry.propagate import extract
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.metrics import MeterProvider, Counter, UpDownCounter, Histogram, ObservableCounter, ObservableUpDownCounter, ObservableGauge
@@ -131,6 +133,42 @@ def _is_valid_otel_attribute_value(value: object) -> bool:
     return _is_valid_otel_attribute_sequence(value)
 
 
+def _normalize_otel_attributes(
+    attributes: dict[str, object] | None,
+    *,
+    allow_none: bool = False,
+) -> dict[str, object]:
+    if not attributes:
+        return {}
+
+    normalized: dict[str, object] = {}
+    for key, value in attributes.items():
+        if not isinstance(key, str) or not key:
+            continue
+        if value is None and not allow_none:
+            continue
+        if _is_valid_otel_attribute_value(value):
+            normalized[key] = value
+        else:
+            normalized[key] = repr(value)
+    return normalized
+
+
+def _extract_remote_context(carrier: dict[str, object] | None):
+    if not carrier:
+        return None
+
+    propagation_carrier: dict[str, str] = {}
+    for header_name in ("traceparent", "tracestate"):
+        header_value = carrier.get(header_name)
+        if isinstance(header_value, str) and header_value.strip():
+            propagation_carrier[header_name] = header_value.strip()
+
+    if not propagation_carrier:
+        return None
+    return extract(propagation_carrier)
+
+
 class OtelAttributeSanitizerFilter(logging.Filter):
     """Normalize custom LogRecord extras to OTEL-supported attribute types."""
 
@@ -156,7 +194,13 @@ if not is_debug() and "PYTEST_CURRENT_TEST" not in os.environ:
 
 _logger = None
 _lock = threading.Lock()
-def log(severity: str, error_type: str = "", message: str = "", where: str = ""):
+def log(
+    severity: str,
+    error_type: str = "",
+    message: str = "",
+    where: str = "",
+    attributes: dict[str, object] | None = None,
+):
     # Lazy init logger to prevent circular import issues
     global _logger
     with _lock:
@@ -180,11 +224,32 @@ def log(severity: str, error_type: str = "", message: str = "", where: str = "")
     if severity in ["error"] and error_type:
         # Get current trace_id
         error_counter.add(1, {"type": error_type, "location": where})
-    log_function(f"{error_type} at {where}: {message}")
+    extra = {
+        key: value
+        for key, value in _normalize_otel_attributes(attributes, allow_none=False).items()
+        if key not in _reserved_log_record_keys
+    }
+    log_function(
+        f"{error_type} at {where}: {message}",
+        extra=extra or None,
+    )
 
-def add_span(name: str):
+
+@contextmanager
+def add_span(
+    name: str,
+    attributes: dict[str, object] | None = None,
+    carrier: dict[str, object] | None = None,
+):
     """Context manager for tracing blocks of code."""
-    return tracer.start_as_current_span(name)
+    with tracer.start_as_current_span(
+        name,
+        context=_extract_remote_context(carrier),
+    ) as span:
+        span.set_attribute(_session_id_attribute, session_id)
+        for key, value in _normalize_otel_attributes(attributes, allow_none=False).items():
+            span.set_attribute(key, value)
+        yield span
 
 def with_trace(name=None):
     def decorator(func):

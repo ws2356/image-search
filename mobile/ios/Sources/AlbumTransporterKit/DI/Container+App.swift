@@ -17,7 +17,7 @@ extension Container {
     }
 
     var pairingBootstrapClient: Factory<PairingBootstrapClient> {
-        self { URLSessionPairingBootstrapClient() }
+        self { URLSessionPairingBootstrapClient(telemetryClient: self.telemetryClient()) }
             .singleton
     }
 
@@ -27,15 +27,26 @@ extension Container {
     }
 
     var pairingUSBBootstrapClient: Factory<PairingUSBBootstrapClient> {
-        self { WebSocketPairingUSBBootstrapClient(runtime: self.usbTransportRuntime()) }
+        self {
+            WebSocketPairingUSBBootstrapClient(
+                runtime: self.usbTransportRuntime(),
+                telemetryClient: self.telemetryClient()
+            )
+        }
             .singleton
     }
 
     var pairingService: Factory<PairingService> {
         self {
             let pairingDebugTransportClient = AdaptiveMobileTransferClient(
-                lanClient: URLSessionMobileTransferClient(usePerBackupEphemeralSession: true),
-                usbClient: WebSocketMobileTransferClient(runtime: self.usbTransportRuntime())
+                lanClient: URLSessionMobileTransferClient(
+                    telemetryClient: self.telemetryClient(),
+                    usePerBackupEphemeralSession: true
+                ),
+                usbClient: WebSocketMobileTransferClient(
+                    runtime: self.usbTransportRuntime(),
+                    telemetryClient: self.telemetryClient()
+                )
             )
             return DesktopBootstrapPairingService(
                 bootstrapClient: self.pairingBootstrapClient(),
@@ -64,8 +75,14 @@ extension Container {
             PhotoLibraryTransferService(
                 assetSource: PhotoLibraryAssetSource(),
                 transferClient: AdaptiveMobileTransferClient(
-                    lanClient: URLSessionMobileTransferClient(usePerBackupEphemeralSession: true),
-                    usbClient: WebSocketMobileTransferClient(runtime: self.usbTransportRuntime())
+                    lanClient: URLSessionMobileTransferClient(
+                        telemetryClient: self.telemetryClient(),
+                        usePerBackupEphemeralSession: true
+                    ),
+                    usbClient: WebSocketMobileTransferClient(
+                        runtime: self.usbTransportRuntime(),
+                        telemetryClient: self.telemetryClient()
+                    )
                 ),
                 trustedDesktopStore: self.trustedDesktopStore()
             )

@@ -161,6 +161,7 @@ actor USBWebSocketTransportRuntime {
         operation: String,
         bodySchema: String,
         request: Request,
+        additionalBodyFields: [String: Any] = [:],
         timeout: TimeInterval = 3
     ) async throws -> USBTransportRuntimeResponse {
         let connection = try await waitForReadyConnection(timeout: timeout)
@@ -169,7 +170,8 @@ actor USBWebSocketTransportRuntime {
             operation: operation,
             requestID: requestID,
             bodySchema: bodySchema,
-            request: request
+            request: request,
+            additionalBodyFields: additionalBodyFields
         )
         try await sendText(
             envelopeData,
@@ -188,19 +190,20 @@ actor USBWebSocketTransportRuntime {
         bodySchema: String,
         request: Request,
         chunkSizeBytes: Int,
+        additionalBodyFields: [String: Any] = [:],
         timeout: TimeInterval = 3
     ) async throws -> String {
         let connection = try await waitForReadyConnection(timeout: timeout)
         let requestID = UUID().uuidString.lowercased()
+        var bodyFields = additionalBodyFields
+        bodyFields[MobileTransportProtocol.transferAssetStreamStateField] = MobileTransportProtocol.transferAssetStreamStateStart
+        bodyFields["chunk_size"] = chunkSizeBytes
         let envelopeData = try encodeEnvelope(
             operation: operation,
             requestID: requestID,
             bodySchema: bodySchema,
             request: request,
-            additionalBodyFields: [
-                MobileTransportProtocol.transferAssetStreamStateField: MobileTransportProtocol.transferAssetStreamStateStart,
-                "chunk_size": chunkSizeBytes,
-            ]
+            additionalBodyFields: bodyFields
         )
         try await sendText(
             envelopeData,
@@ -780,13 +783,16 @@ actor USBWebSocketTransportRuntime {
 
 struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
     let runtime: USBWebSocketTransportRuntime
+    let telemetryClient: TelemetryClient
     let responseTimeout: TimeInterval
 
     init(
         runtime: USBWebSocketTransportRuntime,
+        telemetryClient: TelemetryClient = NoOpTelemetryClient(),
         responseTimeout: TimeInterval = 1.2
     ) {
         self.runtime = runtime
+        self.telemetryClient = telemetryClient
         self.responseTimeout = responseTimeout
     }
 
@@ -825,6 +831,7 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
                 operation: operation,
                 bodySchema: PairingProtocol.schema,
                 request: request,
+                additionalBodyFields: traceContextPayloadFields(await telemetryClient.currentTraceContext()),
                 timeout: responseTimeout
             )
             let decodedResponse = try JSONDecoder.pairingDecoder.decode(
@@ -889,13 +896,16 @@ private struct USBTransferAssetUploadRequest: Codable, Sendable {
 
 struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, USBTransportConnectivityChecking {
     let runtime: USBWebSocketTransportRuntime
+    let telemetryClient: TelemetryClient
     let responseTimeout: TimeInterval
 
     init(
         runtime: USBWebSocketTransportRuntime,
+        telemetryClient: TelemetryClient = NoOpTelemetryClient(),
         responseTimeout: TimeInterval = 6
     ) {
         self.runtime = runtime
+        self.telemetryClient = telemetryClient
         self.responseTimeout = responseTimeout
     }
 
@@ -913,10 +923,10 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
             sessionID: request.sessionID,
             deviceUUID: request.deviceUUID
         )
-        let response = try await sendTransferEnvelope(
-            operation: MobileTransportProtocol.transferStartOperation,
-            request: request,
-            responseType: TransferServerResponse.self
+            let response = try await sendTransferEnvelope(
+                operation: MobileTransportProtocol.transferStartOperation,
+                request: request,
+                responseType: TransferServerResponse.self
         )
         switch response.status {
         case .accepted:
@@ -948,10 +958,10 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
             sessionID: request.sessionID,
             deviceUUID: request.deviceUUID
         )
-        let response = try await sendTransferEnvelope(
-            operation: MobileTransportProtocol.transferExistenceOperation,
-            request: request,
-            responseType: TransferExistenceResponse.self
+            let response = try await sendTransferEnvelope(
+                operation: MobileTransportProtocol.transferExistenceOperation,
+                request: request,
+                responseType: TransferExistenceResponse.self
         )
         switch response.status {
         case .checked:
@@ -1012,6 +1022,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
                 bodySchema: TransferProtocol.schema,
                 request: request,
                 chunkSizeBytes: MobileTransportProtocol.transferAssetChunkSizeBytes,
+                additionalBodyFields: traceContextPayloadFields(await telemetryClient.currentTraceContext()),
                 timeout: responseTimeout
             )
             do {
@@ -1187,6 +1198,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
                 operation: operation,
                 bodySchema: bodySchema,
                 request: request,
+                additionalBodyFields: traceContextPayloadFields(await telemetryClient.currentTraceContext()),
                 timeout: responseTimeout
             )
             let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: runtimeResponse.bodyData)

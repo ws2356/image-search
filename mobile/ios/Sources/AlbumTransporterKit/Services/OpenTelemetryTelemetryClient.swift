@@ -164,6 +164,26 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         }
     }
 
+    func currentTraceContext() async -> MobileTraceContext? {
+        guard let parentSpan = currentParentSpan() else {
+            return nil
+        }
+
+        var carrier: [String: String] = [:]
+        W3CTraceContextPropagator().inject(
+            spanContext: parentSpan.context,
+            carrier: &carrier,
+            setter: TraceContextSetter()
+        )
+        guard let traceParent = carrier["traceparent"], !traceParent.isEmpty else {
+            return nil
+        }
+        return MobileTraceContext(
+            traceParent: traceParent,
+            traceState: carrier["tracestate"]
+        )
+    }
+
     func forceFlush() async {
         tracerProvider.forceFlush()
         _ = meterProvider.forceFlush()
@@ -269,6 +289,12 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
                 String(cString: $0)
             }
         }
+    }
+}
+
+private struct TraceContextSetter: Setter {
+    func set(carrier: inout [String: String], key: String, value: String) {
+        carrier[key] = value
     }
 }
 

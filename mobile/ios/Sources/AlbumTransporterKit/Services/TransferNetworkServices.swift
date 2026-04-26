@@ -720,14 +720,17 @@ private actor TransferSessionURLSessionStore {
 
 struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient {
     private let defaultSession: URLSession
+    private let telemetryClient: TelemetryClient
     private let usePerBackupEphemeralSession: Bool
     private let sessionStore: TransferSessionURLSessionStore
 
     init(
         session: URLSession = .shared,
+        telemetryClient: TelemetryClient = NoOpTelemetryClient(),
         usePerBackupEphemeralSession: Bool = false
     ) {
         self.defaultSession = session
+        self.telemetryClient = telemetryClient
         self.usePerBackupEphemeralSession = usePerBackupEphemeralSession
         self.sessionStore = TransferSessionURLSessionStore()
     }
@@ -1178,7 +1181,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         urlRequest.timeoutInterval = 30
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-        urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(body)
+        urlRequest.httpBody = try await encodeRequestBody(body)
         return try await execute(
             request: urlRequest,
             responseType: responseType,
@@ -1298,6 +1301,20 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         components?.query = nil
         components?.fragment = nil
         return components?.url ?? desktop.endpointURL
+    }
+
+    private func encodeRequestBody<RequestBody: Encodable>(_ body: RequestBody) async throws -> Data {
+        let encodedBody = try JSONEncoder.pairingEncoder.encode(body)
+        guard var bodyValue = try JSONSerialization.jsonObject(with: encodedBody) as? [String: Any] else {
+            throw TransferClientError.transport(message: "Desktop transfer request body could not be encoded.")
+        }
+        for (key, value) in traceContextPayloadFields(await telemetryClient.currentTraceContext()) {
+            bodyValue[key] = value
+        }
+        guard JSONSerialization.isValidJSONObject(bodyValue) else {
+            throw TransferClientError.transport(message: "Desktop transfer request body is invalid.")
+        }
+        return try JSONSerialization.data(withJSONObject: bodyValue, options: [])
     }
 }
 

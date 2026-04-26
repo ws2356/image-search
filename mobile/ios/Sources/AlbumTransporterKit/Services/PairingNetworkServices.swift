@@ -4,9 +4,11 @@ import OSLog
 
 struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
     let session: URLSession
+    let telemetryClient: TelemetryClient
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = .shared, telemetryClient: TelemetryClient = NoOpTelemetryClient()) {
         self.session = session
+        self.telemetryClient = telemetryClient
     }
 
     func primeInternetAccess() async {
@@ -40,7 +42,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.timeoutInterval = 5
-        urlRequest.httpBody = try JSONEncoder.pairingEncoder.encode(requestBody)
+        urlRequest.httpBody = try await encodeRequestBody(requestBody)
 
         let data: Data
         let response: URLResponse
@@ -130,6 +132,20 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
 
     private static let localNetworkPermissionFailureMessage =
         "Local Network access is required before pairing can continue. Allow access in iOS Settings, then scan the desktop QR code again."
+
+    private func encodeRequestBody<RequestBody: Encodable>(_ requestBody: RequestBody) async throws -> Data {
+        let encodedBody = try JSONEncoder.pairingEncoder.encode(requestBody)
+        guard var bodyValue = try JSONSerialization.jsonObject(with: encodedBody) as? [String: Any] else {
+            throw PairingServiceError.transport(message: "Desktop pairing request body could not be encoded.")
+        }
+        for (key, value) in traceContextPayloadFields(await telemetryClient.currentTraceContext()) {
+            bodyValue[key] = value
+        }
+        guard JSONSerialization.isValidJSONObject(bodyValue) else {
+            throw PairingServiceError.transport(message: "Desktop pairing request body is invalid.")
+        }
+        return try JSONSerialization.data(withJSONObject: bodyValue, options: [])
+    }
 }
 
 struct DesktopBootstrapPairingService: PairingService {
@@ -354,6 +370,7 @@ struct DesktopBootstrapPairingService: PairingService {
         return Data(digest).base64URLEncodedString()
     }
 }
+
 
 private struct PairingBootstrapAttempt {
     let endpoint: URL

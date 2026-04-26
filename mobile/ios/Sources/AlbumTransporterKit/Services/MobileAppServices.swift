@@ -63,10 +63,16 @@ protocol TelemetryClient: Sendable {
         status: MobileTelemetrySpanStatus?
     ) async
     func increment(metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) async
+    func currentTraceContext() async -> MobileTraceContext?
     func forceFlush() async
 }
 
 extension TelemetryClient {
+    func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
+        _ = event
+        _ = attributes
+    }
+
     func record(event: MobileTelemetryEvent) async {
         await record(event: event, attributes: [:])
     }
@@ -95,6 +101,8 @@ extension TelemetryClient {
         _ = value
         _ = attributes
     }
+
+    func currentTraceContext() async -> MobileTraceContext? { nil }
 
     func forceFlush() async {}
 }
@@ -141,6 +149,26 @@ enum MobileTelemetryMetric: String, Sendable {
 enum MobileTelemetrySpanStatus: Sendable {
     case ok
     case error(String)
+}
+
+struct MobileTraceContext: Equatable, Sendable {
+    let traceParent: String
+    let traceState: String?
+}
+
+struct NoOpTelemetryClient: TelemetryClient {}
+
+func traceContextPayloadFields(_ traceContext: MobileTraceContext?) -> [String: Any] {
+    guard let traceContext else {
+        return [:]
+    }
+    var payload: [String: Any] = [
+        "traceparent": traceContext.traceParent,
+    ]
+    if let traceState = traceContext.traceState, !traceState.isEmpty {
+        payload["tracestate"] = traceState
+    }
+    return payload
 }
 
 typealias MobileTelemetryAttributes = [String: MobileTelemetryAttributeValue]

@@ -197,6 +197,37 @@ class TestMobilePairingService(unittest.TestCase):
             self.assertIsNotNone(session_row)
             self.assertEqual(session_row["status"], "paired")
 
+    def test_handle_pairing_request_logs_correlated_telemetry_attributes(self):
+        now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)
+
+        with patch("dt_image_search.telemetry.telemetry_client.log") as log_mock:
+            session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+            token = session.token_for(MobilePlatform.IOS)
+
+            status_code, _ = self._pairing_service.handle_pairing_request(
+                {
+                    "schema": "dtis.mobile-pairing.v1",
+                    "sid": session.session_id,
+                    "opt": token.one_time_passcode,
+                    "platform": "ios",
+                    "device_uuid": "ios-device-telemetry-001",
+                    "device_name": "Telemetry iPhone",
+                    "client_nonce": "client-nonce-telemetry-123",
+                },
+                now=now + timedelta(seconds=5),
+            )
+
+        self.assertEqual(status_code, 200)
+        accepted_attributes = [
+            call.kwargs["attributes"]
+            for call in log_mock.call_args_list
+            if (call.kwargs.get("attributes") or {}).get("backup.result") == "accepted"
+        ]
+        self.assertTrue(accepted_attributes)
+        self.assertEqual(accepted_attributes[-1]["correlation.session_id"], session.session_id)
+        self.assertEqual(accepted_attributes[-1]["mobile.device.uuid"], "ios-device-telemetry-001")
+        self.assertEqual(accepted_attributes[-1]["pairing.transport"], "lan")
+
     def test_pairing_state_http_endpoint_returns_latest_pairing_state(self):
         now = datetime(2026, 4, 10, 6, 30, tzinfo=timezone.utc)
         session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)

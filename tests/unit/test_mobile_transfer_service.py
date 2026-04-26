@@ -279,6 +279,45 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
+    def test_complete_request_logs_correlated_transfer_telemetry_attributes(self):
+        pairing_context = self._pair_device()
+
+        with patch("dt_image_search.mobile.mobile_transfer_service.log") as log_mock:
+            start_status, _ = self._post_json(
+                MOBILE_TRANSFER_START_PATH,
+                {
+                    "schema": MOBILE_TRANSFER_SCHEMA,
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "trust_key": pairing_context["trust_key_b64"],
+                    "total_assets": 2,
+                },
+            )
+            complete_status, _ = self._post_json(
+                MOBILE_TRANSFER_COMPLETE_PATH,
+                {
+                    "schema": MOBILE_TRANSFER_SCHEMA,
+                    "session_id": pairing_context["session_id"],
+                    "device_uuid": pairing_context["device_uuid"],
+                    "trust_key": pairing_context["trust_key_b64"],
+                    "transferred_count": 2,
+                    "failed_count": 0,
+                },
+            )
+
+        self.assertEqual(start_status, 200)
+        self.assertEqual(complete_status, 200)
+        completed_attributes = [
+            call.kwargs["attributes"]
+            for call in log_mock.call_args_list
+            if (call.kwargs.get("attributes") or {}).get("backup.result") == "completed"
+        ]
+        self.assertTrue(completed_attributes)
+        self.assertEqual(completed_attributes[-1]["correlation.session_id"], pairing_context["session_id"])
+        self.assertEqual(completed_attributes[-1]["mobile.device.uuid"], pairing_context["device_uuid"])
+        self.assertEqual(completed_attributes[-1]["backup.transferred_count"], 2)
+        self.assertEqual(completed_attributes[-1]["backup.failed_count"], 0)
+
     def test_complete_request_marks_stopped_session_and_clears_transferring_badge(self):
         pairing_context = self._pair_device()
         transfer_state_events: list[dict[str, object]] = []
