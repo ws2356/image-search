@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    exit 0
+fi
+
 APP_PATH=""
 
 while [[ $# -gt 0 ]]; do
