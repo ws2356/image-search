@@ -40,9 +40,17 @@ Welcome to the `image-search` repository. This document outlines the architectur
 
 ## 6. Error Handling & Telemetry
 - **Standard Handling**: Use `try...except...finally` blocks. Handle specific exceptions rather than broad `Exception` where possible.
-- **Telemetry**: Uses OpenTelemetry for structured logging and metrics.
+- **Telemetry**: Uses OpenTelemetry for structured logging, tracing and metrics.
   - **Do NOT use `print()` or standard `logging` module.**
   - Always import and use the centralized log function: `from dt_image_search.telemetry.telemetry_client import log`.
+  - **Span-First approach**: Use hierarchical spans for flows that take some time, so we can measure the duration. Create sub-spans for critical steps within those flows. Use Span Events for important events or state changes within a span. Example of spans - "QR code claim request/response", page/dialog views, etc. Example of span events - "User clicked 'Claim' button", "http/websocket request failure".
+  - **Trace & Span**: Use Trace (or Root Span) for high-level operations (e.g., "Indexing Folder", "Performing Search", "One Backup session") and Sub-Spans for individual steps (e.g., http/websocket request/response, page view).
+  - [Mobile] Use Persistent Buffering for logs/spans/metrics to ensure data is not lost on scenario like server down or app crash.
+  - [Mobile] Flush on entering background and on app exit.
+  - [Mobile] Use batching and compression to optimize network usage.
+  - **Correlation** When mobile/pc components interact, ensure to pass correlation IDs in telemetry to link related events across systems.
+  - Use standard keys like http.method, device.model.identifier, and os.version.
+  - Use `app.device.id` for identifying unique devices in telemetry
 - **Performance Profiling**: Critical functions are often wrapped with a custom `@perffunc` decorator for execution time monitoring.
 
 ## 7. Database Operations
