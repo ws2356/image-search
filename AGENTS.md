@@ -51,6 +51,7 @@ Welcome to the `image-search` repository. This document outlines the architectur
   - **Correlation** When mobile/pc components interact, ensure to pass correlation IDs in telemetry to link related events across systems.
   - Use standard keys like http.method, device.model.identifier, and os.version.
   - Use `app.device.id` for identifying unique devices in telemetry
+  - **Sampling**: For high-volume events, e.g. per file/chunk spans or events, use sampling to reduce server load.
 - **Performance Profiling**: Critical functions are often wrapped with a custom `@perffunc` decorator for execution time monitoring.
 
 ## 7. Database Operations
