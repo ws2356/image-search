@@ -84,7 +84,8 @@ extension Container {
                         telemetryClient: self.telemetryClient()
                     )
                 ),
-                trustedDesktopStore: self.trustedDesktopStore()
+                trustedDesktopStore: self.trustedDesktopStore(),
+                telemetryClient: self.telemetryClient()
             )
         }
             .singleton

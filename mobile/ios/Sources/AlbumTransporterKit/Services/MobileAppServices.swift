@@ -64,6 +64,11 @@ protocol TelemetryClient: Sendable {
     ) async
     func increment(metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) async
     func currentTraceContext() async -> MobileTraceContext?
+    func withSpan<T: Sendable>(
+        name: String,
+        attributes: MobileTelemetryAttributes,
+        operation: @Sendable () async throws -> T
+    ) async throws -> T
     func forceFlush() async
 }
 
@@ -103,6 +108,16 @@ extension TelemetryClient {
     }
 
     func currentTraceContext() async -> MobileTraceContext? { nil }
+
+    func withSpan<T: Sendable>(
+        name: String,
+        attributes: MobileTelemetryAttributes,
+        operation: @Sendable () async throws -> T
+    ) async throws -> T {
+        _ = name
+        _ = attributes
+        return try await operation()
+    }
 
     func forceFlush() async {}
 }

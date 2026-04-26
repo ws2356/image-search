@@ -2126,6 +2126,7 @@ private func performPreparedAssetUpload(
     preparedAsset: PreparedTransferAsset,
     desktop: TrustedDesktopRecord,
     transferClient: MobileTransferClient,
+    telemetryClient: TelemetryClient,
     preferredTransport: TransferTransport?,
     onChunkTransferred: (@Sendable (Int) async -> Void)? = nil
 ) async -> PreparedTransferUploadResult {
@@ -2157,13 +2158,24 @@ private func performPreparedAssetUpload(
         }
         try Task.checkCancellation()
         let uploadStart = ProcessInfo.processInfo.systemUptime
-        let response = try await uploadPreparedAsset(
-            transferClient: transferClient,
-            asset: preparedAsset.exportedAsset,
-            desktop: desktop,
-            preferredTransport: preferredTransport,
-            onChunkTransferred: onChunkTransferred
-        )
+        let response = try await telemetryClient.withSpan(
+            name: "mobile.backup.asset.upload",
+            attributes: assetPipelineTelemetryAttributes(
+                descriptor: preparedAsset.exportedAsset.descriptor,
+                sessionID: desktop.lastSessionID,
+                stage: "upload",
+                preferredTransport: preferredTransport,
+                fileSizeBytes: preparedAsset.exportedAsset.fileSize
+            )
+        ) {
+            try await uploadPreparedAsset(
+                transferClient: transferClient,
+                asset: preparedAsset.exportedAsset,
+                desktop: desktop,
+                preferredTransport: preferredTransport,
+                onChunkTransferred: onChunkTransferred
+            )
+        }
         uploadDurationSeconds = ProcessInfo.processInfo.systemUptime - uploadStart
         return PreparedTransferUploadResult(
             preparedAsset: preparedAsset,
@@ -2202,13 +2214,24 @@ private func performPreparedAssetUpload(
 
 private func exportPipelineResult(
     descriptor: TransferAssetDescriptor,
-    exportSource: TransferAssetSource
+    exportSource: TransferAssetSource,
+    sessionID: String,
+    telemetryClient: TelemetryClient
 ) async -> ExportPipelineResult {
     let exportStart = ProcessInfo.processInfo.systemUptime
     let memoryBefore = ProcessMemorySnapshot.capture()
     do {
         try Task.checkCancellation()
-        let exportedAsset = try await exportSource.exportAsset(descriptor)
+        let exportedAsset = try await telemetryClient.withSpan(
+            name: "mobile.backup.asset.export",
+            attributes: assetPipelineTelemetryAttributes(
+                descriptor: descriptor,
+                sessionID: sessionID,
+                stage: "export"
+            )
+        ) {
+            try await exportSource.exportAsset(descriptor)
+        }
         if Task.isCancelled {
             try? FileManager.default.removeItem(at: exportedAsset.fileURL)
             throw CancellationError()
@@ -2245,6 +2268,30 @@ private func exportPipelineResult(
             exportDurationSeconds: exportDurationSeconds
         )
     }
+}
+
+private func assetPipelineTelemetryAttributes(
+    descriptor: TransferAssetDescriptor,
+    sessionID: String,
+    stage: String,
+    preferredTransport: TransferTransport? = nil,
+    fileSizeBytes: Int? = nil
+) -> MobileTelemetryAttributes {
+    var attributes: MobileTelemetryAttributes = [
+        "correlation.session_id": .string(sessionID),
+        "transfer.asset_id": .string(descriptor.assetID),
+        "transfer.asset_version": .string(descriptor.assetVersion),
+        "transfer.asset_filename": .string(descriptor.filename),
+        "transfer.asset_media_type": .string(descriptor.mediaType),
+        "transfer.pipeline_stage": .string(stage),
+    ]
+    if let preferredTransport {
+        attributes["transfer.transport"] = .string(preferredTransport.rawValue)
+    }
+    if let fileSizeBytes {
+        attributes["transfer.asset_file_size_bytes"] = .int(fileSizeBytes)
+    }
+    return attributes
 }
 
 private let exportMemorySpikeThresholdBytes: Int64 = 256 * 1024 * 1024
@@ -2301,6 +2348,7 @@ actor PhotoLibraryTransferService: TransferService {
     private let transportResolver: (any TransferTransportResolving)?
     private let liveTransportResolver: (any TransferLiveTransportResolving)?
     private let trustedDesktopStore: TrustedDesktopStore
+    private let telemetryClient: TelemetryClient
     private let exportConcurrencyLimit: Int
     private let uploadConcurrencyLimit: Int
     private var transferSpeedSamples: [TransferSpeedSample] = []
@@ -2312,6 +2360,7 @@ actor PhotoLibraryTransferService: TransferService {
         assetSource: TransferAssetSource,
         transferClient: MobileTransferClient,
         trustedDesktopStore: TrustedDesktopStore,
+        telemetryClient: TelemetryClient = NoOpTelemetryClient(),
         exportConcurrencyLimit: Int = 5,
         uploadConcurrencyLimit: Int = 5
     ) {
@@ -2320,6 +2369,7 @@ actor PhotoLibraryTransferService: TransferService {
         self.transportResolver = transferClient as? any TransferTransportResolving
         self.liveTransportResolver = transferClient as? any TransferLiveTransportResolving
         self.trustedDesktopStore = trustedDesktopStore
+        self.telemetryClient = telemetryClient
         self.exportConcurrencyLimit = max(1, exportConcurrencyLimit)
         self.uploadConcurrencyLimit = max(1, uploadConcurrencyLimit)
     }
@@ -2752,7 +2802,8 @@ actor PhotoLibraryTransferService: TransferService {
         let producerTask = Task {
             await producePreparedAssets(
                 assets: assets,
-                queue: preparedAssetQueue
+                queue: preparedAssetQueue,
+                sessionID: desktop.lastSessionID
             )
         }
         let uploadLanes = await configuredUploadLanes(for: desktop)
@@ -2765,6 +2816,7 @@ actor PhotoLibraryTransferService: TransferService {
         var stopHandled = false
         var terminalFailureSnapshot: TransferSnapshot? = nil
         let uploadClient = transferClient
+        let telemetryClient = self.telemetryClient
 
         await withTaskGroup(of: (Int, PreparedTransferUploadResult).self) { uploadGroup in
             while true {
@@ -2823,6 +2875,7 @@ actor PhotoLibraryTransferService: TransferService {
                                     preparedAsset: preparedAsset,
                                     desktop: desktop,
                                     transferClient: uploadClient,
+                                    telemetryClient: telemetryClient,
                                     preferredTransport: lane.preferredTransport,
                                     onChunkTransferred: { [self] bytes in
                                         await recordChunkTransferProgress(
@@ -3000,36 +3053,50 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func producePreparedAssets(
         assets: [TransferAssetDescriptor],
-        queue: PreparedTransferAssetQueue
+        queue: PreparedTransferAssetQueue,
+        sessionID: String
     ) async {
         let exportSource = assetSource
+        let telemetryClient = self.telemetryClient
 
-        await withTaskGroup(of: ExportPipelineResult.self) { group in
+        await withTaskGroup(of: (Int, ExportPipelineResult).self) { group in
             var nextAssetIndex = 0
             var inFlightExportCount = 0
+            var nextResultIndexToEnqueue = 0
+            var pendingResultsByIndex: [Int: ExportPipelineResult] = [:]
 
             while inFlightExportCount < exportConcurrencyLimit, nextAssetIndex < assets.count {
                 if Task.isCancelled || stopRequested {
                     group.cancelAll()
                     break
                 }
+                let exportIndex = nextAssetIndex
                 let descriptor = assets[nextAssetIndex]
                 nextAssetIndex += 1
                 inFlightExportCount += 1
                 group.addTask {
-                    await exportPipelineResult(
-                        descriptor: descriptor,
-                        exportSource: exportSource
+                    (
+                        exportIndex,
+                        await exportPipelineResult(
+                            descriptor: descriptor,
+                            exportSource: exportSource,
+                            sessionID: sessionID,
+                            telemetryClient: telemetryClient
+                        )
                     )
                 }
             }
 
             while inFlightExportCount > 0 {
-                guard let exportResult = await group.next() else {
+                guard let (completedIndex, exportResult) = await group.next() else {
                     break
                 }
                 inFlightExportCount -= 1
-                await queue.enqueue(exportResult)
+                pendingResultsByIndex[completedIndex] = exportResult
+                while let orderedResult = pendingResultsByIndex.removeValue(forKey: nextResultIndexToEnqueue) {
+                    await queue.enqueue(orderedResult)
+                    nextResultIndexToEnqueue += 1
+                }
 
                 if Task.isCancelled || stopRequested {
                     group.cancelAll()
@@ -3039,13 +3106,19 @@ actor PhotoLibraryTransferService: TransferService {
                     continue
                 }
 
+                let exportIndex = nextAssetIndex
                 let descriptor = assets[nextAssetIndex]
                 nextAssetIndex += 1
                 inFlightExportCount += 1
                 group.addTask {
-                    await exportPipelineResult(
-                        descriptor: descriptor,
-                        exportSource: exportSource
+                    (
+                        exportIndex,
+                        await exportPipelineResult(
+                            descriptor: descriptor,
+                            exportSource: exportSource,
+                            sessionID: sessionID,
+                            telemetryClient: telemetryClient
+                        )
                     )
                 }
             }

@@ -93,6 +93,50 @@ final class TransferServiceTests: XCTestCase {
         )
     }
 
+    func test_photo_library_transfer_service_records_asset_export_and_upload_spans() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let descriptor = TransferAssetDescriptor(
+            assetID: "ph://asset-telemetry-001",
+            assetVersion: "v3",
+            filename: "IMG_9001.HEIC",
+            mediaType: "image",
+            createdAt: Date(timeIntervalSince1970: 1_776_123_810),
+            updatedAt: Date(timeIntervalSince1970: 1_776_123_810)
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [descriptor],
+            exportedSizeByAssetID: [descriptor.assetID: 4096]
+        )
+        let telemetryClient = RecordingSpanTelemetryClient()
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: RecordingMobileTransferClient(),
+            trustedDesktopStore: trustedDesktopStore,
+            telemetryClient: telemetryClient
+        )
+
+        _ = await service.startTransfer(progress: { _ in })
+        let spans = await telemetryClient.recordedSpans()
+
+        XCTAssertEqual(spans.map(\.name), ["mobile.backup.asset.export", "mobile.backup.asset.upload"])
+        XCTAssertEqual(spans[0].attributes["correlation.session_id"], .string("pairing-demo-001"))
+        XCTAssertEqual(spans[0].attributes["transfer.asset_id"], .string(descriptor.assetID))
+        XCTAssertEqual(spans[0].attributes["transfer.pipeline_stage"], .string("export"))
+        XCTAssertEqual(spans[1].attributes["transfer.pipeline_stage"], .string("upload"))
+        XCTAssertEqual(spans[1].attributes["transfer.asset_file_size_bytes"], .int(4096))
+    }
+
     func test_photo_library_transfer_service_reports_missing_desktop_record() async {
         let assetSource = StaticTransferAssetSource(descriptors: [])
         let service = PhotoLibraryTransferService(
@@ -1357,6 +1401,28 @@ private final class ProgressSnapshotRecorder: @unchecked Sendable {
         defer { lock.unlock() }
         return recordedSnapshots
     }
+}
+
+private actor RecordingSpanTelemetryClient: TelemetryClient {
+    private var spans: [RecordedSpan] = []
+
+    func withSpan<T: Sendable>(
+        name: String,
+        attributes: MobileTelemetryAttributes,
+        operation: @Sendable () async throws -> T
+    ) async throws -> T {
+        spans.append(RecordedSpan(name: name, attributes: attributes))
+        return try await operation()
+    }
+
+    func recordedSpans() -> [RecordedSpan] {
+        spans
+    }
+}
+
+private struct RecordedSpan: Equatable {
+    let name: String
+    let attributes: MobileTelemetryAttributes
 }
 
 private func sha1Hex(for data: Data) -> String {

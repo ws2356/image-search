@@ -97,6 +97,30 @@ final class OTLPHTTPSpanExporterTests: XCTestCase {
         XCTAssertEqual((exportedSpan["traceId"] as? String)?.count, 32)
         XCTAssertEqual((exportedSpan["spanId"] as? String)?.count, 16)
     }
+
+    func test_open_telemetry_client_uses_root_sampler_for_trace_context() async throws {
+        let identityProvider = StaticSpanIdentityProvider()
+        let unsampledClient = OpenTelemetryTelemetryClient(
+            identityProvider: identityProvider,
+            rootSpanSampleRate: 0
+        )
+        await unsampledClient.begin(span: .backupSession, attributes: [:])
+        let unsampledTraceContextValue = await unsampledClient.currentTraceContext()
+        let unsampledTraceContext = try XCTUnwrap(unsampledTraceContextValue)
+        await unsampledClient.end(span: .backupSession, attributes: [:], status: .ok)
+
+        let sampledClient = OpenTelemetryTelemetryClient(
+            identityProvider: identityProvider,
+            rootSpanSampleRate: 1
+        )
+        await sampledClient.begin(span: .backupSession, attributes: [:])
+        let sampledTraceContextValue = await sampledClient.currentTraceContext()
+        let sampledTraceContext = try XCTUnwrap(sampledTraceContextValue)
+        await sampledClient.end(span: .backupSession, attributes: [:], status: .ok)
+
+        XCTAssertTrue(unsampledTraceContext.traceParent.hasSuffix("-00"))
+        XCTAssertTrue(sampledTraceContext.traceParent.hasSuffix("-01"))
+    }
 }
 
 private final class CapturingURLProtocol: URLProtocol {
@@ -173,5 +197,16 @@ private final class SpanCaptureExporter: SpanExporter, @unchecked Sendable {
 
     func shutdown(explicitTimeout: TimeInterval?) {
         _ = explicitTimeout
+    }
+}
+
+private struct StaticSpanIdentityProvider: LocalDeviceIdentityProviding {
+    func currentIdentity() async -> LocalDeviceIdentity {
+        LocalDeviceIdentity(
+            installID: "install-001",
+            deviceUUID: "ios-device-001",
+            deviceName: "Test iPhone",
+            platform: "ios"
+        )
     }
 }

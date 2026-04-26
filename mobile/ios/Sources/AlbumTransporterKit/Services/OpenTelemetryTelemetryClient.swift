@@ -6,6 +6,14 @@ import UIKit
 #endif
 
 actor OpenTelemetryTelemetryClient: TelemetryClient {
+    private static var defaultRootSpanSampleRate: Double {
+#if DEBUG
+        1.0
+#else
+        0.1
+#endif
+    }
+
     private let tracerProvider: TracerProviderSdk
     private let meterProvider: MeterProviderSdk
     private let tracer: any Tracer
@@ -30,7 +38,8 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         scheduleDelay: TimeInterval = 5,
         metricExportInterval: TimeInterval = 30,
         maxQueueSize: Int = 2048,
-        maxExportBatchSize: Int = 128
+        maxExportBatchSize: Int = 128,
+        rootSpanSampleRate: Double = defaultRootSpanSampleRate
     ) {
         self.identityProvider = identityProvider
 
@@ -45,6 +54,7 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         )
         tracerProvider = TracerProviderBuilder()
             .with(resource: resource)
+            .with(sampler: Samplers.parentBased(root: Samplers.traceIdRatio(ratio: max(0, min(rootSpanSampleRate, 1)))))
             .add(
                 spanProcessor: BatchSpanProcessor(
                     spanExporter: spanExporter,
@@ -71,6 +81,15 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         meterProvider = MeterProviderSdk.builder()
             .setResource(resource: resource)
             .registerMetricReader(reader: metricReader)
+            .registerView(
+                selector: InstrumentSelector.builder()
+                    .setInstrument(type: .counter)
+                    .setInstrument(name: "mobile\\.backup\\..*")
+                    .build(),
+                view: View.builder()
+                    .withAggregation(aggregation: Aggregations.sum())
+                    .build()
+            )
             .build()
         let meter = meterProvider.get(name: instrumentationName)
         backupAttemptsCounter = meter.counterBuilder(name: MobileTelemetryMetric.backupAttempts.rawValue)
@@ -182,6 +201,35 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
             traceParent: traceParent,
             traceState: carrier["tracestate"]
         )
+    }
+
+    func withSpan<T: Sendable>(
+        name: String,
+        attributes: MobileTelemetryAttributes,
+        operation: @Sendable () async throws -> T
+    ) async throws -> T {
+        let enrichedAttributes = await enrichedAttributes(for: attributes)
+        let otelAttributes = otelAttributes(for: name, attributes: enrichedAttributes)
+        let builder = tracer
+            .spanBuilder(spanName: name)
+            .setSpanKind(spanKind: .internal)
+        if let parentSpan = currentParentSpan() {
+            _ = builder.setParent(parentSpan.context)
+        }
+        let span = builder.startSpan()
+        span.setAttributes(otelAttributes)
+
+        do {
+            let result = try await operation()
+            span.status = .ok
+            span.end()
+            return result
+        } catch {
+            span.recordException(error)
+            span.status = .error(description: String(describing: error))
+            span.end()
+            throw error
+        }
     }
 
     func forceFlush() async {

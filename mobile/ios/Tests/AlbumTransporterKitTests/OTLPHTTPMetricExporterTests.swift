@@ -5,6 +5,16 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class OTLPHTTPMetricExporterTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        MetricCapturingURLProtocol.reset()
+    }
+
+    override func tearDown() {
+        MetricCapturingURLProtocol.reset()
+        super.tearDown()
+    }
+
     func test_export_posts_otlp_json_metric_payload() throws {
         let metric = try JSONDecoder().decode(MetricData.self, from: Data(metricFixture.utf8))
         let configuration = URLSessionConfiguration.ephemeral
@@ -27,6 +37,40 @@ final class OTLPHTTPMetricExporterTests: XCTestCase {
         XCTAssertTrue(jsonString.contains("\"aggregationTemporality\":2"))
         XCTAssertTrue(jsonString.contains("\"isMonotonic\":true"))
         XCTAssertTrue(jsonString.contains("\"asInt\":\"1\""))
+        XCTAssertEqual(exporter.getAggregationTemporality(for: .counter), .cumulative)
+    }
+
+    func test_open_telemetry_client_force_flush_posts_metric_request() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MetricCapturingURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let telemetryClient = OpenTelemetryTelemetryClient(
+            identityProvider: StaticMetricIdentityProvider(),
+            tracesEndpoint: URL(string: "https://otel.boldman.net/v1/traces")!,
+            metricsEndpoint: URL(string: "https://otel.boldman.net/v1/metrics")!,
+            session: session,
+            scheduleDelay: 60,
+            metricExportInterval: 60
+        )
+
+        await telemetryClient.increment(
+            metric: MobileTelemetryMetric.backupSuccesses,
+            by: 1,
+            attributes: [
+                "correlation.session_id": MobileTelemetryAttributeValue.string("pairing-demo-001"),
+                "transfer.transport": MobileTelemetryAttributeValue.string("lan"),
+            ]
+        )
+        await telemetryClient.forceFlush()
+
+        let payloads = MetricCapturingURLProtocol.capturedRequestBodies()
+        XCTAssertEqual(payloads.count, 1)
+        let bodyData = try XCTUnwrap(payloads.first)
+        let bodyString = try XCTUnwrap(String(data: bodyData, encoding: .utf8))
+        XCTAssertTrue(bodyString.contains("\"mobile.backup.successes\""))
+        XCTAssertTrue(bodyString.contains("\"pairing-demo-001\""))
+        XCTAssertTrue(bodyString.contains("\"service.name\""))
+        XCTAssertTrue(bodyString.contains("\"AuBackup.iOS\""))
     }
 
     private var metricFixture: String {
@@ -75,7 +119,15 @@ final class OTLPHTTPMetricExporterTests: XCTestCase {
 }
 
 private final class MetricCapturingURLProtocol: URLProtocol {
-    static func reset() {}
+    nonisolated(unsafe) static var capturedBodies: [Data] = []
+
+    static func reset() {
+        capturedBodies = []
+    }
+
+    static func capturedRequestBodies() -> [Data] {
+        capturedBodies
+    }
 
     override class func canInit(with request: URLRequest) -> Bool {
         true
@@ -86,6 +138,7 @@ private final class MetricCapturingURLProtocol: URLProtocol {
     }
 
     override func startLoading() {
+        Self.capturedBodies.append(Self.requestBodyData(for: request) ?? Data())
         let response = HTTPURLResponse(
             url: request.url ?? URL(string: "https://otel.boldman.net/v1/metrics")!,
             statusCode: 200,
@@ -98,4 +151,40 @@ private final class MetricCapturingURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    private static func requestBodyData(for request: URLRequest) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+        guard let stream = request.httpBodyStream else {
+            return nil
+        }
+        stream.open()
+        defer { stream.close() }
+
+        let bufferSize = 4096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        var body = Data()
+        while stream.hasBytesAvailable {
+            let bytesRead = stream.read(buffer, maxLength: bufferSize)
+            guard bytesRead > 0 else {
+                break
+            }
+            body.append(buffer, count: bytesRead)
+        }
+        return body
+    }
+}
+
+private struct StaticMetricIdentityProvider: LocalDeviceIdentityProviding {
+    func currentIdentity() async -> LocalDeviceIdentity {
+        LocalDeviceIdentity(
+            installID: "install-001",
+            deviceUUID: "ios-device-001",
+            deviceName: "Test iPhone",
+            platform: "ios"
+        )
+    }
 }
