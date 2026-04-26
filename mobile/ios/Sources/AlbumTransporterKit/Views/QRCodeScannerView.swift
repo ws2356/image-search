@@ -16,6 +16,7 @@ struct LiveQRCodeScannerScreen: View {
     @Binding var scannedQRCodeValue: String
     let onStartPairing: () -> Void
     let onBack: () -> Void
+    let onOpenSettings: () -> Void
 
     @Environment(\.openURL) private var openURL
     @State private var accessState: QRCodeScannerAccessState = .requesting
@@ -57,6 +58,7 @@ struct LiveQRCodeScannerScreen: View {
                             guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else {
                                 return
                             }
+                            onOpenSettings()
                             openURL(settingsURL)
                         }
                         .buttonStyle(.borderedProminent)

@@ -38,6 +38,7 @@ final class MobileAppModel: ObservableObject {
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
 #if canImport(UIKit)
     private var memoryWarningObservationTask: Task<Void, Never>?
+    private var appLifecycleObservationTask: Task<Void, Never>?
 #endif
 
     init(
@@ -60,12 +61,14 @@ final class MobileAppModel: ObservableObject {
         )
         self.transferProgressPollingIntervalNanoseconds = transferProgressPollingIntervalNanoseconds
         configureMemoryWarningObservation()
+        configureAppLifecycleObservation()
     }
 
     deinit {
         transferProgressPollingTask?.cancel()
 #if canImport(UIKit)
         memoryWarningObservationTask?.cancel()
+        appLifecycleObservationTask?.cancel()
 #endif
     }
 
@@ -117,6 +120,7 @@ final class MobileAppModel: ObservableObject {
     }
 
     func openScanFlow() async {
+        beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
             phase: .scanning,
@@ -132,6 +136,7 @@ final class MobileAppModel: ObservableObject {
     }
 
     func beginPairing() async {
+        beginTelemetrySpan(.pairingFlow)
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
             phase: .pairing,
@@ -164,6 +169,19 @@ final class MobileAppModel: ObservableObject {
                         "pairing.failure_message": .string(failureMessage)
                     ]
                 )
+                incrementTelemetryMetric(
+                    .backupFailures,
+                    attributes: [
+                        "backup.failure_reason": .string("invalid_qr_payload")
+                    ]
+                )
+                endTelemetrySpan(
+                    .pairingFlow,
+                    attributes: [
+                        "pairing.failure_reason": .string("invalid_qr_payload")
+                    ],
+                    status: .error("invalid_qr_payload")
+                )
             }
             persistSnapshot()
             return
@@ -184,6 +202,26 @@ final class MobileAppModel: ObservableObject {
                     "pairing.failure_reason": .string("desktop_stopped_pairing")
                 ]
             )
+            incrementTelemetryMetric(
+                .backupFailures,
+                attributes: [
+                    "backup.failure_reason": .string("desktop_stopped_pairing")
+                ]
+            )
+            endTelemetrySpan(
+                .pairingFlow,
+                attributes: [
+                    "pairing.failure_reason": .string("desktop_stopped_pairing")
+                ],
+                status: .error("desktop_stopped_pairing")
+            )
+            endTelemetrySpan(
+                .backupSession,
+                attributes: [
+                    "backup.failure_reason": .string("desktop_stopped_pairing")
+                ],
+                status: .error("desktop_stopped_pairing")
+            )
             persistSnapshot()
             return
         }
@@ -196,6 +234,20 @@ final class MobileAppModel: ObservableObject {
                     "pairing.result_phase": .string(result.phase.rawValue)
                 ]
             )
+            incrementTelemetryMetric(
+                .backupFailures,
+                attributes: [
+                    "backup.failure_reason": .string("unexpected_pairing_phase")
+                ]
+            )
+            endTelemetrySpan(
+                .pairingFlow,
+                attributes: [
+                    "pairing.failure_reason": .string("unexpected_pairing_phase"),
+                    "pairing.result_phase": .string(result.phase.rawValue)
+                ],
+                status: .error("unexpected_pairing_phase")
+            )
             return
         }
 
@@ -204,6 +256,7 @@ final class MobileAppModel: ObservableObject {
         route = .permissions
 
         recordTelemetry(.pairingSucceeded)
+        endTelemetrySpan(.pairingFlow, status: .ok)
         persistSnapshot()
     }
 
@@ -222,6 +275,7 @@ final class MobileAppModel: ObservableObject {
         isShowingRemoveAfterBackupPrompt = false
         isAwaitingMediaAccessDecision = false
         permissionSummary = await permissionService.loadPermissionSummary()
+        beginTelemetrySpan(.backupPreflight)
         recordTelemetry(.backupPreflightStarted)
         guard permissionSummary.mediaScope == .full else {
             isShowingMediaAccessAlert = true
@@ -346,6 +400,26 @@ final class MobileAppModel: ObservableObject {
                 "transfer.stop_reason": .string(reason)
             ]
         )
+        incrementTelemetryMetric(
+            .backupFailures,
+            attributes: [
+                "backup.failure_reason": .string(reason)
+            ]
+        )
+        endTelemetrySpan(
+            .backupPreflight,
+            attributes: [
+                "backup.failure_reason": .string(reason)
+            ],
+            status: .error(reason)
+        )
+        endTelemetrySpan(
+            .backupSession,
+            attributes: [
+                "backup.failure_reason": .string(reason)
+            ],
+            status: .error(reason)
+        )
         persistSnapshot()
     }
 
@@ -368,6 +442,26 @@ final class MobileAppModel: ObservableObject {
             attributes: [
                 "transfer.stop_reason": .string("user_requested")
             ]
+        )
+        incrementTelemetryMetric(
+            .backupFailures,
+            attributes: [
+                "backup.failure_reason": .string("user_requested")
+            ]
+        )
+        endTelemetrySpan(
+            .transferFlow,
+            attributes: [
+                "transfer.stop_reason": .string("user_requested")
+            ],
+            status: .error("user_requested")
+        )
+        endTelemetrySpan(
+            .backupSession,
+            attributes: [
+                "backup.failure_reason": .string("user_requested")
+            ],
+            status: .error("user_requested")
         )
         persistSnapshot()
     }
@@ -427,6 +521,22 @@ final class MobileAppModel: ObservableObject {
             completionAttributes["transfer.cleanup_failure_message"] = .string(message)
         }
         recordTelemetry(.transferCompleted, attributes: completionAttributes)
+        incrementTelemetryMetric(.backupSuccesses, attributes: completionAttributes)
+        incrementTelemetryMetric(
+            .backupCompletedItems,
+            by: transferSnapshot.transferredCount,
+            attributes: completionAttributes
+        )
+        endTelemetrySpan(
+            .transferFlow,
+            attributes: completionAttributes,
+            status: transferSnapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
+        )
+        endTelemetrySpan(
+            .backupSession,
+            attributes: completionAttributes,
+            status: transferSnapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
+        )
         persistSnapshot()
     }
 
@@ -466,6 +576,8 @@ final class MobileAppModel: ObservableObject {
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: permissionSummary.mediaScope != .full
         )
+        endTelemetrySpan(.backupPreflight, status: .ok)
+        beginTelemetrySpan(.transferFlow)
         recordTelemetry(
             .transferStarted,
             attributes: [
@@ -583,6 +695,55 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
+    private func beginTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes = [:]
+    ) {
+        let worker = sideEffectWorker
+        var mergedAttributes = telemetryContextAttributes()
+        for (key, value) in attributes {
+            mergedAttributes[key] = value
+        }
+        Task.detached(priority: .utility) {
+            await worker.begin(span: span, attributes: mergedAttributes)
+        }
+    }
+
+    private func endTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes = [:],
+        status: MobileTelemetrySpanStatus? = nil
+    ) {
+        let worker = sideEffectWorker
+        var mergedAttributes = telemetryContextAttributes()
+        for (key, value) in attributes {
+            mergedAttributes[key] = value
+        }
+        Task.detached(priority: .utility) {
+            await worker.end(span: span, attributes: mergedAttributes, status: status)
+        }
+    }
+
+    private func incrementTelemetryMetric(
+        _ metric: MobileTelemetryMetric,
+        by value: Int = 1,
+        attributes: MobileTelemetryAttributes = [:]
+    ) {
+        let worker = sideEffectWorker
+        var mergedAttributes = telemetryContextAttributes()
+        for (key, value) in attributes {
+            mergedAttributes[key] = value
+        }
+        Task.detached(priority: .utility) {
+            await worker.increment(metric: metric, by: value, attributes: mergedAttributes)
+        }
+    }
+
+    private func beginBackupSessionTelemetry() {
+        beginTelemetrySpan(.backupSession)
+        incrementTelemetryMetric(.backupAttempts)
+    }
+
     private func telemetryContextAttributes() -> MobileTelemetryAttributes {
         var attributes: MobileTelemetryAttributes = [
             "app.route": .string(route.rawValue),
@@ -603,6 +764,9 @@ final class MobileAppModel: ObservableObject {
         if let transport = pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
             attributes["transfer.transport"] = .string(transport.rawValue)
         }
+        if let sessionID = pairingStatus.sessionID, !sessionID.isEmpty {
+            attributes["correlation.session_id"] = .string(sessionID)
+        }
         if let pendingItemCount = homeSummary.pendingItemCount {
             attributes["home.pending_item_count"] = .int(pendingItemCount)
         }
@@ -611,6 +775,43 @@ final class MobileAppModel: ObservableObject {
             attributes["pairing.desktop_name_length"] = .int(desktopName.count)
         }
         return attributes
+    }
+
+    func recordPageView(name: String) {
+        recordTelemetry(
+            .pageViewed,
+            attributes: [
+                "ui.view.kind": .string("page"),
+                "ui.view.name": .string(name)
+            ]
+        )
+    }
+
+    func recordDialogView(name: String) {
+        recordTelemetry(
+            .dialogViewed,
+            attributes: [
+                "ui.view.kind": .string("dialog"),
+                "ui.view.name": .string(name)
+            ]
+        )
+    }
+
+    func recordInteraction(name: String, location: String) {
+        recordTelemetry(
+            .interactionTriggered,
+            attributes: [
+                "ui.interaction.name": .string(name),
+                "ui.interaction.location": .string(location)
+            ]
+        )
+    }
+
+    func flushTelemetry() {
+        let worker = sideEffectWorker
+        Task.detached(priority: .utility) {
+            await worker.forceFlush()
+        }
     }
 
     private func telemetryPrimaryActionName(_ action: HomePrimaryAction) -> String {
@@ -635,6 +836,43 @@ final class MobileAppModel: ObservableObject {
                     return
                 }
                 await self.handleMemoryWarningNotification()
+            }
+        }
+#endif
+    }
+
+    private func configureAppLifecycleObservation() {
+#if canImport(UIKit)
+        appLifecycleObservationTask?.cancel()
+        appLifecycleObservationTask = Task { [weak self] in
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { [weak self] in
+                    do {
+                        for try await _ in NotificationCenter.default.notifications(
+                            named: UIApplication.didEnterBackgroundNotification
+                        ) {
+                            guard let self else {
+                                return
+                            }
+                            await self.flushTelemetry()
+                        }
+                    } catch {}
+                }
+
+                group.addTask { [weak self] in
+                    do {
+                        for try await _ in NotificationCenter.default.notifications(
+                            named: UIApplication.willTerminateNotification
+                        ) {
+                            guard let self else {
+                                return
+                            }
+                            await self.flushTelemetry()
+                        }
+                    } catch {}
+                }
+
+                await group.waitForAll()
             }
         }
 #endif
@@ -726,5 +964,29 @@ actor MobileAppSideEffectWorker {
 
     func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
         await telemetryClient.record(event: event, attributes: attributes)
+    }
+
+    func begin(span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) async {
+        await telemetryClient.begin(span: span, attributes: attributes)
+    }
+
+    func end(
+        span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) async {
+        await telemetryClient.end(span: span, attributes: attributes, status: status)
+    }
+
+    func increment(
+        metric: MobileTelemetryMetric,
+        by value: Int,
+        attributes: MobileTelemetryAttributes
+    ) async {
+        await telemetryClient.increment(metric: metric, by: value, attributes: attributes)
+    }
+
+    func forceFlush() async {
+        await telemetryClient.forceFlush()
     }
 }

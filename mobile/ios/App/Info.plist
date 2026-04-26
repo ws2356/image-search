@@ -37,5 +37,7 @@
 	<string>AuBackup reads your local photos and videos so it can transfer them directly to your paired desktop.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>UIRequiresFullScreen</key>
+	<true/>
 </dict>
 </plist>

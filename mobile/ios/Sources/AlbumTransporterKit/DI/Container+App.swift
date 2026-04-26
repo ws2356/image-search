@@ -74,7 +74,7 @@ extension Container {
     }
 
     var telemetryClient: Factory<TelemetryClient> {
-        self { OpenTelemetryTelemetryClient() }
+        self { OpenTelemetryTelemetryClient(identityProvider: self.localDeviceIdentityProvider()) }
             .singleton
     }
 

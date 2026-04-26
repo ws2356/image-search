@@ -19,27 +19,51 @@ public struct AlbumTransporterRootView: View {
             .task {
                 await model.load()
             }
+            .task(id: model.route) {
+                model.recordPageView(name: model.route.rawValue)
+            }
+            .onChange(of: model.isShowingStopConfirmation) { isPresented in
+                guard isPresented else { return }
+                model.recordDialogView(name: "stop_confirmation")
+            }
+            .onChange(of: model.isShowingLowBatteryWarning) { isPresented in
+                guard isPresented else { return }
+                model.recordDialogView(name: "low_battery_warning")
+            }
+            .onChange(of: model.isShowingMediaAccessAlert) { isPresented in
+                guard isPresented else { return }
+                model.recordDialogView(name: "media_access_alert")
+            }
+            .onChange(of: model.isShowingRemoveAfterBackupPrompt) { isPresented in
+                guard isPresented else { return }
+                model.recordDialogView(name: "remove_after_backup_prompt")
+            }
             .confirmationDialog(
                 "Stop backup?",
                 isPresented: $model.isShowingStopConfirmation,
                 titleVisibility: .visible
             ) {
                 Button("Stop Sending More Items", role: .destructive) {
+                    model.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
                     Task {
                         await model.confirmStopTransfer()
                     }
                 }
-                Button("Keep Backing Up", role: .cancel) {}
+                Button("Keep Backing Up", role: .cancel) {
+                    model.recordInteraction(name: "stop_cancelled", location: "stop_confirmation")
+                }
             } message: {
                 Text("The desktop may continue indexing items that already transferred before the stop request.")
             }
             .alert("Low battery detected", isPresented: $model.isShowingLowBatteryWarning) {
                 Button("Continue Anyway") {
+                    model.recordInteraction(name: "continue_anyway_tapped", location: "low_battery_warning")
                     Task {
                         await model.continuePastLowBatteryWarning()
                     }
                 }
                 Button("Not Now", role: .cancel) {
+                    model.recordInteraction(name: "not_now_tapped", location: "low_battery_warning")
                     Task {
                         await model.cancelBackupFromLowBatteryWarning()
                     }
@@ -50,6 +74,7 @@ public struct AlbumTransporterRootView: View {
             .alert("Full media access recommended", isPresented: $model.isShowingMediaAccessAlert) {
 #if os(iOS)
                 Button("Update") {
+                    model.recordInteraction(name: "update_media_access_tapped", location: "media_access_alert")
                     Task {
                         PHPhotoLibrary.showLimitedPicker { _ in
                             Task {
@@ -60,6 +85,7 @@ public struct AlbumTransporterRootView: View {
                 }
 #endif
                 Button("Not now", role: .cancel) {
+                    model.recordInteraction(name: "not_now_tapped", location: "media_access_alert")
                     Task {
                         await model.continueBackupFromMediaAccess()
                     }
@@ -69,11 +95,13 @@ public struct AlbumTransporterRootView: View {
             }
             .alert("After backup, remove transferred media?", isPresented: $model.isShowingRemoveAfterBackupPrompt) {
                 Button("Remove") {
+                    model.recordInteraction(name: "remove_after_backup_selected", location: "remove_after_backup_prompt")
                     Task {
                         await model.selectRemoveAfterBackupPreferenceAndContinue(true)
                     }
                 }
                 Button("Do not remove", role: .cancel) {
+                    model.recordInteraction(name: "keep_originals_selected", location: "remove_after_backup_prompt")
                     Task {
                         await model.selectRemoveAfterBackupPreferenceAndContinue(false)
                     }
@@ -120,11 +148,13 @@ public struct AlbumTransporterRootView: View {
             HomeView(
                 summary: homeViewModel.summary,
                 onPrimaryAction: {
+                    model.recordInteraction(name: "primary_action_tapped", location: "home")
                     Task {
                         await homeViewModel.handlePrimaryAction()
                     }
                 },
                 onScanDesktop: {
+                    model.recordInteraction(name: "reconnect_tapped", location: "home")
                     Task {
                         await homeViewModel.openScanFlow()
                     }
@@ -136,25 +166,32 @@ public struct AlbumTransporterRootView: View {
                 status: pairingViewModel.status,
                 scannedQRCodeValue: pairingViewModel.scannedQRCodeBinding,
                 onStartPairing: {
+                    model.recordInteraction(name: "start_pairing_tapped", location: "pairing")
                     Task {
                         await pairingViewModel.beginPairing()
                     }
                 },
                 onScanAgain: {
+                    model.recordInteraction(name: "scan_again_tapped", location: "pairing")
                     Task {
                         await pairingViewModel.scanAgain()
                     }
                 },
                 onBack: {
+                    model.recordInteraction(name: "back_tapped", location: "pairing")
                     Task {
                         await pairingViewModel.goBack()
                     }
+                },
+                onOpenSettings: {
+                    model.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
                 }
             )
         case .permissions:
             let permissionsViewModel = PermissionsPageViewModel(model: model)
             PermissionsGateView(
                 onStartPreflight: {
+                    model.recordInteraction(name: "start_backup_tapped", location: "permissions")
                     Task {
                         await permissionsViewModel.startBackup()
                     }
@@ -165,6 +202,7 @@ public struct AlbumTransporterRootView: View {
             TransferSessionView(
                 snapshot: transferViewModel.snapshot,
                 onStop: {
+                    model.recordInteraction(name: "stop_backup_tapped", location: "transfer")
                     transferViewModel.requestStopTransfer()
                 }
             )
@@ -173,6 +211,7 @@ public struct AlbumTransporterRootView: View {
             CompletionStateView(
                 summary: completionViewModel.summary,
                 onReturnHome: {
+                    model.recordInteraction(name: "return_home_tapped", location: "completion")
                     Task {
                         await completionViewModel.returnHome()
                     }

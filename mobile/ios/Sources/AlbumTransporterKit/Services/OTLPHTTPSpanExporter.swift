@@ -8,15 +8,18 @@ final class OTLPHTTPSpanExporter: SpanExporter, @unchecked Sendable {
     private let endpoint: URL
     private let session: URLSession
     private let timeout: TimeInterval
+    private let requestStore: PersistentOTLPRequestStore
 
     init(
         endpoint: URL = defaultTracesEndpoint,
         session: URLSession = .shared,
-        timeout: TimeInterval = 60
+        timeout: TimeInterval = 60,
+        requestStore: PersistentOTLPRequestStore = PersistentOTLPRequestStore(signal: "traces")
     ) {
         self.endpoint = endpoint
         self.session = session
         self.timeout = timeout
+        self.requestStore = requestStore
     }
 
     @discardableResult
@@ -32,15 +35,39 @@ final class OTLPHTTPSpanExporter: SpanExporter, @unchecked Sendable {
             return .failure
         }
 
+        guard requestStore.enqueue(payload: requestBody) else {
+            return .failure
+        }
+
+        return requestStore.drain { [self] payload in
+            send(payload: payload, timeout: explicitTimeout ?? timeout)
+        } ? .success : .failure
+    }
+
+    func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+        requestStore.drain { [self] payload in
+            send(payload: payload, timeout: explicitTimeout ?? timeout)
+        } ? .success : .failure
+    }
+
+    func shutdown(explicitTimeout: TimeInterval?) {
+        _ = flush(explicitTimeout: explicitTimeout)
+    }
+
+    func makeRequestBody(for spans: [SpanData]) throws -> Data {
+        let payload = ExportTraceServiceRequest(resourceSpans: resourceSpansPayload(from: spans))
+        return try JSONEncoder().encode(payload)
+    }
+
+    private func send(payload: Data, timeout: TimeInterval) -> Bool {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.httpBody = requestBody
+        request.httpBody = payload
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = explicitTimeout ?? timeout
+        request.timeoutInterval = timeout
 
         let semaphore = DispatchSemaphore(value: 0)
-        let requestTimeout = explicitTimeout ?? timeout
         let requestState = HTTPExportRequestState()
 
         let task = session.dataTask(with: request) { _, response, error in
@@ -54,23 +81,12 @@ final class OTLPHTTPSpanExporter: SpanExporter, @unchecked Sendable {
         }
         task.resume()
 
-        if semaphore.wait(timeout: .now() + requestTimeout) == .timedOut {
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
             task.cancel()
-            return .failure
+            return false
         }
 
-        return requestState.didSucceed ? .success : .failure
-    }
-
-    func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
-        .success
-    }
-
-    func shutdown(explicitTimeout: TimeInterval?) {}
-
-    func makeRequestBody(for spans: [SpanData]) throws -> Data {
-        let payload = ExportTraceServiceRequest(resourceSpans: resourceSpansPayload(from: spans))
-        return try JSONEncoder().encode(payload)
+        return requestState.didSucceed
     }
 
     private func resourceSpansPayload(from spans: [SpanData]) -> [ResourceSpansPayload] {

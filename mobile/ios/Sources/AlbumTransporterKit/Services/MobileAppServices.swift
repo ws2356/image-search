@@ -56,16 +56,54 @@ enum TransferAssetCleanupResult: Equatable, Sendable {
 
 protocol TelemetryClient: Sendable {
     func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async
+    func begin(span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) async
+    func end(
+        span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) async
+    func increment(metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) async
+    func forceFlush() async
 }
 
 extension TelemetryClient {
     func record(event: MobileTelemetryEvent) async {
         await record(event: event, attributes: [:])
     }
+
+    func begin(span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes = [:]) async {
+        _ = span
+        _ = attributes
+    }
+
+    func end(
+        span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes = [:],
+        status: MobileTelemetrySpanStatus? = nil
+    ) async {
+        _ = span
+        _ = attributes
+        _ = status
+    }
+
+    func increment(
+        metric: MobileTelemetryMetric,
+        by value: Int = 1,
+        attributes: MobileTelemetryAttributes = [:]
+    ) async {
+        _ = metric
+        _ = value
+        _ = attributes
+    }
+
+    func forceFlush() async {}
 }
 
 enum MobileTelemetryEvent: String, Sendable {
     case appLaunched
+    case pageViewed
+    case dialogViewed
+    case interactionTriggered
     case scanStarted
     case pairingStarted
     case pairingSucceeded
@@ -84,6 +122,25 @@ enum MobileTelemetryEvent: String, Sendable {
     case transferStopped
     case resumeTapped
     case transferCompleted
+}
+
+enum MobileTelemetrySpan: String, Sendable {
+    case backupSession = "mobile.backup.session"
+    case pairingFlow = "mobile.backup.pairing"
+    case backupPreflight = "mobile.backup.preflight"
+    case transferFlow = "mobile.backup.transfer"
+}
+
+enum MobileTelemetryMetric: String, Sendable {
+    case backupAttempts = "mobile.backup.attempts"
+    case backupSuccesses = "mobile.backup.successes"
+    case backupFailures = "mobile.backup.failures"
+    case backupCompletedItems = "mobile.backup.completed_items"
+}
+
+enum MobileTelemetrySpanStatus: Sendable {
+    case ok
+    case error(String)
 }
 
 typealias MobileTelemetryAttributes = [String: MobileTelemetryAttributeValue]

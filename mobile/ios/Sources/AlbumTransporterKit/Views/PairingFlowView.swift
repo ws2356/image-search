@@ -6,6 +6,7 @@ struct PairingFlowView: View {
     let onStartPairing: () -> Void
     let onScanAgain: () -> Void
     let onBack: () -> Void
+    let onOpenSettings: () -> Void
 
     var body: some View {
         #if os(iOS)
@@ -15,7 +16,8 @@ struct PairingFlowView: View {
                     status: status,
                     scannedQRCodeValue: $scannedQRCodeValue,
                     onStartPairing: onStartPairing,
-                    onBack: onBack
+                    onBack: onBack,
+                    onOpenSettings: onOpenSettings
                 )
                 .toolbar(.hidden, for: .navigationBar)
             } else {
@@ -23,7 +25,8 @@ struct PairingFlowView: View {
                     status: status,
                     scannedQRCodeValue: $scannedQRCodeValue,
                     onStartPairing: onStartPairing,
-                    onBack: onBack
+                    onBack: onBack,
+                    onOpenSettings: onOpenSettings
                 )
                 .navigationBarHidden(true)
             }
