@@ -37,6 +37,16 @@ datas += [(str(build_vars_path), "dt_image_search/resources")]
 # UPX is disabled on macOS: UPX modifies Mach-O headers in a way that breaks
 # code signatures and notarization.  Enable it only on non-macOS platforms.
 upx_enabled = sys.platform != "darwin"
+excludes = []
+if sys.platform == "darwin":
+    # These packages are not used by the shipped macOS app path, but PyInstaller
+    # still discovers them through optional imports in third-party libraries.
+    excludes += [
+        "IPython",
+        "jedi",
+        "parso",
+        "timm",
+    ]
 
 a = Analysis(
     ['__main__.py'],
@@ -55,7 +65,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     noarchive=False,
     optimize=1,
 )
