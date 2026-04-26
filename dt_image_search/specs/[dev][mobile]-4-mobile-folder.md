@@ -78,7 +78,7 @@ The mobile MVP covers:
 
 - a home page that explains the app and the PC-first setup
 - scan entry for desktop QR pairing
-- local device identity creation and persistence
+- This Machine identity creation and persistence
 - a simplified bootstrap handshake against desktop QR payload
 - permission handling for camera, media library, notifications, and low-battery warning flow
 - full eligible-library backup only
@@ -287,7 +287,7 @@ Responsibilities:
 
 - accept a simplified QR payload model
 - validate schema version
-- create or reuse local device identity
+- create or reuse This Machine identity
 - perform bootstrap handshake with desktop
 - return pairing result containing desktop display label, session ID, trust result, and chosen transport
 

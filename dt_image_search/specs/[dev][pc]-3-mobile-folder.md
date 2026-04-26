@@ -130,12 +130,12 @@ High-level additions:
 ### 5.1 MVP user-visible behavior
 
 1. The user clicks Add Folder.
-2. The desktop app shows the source-selection dialog with Local Device and Mobile Device.
-3. If Local Device is chosen, the existing folder chooser flow continues unchanged.
+2. The desktop app shows the source-selection dialog with This Machine and Mobile Device.
+3. If This Machine is chosen, the existing folder chooser flow continues unchanged.
 4. If Mobile Device is chosen, the desktop app prompts for a parent destination directory.
 5. The desktop app creates a pairing intent and shows the QR dialog with Android and iOS QR codes.
 6. The mobile app scans the platform-specific code and connects to the desktop bootstrap endpoint.
-7. The desktop validates the token, accepts the pairing, receives device identity plus device metadata, and resolves the stable local device folder.
+7. The desktop validates the token, accepts the pairing, receives device identity plus device metadata, and resolves the stable This Machine folder.
 8. The desktop inserts or reuses the resolved folder in the normal root-folder list.
 9. The desktop starts receiving files into that folder in the background while the existing filesystem monitor and index pipeline process arrived files.
 10. The Folder TreeView shows transfer state and progress while the rest of the app remains usable.
@@ -144,7 +144,7 @@ High-level additions:
 ```mermaid
 graph TD
     A[Add Folder] --> B{Source selection}
-    B -->|Local Device| C[Existing local-folder flow]
+    B -->|This Machine| C[Existing local-folder flow]
     B -->|Mobile Device| D[Choose parent destination]
     D --> E[Create pairing intent and show Android plus iOS QR codes]
     E --> F[Mobile scans QR and connects over LAN]

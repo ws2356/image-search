@@ -33,7 +33,7 @@ PRD: Mobile Folder
 
 2.3 Non-goals
 
- - Cloud relay, cloud backup, or any media transfer path that leaves the local device and desktop network boundary.
+ - Cloud relay, cloud backup, or any media transfer path that leaves the This Machine and desktop network boundary.
  - Bi-directional sync or desktop-to-mobile writes.
  - Propagating phone-side deletions to the desktop copy.
  - Explicit desktop pause or resume controls for a session.
@@ -68,8 +68,8 @@ file hashes.
 4. Functional requirements
 
  - Source selection dialog (Priority: P0)
-   - Clicking the existing Add Folder button must first show a source selection dialog with exactly two choices: Local Device and Mobile Device.
-   - The Local Device option must continue the current behavior unchanged.
+   - Clicking the existing Add Folder button must first show a source selection dialog with exactly two choices: This Machine and Mobile Device.
+   - The This Machine option must continue the current behavior unchanged.
    - The Mobile Device option must explain that USB transfer is typically faster and Wi-Fi LAN is also supported.
  - Parent destination selection (Priority: P0)
    - After the user selects Mobile Device, the desktop app must prompt for a parent folder that will contain the device-specific backup folder.

@@ -78,7 +78,7 @@ class SourceSelectionDialog(QDialog):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "<b>Local Device</b> create index for semantic search for images in a folder on this computer.<br>"
+            "<b>This Machine</b> create index for semantic search for images in a folder on this computer.<br>"
             "<b>Mobile Device</b> starts a paired backup flow over USB or Wi-Fi LAN, before creating an index."
         )
         subtitle.setWordWrap(True)
@@ -90,7 +90,7 @@ class SourceSelectionDialog(QDialog):
         button_row.addWidget(
             self._build_source_card(
                 icon=self._ICON_LOCAL,
-                title="Local Device",
+                title="This Machine",
                 description="Index a folder that already exists on this computer.",
                 source=MobileSourceType.LOCAL_DEVICE,
             )

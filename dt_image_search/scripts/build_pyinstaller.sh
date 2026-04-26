@@ -13,4 +13,6 @@ project_root="${this_dir}/../.."
 
 distpath="$project_root/pyinstaller-dist"
 pyinstaller "$project_root/dt_image_search/DTImageSearch.spec"  --noconfirm --clean --distpath "$distpath"
+
+bash "$this_dir/prune_macos_bundle.sh" --app-path "${distpath}/AuSearch.app"
 echo "PyInstaller build completed. Output located at: $distpath"

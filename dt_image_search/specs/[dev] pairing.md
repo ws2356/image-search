@@ -34,7 +34,7 @@ Desktop owns:
 
 Mobile owns:
 
-- local device identity generation and persistence
+- This Machine identity generation and persistence
 - QR decoding
 - bootstrap request submission
 - local trusted-desktop persistence
@@ -79,8 +79,8 @@ sequenceDiagram
     DesktopPair->>DesktopPair: start HTTP bootstrap endpoint
     DesktopPair->>DesktopUI: session_id + pairing QR payload
     MobileApp->>MobileApp: decode QR payload
-    MobileApp->>MobilePrefs: load or create local device identity
-    MobileApp->>MobileApp: prepare pairing claim using QR payload + local device identity
+    MobileApp->>MobilePrefs: load or create This Machine identity
+    MobileApp->>MobileApp: prepare pairing claim using QR payload + This Machine identity
     MobileApp->>DesktopPair: POST /api/mobile/pairing/claim with JSON claim body
     DesktopPair->>DesktopPair: derive shared trust key
     DesktopPair->>DesktopPair: validate sid, opt, platform, expiry

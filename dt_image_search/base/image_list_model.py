@@ -40,7 +40,7 @@ class ImageListModel(QAbstractListModel):
             return self.placeholder_icon
 
         if role == Qt.ToolTipRole:
-            return os.path.basename(path)
+            return path
 
         if role == Qt.AccessibleTextRole:
             return os.path.basename(path)

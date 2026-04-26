@@ -19,6 +19,7 @@ set -euo pipefail
 APP_PATH=""
 VOLUME_NAME=""
 IDENTITY="${DEVELOPER_ID_IDENTITY:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
