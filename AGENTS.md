@@ -10,7 +10,9 @@ Welcome to the `image-search` repository. This document outlines the architectur
 - **Dependencies**: Listed in `requirements.txt` and `requirements-dev.txt` (or `environment.yml` for conda).
 
 ## 2. Development Commands
-- **Build / Package**: Run `./package.sh` which executes `rm -rf ./build ./dist && pyinstaller DTImageSearch.spec`.
+- **Package**: Run `dt_image_search/scripts/build_pyinstaller.sh --distpath pyinstaller-dist` to create a packaged app bundle.
+- **Package DMG**: Run `dt_image_search/scripts/package_dmg.sh  --app-path pyinstaller-dist/AuSearch.app` to create a standalone application bundle (macOS DMG in this case).
+- **Package MSIX**: Run `powershell dt_image_search/scripts/package_msix.ps1 && powershell dt_image_search/scripts/codesign.ps1` to create msix for Windows.
 - **Run Application**: Usually executed from the root via `python dt_image_search/main.py` or `python -m dt_image_search`.
 - **Testing**: There is no established pytest suite yet, but individual test scripts like `test_exception_handlers.py` can be executed directly via `python test_exception_handlers.py`. Use standard Python `unittest` or `pytest` paradigms for new tests.
 
