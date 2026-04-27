@@ -94,7 +94,7 @@ public struct AlbumTransporterRootView: View {
                 Text(model.mediaAccessAlertMessage)
             }
             .alert("After backup, remove transferred media?", isPresented: $model.isShowingRemoveAfterBackupPrompt) {
-                Button("Remove") {
+                Button("Remove", role: .destructive) {
                     model.recordInteraction(name: "remove_after_backup_selected", location: "remove_after_backup_prompt")
                     Task {
                         await model.selectRemoveAfterBackupPreferenceAndContinue(true)
