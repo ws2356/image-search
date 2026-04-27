@@ -445,6 +445,8 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
     var sharedKeyBase64: String
     var transport: TransferTransport
     var lastSessionID: String
+    var usbOneTimePasscode: String? = nil
+    var usbSuggestedPort: Int? = nil
     var pairedAt: Date
 }
 

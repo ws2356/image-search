@@ -251,6 +251,8 @@ struct DesktopBootstrapPairingService: PairingService {
                 sharedKeyBase64: sharedKeyBase64,
                 transport: transport,
                 lastSessionID: sessionID,
+                usbOneTimePasscode: payload.oneTimePasscode,
+                usbSuggestedPort: payload.suggestedUSBPort,
                 pairedAt: pairedAt
             )
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)

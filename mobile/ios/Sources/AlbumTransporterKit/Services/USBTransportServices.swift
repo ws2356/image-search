@@ -909,7 +909,22 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         self.responseTimeout = responseTimeout
     }
 
+    func prepareUSBTransportIfNeeded(for desktop: TrustedDesktopRecord) async throws {
+        guard
+            let oneTimePasscode = desktop.usbOneTimePasscode,
+            let suggestedPort = desktop.usbSuggestedPort
+        else {
+            return
+        }
+        try await runtime.prepareBootstrap(
+            sessionID: desktop.lastSessionID,
+            oneTimePasscode: oneTimePasscode,
+            suggestedPort: suggestedPort
+        )
+    }
+
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
+        try await prepareUSBTransportIfNeeded(for: desktop)
         var request = TransferStartRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -945,6 +960,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         guard !candidates.isEmpty else {
             return [:]
         }
+        try await prepareUSBTransportIfNeeded(for: desktop)
         var request = TransferExistenceRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -996,6 +1012,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         desktop: TrustedDesktopRecord,
         onChunkTransferred: (@Sendable (Int) async -> Void)?
     ) async throws -> TransferServerResponse {
+        try await prepareUSBTransportIfNeeded(for: desktop)
         var request = USBTransferAssetUploadRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -1084,6 +1101,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         failedCount: Int,
         interruptionReason: String?
     ) async throws -> TransferServerResponse {
+        try await prepareUSBTransportIfNeeded(for: desktop)
         var request = TransferCompleteRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -1118,6 +1136,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         _ mobileCapabilities: [String: Int],
         desktop: TrustedDesktopRecord
     ) async throws -> CapabilityExchangeResponse {
+        try await prepareUSBTransportIfNeeded(for: desktop)
         var request = CapabilityExchangeRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,
@@ -1152,6 +1171,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         updateDestination: String?,
         desktop: TrustedDesktopRecord
     ) async throws -> UpdatePromptResponse {
+        try await prepareUSBTransportIfNeeded(for: desktop)
         var request = UpdatePromptRequest(
             sessionID: desktop.lastSessionID,
             deviceUUID: desktop.mobileDeviceUUID,

@@ -41,6 +41,46 @@ final class USBTransportServicesTests: XCTestCase {
         )
     }
 
+    func test_websocket_mobile_transfer_client_rebuilds_usb_bootstrap_from_trusted_desktop() async throws {
+        let runtime = USBWebSocketTransportRuntime()
+        let client = WebSocketMobileTransferClient(runtime: runtime)
+        let oneTimePasscode = "482913"
+        let challengeRand = "client-rebootstrap-rand-001"
+
+        for _ in 0 ..< 20 {
+            let candidatePort = Int.random(in: 45_000 ... 60_000)
+            let desktop = trustedDesktop(
+                transport: .usb,
+                usbOneTimePasscode: oneTimePasscode,
+                usbSuggestedPort: candidatePort
+            )
+            do {
+                try await client.prepareUSBTransportIfNeeded(for: desktop)
+                defer {
+                    Task {
+                        await runtime.reset()
+                    }
+                }
+
+                let result = try runPythonDesktopChallengeScript(
+                    port: candidatePort,
+                    sessionID: desktop.lastSessionID,
+                    oneTimePasscode: oneTimePasscode,
+                    challengeRand: challengeRand
+                )
+                XCTAssertEqual(result.terminationStatus, 0, result.outputSummary)
+                return
+            } catch let error as USBTransportRuntimeError {
+                if case .listenerStartFailed = error {
+                    continue
+                }
+                throw error
+            }
+        }
+
+        XCTFail("Failed to allocate a USB runtime listener port for trusted-desktop bootstrap recovery.")
+    }
+
     func test_adaptive_mobile_transfer_client_prefers_usb_for_usb_transport() async throws {
         let lanClient = RecordingTransferClient()
         let usbClient = RecordingTransferClient()
@@ -306,7 +346,11 @@ final class USBTransportServicesTests: XCTestCase {
         XCTAssertEqual(usbLookupCalls, 2)
     }
 
-    private func trustedDesktop(transport: TransferTransport) -> TrustedDesktopRecord {
+    private func trustedDesktop(
+        transport: TransferTransport,
+        usbOneTimePasscode: String? = nil,
+        usbSuggestedPort: Int? = nil
+    ) -> TrustedDesktopRecord {
         TrustedDesktopRecord(
             desktopDeviceID: "desktop-device-001",
             desktopName: "Studio Mac",
@@ -315,6 +359,8 @@ final class USBTransportServicesTests: XCTestCase {
             sharedKeyBase64: "shared-key-001",
             transport: transport,
             lastSessionID: "pairing-demo-001",
+            usbOneTimePasscode: usbOneTimePasscode,
+            usbSuggestedPort: usbSuggestedPort,
             pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
         )
     }

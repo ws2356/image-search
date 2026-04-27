@@ -79,6 +79,8 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertEqual(trustedDesktop?.mobileDeviceUUID, "ios-device-001")
         XCTAssertEqual(trustedDesktop?.transport, .lan)
         XCTAssertEqual(trustedDesktop?.lastSessionID, "pairing-demo-001")
+        XCTAssertEqual(trustedDesktop?.usbOneTimePasscode, PairingQRCodePayload.demo.oneTimePasscode)
+        XCTAssertEqual(trustedDesktop?.usbSuggestedPort, PairingQRCodePayload.demo.suggestedUSBPort)
         XCTAssertFalse(trustedDesktop?.sharedKeyBase64.isEmpty ?? true)
     }
 
