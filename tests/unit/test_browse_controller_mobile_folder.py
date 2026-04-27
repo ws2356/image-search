@@ -83,7 +83,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
 
             selection_spy = QSignalSpy(controller.folder_selection_signal.select_folder)
 
-            controller.ensure_folder_registered(folder_path.as_posix())
+            controller.ensure_folder_registered(folder_path.as_posix(), select_folder=True)
 
             folder_item = controller.folder_list_model().find_folder_item(folder_path.as_posix())
             self.assertIsNotNone(folder_item)
@@ -133,7 +133,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
 
             selection_spy = QSignalSpy(controller.folder_selection_signal.select_folder)
 
-            controller.ensure_folder_registered(folder_path.as_posix())
+            controller.ensure_folder_registered(folder_path.as_posix(), select_folder=True)
 
             folder_item = controller.folder_list_model().find_folder_item(folder_path.as_posix())
             self.assertIsNotNone(folder_item)

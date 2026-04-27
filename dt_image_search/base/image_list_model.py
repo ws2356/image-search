@@ -1,19 +1,19 @@
-from importlib.metadata import files
-import logging
 import os
-import threading
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex, QThreadPool, QSize
-from PySide6.QtGui import QPixmap, QIcon, QImage
+from PySide6.QtGui import QGuiApplication, QPixmap, QIcon
 from dt_image_search.browse.thumbnail_job import ThumbnailJob, ThumbnailJobSignals
 
+
 class ImageListModel(QAbstractListModel):
+    THUMBNAIL_ICON_SIZE = QSize(150, 150)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         # _item is a list of tuples (path, weight)
         # where path is the image file path and weight is an integer for sorting in descending order
         self._item = []
         self.thumbnail_cache = {}
-        self.placeholder_icon = QIcon(QPixmap(150, 150))  # empty gray or icon
+        self.placeholder_icon = self._create_placeholder_icon()
         self.thread_pool = QThreadPool.globalInstance()
         self.loading_paths = set()
 
@@ -34,7 +34,12 @@ class ImageListModel(QAbstractListModel):
                 # Start async thumbnail job
                 signals = ThumbnailJobSignals()
                 signals.finished.connect(self._on_thumbnail_ready)
-                job = ThumbnailJob(path, QSize(150, 150), signals)
+                job = ThumbnailJob(
+                    path,
+                    self._thumbnail_pixel_size(),
+                    self._thumbnail_device_pixel_ratio(),
+                    signals,
+                )
                 self.thread_pool.start(job)
 
             return self.placeholder_icon
@@ -87,3 +92,24 @@ class ImageListModel(QAbstractListModel):
             return
         index = self.index(row)
         self.dataChanged.emit(index, index, [Qt.DecorationRole])
+
+    def _create_placeholder_icon(self) -> QIcon:
+        pixmap = QPixmap(self._thumbnail_pixel_size())
+        pixmap.setDevicePixelRatio(self._thumbnail_device_pixel_ratio())
+        return QIcon(pixmap)
+
+    def _thumbnail_device_pixel_ratio(self) -> float:
+        app = QGuiApplication.instance()
+        if app is None:
+            return 1.0
+        screen = app.primaryScreen()
+        if screen is None:
+            return 1.0
+        return max(1.0, float(screen.devicePixelRatio()))
+
+    def _thumbnail_pixel_size(self) -> QSize:
+        device_pixel_ratio = self._thumbnail_device_pixel_ratio()
+        return QSize(
+            max(1, int(round(self.THUMBNAIL_ICON_SIZE.width() * device_pixel_ratio))),
+            max(1, int(round(self.THUMBNAIL_ICON_SIZE.height() * device_pixel_ratio))),
+        )
