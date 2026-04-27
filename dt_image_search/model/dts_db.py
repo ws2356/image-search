@@ -319,7 +319,7 @@ def get_files_by_clip_indices(conn, folder_id, clip_indices: list):
 
 def get_pending_files_for_folder(conn, folder_id: int, offset: int = 0, limit: int = 100) -> list[File]:
     cursor = conn.execute(
-        "SELECT id, path, clip_index, status FROM files WHERE folder_id = ? AND status = 0 LIMIT ? OFFSET ?",
+        "SELECT id, path, clip_index, status FROM files WHERE folder_id = ? AND status = 0 ORDER BY id LIMIT ? OFFSET ?",
         (folder_id, limit, offset)
     ).fetchall()
     return [File(id=row[0], path=row[1], folder_id=folder_id, clip_index=row[2], status=row[3])
