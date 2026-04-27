@@ -95,5 +95,8 @@ done
 # fi
 # 
 if [ "$has_failed" = true ]; then
+  echo "Some tests failed. Please check the output above for details."
   exit 1
+else
+  echo "All tests passed successfully."
 fi
