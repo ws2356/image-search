@@ -327,7 +327,7 @@ class BrowseController(BaseController):
             folders_changed.append(updated_path)
         self._folder_changed_in_background = []
         for p in folders_changed:
-            if normalized_folder_path(p).replace('\\', '/') == normalized_folder_path(self._selected_folder_path).replace('\\', '/'):
+            if normalized_folder_path(p).replace('\\', '/').startswith(normalized_folder_path(self._selected_folder_path).replace('\\', '/')):
                 self.image_list_model().load_images_from_folder(self._selected_folder_path)
                 break
 
