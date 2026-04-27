@@ -17,7 +17,7 @@ from dt_image_search.model.feature_flags import is_mobile_folder_enabled
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
-from dt_image_search.tools.dts_debounce import debounce
+from dt_image_search.tools.dts_debounce import debounce, throttle
 from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
 from dt_image_search.fs.bm_fs_monitor import add_folder, remove_folder
@@ -42,7 +42,7 @@ class BrowseController(BaseController):
         self.imageListModel = None
         self._runtime_mobile_transfer_states_by_path: dict[str, str] = {}
         self._init_folders()
-        self._fs_changed = False
+        self._folder_changed_in_background = []
         self._fs_changed_signal = self.FSChangedSignal()
         self._fs_changed_signal.signal.connect(self._on_notify_folder_changed_main_thread)
         self._mobile_transfer_state_changed_signal = self.MobileTransferStateChangedSignal()
@@ -81,9 +81,9 @@ class BrowseController(BaseController):
             else:
                 log("warning", message=f"BrowseController/on_folder_added: parent folder item not found in model for {parent_folder.path}")
             return
-        self.ensure_folder_registered(folder_path, insert_if_missing=True)
+        self.ensure_folder_registered(folder_path, insert_if_missing=True, select_folder=True)
 
-    def ensure_folder_registered(self, folder_path: str, *, insert_if_missing: bool = False) -> None:
+    def ensure_folder_registered(self, folder_path: str, *, insert_if_missing: bool = False, select_folder: bool = False) -> None:
         folder_path = normalized_folder_path(folder_path).replace('\\', '/')
         with create_db_conn(ctx=self.ctx) as conn:
             folder = get_folder_by_path(conn, folder_path)
@@ -103,8 +103,9 @@ class BrowseController(BaseController):
             log("warning", message=f"BrowseController/ensure_folder_registered: folder item not found in model for {folder.path}")
             return
 
-        log("debug", message=f"BrowseController/ensure_folder_registered: emitting select_folder for {folder.path}")
-        self._folder_selection_signal.select_folder.emit(folder_item)
+        if select_folder:
+            log("debug", message=f"BrowseController/ensure_folder_registered: emitting select_folder for {folder.path}")
+            self._folder_selection_signal.select_folder.emit(folder_item)
 
     def _ensure_folder_visible(self, folder_path: str) -> QStandardItem | None:
         is_mobile_folder = self.folder_list_model().is_mobile_folder_path(folder_path)
@@ -229,8 +230,9 @@ class BrowseController(BaseController):
                  log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: moved event, refreshing dest {event.dest_path}")
                  self._folder_change_impl(updated_path=event.dest_path)
         else:
-            log("debug", message="BrowseController/_on_notify_folder_changed_main_thread: controller inactive, setting _fs_changed=True")
-            self._fs_changed = True
+            self._folder_changed_in_background.append(event.src_path)
+            if event.event_type == 'moved':
+                self._folder_changed_in_background.append(event.dest_path)
     
     def _try_delete_root_folder(self, event: watchdog.events.FileSystemEvent) -> QStandardItem | None:
         src_path = normalized_folder_path(event.src_path)
@@ -280,6 +282,7 @@ class BrowseController(BaseController):
         else:
              log("warning", message=f"BrowseController/_repopulate_folder_item: no affected root item found for {src_path}")
 
+    @throttle(2, 'folder_path')  # Throttle mobile transfer state updates to avoid excessive UI refreshes
     def _on_mobile_transfer_state_changed(self, *, folder_path: str, transfer_state: str, **_: object) -> None:
         self._mobile_transfer_state_changed_signal.signal.emit(folder_path, transfer_state)
 
@@ -299,9 +302,9 @@ class BrowseController(BaseController):
         self._refresh_mobile_transfer_states()
 
     def on_active_change(self, old_value: bool, new_value: bool):
-        if new_value and self._fs_changed:
+        if new_value and self._folder_changed_in_background:
             self._folder_change_impl()
-            self._fs_changed = False
+            self._folder_changed_in_background = []
 
     def _folder_change_impl(self, updated_path: str = None):
         log("debug", message=f"BrowseController/_folder_change_impl: updated_path={updated_path}, selected={self._selected_folder_path}")
@@ -319,7 +322,14 @@ class BrowseController(BaseController):
                 return
         
         log("debug", message=f"BrowseController/_folder_change_impl: loading images from {self._selected_folder_path}")
-        self.image_list_model().load_images_from_folder(self._selected_folder_path)
+        folders_changed = [p for p in self._folder_changed_in_background]
+        if updated_path:
+            folders_changed.append(updated_path)
+        self._folder_changed_in_background = []
+        for p in folders_changed:
+            if normalized_folder_path(p).replace('\\', '/') == normalized_folder_path(self._selected_folder_path).replace('\\', '/'):
+                self.image_list_model().load_images_from_folder(self._selected_folder_path)
+                break
 
     def _refresh_mobile_transfer_states(self) -> None:
         with create_db_conn(ctx=self.ctx) as conn:
