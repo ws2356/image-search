@@ -6,6 +6,18 @@ import UIKit
 #endif
 
 actor OpenTelemetryTelemetryClient: TelemetryClient {
+    private static let allowedMetricAttributeKeys: Set<String> = [
+        "app.route",
+        "backup.flow_state",
+        "pairing.phase",
+        "permission.media_scope",
+        "backup.remove_after_backup_enabled",
+        "app.has_paired_desktop",
+        "transfer.transport",
+        "backup.failure_reason",
+        "transfer.cleanup_result",
+    ]
+
     private static var defaultRootSpanSampleRate: Double {
 #if DEBUG
         1.0
@@ -168,8 +180,9 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
     }
 
     func increment(metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) async {
-        let enrichedAttributes = await enrichedAttributes(for: attributes)
-        let otelAttributes = otelMetricAttributes(attributes: enrichedAttributes)
+        let otelAttributes = otelMetricAttributes(
+            attributes: filteredMetricAttributes(for: metric, attributes: attributes)
+        )
 
         switch metric {
         case .backupAttempts:
@@ -301,6 +314,27 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         attributes: MobileTelemetryAttributes
     ) -> [String: AttributeValue] {
         attributes.mapValues { $0.attributeValue }
+    }
+
+    private func filteredMetricAttributes(
+        for metric: MobileTelemetryMetric,
+        attributes: MobileTelemetryAttributes
+    ) -> MobileTelemetryAttributes {
+        var filteredAttributes: MobileTelemetryAttributes = [:]
+        for key in Self.allowedMetricAttributeKeys {
+            if let value = attributes[key] {
+                filteredAttributes[key] = value
+            }
+        }
+        switch metric {
+        case .backupAttempts:
+            break
+        case .backupSuccesses, .backupCompletedItems:
+            filteredAttributes.removeValue(forKey: "backup.failure_reason")
+        case .backupFailures:
+            filteredAttributes.removeValue(forKey: "transfer.cleanup_result")
+        }
+        return filteredAttributes
     }
 
     private func spanStatus(from status: MobileTelemetrySpanStatus) -> Status {

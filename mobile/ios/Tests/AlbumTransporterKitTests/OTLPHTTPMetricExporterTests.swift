@@ -58,7 +58,10 @@ final class OTLPHTTPMetricExporterTests: XCTestCase {
             by: 1,
             attributes: [
                 "correlation.session_id": MobileTelemetryAttributeValue.string("pairing-demo-001"),
+                "app.device.id": MobileTelemetryAttributeValue.string("ios-device-001"),
+                "transfer.transferred_count": MobileTelemetryAttributeValue.int(42),
                 "transfer.transport": MobileTelemetryAttributeValue.string("lan"),
+                "transfer.cleanup_result": MobileTelemetryAttributeValue.string("removed"),
             ]
         )
         await telemetryClient.forceFlush()
@@ -68,7 +71,11 @@ final class OTLPHTTPMetricExporterTests: XCTestCase {
         let bodyData = try XCTUnwrap(payloads.first)
         let bodyString = try XCTUnwrap(String(data: bodyData, encoding: .utf8))
         XCTAssertTrue(bodyString.contains("\"mobile.backup.successes\""))
-        XCTAssertTrue(bodyString.contains("\"pairing-demo-001\""))
+        XCTAssertTrue(bodyString.contains("\"lan\""))
+        XCTAssertTrue(bodyString.contains("\"removed\""))
+        XCTAssertFalse(bodyString.contains("\"pairing-demo-001\""))
+        XCTAssertFalse(bodyString.contains("\"ios-device-001\""))
+        XCTAssertFalse(bodyString.contains("\"42\""))
         XCTAssertTrue(bodyString.contains("\"service.name\""))
         XCTAssertTrue(bodyString.contains("\"AuBackup.iOS\""))
     }
