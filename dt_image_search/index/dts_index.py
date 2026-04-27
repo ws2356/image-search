@@ -360,6 +360,7 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
                 batch_result = False
         else:
             log("info", message=f"No new files to index in batch {batch_start} to {batch_end}.")
+            continue
         
         # Yield progress information after each batch
         res = {

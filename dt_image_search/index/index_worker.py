@@ -15,6 +15,7 @@ from dt_image_search.tools.dts_event_bus import default_bus
 
 _max_workers = 1  # Maximum number of concurrent indexing workers
 _index_workers = []  # List to keep track of active indexing workers
+_pending_index_folders = []  # List to keep track of pending indexing workers
 _workers_lock = threading.Lock()  # Protect _index_workers from concurrent access
 
 class IndexWorker:
@@ -87,7 +88,7 @@ class IndexWorker:
                     update_folder_status(conn, folder_id, 2)
                     status_bar_messenger.show_status_message.emit(f"Indexing completed: {self.folder.path}")
                 else:
-                    status_bar_messenger.show_status_message.emit(f"Indexing partially failed.")
+                    status_bar_messenger.show_status_message.emit(f"Indexing partially failed: {self.folder.path}")
         finally:
             # Always remove worker from list when done, even if an exception occurred
             with _workers_lock:
@@ -100,48 +101,54 @@ class IndexWorker:
                         if folder is None or folder.status == 2:
                             resume_index_workers(self.ctx)
 
-def add_index_worker(ctx: BMContext, folder: Folder) -> IndexWorker:
+def add_index_worker(ctx: BMContext, folder: Folder | None) -> IndexWorker:
     """
     Add a new indexing worker for the specified folder.
     """
+    worker = None
     with _workers_lock:
+        if folder is None:
+            folder = _pending_index_folders.pop() if _pending_index_folders else None
+        if folder is None:
+            return None
+
         existing_worker = next((w for w in _index_workers if w.folder.id == folder.id), None)
         if existing_worker:
             log("info", message=f"Index worker already exists for this folder: {folder.id}.")
             return existing_worker  # Return existing worker if already indexing this folder
 
-        if len(_index_workers) >= _max_workers:
-            return None  # Cannot add more workers if the limit is reached
-        
-        if len(_index_workers) >= _max_workers:
-            # Stop the oldest worker if replacing existing
-            worker = _index_workers.pop(0)
-            worker.stop()
-
         log("info", message=f"Index worker not already exists for this folder: {folder.id}, creating one")
-        worker = IndexWorker(ctx, folder)
-        _index_workers.append(worker)
-        _index_workers.sort(key=lambda w: datetime.datetime.fromisoformat(w.folder.added_at))
+        if len(_index_workers) < _max_workers:
+            worker = IndexWorker(ctx, folder)
+            _index_workers.append(worker)
+            _index_workers.sort(key=lambda w: datetime.datetime.fromisoformat(w.folder.added_at))
+            _pending_index_folders[:] = [f for f in _pending_index_folders if f.id != folder.id]  # Remove from pending if exists
+        else:
+            log("info", message=f"Max workers reached, adding index worker for folder {folder.id} to pending queue.")
+            if not any(f.id == folder.id for f in _pending_index_folders):
+                _pending_index_folders.append(folder)
     
     # Start the worker outside the lock to avoid holding the lock during thread creation
-    worker.run()  
+    if worker:
+        worker.run()  
     return worker
 
 def resume_index_workers(ctx: BMContext, is_init: bool = False):
-    folder_statuses_to_resume = [0, 1]  # Not indexed or partially indexed
+    folder_statuses_to_resume = [0, 1, 2, 3] if is_init else [0, 1]  # Not indexed or partially indexed
     if is_init:
-        folder_statuses_to_resume.append(3)  # Also include partially updated on init
-
-    log("info", message=f"Resuming index workers for incomplete folders.")
+        log("info", message="Refresh index for all folders")
+    else:
+        log("info", message="Checking for pending index workers to resume.")
     def resume_logic():
         with create_db_conn(ctx=ctx) as conn:
             log("info", message="Resuming index workers for incomplete folders - db connected")
             all_folders = get_all_folders(conn)
             folders = [folder for folder in all_folders if folder.status in folder_statuses_to_resume]
             for folder in folders:
-                if not add_index_worker(ctx, folder):
-                    return
-                log("info", message=f"Resuming indexing for folder: {folder.path}")
+                add_index_worker(ctx, folder)
+            if not folders:
+                add_index_worker(ctx, None)  # Try to add a worker from pending queue if no folders need indexing
+        
     _resume_thread = threading.Thread(target=resume_logic, daemon=True)
     _resume_thread.start()
 
