@@ -13,7 +13,7 @@ from torchvision import transforms
 import numpy as np
 import faiss
 import hf_xet
-from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
+from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, count_files_in_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
@@ -322,32 +322,29 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
     _model_loaded_event.wait()  # Ensure model is preloaded before starting indexing
 
     create_index_if_needed(index_path)
-    with create_db_conn(ctx=ctx) as conn:
-        files = get_pending_files_for_folder(conn, folder_id)
-    
-    if not files:
-        log("error", "db", message=f"No files to index for folder ID {folder_id}.")
-        return
-    
-    total_files = len(files)
-    step = 100
-    files_processed = 0
-    
-    for i_slice in range(0, total_files, step):
-        batch_start = i_slice
-        batch_end = min(i_slice + step, total_files)
-        files_slice = files[i_slice:batch_end]
+    offset = 0
+    limit = 100
+    total_files = -1
+    while True:
+        with create_db_conn(ctx=ctx) as conn:
+            if total_files == -1:
+                total_files = count_files_in_folder(conn, folder_id)
+            files = get_pending_files_for_folder(conn, folder_id, offset=offset, limit=limit)
+        if not files:
+            break
+        batch_start = offset
+        offset += len(files)
+        batch_end = offset
         
-        log("debug", message=f"Processing slice {batch_start} to {batch_end} for indexing.")
+        log("debug", message=f"Processing files batch {batch_start} to {batch_end} for indexing.")
         
         # Filter files that need to be indexed
-        files_to_index = [file for file in files_slice if file.clip_index is None and file.status == 0]
+        files_to_index = [file for file in files if file.clip_index is None and file.status == 0]
         
         batch_result = True
         if files_to_index:
             try:
                 batch_result = _add_to_index(ctx, index_path, folder_id, files_to_index)
-                files_processed += len(files_to_index)
             except CorruptFaissIndexError:
                 log(
                     "error",
@@ -362,14 +359,14 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
                 log("error", "index", message=f"Unexpected indexing error for folder {folder_id}: {exc}")
                 batch_result = False
         else:
-            log("info", message=f"No new files to index in slice {batch_start} to {batch_end}.")
+            log("info", message=f"No new files to index in batch {batch_start} to {batch_end}.")
         
         # Yield progress information after each batch
         res = {
             'batch_start': batch_start,
             'batch_end': batch_end,
             'total_files': total_files,
-            'files_processed': files_processed,
+            'files_processed': offset,
             'files_in_batch': len(files_to_index),
             'batch_result': batch_result
         }

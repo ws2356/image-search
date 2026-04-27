@@ -317,13 +317,18 @@ def get_files_by_clip_indices(conn, folder_id, clip_indices: list):
     path_by_clip_index = {row[1]: row[0] for row in cursor.fetchall()}
     return [path_by_clip_index.get(clip_index) for clip_index in clip_indices]
 
-def get_pending_files_for_folder(conn, folder_id: int):
+def get_pending_files_for_folder(conn, folder_id: int, offset: int = 0, limit: int = 100) -> list[File]:
     cursor = conn.execute(
-        "SELECT id, path, clip_index, status FROM files WHERE folder_id = ? AND status = 0",
-        (folder_id,)
+        "SELECT id, path, clip_index, status FROM files WHERE folder_id = ? AND status = 0 LIMIT ? OFFSET ?",
+        (folder_id, limit, offset)
     ).fetchall()
     return [File(id=row[0], path=row[1], folder_id=folder_id, clip_index=row[2], status=row[3])
             for row in cursor]
+
+def count_files_in_folder(conn, folder_id: int) -> int:
+    cursor = conn.execute("SELECT COUNT(*) FROM files WHERE folder_id = ?", (folder_id,))
+    row = cursor.fetchone()
+    return row[0] if row else 0
 
 def delete_files_by_folder_id(conn, folder_id: int):
     conn.execute("DELETE FROM files WHERE folder_id = ?", (folder_id,))
