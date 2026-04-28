@@ -67,6 +67,12 @@ Upload only metadata to App Store Connect
 
 Build and upload both IPA and metadata to App Store Connect
 
+```sh
+[bundle exec] fastlane ios download_metadata
+```
+
+Download the current App Store Connect metadata into `mobile/ios/fastlane/metadata`.
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
