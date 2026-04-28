@@ -16,10 +16,6 @@ _worker_preprocess = None
 def _initialize_worker(ctx: BMContext):
     """Initialize worker process with preloaded model"""
     global _worker_preprocess
-    log("debug", message=f"Initializing model in worker [debug]")
-    log("info", message=f"Initializing model in worker [info]")
-    log("error", message=f"Initializing model in worker [error]")
-    
     # Load model once per worker process
     try:
         _model, _, preprocess = open_clip.create_model_and_transforms(ctx.model_name, pretrained=ctx.get_pretrained_model_name_or_path())
