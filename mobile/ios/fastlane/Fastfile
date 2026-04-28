@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-require "shellwords"
 require "dotenv"
-require "json"
+require "deliver"
+require "deliver/options"
+require "deliver/setup"
 require "fileutils"
 require "tmpdir"
 
@@ -51,16 +52,6 @@ def resolved_api_key_file_path
   return ios_candidate if File.exist?(ios_candidate)
 
   File.expand_path(path, __dir__)
-end
-
-def deliver_cli_api_key_json
-  JSON.generate(
-    {
-      key_id: api_key_id,
-      filepath: resolved_api_key_file_path,
-      issuer_id: api_key_issuer_id
-    }
-  )
 end
 
 def project_path(options)
@@ -216,7 +207,7 @@ platform :ios do
         ) if ENV["FASTLANE_SESSION"].to_s.strip.empty?
       end
     end
-    if flags[:upload_metadata]
+    if flags[:upload_metadata] && truthy?(options[:require_existing_metadata], default: true)
       ensure_metadata_ready!(metadata_path(options))
     end
 
@@ -300,7 +291,7 @@ platform :ios do
   desc "Download current App Store Connect metadata into fastlane/metadata"
   lane :download_metadata do |options|
     options ||= {}
-    prerelease_check(options.merge(upload_binary: false, upload_metadata: true))
+    prerelease_check(options.merge(upload_binary: false, upload_metadata: true, require_existing_metadata: false))
     UI.user_error!("API key auth is required for download_metadata.") unless api_key_complete?
 
     app_identifier = option_or_env(
@@ -311,22 +302,41 @@ platform :ios do
     )
     metadata_dir = metadata_path(options)
     FileUtils.mkdir_p(File.join(ios_root, "build"))
-    staging_dir = Dir.mktmpdir("fastlane-metadata-", File.join(ios_root, "build"))
+    staging_root = Dir.mktmpdir("fastlane-metadata-", File.join(ios_root, "build"))
+    staging_dir = File.join(staging_root, "metadata")
 
     begin
-      sh(
-        "bundle",
-        "exec",
-        "fastlane",
-        "deliver",
-        "download_metadata",
-        "--app_identifier",
-        app_identifier,
-        "--metadata_path",
-        staging_dir,
-        "--api_key",
-        deliver_cli_api_key_json
+      deliver_options = FastlaneCore::Configuration.create(
+        Deliver::Options.available_options,
+        {
+          app_identifier: app_identifier,
+          metadata_path: staging_dir,
+          platform: "ios",
+          api_key: {
+            key_id: api_key_id,
+            filepath: resolved_api_key_file_path,
+            issuer_id: api_key_issuer_id
+          }
+        }
       )
+      Deliver::Runner.new(deliver_options)
+
+      app = Deliver.cache[:app]
+      platform = Spaceship::ConnectAPI::Platform.map(deliver_options[:platform])
+      version = app.get_latest_app_store_version(platform: platform)
+      requested_version = option_or_env(options, :app_version, "APP_STORE_CONNECT_APP_VERSION")
+      if requested_version.to_s.length > 0
+        version = app.get_live_app_store_version(platform: platform) if version.version_string != requested_version
+        if version.nil? || version.version_string != requested_version
+          UI.user_error!("Neither the current nor live version match specified app_version \"#{requested_version}\"")
+        end
+      end
+
+      Deliver::Setup.new.generate_metadata_files(app, version, staging_dir, deliver_options)
+
+      unless Dir.exist?(staging_dir) && Dir.children(staging_dir).any?
+        UI.user_error!("Metadata download produced no files at #{staging_dir}; leaving existing metadata untouched.")
+      end
 
       if Dir.exist?(metadata_dir)
         if Dir.children(metadata_dir).any?
@@ -340,7 +350,9 @@ platform :ios do
 
       FileUtils.mv(staging_dir, metadata_dir)
       staging_dir = nil
+      staging_root = nil
     ensure
+      FileUtils.rm_rf(staging_root) if staging_root && Dir.exist?(staging_root)
       FileUtils.rm_rf(staging_dir) if staging_dir && Dir.exist?(staging_dir)
     end
   end
