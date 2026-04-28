@@ -1,0 +1,13 @@
+AuBackup moves photos and videos from your iPhone to your PC without routing your library through the cloud.
+
+Pair in seconds by scanning a QR code from AuSearch on your desktop, then transfer full-quality items over Wi-Fi or switch to USB for even faster backups. Reconnect to the same desktop later and keep your library moving with a simple, privacy-friendly workflow.
+
+Why AuBackup:
+• Direct iPhone-to-PC backup
+• Full-quality photo and video transfer
+• Fast QR pairing with your desktop
+• Works over Wi-Fi and USB
+• Local transfer flow designed for privacy
+• Easy reconnects to previously paired desktops
+
+Start on your PC, add a Mobile Folder in AuSearch, scan the QR code, and back up your library in minutes.
