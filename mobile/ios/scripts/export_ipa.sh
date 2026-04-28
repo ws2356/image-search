@@ -16,6 +16,11 @@ TEAM_ID="${TEAM_ID:-ZU6V838VRQ}"
 EXPORT_OPTIONS_PLIST="${EXPORT_OPTIONS_PLIST:-}"
 ALLOW_PROVISIONING_UPDATES="${ALLOW_PROVISIONING_UPDATES:-0}"
 CLEAN_BUILD="${CLEAN_BUILD:-1}"
+CODE_SIGN_IDENTITY_NAME="${CODE_SIGN_IDENTITY_NAME:-}"
+KEYCHAIN_PATH="${KEYCHAIN_PATH:-}"
+SIGNING_STYLE="${SIGNING_STYLE:-automatic}"
+PROVISIONING_PROFILE_SPECIFIER="${PROVISIONING_PROFILE_SPECIFIER:-}"
+BUNDLE_IDENTIFIER="${BUNDLE_IDENTIFIER:-net.boldman.albumtransporter}"
 
 usage() {
     cat <<'EOF'
@@ -34,6 +39,11 @@ Environment overrides:
   EXPORT_OPTIONS_PLIST         Existing ExportOptions.plist to use as-is
   ALLOW_PROVISIONING_UPDATES   Set to 1 to pass -allowProvisioningUpdates
   CLEAN_BUILD                  Set to 0 to skip the clean step before archive
+  CODE_SIGN_IDENTITY_NAME      Optional code signing identity name from Keychain
+  KEYCHAIN_PATH                Optional keychain path forwarded via OTHER_CODE_SIGN_FLAGS
+  SIGNING_STYLE                automatic (default) or manual
+  PROVISIONING_PROFILE_SPECIFIER Provisioning profile name/specifier for manual signing
+  BUNDLE_IDENTIFIER            Bundle identifier used in ExportOptions.plist for manual signing
 EOF
 }
 
@@ -46,7 +56,8 @@ require_command() {
 
 write_export_options_plist() {
     local plist_path="$1"
-    cat >"${plist_path}" <<EOF
+    {
+        cat <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -56,7 +67,24 @@ write_export_options_plist() {
     <key>method</key>
     <string>${EXPORT_METHOD}</string>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>${SIGNING_STYLE}</string>
+EOF
+        if [[ -n "${CODE_SIGN_IDENTITY_NAME}" ]]; then
+            cat <<EOF
+    <key>signingCertificate</key>
+    <string>${CODE_SIGN_IDENTITY_NAME}</string>
+EOF
+        fi
+        if [[ "${SIGNING_STYLE}" == "manual" ]]; then
+            cat <<EOF
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>${BUNDLE_IDENTIFIER}</key>
+        <string>${PROVISIONING_PROFILE_SPECIFIER}</string>
+    </dict>
+EOF
+        fi
+        cat <<EOF
     <key>stripSwiftSymbols</key>
     <true/>
     <key>teamID</key>
@@ -66,6 +94,7 @@ write_export_options_plist() {
 </dict>
 </plist>
 EOF
+    } >"${plist_path}"
 }
 
 main() {
@@ -78,6 +107,18 @@ main() {
 
     if [[ ! -d "${PROJECT_PATH}" ]]; then
         echo "error: project not found at ${PROJECT_PATH}" >&2
+        exit 1
+    fi
+    if [[ -n "${KEYCHAIN_PATH}" && ! -f "${KEYCHAIN_PATH}" ]]; then
+        echo "error: keychain not found at ${KEYCHAIN_PATH}" >&2
+        exit 1
+    fi
+    if [[ "${SIGNING_STYLE}" != "automatic" && "${SIGNING_STYLE}" != "manual" ]]; then
+        echo "error: SIGNING_STYLE must be 'automatic' or 'manual'" >&2
+        exit 1
+    fi
+    if [[ "${SIGNING_STYLE}" == "manual" && -z "${PROVISIONING_PROFILE_SPECIFIER}" ]]; then
+        echo "error: PROVISIONING_PROFILE_SPECIFIER is required when SIGNING_STYLE=manual" >&2
         exit 1
     fi
 
@@ -104,10 +145,18 @@ main() {
         -destination "${DESTINATION}"
         -derivedDataPath "${DERIVED_DATA_PATH}"
         DEVELOPMENT_TEAM="${TEAM_ID}"
-        CODE_SIGN_STYLE=Automatic
     )
     if [[ "${ALLOW_PROVISIONING_UPDATES}" == "1" ]]; then
         common_args+=(-allowProvisioningUpdates)
+    fi
+    if [[ "${SIGNING_STYLE}" != "manual" ]]; then
+        common_args+=(CODE_SIGN_STYLE="$(tr '[:lower:]' '[:upper:]' <<< "${SIGNING_STYLE:0:1}")${SIGNING_STYLE:1}")
+    fi
+    if [[ -n "${CODE_SIGN_IDENTITY_NAME}" && "${SIGNING_STYLE}" != "manual" ]]; then
+        common_args+=(CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY_NAME}")
+    fi
+    if [[ -n "${KEYCHAIN_PATH}" ]]; then
+        common_args+=(OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}")
     fi
 
     local -a archive_args=(archive -archivePath "${ARCHIVE_PATH}")
@@ -116,6 +165,12 @@ main() {
     fi
 
     echo "==> Archiving ${SCHEME} (${CONFIGURATION})"
+    if [[ -n "${CODE_SIGN_IDENTITY_NAME}" ]]; then
+        echo "==> Using code signing identity: ${CODE_SIGN_IDENTITY_NAME}"
+    fi
+    if [[ "${SIGNING_STYLE}" == "manual" ]]; then
+        echo "==> Using provisioning profile during export: ${PROVISIONING_PROFILE_SPECIFIER}"
+    fi
     xcodebuild "${common_args[@]}" "${archive_args[@]}"
 
     echo "==> Exporting IPA (${EXPORT_METHOD})"

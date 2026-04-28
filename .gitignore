@@ -5,6 +5,10 @@
 __pycache__
 /build
 /dist
+/mobile/ios/build/
+/mobile/ios/fastlane/Preview.html
+/mobile/ios/fastlane/report.xml
+/mobile/ios/fastlane/test_output/
 MagicMock/
 /DTImageSearchApp
 /*.msix
@@ -14,4 +18,4 @@ node_modules
 xcuserdata/
 obj/
 .build/
-.env
+.env.credential
