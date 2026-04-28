@@ -322,19 +322,20 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
     _model_loaded_event.wait()  # Ensure model is preloaded before starting indexing
 
     create_index_if_needed(index_path)
-    offset = 0
+
     limit = 100
     total_files = -1
+    batch_start = 0
+    batch_end = 0
     while True:
         with create_db_conn(ctx=ctx) as conn:
             if total_files == -1:
                 total_files = count_files_in_folder(conn, folder_id)
-            files = get_pending_files_for_folder(conn, folder_id, offset=offset, limit=limit)
+            files = get_pending_files_for_folder(conn, folder_id, offset=0, limit=limit)
         if not files:
             break
-        batch_start = offset
-        offset += len(files)
-        batch_end = offset
+        batch_start = batch_end
+        batch_end += len(files)
         
         log("debug", message=f"Processing files batch {batch_start} to {batch_end} for indexing.")
         
@@ -367,7 +368,7 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
             'batch_start': batch_start,
             'batch_end': batch_end,
             'total_files': total_files,
-            'files_processed': offset,
+            'files_processed': batch_end,
             'files_in_batch': len(files_to_index),
             'batch_result': batch_result
         }
