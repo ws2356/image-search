@@ -11,7 +11,7 @@ struct HomeView: View {
             number: 1,
             title: "Open AuSearch on your PC",
             detail: "Open in your desktop browser. Then install and launch AuSearch.",
-            link: "https://f.boldman.net/2"
+            link: "https://aurora.boldman.net"
         ),
         SetupStep(id: "add-mobile-folder", number: 2, title: "Add a Mobile Folder", detail: "Click Add Folder → Mobile Device in the PC app", link: nil),
         SetupStep(id: "scan-qr", number: 3, title: "Scan the QR code", detail: "A QR code appears on screen — scan it below to pair", link: nil),
