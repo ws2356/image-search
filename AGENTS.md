@@ -15,7 +15,7 @@ Welcome to the `image-search` repository. This document outlines the architectur
 - **Package**: Run `dt_image_search/scripts/build_pyinstaller.sh --distpath pyinstaller-dist` to create a packaged app bundle.
 - **Package DMG**: Run `dt_image_search/scripts/package_dmg.sh  --app-path pyinstaller-dist/AuSearch.app` to create a standalone application bundle (macOS DMG in this case).
 - **Package MSIX**: Run `powershell dt_image_search/scripts/package_msix.ps1 && powershell dt_image_search/scripts/codesign.ps1` to create msix for Windows.
-- **iOS app build & distribution**: See `mobile/ios/fastlane/README.md` for Fastlane commands to build and upload the iOS companion app to App Store Connect.
+- **iOS app build & distribution**: See `mobile/ios/fastlane/README.md` for Fastlane commands to build and upload the iOS companion app to App Store Connect. Fastlane prefers App Store Connect API key auth via `API_KEY_ID` and `API_KEY_FILE_PATH` in `mobile/ios/fastlane/.env.credential`; `API_KEY_ISSUER_ID` is optional for individual keys. Manual signing uses `IOS_CODE_SIGN_IDENTITY` and, when `IOS_SIGNING_STYLE=manual`, `IOS_PROVISIONING_PROFILE_SPECIFIER` from `mobile/ios/fastlane/.env`.
 - **Run Application**: Usually executed from the root via `python dt_image_search/main.py` or `python -m dt_image_search`.
 - **Testing**: There is no established pytest suite yet, but individual test scripts like `test_exception_handlers.py` can be executed directly via `python test_exception_handlers.py`. Use standard Python `unittest` or `pytest` paradigms for new tests.
 
