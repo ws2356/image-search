@@ -69,4 +69,4 @@ metrics_generator:
 overrides:  # Enable processors globally/single-tenant
   defaults:
     metrics_generator:
-      processors: [local_blocks, span_metrics, service_graphs]
+      processors: [local-blocks, span-metrics, service-graphs]
