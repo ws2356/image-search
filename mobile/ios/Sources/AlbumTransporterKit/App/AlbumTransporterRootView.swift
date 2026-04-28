@@ -9,7 +9,11 @@ import Photos
 public struct AlbumTransporterRootView: View {
     @StateObject private var model: MobileAppModel
 
-    public init(container: Container = .shared) {
+    public init() {
+        self.init(container: .shared)
+    }
+
+    init(container: Container) {
         _model = StateObject(wrappedValue: container.mobileAppModel())
     }
 

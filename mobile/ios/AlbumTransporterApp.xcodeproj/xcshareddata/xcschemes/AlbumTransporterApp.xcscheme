@@ -37,6 +37,16 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+<TestableReference
+   skipped = "NO">
+   <BuildableReference
+      BuildableIdentifier = "primary"
+      BlueprintIdentifier = "739A2121A64CD8C9B7DB5BA4"
+      BuildableName = "AlbumTransporterAppSnapshotTests.xctest"
+      BlueprintName = "AlbumTransporterAppSnapshotTests"
+      ReferencedContainer = "container:AlbumTransporterApp.xcodeproj">
+   </BuildableReference>
+</TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

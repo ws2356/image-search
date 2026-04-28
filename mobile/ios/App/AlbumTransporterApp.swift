@@ -5,7 +5,12 @@ import SwiftUI
 struct AlbumTransporterApp: App {
     var body: some Scene {
         WindowGroup {
-            AlbumTransporterRootView()
+            if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+                Color.clear
+                    .ignoresSafeArea()
+            } else {
+                AlbumTransporterRootView()
+            }
         }
     }
 }
