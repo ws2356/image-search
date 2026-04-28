@@ -4,6 +4,7 @@ require "shellwords"
 require "dotenv"
 require "json"
 require "fileutils"
+require "tmpdir"
 
 credential_env_path = File.expand_path(".env.credential", __dir__)
 Dotenv.overload(credential_env_path) if File.exist?(credential_env_path)
@@ -309,22 +310,39 @@ platform :ios do
       CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier)
     )
     metadata_dir = metadata_path(options)
-    FileUtils.rm_rf(metadata_dir)
-    FileUtils.mkdir_p(metadata_dir)
+    FileUtils.mkdir_p(File.join(ios_root, "build"))
+    staging_dir = Dir.mktmpdir("fastlane-metadata-", File.join(ios_root, "build"))
 
-    sh(
-      "bundle",
-      "exec",
-      "fastlane",
-      "deliver",
-      "download_metadata",
-      "--app_identifier",
-      app_identifier,
-      "--metadata_path",
-      metadata_dir,
-      "--api_key",
-      deliver_cli_api_key_json
-    )
+    begin
+      sh(
+        "bundle",
+        "exec",
+        "fastlane",
+        "deliver",
+        "download_metadata",
+        "--app_identifier",
+        app_identifier,
+        "--metadata_path",
+        staging_dir,
+        "--api_key",
+        deliver_cli_api_key_json
+      )
+
+      if Dir.exist?(metadata_dir)
+        if Dir.children(metadata_dir).any?
+          backup_dir = "#{metadata_dir}.backup-#{Time.now.utc.strftime('%Y%m%d%H%M%S')}"
+          FileUtils.mv(metadata_dir, backup_dir)
+          UI.message("Backed up existing metadata to #{backup_dir}")
+        else
+          FileUtils.rm_rf(metadata_dir)
+        end
+      end
+
+      FileUtils.mv(staging_dir, metadata_dir)
+      staging_dir = nil
+    ensure
+      FileUtils.rm_rf(staging_dir) if staging_dir && Dir.exist?(staging_dir)
+    end
   end
 
   desc "Build and upload the IPA and/or metadata to App Store Connect"
