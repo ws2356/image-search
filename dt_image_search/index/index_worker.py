@@ -88,6 +88,7 @@ class IndexWorker:
                     update_folder_status(conn, folder_id, 2)
                     status_bar_messenger.show_status_message.emit(f"Indexing completed: {self.folder.path}")
                 else:
+                    log("error", message="Indexing partially failed.")
                     status_bar_messenger.show_status_message.emit(f"Indexing partially failed: {self.folder.path}")
         finally:
             # Always remove worker from list when done, even if an exception occurred
