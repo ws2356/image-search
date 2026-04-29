@@ -1054,7 +1054,7 @@ def _cleanup_temp_upload_file(temp_file_path: str | None) -> None:
 
 
 def _target_month_directory(*, created_at: datetime | None, updated_at: datetime | None) -> str:
-    timestamp = updated_at or created_at or datetime.now(timezone.utc)
+    timestamp = created_at or updated_at or datetime.now(timezone.utc)
     normalized_timestamp = _utc_now(timestamp)
     return normalized_timestamp.strftime("%Y-%m")
 

@@ -90,6 +90,36 @@ class TestMobileBackupFlow(unittest.TestCase):
             self.assertEqual(session_row["status"], "completed")
             self.assertIsNotNone(session_row["ended_at"])
 
+    def test_mock_mobile_client_buckets_assets_by_created_month_not_updated_month(self):
+        pairing_session = self._pairing_service.start_pairing_session(
+            self._destination_root.as_posix(),
+            now=datetime.now(timezone.utc),
+        )
+        pairing_payload = pairing_session.token_for(MobilePlatform.IOS).payload
+
+        legacy_file_path = self._client_media_root / "IMG_1999.PNG"
+        legacy_file_path.write_bytes(_SAMPLE_IMAGE_BYTES[0])
+        legacy_asset = MockBackupAsset(
+            asset_id="ph://functional-legacy-asset-001",
+            file_path=legacy_file_path,
+            filename=legacy_file_path.name,
+            media_type="image",
+            created_at=datetime(2025, 3, 14, 8, 15, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 4, 9, 12, 30, tzinfo=timezone.utc),
+            asset_version="2026-04-09T12:30:00+00:00",
+        )
+        backup_client = MockMobileBackupClient(
+            pairing_payload=pairing_payload,
+            device_uuid="functional-ios-device-002",
+            device_name="Functional Legacy iPhone",
+        )
+
+        backup_result = backup_client.pair_and_backup([legacy_asset])
+
+        self.assertEqual(backup_result.asset_responses[0]["status"], "stored")
+        self.assertEqual(backup_result.asset_responses[0]["local_relative_path"], "2025-03/IMG_1999.PNG")
+        self.assertTrue((Path(backup_result.pairing.folder_path) / "2025-03" / legacy_asset.filename).exists())
+
     def _create_sample_assets(self) -> list[MockBackupAsset]:
         first_file_path = self._client_media_root / "IMG_0001.PNG"
         second_file_path = self._client_media_root / "IMG_0002.PNG"

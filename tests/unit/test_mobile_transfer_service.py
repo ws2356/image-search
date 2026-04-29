@@ -175,6 +175,46 @@ class TestMobileTransferService(unittest.TestCase):
             self.assertIsNotNone(folder_row)
             self.assertEqual(folder_row["transfer_state"], "transfer_completed")
 
+    def test_asset_upload_buckets_into_created_month_when_updated_month_differs(self):
+        pairing_context = self._pair_device()
+
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": pairing_context["session_id"],
+                "device_uuid": pairing_context["device_uuid"],
+                "trust_key": pairing_context["trust_key_b64"],
+                "total_assets": 1,
+            },
+        )
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+
+        asset_metadata = {
+            "schema": MOBILE_TRANSFER_SCHEMA,
+            "session_id": pairing_context["session_id"],
+            "device_uuid": pairing_context["device_uuid"],
+            "trust_key": pairing_context["trust_key_b64"],
+            "asset_id": "ph://asset-created-month",
+            "asset_version": "2026-04-09T12:30:00+00:00",
+            "filename": "IMG_2025.JPG",
+            "media_type": "image",
+            "created_at": "2025-03-14T08:15:00+00:00",
+            "updated_at": "2026-04-09T12:30:00+00:00",
+        }
+        stored_status, stored_response = self._post_asset(
+            asset_metadata=asset_metadata,
+            asset_bytes=b"image-created-in-2025",
+        )
+        self.assertEqual(stored_status, 200)
+        self.assertEqual(stored_response["status"], "stored")
+        self.assertEqual(stored_response["local_relative_path"], "2025-03/IMG_2025.JPG")
+
+        stored_path = Path(pairing_context["folder_path"]) / stored_response["local_relative_path"]
+        self.assertTrue(stored_path.exists())
+        self.assertEqual(stored_path.read_bytes(), b"image-created-in-2025")
+
     def test_start_request_publishes_transfer_started_event(self):
         pairing_context = self._pair_device()
         received_events: list[dict[str, object]] = []
