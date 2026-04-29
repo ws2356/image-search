@@ -59,6 +59,21 @@ class TestFSImageListModel(unittest.TestCase):
             (folder_b / "b.jpg").as_posix(),
         )
 
+    def test_load_images_prunes_thumbnail_cache_for_non_visible_items(self):
+        model = FSImageListModel()
+        keep_path = (Path(self._temp_dir.name) / "keep.jpg").as_posix()
+        drop_path = (Path(self._temp_dir.name) / "drop.jpg").as_posix()
+        model.thumbnail_cache = {
+            keep_path: object(),
+            drop_path: object(),
+        }
+        model.loading_paths = {keep_path, drop_path}
+
+        model.load_images([(keep_path, 0)])
+
+        self.assertEqual(set(model.thumbnail_cache.keys()), {keep_path})
+        self.assertEqual(model.loading_paths, {keep_path})
+
     def _wait_for(self, predicate, timeout_ms: int = 3000) -> None:
         deadline = QDeadlineTimer(timeout_ms)
         while not predicate():

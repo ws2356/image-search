@@ -112,6 +112,7 @@ class FolderTreeModel(QAbstractItemModel):
         self._mobile_transfer_states_by_path: dict[str, str] = {}
         self._mobile_folder_summaries_by_path: dict[str, dict[str, object]] = {}
         self._node_cache: dict[tuple[str, str], _FolderTreeNode] = {}
+        self._child_directory_paths_cache: dict[str, list[str]] = {}
         self._pending_fs_row_insertions: list[_PendingFsRowChange] = []
         self._pending_fs_row_removals: list[_PendingFsRowChange] = []
         self._root_registry_model = QStandardItemModel(self)
@@ -242,6 +243,7 @@ class FolderTreeModel(QAbstractItemModel):
         }
         if new_mobile_folder_paths == self._mobile_folder_paths:
             return
+        self._invalidate_child_directory_paths()
         self._move_roots_for_mobile_folder_paths(new_mobile_folder_paths)
         self._mobile_folder_paths = new_mobile_folder_paths
 
@@ -482,6 +484,11 @@ class FolderTreeModel(QAbstractItemModel):
         return QModelIndex()
 
     def _child_directory_paths(self, parent_path: str) -> list[str]:
+        normalized_parent_path = normalized_folder_path(parent_path).replace("\\", "/")
+        cached_child_paths = self._child_directory_paths_cache.get(normalized_parent_path)
+        if cached_child_paths is not None:
+            return cached_child_paths
+
         parent_proxy_index = self._fs_proxy_model.index_for_path(parent_path)
         if not parent_proxy_index.isValid():
             return []
@@ -493,7 +500,15 @@ class FolderTreeModel(QAbstractItemModel):
                 continue
             child_paths.append(self._fs_proxy_model.file_path(child_index))
         child_paths.sort(key=str.casefold)
+        self._child_directory_paths_cache[normalized_parent_path] = child_paths
         return child_paths
+
+    def _invalidate_child_directory_paths(self, parent_path: str | None = None) -> None:
+        if parent_path is None:
+            self._child_directory_paths_cache.clear()
+            return
+        normalized_parent_path = normalized_folder_path(parent_path).replace("\\", "/")
+        self._child_directory_paths_cache.pop(normalized_parent_path, None)
 
     def _ensure_section_items(self) -> None:
         if not self._sectioned_view:
@@ -728,12 +743,17 @@ class FolderTreeModel(QAbstractItemModel):
             for child in sorted(Path(self._public_path(parent_path)).iterdir(), key=lambda path: path.name.casefold()):
                 if not child.is_dir():
                     continue
-                child_paths.append(normalized_folder_path(child.resolve().as_posix()).replace("\\", "/"))
+                child_path = normalized_folder_path(child.resolve().as_posix()).replace("\\", "/")
+                if not self._is_visible_child_path(child_path):
+                    continue
+                child_paths.append(child_path)
             return child_paths
         except OSError:
             return []
 
     def _is_visible_child_path(self, child_path: str) -> bool:
+        if Path(self._public_path(child_path)).name.startswith("."):
+            return False
         if self._is_mobile_folder_path(child_path):
             return False
         return self.folder_predicate(Path(self._public_path(child_path)))
@@ -795,6 +815,7 @@ class FolderTreeModel(QAbstractItemModel):
         if adapter_parent is None:
             return
         _adapter_parent_index, parent_path = adapter_parent
+        self._invalidate_child_directory_paths(parent_path)
         pending_change = self._take_pending_fs_change(
             self._pending_fs_row_insertions,
             parent_path=parent_path,
@@ -845,6 +866,7 @@ class FolderTreeModel(QAbstractItemModel):
         if adapter_parent is None:
             return
         _adapter_parent_index, parent_path = adapter_parent
+        self._invalidate_child_directory_paths(parent_path)
         pending_change = self._take_pending_fs_change(
             self._pending_fs_row_removals,
             parent_path=parent_path,
@@ -879,6 +901,8 @@ class FolderTreeModel(QAbstractItemModel):
         adapter_parent = self._adapter_parent_index_for_fs_parent(fs_parent_index)
         if adapter_parent is None:
             return
+        _adapter_parent_index, parent_path = adapter_parent
+        self._invalidate_child_directory_paths(parent_path)
 
         for row in range(top_left.row(), bottom_right.row() + 1):
             child_index = self._fs_proxy_model.index(row, 0, fs_parent_index)

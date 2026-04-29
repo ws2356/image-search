@@ -260,6 +260,8 @@ class MainWindow(QMainWindow):
             view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
             view.setViewMode(QListView.IconMode)
+            view.setLayoutMode(QListView.Batched)
+            view.setBatchSize(100)
             view.setResizeMode(QListView.Adjust)
             view.setUniformItemSizes(True)
             view.setIconSize(QSize(150, 150))

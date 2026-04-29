@@ -59,6 +59,13 @@ class ImageListModel(QAbstractListModel):
         self.load_images([(path, 0) for path in paths])
 
     def load_images(self, paths_weight_pairs):
+        visible_paths = {path for path, _weight in paths_weight_pairs}
+        self.thumbnail_cache = {
+            path: thumbnail
+            for path, thumbnail in self.thumbnail_cache.items()
+            if path in visible_paths
+        }
+        self.loading_paths.intersection_update(visible_paths)
         self.beginResetModel()
         self._item = paths_weight_pairs
         self.endResetModel()

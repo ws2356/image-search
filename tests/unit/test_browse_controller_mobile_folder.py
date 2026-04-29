@@ -463,6 +463,70 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
                 QTest.qWait(controller._image_list_reload_timer.interval() + 200)
                 load_images_mock.assert_called_once_with(root_folder.as_posix())
 
+    def test_folder_tree_reuses_cached_child_paths_for_repeated_access(self):
+        root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        child_folders = []
+        for month in ("2026-01", "2026-02", "2026-03"):
+            child_folder = (root_folder / month).resolve()
+            child_folder.mkdir(parents=True, exist_ok=True)
+            child_folders.append(child_folder)
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+
+        with self._controller_context(mobile_feature_enabled=False) as (controller, _add_folder_mock, _add_index_worker_mock):
+            model = controller.folder_list_model()
+            top_level_item = model.item(0, 0)
+            self.assertIsNotNone(top_level_item)
+            root_index = model.indexFromItem(top_level_item)
+            inserted_spy = QSignalSpy(model.rowsInserted)
+            model.expand_subfolders(root_index)
+            self.assertTrue(inserted_spy.wait(2000))
+            self.assertEqual(model.rowCount(root_index), 3)
+
+            original_file_path = model._fs_proxy_model.file_path
+            file_path_call_count = 0
+
+            def counting_file_path(index):
+                nonlocal file_path_call_count
+                file_path_call_count += 1
+                return original_file_path(index)
+
+            with patch.object(model._fs_proxy_model, "file_path", side_effect=counting_file_path):
+                for _ in range(10):
+                    self.assertEqual(model.rowCount(root_index), 3)
+                    for row, child_folder in enumerate(child_folders):
+                        child_index = model.index(row, 0, root_index)
+                        self.assertTrue(child_index.isValid())
+                        self.assertEqual(model.data(child_index, Qt.UserRole), child_folder.as_posix())
+
+            self.assertEqual(file_path_call_count, 0)
+
+    def test_added_local_root_with_hidden_subfolder_does_not_reset_tree(self):
+        root_folder = (Path(self._temp_dir.name) / "Project").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        (root_folder / ".git").mkdir(parents=True, exist_ok=True)
+        for child_name in ("assets", "deployment", "scripts"):
+            (root_folder / child_name).mkdir(parents=True, exist_ok=True)
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+
+        with self._controller_context() as (controller, _add_folder_mock, _add_index_worker_mock):
+            model = controller.folder_list_model()
+            folder_item = model.find_folder_item(root_folder.as_posix())
+            self.assertIsNotNone(folder_item)
+            root_index = model.indexFromItem(folder_item)
+            inserted_spy = QSignalSpy(model.rowsInserted)
+            reset_spy = QSignalSpy(model.modelReset)
+
+            model.expand_subfolders(root_index)
+
+            self.assertTrue(inserted_spy.wait(2000))
+            self.assertEqual(reset_spy.count(), 0)
+            self.assertEqual(model.rowCount(root_index), 3)
+
     def test_mobile_root_moves_between_sections_without_model_reset(self):
         root_folder = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
