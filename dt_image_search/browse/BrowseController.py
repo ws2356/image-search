@@ -31,7 +31,7 @@ class BrowseController(BaseController):
         signal = Signal(watchdog.events.FileSystemEvent)
 
     class FolderSelectionSignal(QObject):
-        select_folder = Signal(QStandardItem)  # Signal to request folder selection in UI
+        select_folder = Signal(object)  # Signal to request folder selection in UI
 
     def __init__(self, ctx: BMContext):
         super().__init__()
