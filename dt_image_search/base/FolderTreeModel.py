@@ -236,13 +236,14 @@ class FolderTreeModel(QAbstractItemModel):
         )
 
     def set_mobile_folder_paths(self, folder_paths: typing.Iterable[str]) -> None:
-        self._mobile_folder_paths = {
+        new_mobile_folder_paths = {
             normalized_folder_path(path).replace("\\", "/")
             for path in folder_paths
         }
-        self._sync_root_sections()
-        self.beginResetModel()
-        self.endResetModel()
+        if new_mobile_folder_paths == self._mobile_folder_paths:
+            return
+        self._move_roots_for_mobile_folder_paths(new_mobile_folder_paths)
+        self._mobile_folder_paths = new_mobile_folder_paths
 
     def set_mobile_folder_summaries(self, summaries_by_path: dict[str, dict[str, object]]) -> None:
         self._mobile_folder_summaries_by_path = {
@@ -526,6 +527,14 @@ class FolderTreeModel(QAbstractItemModel):
     def _section_kind_for_folder_path(self, folder_path: str) -> str:
         return self._MOBILE_SECTION_KIND if self._is_mobile_folder_path(folder_path) else self._LOCAL_SECTION_KIND
 
+    def _section_kind_for_folder_path_in_set(
+        self,
+        folder_path: str,
+        mobile_folder_paths: set[str],
+    ) -> str:
+        normalized_path = normalized_folder_path(folder_path).replace("\\", "/")
+        return self._MOBILE_SECTION_KIND if normalized_path in mobile_folder_paths else self._LOCAL_SECTION_KIND
+
     def _section_item_for_kind(self, section_kind: str) -> QStandardItem | None:
         if not self._sectioned_view:
             return None
@@ -564,10 +573,7 @@ class FolderTreeModel(QAbstractItemModel):
             child_path = child_item.data(Qt.UserRole)
             if not child_path:
                 continue
-            normalized_path = normalized_folder_path(child_path).replace("\\", "/")
-            if self._section_kind_for_folder_path(normalized_path) != section_kind:
-                continue
-            root_paths.append(normalized_path)
+            root_paths.append(normalized_folder_path(child_path).replace("\\", "/"))
         root_paths.sort(key=str.casefold)
         return root_paths
 
@@ -590,34 +596,77 @@ class FolderTreeModel(QAbstractItemModel):
         normalized_path = normalized_folder_path(folder_path).replace("\\", "/")
         return normalized_path in self._mobile_folder_paths
 
-    def _sync_root_sections(self) -> None:
+    def _move_roots_for_mobile_folder_paths(self, new_mobile_folder_paths: set[str]) -> None:
         if not self._sectioned_view:
             return
         self._ensure_section_items()
         assert self._local_section_item is not None
         assert self._mobile_section_item is not None
 
-        for section_item in (self._local_section_item, self._mobile_section_item):
-            row = 0
-            while row < section_item.rowCount():
-                child_item = section_item.child(row)
-                if child_item is None:
-                    row += 1
-                    continue
-                child_path = child_item.data(Qt.UserRole)
-                if not child_path:
-                    row += 1
-                    continue
-                normalized_path = normalized_folder_path(child_path).replace("\\", "/")
-                target_parent = self._registry_parent_for_section(self._section_kind_for_folder_path(normalized_path))
-                if target_parent is section_item:
-                    row += 1
-                    continue
-                taken_row = section_item.takeRow(row)
-                if not taken_row:
-                    continue
-                insert_row = self._root_insert_row(self._section_kind_for_folder_path(normalized_path), normalized_path)
-                target_parent.insertRow(insert_row, taken_row)
+        for source_section_kind in (self._LOCAL_SECTION_KIND, self._MOBILE_SECTION_KIND):
+            while True:
+                root_path_to_move: str | None = None
+                for root_path in self._root_paths_for_section(source_section_kind):
+                    target_section_kind = self._section_kind_for_folder_path_in_set(
+                        root_path,
+                        new_mobile_folder_paths,
+                    )
+                    if target_section_kind != source_section_kind:
+                        root_path_to_move = root_path
+                        break
+                if root_path_to_move is None:
+                    break
+                self._move_root_between_sections(
+                    root_path=root_path_to_move,
+                    source_section_kind=source_section_kind,
+                    target_section_kind=self._section_kind_for_folder_path_in_set(
+                        root_path_to_move,
+                        new_mobile_folder_paths,
+                    ),
+                )
+
+    def _move_root_between_sections(
+        self,
+        *,
+        root_path: str,
+        source_section_kind: str,
+        target_section_kind: str,
+    ) -> None:
+        if source_section_kind == target_section_kind:
+            return
+        source_parent_item = self._registry_parent_for_section(source_section_kind)
+        target_parent_item = self._registry_parent_for_section(target_section_kind)
+        source_parent_index = self._section_index_for_kind(source_section_kind)
+        target_parent_index = self._section_index_for_kind(target_section_kind)
+        source_row = self._row_of_root_in_section(source_section_kind, root_path)
+        if source_row < 0:
+            return
+        destination_row = self._root_insert_row(target_section_kind, root_path)
+        self.beginMoveRows(
+            source_parent_index,
+            source_row,
+            source_row,
+            target_parent_index,
+            destination_row,
+        )
+        taken_row = source_parent_item.takeRow(source_row)
+        if taken_row:
+            target_parent_item.insertRow(destination_row, taken_row)
+        self.endMoveRows()
+
+    def _row_of_root_in_section(self, section_kind: str, root_path: str) -> int:
+        normalized_root_path = normalized_folder_path(root_path).replace("\\", "/")
+        parent_item = self._registry_parent_for_section(section_kind)
+        for row in range(parent_item.rowCount()):
+            child_item = parent_item.child(row)
+            if child_item is None:
+                continue
+            child_path = child_item.data(Qt.UserRole)
+            if not child_path:
+                continue
+            if normalized_folder_path(child_path).replace("\\", "/") == normalized_root_path:
+                return row
+        return -1
 
     def _registry_item_for_ref(self, item: FolderTreeItemRef) -> QStandardItem | None:
         if item._node.kind == self._SECTION_NODE_KIND:

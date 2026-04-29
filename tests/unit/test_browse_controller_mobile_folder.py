@@ -389,6 +389,106 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertIsNone(model.find_folder_item(child_folder.as_posix()))
             self.assertEqual(reset_spy.count(), 0)
 
+    def test_mobile_root_moves_between_sections_without_model_reset(self):
+        root_folder = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+            folder_id = int(inserted_folder.id)
+
+        with self._controller_context() as (controller, _add_folder_mock, _add_index_worker_mock):
+            model = controller.folder_list_model()
+            folder_item = model.find_folder_item(root_folder.as_posix())
+            self.assertIsNotNone(folder_item)
+            self.assertEqual(folder_item.parent().text(), "LOCAL")
+
+            moved_spy = QSignalSpy(model.rowsMoved)
+            reset_spy = QSignalSpy(model.modelReset)
+
+            updated_at = datetime.now(timezone.utc).isoformat()
+            with create_db_conn(ctx=self._ctx) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO mobile_devices (
+                        device_uuid,
+                        platform,
+                        device_name,
+                        trust_key_b64,
+                        paired_at,
+                        last_seen_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    ("device-move-001", "ios", "Alice iPhone", "trust-key", updated_at, updated_at),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO mobile_folders (folder_id, device_uuid, transfer_state, transfer_state_updated_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (folder_id, "device-move-001", MOBILE_TRANSFER_STATE_TRANSFERRING, updated_at),
+                )
+                conn.commit()
+
+            controller._refresh_mobile_transfer_states()
+            self.assertEqual(moved_spy.count(), 1)
+            self.assertEqual(reset_spy.count(), 0)
+            self.assertEqual(folder_item.parent().text(), "MOBILE")
+
+            with create_db_conn(ctx=self._ctx) as conn:
+                conn.execute("DELETE FROM mobile_folders WHERE folder_id = ?", (folder_id,))
+                conn.execute("DELETE FROM mobile_devices WHERE device_uuid = ?", ("device-move-001",))
+                conn.commit()
+
+            controller._refresh_mobile_transfer_states()
+            self.assertEqual(moved_spy.count(), 2)
+            self.assertEqual(reset_spy.count(), 0)
+            self.assertEqual(folder_item.parent().text(), "LOCAL")
+
+    def test_mobile_root_poll_noop_does_not_reset_or_move_tree(self):
+        root_folder = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        updated_at = datetime.now(timezone.utc).isoformat()
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+            conn.execute(
+                """
+                INSERT INTO mobile_devices (
+                    device_uuid,
+                    platform,
+                    device_name,
+                    trust_key_b64,
+                    paired_at,
+                    last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("device-noop-001", "ios", "Alice iPhone", "trust-key", updated_at, updated_at),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_folders (folder_id, device_uuid, transfer_state, transfer_state_updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (int(inserted_folder.id), "device-noop-001", MOBILE_TRANSFER_STATE_TRANSFERRING, updated_at),
+            )
+            conn.commit()
+
+        with self._controller_context() as (controller, _add_folder_mock, _add_index_worker_mock):
+            model = controller.folder_list_model()
+            folder_item = model.find_folder_item(root_folder.as_posix())
+            self.assertIsNotNone(folder_item)
+            self.assertEqual(folder_item.parent().text(), "MOBILE")
+
+            moved_spy = QSignalSpy(model.rowsMoved)
+            reset_spy = QSignalSpy(model.modelReset)
+
+            controller._refresh_mobile_transfer_states()
+
+            self.assertEqual(moved_spy.count(), 0)
+            self.assertEqual(reset_spy.count(), 0)
+            self.assertEqual(folder_item.parent().text(), "MOBILE")
+
     def _controller_context(self, *, mobile_feature_enabled: bool = True):
         return _ControllerContext(self._ctx, mobile_feature_enabled=mobile_feature_enabled)
 
