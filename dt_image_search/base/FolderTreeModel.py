@@ -352,7 +352,9 @@ class FolderTreeModel(QAbstractItemModel):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def hasChildren(self, parent: QModelIndex = QModelIndex()) -> bool:
-        return self.rowCount(parent) > 0
+        if parent.column() > 0:
+            return False
+        return self.rowCount(parent) > 0 or self.canFetchMore(parent)
 
     def canFetchMore(self, parent: QModelIndex) -> bool:
         node = self._node_from_index(parent)

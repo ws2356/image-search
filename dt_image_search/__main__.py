@@ -500,7 +500,15 @@ class MainWindow(QMainWindow):
             parent_indexes.append(parent_index)
             parent_index = parent_index.parent()
         for parent_index in reversed(parent_indexes):
+            if hasattr(model, "expand_subfolders"):
+                model.expand_subfolders(parent_index)
+            elif model.canFetchMore(parent_index):
+                model.fetchMore(parent_index)
             self.ui.browsePageFolderTreeView.expand(parent_index)
+        if hasattr(model, "expand_subfolders"):
+            model.expand_subfolders(folder_index)
+        elif model.canFetchMore(folder_index):
+            model.fetchMore(folder_index)
         self.ui.browsePageFolderTreeView.expand(folder_index)
         
         # Select the folder
@@ -549,11 +557,15 @@ class MainWindow(QMainWindow):
         item = model.itemFromIndex(index)
         if item is None or item.data(FolderTreeModel.SECTION_ROLE):
             return
-        if model.rowCount(index) <= 0:
+        if model.rowCount(index) <= 0 and not model.canFetchMore(index):
             return
         if self.ui.browsePageFolderTreeView.isExpanded(index):
             self.ui.browsePageFolderTreeView.collapse(index)
             return
+        if hasattr(model, "expand_subfolders"):
+            model.expand_subfolders(index)
+        elif model.canFetchMore(index):
+            model.fetchMore(index)
         self.ui.browsePageFolderTreeView.expand(index)
 
     def _on_mobile_transfer_folder_ready(self, folder_path: str):

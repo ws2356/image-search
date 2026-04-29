@@ -357,6 +357,30 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertFalse(bool(top_level_item.data(model.SECTION_ROLE)))
             self.assertTrue(model.is_top_level_folder_item(top_level_item))
 
+    def test_root_reports_children_before_fetch_and_loads_existing_subfolders(self):
+        root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        child_folder = (root_folder / "2026-04").resolve()
+        child_folder.mkdir(parents=True, exist_ok=True)
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+
+        with self._controller_context(mobile_feature_enabled=False) as (controller, _add_folder_mock, _add_index_worker_mock):
+            model = controller.folder_list_model()
+            top_level_item = model.item(0, 0)
+            self.assertIsNotNone(top_level_item)
+            root_index = model.indexFromItem(top_level_item)
+            self.assertTrue(root_index.isValid())
+            self.assertEqual(model.rowCount(root_index), 0)
+            self.assertTrue(model.hasChildren(root_index))
+
+            inserted_spy = QSignalSpy(model.rowsInserted)
+            model.expand_subfolders(root_index)
+            self.assertTrue(inserted_spy.wait(2000))
+            self.assertIsNotNone(model.find_folder_item(child_folder.as_posix()))
+            self.assertEqual(model.rowCount(root_index), 1)
+
     def test_folder_tree_forwards_subfolder_insert_and_remove_without_model_reset(self):
         root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
