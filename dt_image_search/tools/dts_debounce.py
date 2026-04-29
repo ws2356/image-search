@@ -22,7 +22,7 @@ def debounce(wait):
 
 
 
-def throttle(wait, key_name):
+def throttle(wait, key_name = None):
     """
     :param wait: 节流间隔（秒）
     :param key_name: 用于隔离状态的关键字参数名称（例如 'file_id'）
@@ -35,7 +35,7 @@ def throttle(wait, key_name):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             # 提取作为 key 的参数值
-            kv = kwargs.get(key_name)
+            kv = kwargs.get(key_name) if key_name else None
             if kv is None:
                 # 如果没提供 key_name，则退化为普通调用或报错
                 return fn(*args, **kwargs)

@@ -205,7 +205,7 @@ class BrowseController(BaseController):
         model = FolderTreeModel(sectioned_view=is_mobile_folder_enabled())
         return model
     
-    @debounce(3)  # Debounce search queries to avoid excessive calls
+    @throttle(3)  # Debounce search queries to avoid excessive calls
     def _on_notify_folder_changed(self, event):
         log("debug", message=f"BrowseController/_on_notify_folder_changed: event type={event.event_type}, src={event.src_path}")
         self._fs_changed_signal.signal.emit(event)
@@ -225,10 +225,10 @@ class BrowseController(BaseController):
         log("info", message=f"Folder changed notification received")
         if self.is_active:
             log("debug", message="BrowseController/_on_notify_folder_changed_main_thread: controller active, refreshing view")
-            self._folder_change_impl(updated_path=event.src_path)
+            self._reload_image_list_in_folder(updated_path=event.src_path)
             if event.event_type == 'moved':
                  log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: moved event, refreshing dest {event.dest_path}")
-                 self._folder_change_impl(updated_path=event.dest_path)
+                 self._reload_image_list_in_folder(updated_path=event.dest_path)
         else:
             self._folder_changed_in_background.append(event.src_path)
             if event.event_type == 'moved':
@@ -279,8 +279,6 @@ class BrowseController(BaseController):
                  log("debug", message=f"BrowseController/_repopulate_folder_item: updated selection to {self._selected_folder_path}")
              else:
                  log("warning", message="BrowseController/_repopulate_folder_item: affected root item has no data")
-        else:
-             log("warning", message=f"BrowseController/_repopulate_folder_item: no affected root item found for {src_path}")
 
     @throttle(2, 'folder_path')  # Throttle mobile transfer state updates to avoid excessive UI refreshes
     def _on_mobile_transfer_state_changed(self, *, folder_path: str, transfer_state: str, **_: object) -> None:
@@ -303,25 +301,25 @@ class BrowseController(BaseController):
 
     def on_active_change(self, old_value: bool, new_value: bool):
         if new_value and self._folder_changed_in_background:
-            self._folder_change_impl()
+            self._reload_image_list_in_folder()
             self._folder_changed_in_background = []
 
-    def _folder_change_impl(self, updated_path: str = None):
-        log("debug", message=f"BrowseController/_folder_change_impl: updated_path={updated_path}, selected={self._selected_folder_path}")
+    def _reload_image_list_in_folder(self, updated_path: str = None):
+        log("debug", message=f"BrowseController/_reload_image_list_in_folder: updated_path={updated_path}, selected={self._selected_folder_path}")
         if not self._selected_folder_path:
-            log("debug", message="BrowseController/_folder_change_impl: no folder selected, skipping")
+            log("debug", message="BrowseController/_reload_image_list_in_folder: no folder selected, skipping")
             return
         # if updated_path is not None but updated_path is not under folder_path, ignore
         if updated_path:
             try:
                 if not Path(updated_path).resolve().is_relative_to(Path(self._selected_folder_path).resolve()):
-                    log("debug", message=f"BrowseController/_folder_change_impl: {updated_path} is not relative to {self._selected_folder_path}, skipping")
+                    log("debug", message=f"BrowseController/_reload_image_list_in_folder: {updated_path} is not relative to {self._selected_folder_path}, skipping")
                     return
             except ValueError as e:
-                log("warning", message=f"BrowseController/_folder_change_impl: path resolution error: {e}")
+                log("warning", message=f"BrowseController/_reload_image_list_in_folder: path resolution error: {e}")
                 return
         
-        log("debug", message=f"BrowseController/_folder_change_impl: loading images from {self._selected_folder_path}")
+        log("debug", message=f"BrowseController/_reload_image_list_in_folder: loading images from {self._selected_folder_path}")
         folders_changed = [p for p in self._folder_changed_in_background]
         if updated_path:
             folders_changed.append(updated_path)
