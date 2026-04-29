@@ -15,7 +15,7 @@ from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_fo
 from dt_image_search.model.feature_flags import is_mobile_folder_enabled
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.base.image_list_model import ImageListModel
-from dt_image_search.index.dts_index import index_path_for_folder, delete_folder
+from dt_image_search.index.dts_index import index_path_for_folder, delete_folder, is_image_file
 from dt_image_search.tools.dts_debounce import debounce, throttle
 from dt_image_search.index.index_worker import add_index_worker
 from dt_image_search.telemetry.telemetry_client import log
@@ -25,6 +25,7 @@ from dt_image_search.tools.dts_util import is_same_folder_path, normalized_folde
 from dt_image_search.tools.dts_event_bus import default_bus
 
 _MOBILE_TRANSFER_STATUS_POLL_INTERVAL_MS = 1000
+_IMAGE_LIST_RELOAD_DEBOUNCE_MS = 1000
 
 class BrowseController(BaseController):
     class FSChangedSignal(QObject):
@@ -46,6 +47,12 @@ class BrowseController(BaseController):
         self._mobile_transfer_status_timer = QTimer()
         self._mobile_transfer_status_timer.setInterval(_MOBILE_TRANSFER_STATUS_POLL_INTERVAL_MS)
         self._mobile_transfer_status_timer.timeout.connect(self._on_mobile_transfer_status_poll_timeout)
+        self._image_list_reload_timer = QTimer()
+        self._image_list_reload_timer.setSingleShot(True)
+        self._image_list_reload_timer.setInterval(_IMAGE_LIST_RELOAD_DEBOUNCE_MS)
+        self._image_list_reload_timer.timeout.connect(self._flush_pending_image_list_reload)
+        self._pending_image_list_reload_paths: set[str] = set()
+        self._force_image_list_reload = False
         default_bus.subscribe("fs_changed", self._on_notify_folder_changed)
         self._selected_folder_path = ''
 
@@ -219,11 +226,11 @@ class BrowseController(BaseController):
         # reload image list if active
         log("info", message=f"Folder changed notification received")
         if self.is_active:
-            log("debug", message="BrowseController/_on_notify_folder_changed_main_thread: controller active, refreshing view")
-            self._reload_image_list_in_folder(updated_path=event.src_path)
+            log("debug", message="BrowseController/_on_notify_folder_changed_main_thread: controller active, queueing image list refresh")
+            self._queue_image_list_reload(updated_path=event.src_path)
             if event.event_type == 'moved':
-                 log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: moved event, refreshing dest {event.dest_path}")
-                 self._reload_image_list_in_folder(updated_path=event.dest_path)
+                 log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: moved event, queueing dest {event.dest_path}")
+                 self._queue_image_list_reload(updated_path=event.dest_path)
         else:
             self._folder_changed_in_background.append(event.src_path)
             if event.event_type == 'moved':
@@ -273,34 +280,54 @@ class BrowseController(BaseController):
             self._mobile_transfer_status_timer.start()
         else:
             self._mobile_transfer_status_timer.stop()
+            if self._pending_image_list_reload_paths:
+                self._folder_changed_in_background.extend(sorted(self._pending_image_list_reload_paths))
+                self._pending_image_list_reload_paths.clear()
+            self._force_image_list_reload = False
+            self._image_list_reload_timer.stop()
         if new_value and self._folder_changed_in_background:
-            self._reload_image_list_in_folder()
+            self._reload_image_list_in_folder(self._folder_changed_in_background)
             self._folder_changed_in_background = []
 
-    def _reload_image_list_in_folder(self, updated_path: str = None):
-        log("debug", message=f"BrowseController/_reload_image_list_in_folder: updated_path={updated_path}, selected={self._selected_folder_path}")
+    def _queue_image_list_reload(self, updated_path: str | None = None, *, force_reload: bool = False) -> None:
+        if updated_path:
+            self._pending_image_list_reload_paths.add(normalized_folder_path(updated_path).replace('\\', '/'))
+        if force_reload:
+            self._force_image_list_reload = True
+        self._image_list_reload_timer.start()
+
+    def _flush_pending_image_list_reload(self) -> None:
+        updated_paths = sorted(self._pending_image_list_reload_paths)
+        force_reload = self._force_image_list_reload
+        self._pending_image_list_reload_paths.clear()
+        self._force_image_list_reload = False
+        self._reload_image_list_in_folder(updated_paths, force_reload=force_reload)
+
+    def _selected_folder_needs_reload_for_path(self, changed_path: str) -> bool:
+        if not self._selected_folder_path or not changed_path:
+            return False
+        selected_folder_path = normalized_folder_path(self._selected_folder_path).replace('\\', '/')
+        normalized_changed_path = normalized_folder_path(changed_path).replace('\\', '/')
+        if is_same_folder_path(normalized_changed_path, selected_folder_path):
+            return True
+        changed_parent_path = normalized_folder_path(Path(normalized_changed_path).parent.as_posix()).replace('\\', '/')
+        if changed_parent_path != selected_folder_path:
+            return False
+        return is_image_file(Path(normalized_changed_path).name)
+
+    def _reload_image_list_in_folder(self, updated_paths: list[str] | None = None, *, force_reload: bool = False):
+        log("debug", message=f"BrowseController/_reload_image_list_in_folder: updated_paths={updated_paths}, selected={self._selected_folder_path}, force_reload={force_reload}")
         if not self._selected_folder_path:
             log("debug", message="BrowseController/_reload_image_list_in_folder: no folder selected, skipping")
             return
-        # if updated_path is not None but updated_path is not under folder_path, ignore
-        if updated_path:
-            try:
-                if not Path(updated_path).resolve().is_relative_to(Path(self._selected_folder_path).resolve()):
-                    log("debug", message=f"BrowseController/_reload_image_list_in_folder: {updated_path} is not relative to {self._selected_folder_path}, skipping")
-                    return
-            except ValueError as e:
-                log("warning", message=f"BrowseController/_reload_image_list_in_folder: path resolution error: {e}")
+        if not force_reload:
+            relevant_paths = updated_paths or []
+            if not any(self._selected_folder_needs_reload_for_path(path) for path in relevant_paths):
+                log("debug", message="BrowseController/_reload_image_list_in_folder: no direct selected-folder image changes, skipping")
                 return
-        
+
         log("debug", message=f"BrowseController/_reload_image_list_in_folder: loading images from {self._selected_folder_path}")
-        folders_changed = [p for p in self._folder_changed_in_background]
-        if updated_path:
-            folders_changed.append(updated_path)
-        self._folder_changed_in_background = []
-        for p in folders_changed:
-            if normalized_folder_path(p).replace('\\', '/').startswith(normalized_folder_path(self._selected_folder_path).replace('\\', '/')):
-                self.image_list_model().load_images_from_folder(self._selected_folder_path)
-                break
+        self.image_list_model().load_images_from_folder(self._selected_folder_path)
 
     def _refresh_mobile_transfer_states(self) -> None:
         with create_db_conn(ctx=self.ctx) as conn:

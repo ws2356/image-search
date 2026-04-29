@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -13,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from PySide6.QtCore import Qt
-from PySide6.QtTest import QSignalSpy
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
 from dt_image_search.bm_context import BMContext
@@ -412,6 +413,55 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertTrue(removed_spy.wait(2000))
             self.assertIsNone(model.find_folder_item(child_folder.as_posix()))
             self.assertEqual(reset_spy.count(), 0)
+
+    def test_selected_root_does_not_reload_image_list_for_descendant_image_changes(self):
+        root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        child_folder = (root_folder / "2026-04").resolve()
+        child_folder.mkdir(parents=True, exist_ok=True)
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+
+        with self._controller_context(mobile_feature_enabled=False) as (controller, _add_folder_mock, _add_index_worker_mock):
+            controller._selected_folder_path = root_folder.as_posix()
+            controller.is_active = True
+            with patch.object(controller.image_list_model(), "load_images_from_folder") as load_images_mock:
+                controller._on_notify_folder_changed_main_thread(
+                    SimpleNamespace(
+                        event_type="created",
+                        src_path=(child_folder / "photo.jpg").as_posix(),
+                    )
+                )
+                QTest.qWait(controller._image_list_reload_timer.interval() + 200)
+                self.assertEqual(load_images_mock.call_count, 0)
+
+    def test_direct_image_changes_reload_image_list_once_per_debounce_window(self):
+        root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
+        root_folder.mkdir(parents=True, exist_ok=True)
+        with create_db_conn(ctx=self._ctx) as conn:
+            inserted_folder = insert_folder(conn, root_folder.as_posix())
+            self.assertIsNotNone(inserted_folder)
+
+        with self._controller_context(mobile_feature_enabled=False) as (controller, _add_folder_mock, _add_index_worker_mock):
+            controller._selected_folder_path = root_folder.as_posix()
+            controller.is_active = True
+            with patch.object(controller.image_list_model(), "load_images_from_folder") as load_images_mock:
+                controller._on_notify_folder_changed_main_thread(
+                    SimpleNamespace(
+                        event_type="created",
+                        src_path=(root_folder / "photo-1.jpg").as_posix(),
+                    )
+                )
+                controller._on_notify_folder_changed_main_thread(
+                    SimpleNamespace(
+                        event_type="created",
+                        src_path=(root_folder / "photo-2.jpg").as_posix(),
+                    )
+                )
+                self.assertEqual(load_images_mock.call_count, 0)
+                QTest.qWait(controller._image_list_reload_timer.interval() + 200)
+                load_images_mock.assert_called_once_with(root_folder.as_posix())
 
     def test_mobile_root_moves_between_sections_without_model_reset(self):
         root_folder = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
