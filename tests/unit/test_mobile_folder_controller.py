@@ -280,7 +280,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
 
         self.assertEqual(decision, MobileBackupAgainDecision.CONTINUE_IN_SELECTED_FOLDER)
 
-    def test_transfer_state_update_closes_active_dialog_after_pairing_accepts(self):
+    def test_transfer_started_closes_active_dialog_after_pairing_accepts(self):
         destination_parent = Path(self._temp_dir.name).resolve().as_posix()
         pairing_session = MobilePairingSessionDraft.create(
             destination_parent=destination_parent,
@@ -300,10 +300,9 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         coordinator._pairing_service = fake_pairing_service
         coordinator._active_dialog = fake_dialog
 
-        coordinator._handle_transfer_state_updated_on_main_thread(
+        coordinator._handle_transfer_started_on_main_thread(
             pairing_session.session_id,
             pairing_session.destination_parent,
-            "paired",
         )
 
         self.assertTrue(fake_dialog.accept_called)

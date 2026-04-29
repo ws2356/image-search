@@ -1,7 +1,7 @@
 import watchdog
 from pathlib import Path
 from dt_image_search.base.BaseController import BaseController
-from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, QPersistentModelIndex, Qt, QModelIndex, Signal, QObject, QThread
+from PySide6.QtCore import QAbstractListModel, QAbstractItemModel, QPersistentModelIndex, Qt, QModelIndex, Signal, QObject, QThread, QTimer
 from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.browse.fs_image_list_model import FSImageListModel
@@ -11,7 +11,6 @@ from dt_image_search.mobile.mobile_pairing_store import (
     get_mobile_folder_summaries_by_path,
     get_mobile_folder_transfer_states,
 )
-from dt_image_search.mobile.mobile_transfer_service import MOBILE_TRANSFER_STATE_UPDATED_EVENT
 from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_folder_by_path, insert_folder, match_parent_folder
 from dt_image_search.model.feature_flags import is_mobile_folder_enabled
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
@@ -25,12 +24,11 @@ from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_util import is_same_folder_path, normalized_folder_path
 from dt_image_search.tools.dts_event_bus import default_bus
 
+_MOBILE_TRANSFER_STATUS_POLL_INTERVAL_MS = 1000
+
 class BrowseController(BaseController):
     class FSChangedSignal(QObject):
         signal = Signal(watchdog.events.FileSystemEvent)
-
-    class MobileTransferStateChangedSignal(QObject):
-        signal = Signal(str, str)
 
     class FolderSelectionSignal(QObject):
         select_folder = Signal(QStandardItem)  # Signal to request folder selection in UI
@@ -40,16 +38,15 @@ class BrowseController(BaseController):
         self.folderListModel = None
         self.ctx = ctx
         self.imageListModel = None
-        self._runtime_mobile_transfer_states_by_path: dict[str, str] = {}
         self._init_folders()
         self._folder_changed_in_background = []
         self._fs_changed_signal = self.FSChangedSignal()
         self._fs_changed_signal.signal.connect(self._on_notify_folder_changed_main_thread)
-        self._mobile_transfer_state_changed_signal = self.MobileTransferStateChangedSignal()
-        self._mobile_transfer_state_changed_signal.signal.connect(self._on_mobile_transfer_state_changed_main_thread)
         self._folder_selection_signal = self.FolderSelectionSignal()
+        self._mobile_transfer_status_timer = QTimer()
+        self._mobile_transfer_status_timer.setInterval(_MOBILE_TRANSFER_STATUS_POLL_INTERVAL_MS)
+        self._mobile_transfer_status_timer.timeout.connect(self._on_mobile_transfer_status_poll_timeout)
         default_bus.subscribe("fs_changed", self._on_notify_folder_changed)
-        default_bus.subscribe(MOBILE_TRANSFER_STATE_UPDATED_EVENT, self._on_mobile_transfer_state_changed)
         self._selected_folder_path = ''
 
     def folder_list_model(self) -> FolderTreeModel:
@@ -280,26 +277,17 @@ class BrowseController(BaseController):
              else:
                  log("warning", message="BrowseController/_repopulate_folder_item: affected root item has no data")
 
-    @throttle(2, 'folder_path')  # Throttle mobile transfer state updates to avoid excessive UI refreshes
-    def _on_mobile_transfer_state_changed(self, *, folder_path: str, transfer_state: str, **_: object) -> None:
-        self._mobile_transfer_state_changed_signal.signal.emit(folder_path, transfer_state)
-
-    def _on_mobile_transfer_state_changed_main_thread(self, folder_path: str, transfer_state: str) -> None:
-        log(
-            "debug",
-            message=(
-                "BrowseController/_on_mobile_transfer_state_changed_main_thread: "
-                f"folder_path={folder_path}, transfer_state={transfer_state}"
-            ),
-        )
-        normalized_folder = normalized_folder_path(folder_path).replace('\\', '/')
-        if transfer_state == MOBILE_TRANSFER_STATE_TRANSFERRING:
-            self._runtime_mobile_transfer_states_by_path[normalized_folder] = transfer_state
-        else:
-            self._runtime_mobile_transfer_states_by_path.pop(normalized_folder, None)
+    def _on_mobile_transfer_status_poll_timeout(self) -> None:
+        assert QThread.isMainThread()
+        log("debug", message="BrowseController/_on_mobile_transfer_status_poll_timeout: refreshing mobile folder status")
         self._refresh_mobile_transfer_states()
 
     def on_active_change(self, old_value: bool, new_value: bool):
+        if new_value:
+            self._refresh_mobile_transfer_states()
+            self._mobile_transfer_status_timer.start()
+        else:
+            self._mobile_transfer_status_timer.stop()
         if new_value and self._folder_changed_in_background:
             self._reload_image_list_in_folder()
             self._folder_changed_in_background = []
@@ -337,13 +325,13 @@ class BrowseController(BaseController):
             normalized_folder_path(path).replace('\\', '/')
             for path in persisted_states_by_path.keys()
         }
-        runtime_states_by_path = {
+        transferring_states_by_path = {
             path: state
-            for path, state in self._runtime_mobile_transfer_states_by_path.items()
-            if path in mobile_folder_paths and state == MOBILE_TRANSFER_STATE_TRANSFERRING
+            for path, state in persisted_states_by_path.items()
+            if normalized_folder_path(path).replace('\\', '/') in mobile_folder_paths
+            and state == MOBILE_TRANSFER_STATE_TRANSFERRING
         }
-        self._runtime_mobile_transfer_states_by_path = runtime_states_by_path
 
         self.folder_list_model().set_mobile_folder_paths(mobile_folder_paths)
-        self.folder_list_model().set_mobile_transfer_states(runtime_states_by_path)
+        self.folder_list_model().set_mobile_transfer_states(transferring_states_by_path)
         self.folder_list_model().set_mobile_folder_summaries(summaries_by_path)

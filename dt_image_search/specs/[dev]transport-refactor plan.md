@@ -104,7 +104,7 @@ USB asset upload detail:
 1. Capture current behavior contract from tests:
    - pairing acceptance/rejection/expiry/status codes
    - transfer start/existence/store/skip/complete responses
-   - event bus events (`mobile_transfer_started`, `mobile_transfer_state_updated`)
+   - event bus event (`mobile_transfer_started`)
 2. Record "must not change" payload fields (`transport`, `server_nonce`, `folder_path`, `local_relative_path`, etc.).
 3. Add QR contract migration checklist:
    - iOS decoder supports both `v=1` and `v=2`

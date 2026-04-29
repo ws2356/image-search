@@ -19,6 +19,8 @@ from PySide6.QtWidgets import QApplication
 from dt_image_search.bm_context import BMContext
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.mobile.mobile_pairing_store import (
+    MOBILE_BACKUP_SESSION_STATUS_COMPLETED,
+    MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
     MOBILE_TRANSFER_STATE_COMPLETED,
     MOBILE_TRANSFER_STATE_TRANSFERRING,
 )
@@ -145,7 +147,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             add_folder_mock.assert_called_once_with(folder_path.as_posix())
             add_index_worker_mock.assert_called_once()
 
-    def test_mobile_folder_badge_is_visible_only_for_runtime_transferring_state(self):
+    def test_mobile_folder_badge_tracks_polled_db_transfer_state(self):
         folder_path = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
         folder_path.mkdir(parents=True, exist_ok=True)
         updated_at = datetime.now(timezone.utc).isoformat()
@@ -187,7 +189,17 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
                     ended_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                ("session-001", "device-001", folder.id, "completed", 6, 0, updated_at, updated_at, updated_at),
+                (
+                    "session-001",
+                    "device-001",
+                    folder.id,
+                    MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
+                    6,
+                    0,
+                    updated_at,
+                    updated_at,
+                    None,
+                ),
             )
             conn.commit()
 
@@ -195,25 +207,139 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             folder_item = controller.folder_list_model().find_folder_item(folder_path.as_posix())
             self.assertIsNotNone(folder_item)
             self.assertEqual(folder_item.text(), "Alice iPhone")
-            self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE))
-            self.assertEqual(folder_item.data(controller.folder_list_model().MOBILE_TRANSFERRED_COUNT_ROLE), 6)
-            self.assertEqual(folder_item.data(controller.folder_list_model().MOBILE_LAST_BACKUP_AT_ROLE), updated_at)
-
-            controller._on_mobile_transfer_state_changed_main_thread(
-                folder_path.as_posix(),
+            self.assertEqual(
+                folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE),
                 MOBILE_TRANSFER_STATE_TRANSFERRING,
             )
+            self.assertEqual(folder_item.data(controller.folder_list_model().MOBILE_TRANSFERRED_COUNT_ROLE), 6)
+            self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_LAST_BACKUP_AT_ROLE))
+
+            completed_at = datetime.now(timezone.utc).isoformat()
+            with create_db_conn(ctx=self._ctx) as conn:
+                conn.execute(
+                    """
+                    UPDATE mobile_folders
+                    SET transfer_state = ?, transfer_state_updated_at = ?
+                    WHERE folder_id = ?
+                    """,
+                    (MOBILE_TRANSFER_STATE_COMPLETED, completed_at, folder.id),
+                )
+                conn.execute(
+                    """
+                    UPDATE mobile_backup_sessions
+                    SET status = ?, ended_at = ?
+                    WHERE session_id = ? AND device_uuid = ?
+                    """,
+                    (
+                        MOBILE_BACKUP_SESSION_STATUS_COMPLETED,
+                        completed_at,
+                        "session-001",
+                        "device-001",
+                    ),
+                )
+                conn.commit()
+
+            controller._on_mobile_transfer_status_poll_timeout()
+            self.assertEqual(folder_item.text(), "Alice iPhone")
+            self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE))
+            self.assertEqual(folder_item.data(controller.folder_list_model().MOBILE_LAST_BACKUP_AT_ROLE), completed_at)
+
+    def test_mobile_folder_poll_timer_runs_only_while_controller_is_active(self):
+        folder_path = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
+        folder_path.mkdir(parents=True, exist_ok=True)
+        updated_at = datetime.now(timezone.utc).isoformat()
+
+        with create_db_conn(ctx=self._ctx) as conn:
+            folder = insert_folder(conn, folder_path.as_posix())
+            self.assertIsNotNone(folder)
+            conn.execute(
+                """
+                INSERT INTO mobile_devices (
+                    device_uuid,
+                    platform,
+                    device_name,
+                    trust_key_b64,
+                    paired_at,
+                    last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("device-002", "ios", "Alice iPhone", "trust-key", updated_at, updated_at),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_folders (folder_id, device_uuid, transfer_state, transfer_state_updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (folder.id, "device-002", MOBILE_TRANSFER_STATE_COMPLETED, updated_at),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_backup_sessions (
+                    session_id,
+                    device_uuid,
+                    folder_id,
+                    status,
+                    transferred_count,
+                    failed_count,
+                    started_at,
+                    paired_at,
+                    ended_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "session-002",
+                    "device-002",
+                    folder.id,
+                    MOBILE_BACKUP_SESSION_STATUS_COMPLETED,
+                    4,
+                    0,
+                    updated_at,
+                    updated_at,
+                    updated_at,
+                ),
+            )
+            conn.commit()
+
+        with self._controller_context() as (controller, _add_folder_mock, _add_index_worker_mock):
+            folder_item = controller.folder_list_model().find_folder_item(folder_path.as_posix())
+            self.assertIsNotNone(folder_item)
+            self.assertFalse(controller._mobile_transfer_status_timer.isActive())
+            self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE))
+
+            with create_db_conn(ctx=self._ctx) as conn:
+                conn.execute(
+                    """
+                    UPDATE mobile_folders
+                    SET transfer_state = ?, transfer_state_updated_at = ?
+                    WHERE folder_id = ?
+                    """,
+                    (MOBILE_TRANSFER_STATE_TRANSFERRING, datetime.now(timezone.utc).isoformat(), folder.id),
+                )
+                conn.execute(
+                    """
+                    UPDATE mobile_backup_sessions
+                    SET status = ?
+                    WHERE session_id = ? AND device_uuid = ?
+                    """,
+                    (
+                        MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
+                        "session-002",
+                        "device-002",
+                    ),
+                )
+                conn.commit()
+
+            self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE))
+
+            controller.is_active = True
+            self.assertTrue(controller._mobile_transfer_status_timer.isActive())
             self.assertEqual(
                 folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE),
                 MOBILE_TRANSFER_STATE_TRANSFERRING,
             )
 
-            controller._on_mobile_transfer_state_changed_main_thread(
-                folder_path.as_posix(),
-                MOBILE_TRANSFER_STATE_COMPLETED,
-            )
-            self.assertEqual(folder_item.text(), "Alice iPhone")
-            self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE))
+            controller.is_active = False
+            self.assertFalse(controller._mobile_transfer_status_timer.isActive())
 
     def test_folder_tree_is_flat_when_mobile_folder_feature_is_disabled(self):
         root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
@@ -263,6 +389,8 @@ class _ControllerContext:
         return self._controller, self._add_folder_mock, self._add_index_worker_mock
 
     def __exit__(self, exc_type, exc, tb):
+        if self._controller is not None:
+            self._controller.is_active = False
         for patcher in reversed(self._patches):
             patcher.stop()
         self._patches = []

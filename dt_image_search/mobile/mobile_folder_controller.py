@@ -28,7 +28,6 @@ from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDr
 from dt_image_search.mobile.mobile_pairing_store import get_mobile_folder_binding_by_path
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_STARTED_EVENT,
-    MOBILE_TRANSFER_STATE_UPDATED_EVENT,
 )
 from dt_image_search.model.dts_db import create_db_conn, get_config, set_config
 from dt_image_search.telemetry.telemetry_client import log
@@ -44,7 +43,6 @@ class _BackupAgainPromptRequest:
 
 class MobileFolderCoordinator(QObject):
     transfer_started = Signal(str, str)
-    transfer_state_updated = Signal(str, str, str)
     backup_again_mismatch_requested = Signal(object)
     _LAST_DESTINATION_KEY = "mobile_backup_parent_path"
 
@@ -56,15 +54,10 @@ class MobileFolderCoordinator(QObject):
         self._active_dialog: MobilePairingDialog | None = None
         self._backup_again_parent: QWidget | None = None
         self.transfer_started.connect(self._handle_transfer_started_on_main_thread)
-        self.transfer_state_updated.connect(self._handle_transfer_state_updated_on_main_thread)
         self.backup_again_mismatch_requested.connect(self._on_backup_again_prompt_request)
         self._transfer_started_subscription = default_bus.subscribe(
             MOBILE_TRANSFER_STARTED_EVENT,
             self._on_transfer_started,
-        )
-        self._transfer_state_updated_subscription = default_bus.subscribe(
-            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
-            self._on_transfer_state_updated,
         )
 
     def choose_source(self, parent: QWidget | None = None) -> MobileSourceType | None:
@@ -194,16 +187,6 @@ class MobileFolderCoordinator(QObject):
     def _on_transfer_started(self, *, session_id: str, folder_path: str, **_: object) -> None:
         self.transfer_started.emit(session_id, folder_path)
 
-    def _on_transfer_state_updated(
-        self,
-        *,
-        session_id: str,
-        folder_path: str,
-        transfer_state: str,
-        **_: object,
-    ) -> None:
-        self.transfer_state_updated.emit(session_id, folder_path, transfer_state)
-
     def _handle_transfer_started_on_main_thread(self, session_id: str, folder_path: str) -> None:
         if self._on_folder_ready is not None:
             self._on_folder_ready(folder_path)
@@ -219,38 +202,6 @@ class MobileFolderCoordinator(QObject):
             message=(
                 "MobileFolderCoordinator/_handle_transfer_started_on_main_thread: "
                 f"closing pairing dialog for session {session_id}"
-            ),
-        )
-        dialog.accept()
-
-    def _handle_transfer_state_updated_on_main_thread(
-        self,
-        session_id: str,
-        folder_path: str,
-        transfer_state: str,
-    ) -> None:
-        if transfer_state == "transferring":
-            if self._on_folder_ready is not None:
-                self._on_folder_ready(folder_path)
-            return
-
-        dialog = self._active_dialog
-        if dialog is None:
-            return
-        if dialog.pairing_session.session_id != session_id:
-            return
-        if transfer_state == "":
-            return
-        if self._pairing_service is None:
-            return
-        if self._pairing_service.current_result().state != PairingResultState.ACCEPTED:
-            return
-
-        log(
-            "info",
-            message=(
-                "MobileFolderCoordinator/_handle_transfer_state_updated_on_main_thread: "
-                f"closing pairing dialog for session {session_id} after transfer state {transfer_state}"
             ),
         )
         dialog.accept()

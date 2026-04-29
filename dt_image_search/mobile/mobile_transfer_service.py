@@ -10,8 +10,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import threading
-import time
 from typing import BinaryIO
 import uuid
 
@@ -51,7 +49,6 @@ MOBILE_TRANSFER_EXISTENCE_PATH = "/api/mobile/transfer/existence"
 MOBILE_TRANSFER_ASSET_PATH = "/api/mobile/transfer/asset"
 MOBILE_TRANSFER_COMPLETE_PATH = "/api/mobile/transfer/complete"
 MOBILE_TRANSFER_STARTED_EVENT = "mobile_transfer_started"
-MOBILE_TRANSFER_STATE_UPDATED_EVENT = "mobile_transfer_state_updated"
 MOBILE_TRANSFER_DISK_FULL_EVENT = "mobile_transfer_disk_full"
 MOBILE_TRANSFER_DISK_FULL_MESSAGE = "Desktop storage is full. Free up disk space on this PC and retry the mobile backup."
 MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER = "stopped_by_user"
@@ -60,7 +57,6 @@ MOBILE_TRANSFER_EXISTENCE_PROOF_PURPOSE = "transfer.existence"
 MOBILE_TRANSFER_ASSET_PROOF_PURPOSE = "transfer.asset"
 MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE = "transfer.complete"
 MOBILE_TRANSFER_FAILURE_CODE_DISK_FULL = "disk_full"
-MOBILE_TRANSFER_PROGRESS_EVENT_INTERVAL_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -117,8 +113,6 @@ class StoredMobileTransferAsset:
 class MobileTransferService:
     def __init__(self, ctx: BMContext):
         self._ctx = ctx
-        self._transferring_event_lock = threading.Lock()
-        self._last_transferring_event_by_session: dict[tuple[str, str], float] = {}
 
     def handle_start_request(
         self,
@@ -185,13 +179,6 @@ class MobileTransferService:
                 session_id=request.session_id,
                 device_uuid=request.device_uuid,
                 folder_path=transfer_context.folder_path,
-            )
-            self._publish_transfer_state_updated(
-                session_id=request.session_id,
-                device_uuid=request.device_uuid,
-                folder_path=transfer_context.folder_path,
-                transfer_state=folder_transfer_state,
-                throttle_transferring=False,
             )
             log(
                 "info",
@@ -388,13 +375,6 @@ class MobileTransferService:
                         device_uuid=metadata.device_uuid,
                         delta=1,
                     )
-                    self._publish_transfer_state_updated(
-                        session_id=metadata.session_id,
-                        device_uuid=metadata.device_uuid,
-                        folder_path=transfer_context.folder_path,
-                        transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
-                        throttle_transferring=True,
-                    )
                     log(
                         "info",
                         message=(
@@ -436,13 +416,6 @@ class MobileTransferService:
                         session_id=metadata.session_id,
                         device_uuid=metadata.device_uuid,
                         delta=1,
-                    )
-                    self._publish_transfer_state_updated(
-                        session_id=metadata.session_id,
-                        device_uuid=metadata.device_uuid,
-                        folder_path=transfer_context.folder_path,
-                        transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
-                        throttle_transferring=True,
                     )
                     log(
                         "info",
@@ -551,13 +524,6 @@ class MobileTransferService:
                     device_uuid=metadata.device_uuid,
                     delta=1,
                 )
-                self._publish_transfer_state_updated(
-                    session_id=metadata.session_id,
-                    device_uuid=metadata.device_uuid,
-                    folder_path=transfer_context.folder_path,
-                    transfer_state=MOBILE_TRANSFER_STATE_TRANSFERRING,
-                    throttle_transferring=True,
-                )
 
             log(
                 "info",
@@ -665,13 +631,6 @@ class MobileTransferService:
                     ended_at=current_time,
                     transferred_count=request.transferred_count or 0,
                     failed_count=failed_count,
-                )
-                self._publish_transfer_state_updated(
-                    session_id=request.session_id,
-                    device_uuid=request.device_uuid,
-                    folder_path=transfer_context.folder_path,
-                    transfer_state=folder_transfer_state,
-                    throttle_transferring=False,
                 )
 
             log(
@@ -826,13 +785,6 @@ class MobileTransferService:
                     result=MOBILE_BACKUP_SESSION_STATUS_FAILED,
                 ),
             )
-            self._publish_transfer_state_updated(
-                session_id=session_id,
-                device_uuid=device_uuid,
-                folder_path=transfer_context.folder_path,
-                transfer_state=folder_transfer_state,
-                throttle_transferring=False,
-            )
             if publish_disk_full_event:
                 default_bus.publish(
                     MOBILE_TRANSFER_DISK_FULL_EVENT,
@@ -841,67 +793,6 @@ class MobileTransferService:
                     folder_path=transfer_context.folder_path,
                     message=MOBILE_TRANSFER_DISK_FULL_MESSAGE,
                 )
-
-
-    def _publish_transfer_state_updated(
-        self,
-        *,
-        session_id: str,
-        device_uuid: str,
-        folder_path: str,
-        transfer_state: str,
-        throttle_transferring: bool,
-    ) -> None:
-        if transfer_state == MOBILE_TRANSFER_STATE_TRANSFERRING:
-            if not self._reserve_transferring_event_slot(
-                session_id=session_id,
-                device_uuid=device_uuid,
-                throttle_transferring=throttle_transferring,
-            ):
-                return
-        else:
-            self._clear_transferring_event_timestamp(
-                session_id=session_id,
-                device_uuid=device_uuid,
-            )
-
-        default_bus.publish(
-            MOBILE_TRANSFER_STATE_UPDATED_EVENT,
-            session_id=session_id,
-            device_uuid=device_uuid,
-            folder_path=folder_path,
-            transfer_state=transfer_state,
-        )
-
-    def _reserve_transferring_event_slot(
-        self,
-        *,
-        session_id: str,
-        device_uuid: str,
-        throttle_transferring: bool,
-    ) -> bool:
-        session_key = (session_id, device_uuid)
-        current_time = time.monotonic()
-        with self._transferring_event_lock:
-            last_published_at = self._last_transferring_event_by_session.get(session_key)
-            if (
-                throttle_transferring
-                and last_published_at is not None
-                and (current_time - last_published_at) < MOBILE_TRANSFER_PROGRESS_EVENT_INTERVAL_SECONDS
-            ):
-                return False
-            self._last_transferring_event_by_session[session_key] = current_time
-        return True
-
-    def _clear_transferring_event_timestamp(
-        self,
-        *,
-        session_id: str,
-        device_uuid: str,
-    ) -> None:
-        session_key = (session_id, device_uuid)
-        with self._transferring_event_lock:
-            self._last_transferring_event_by_session.pop(session_key, None)
 
 
 def decode_transfer_asset_metadata(encoded_metadata: str) -> dict[str, object]:
