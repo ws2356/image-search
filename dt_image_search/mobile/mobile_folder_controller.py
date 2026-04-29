@@ -25,7 +25,11 @@ from dt_image_search.mobile.mobile_pairing_service import (
     PairingResultState,
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobileSourceType
-from dt_image_search.mobile.mobile_pairing_store import get_mobile_folder_binding_by_path
+from dt_image_search.mobile.mobile_pairing_store import (
+    ActiveMobileBackupSession,
+    get_active_mobile_backup_session,
+    get_mobile_folder_binding_by_path,
+)
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_STARTED_EVENT,
 )
@@ -45,6 +49,7 @@ class MobileFolderCoordinator(QObject):
     transfer_started = Signal(str, str)
     backup_again_mismatch_requested = Signal(object)
     _LAST_DESTINATION_KEY = "mobile_backup_parent_path"
+    _ACTIVE_BACKUP_DIALOG_TITLE = "Mobile Backup In Progress"
 
     def __init__(self, ctx: BMContext, *, on_folder_ready: Callable[[str], None] | None = None):
         super().__init__()
@@ -67,6 +72,8 @@ class MobileFolderCoordinator(QObject):
         return source
 
     def start_pairing_flow(self, parent: QWidget | None = None) -> MobilePairingSessionDraft | None:
+        if self._show_active_backup_in_progress_dialog(parent):
+            return None
         destination_parent = self._choose_destination_parent(parent)
         if not destination_parent:
             return None
@@ -77,6 +84,8 @@ class MobileFolderCoordinator(QObject):
         selected_folder_path: str,
         parent: QWidget | None = None,
     ) -> MobilePairingSessionDraft | None:
+        if self._show_active_backup_in_progress_dialog(parent):
+            return None
         normalized_folder_path = Path(selected_folder_path).expanduser().resolve().as_posix()
         with create_db_conn(ctx=self.ctx) as conn:
             folder_binding = get_mobile_folder_binding_by_path(conn, folder_path=normalized_folder_path)
@@ -175,6 +184,38 @@ class MobileFolderCoordinator(QObject):
         if self._pairing_service is None:
             self._pairing_service = MobilePairingService(self.ctx)
         return self._pairing_service
+
+    def _show_active_backup_in_progress_dialog(self, parent: QWidget | None = None) -> bool:
+        with create_db_conn(ctx=self.ctx) as conn:
+            active_session = get_active_mobile_backup_session(conn)
+        if active_session is None:
+            return False
+
+        self._show_active_backup_in_progress_message(parent, active_session)
+        log(
+            "info",
+            message=(
+                "MobileFolderCoordinator/_show_active_backup_in_progress_dialog: "
+                f"blocked new mobile backup while session {active_session.session_id} is transferring"
+            ),
+        )
+        return True
+
+    def _show_active_backup_in_progress_message(
+        self,
+        parent: QWidget | None,
+        active_session: ActiveMobileBackupSession,
+    ) -> None:
+        QMessageBox.warning(
+            parent,
+            self._ACTIVE_BACKUP_DIALOG_TITLE,
+            (
+                "Another mobile backup is already in progress.\n\n"
+                f"Current backup: {active_session.device_name}\n"
+                f"Folder: {active_session.folder_path}\n\n"
+                "Try again after the current session completes."
+            ),
+        )
 
     @staticmethod
     def _ensure_usb_prerequisites(parent: QWidget | None = None) -> bool:

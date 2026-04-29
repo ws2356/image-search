@@ -92,6 +92,14 @@ class MobileTransferContext:
     trust_key_b64: str
 
 
+@dataclass(frozen=True)
+class ActiveMobileBackupSession:
+    session_id: str
+    device_uuid: str
+    folder_path: str
+    device_name: str
+
+
 def ensure_mobile_pairing_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_MOBILE_PAIRING_SCHEMA_SQL)
     _ensure_mobile_asset_signature_columns(conn)
@@ -631,6 +639,33 @@ def increment_mobile_backup_session_transferred_count(
         (int(delta), session_id, device_uuid),
     )
     conn.commit()
+
+
+def get_active_mobile_backup_session(conn: sqlite3.Connection) -> ActiveMobileBackupSession | None:
+    row = conn.execute(
+        """
+        SELECT
+            mobile_backup_sessions.session_id AS session_id,
+            mobile_backup_sessions.device_uuid AS device_uuid,
+            folders.path AS folder_path,
+            mobile_devices.device_name AS device_name
+        FROM mobile_backup_sessions
+        JOIN folders ON folders.id = mobile_backup_sessions.folder_id
+        JOIN mobile_devices ON mobile_devices.device_uuid = mobile_backup_sessions.device_uuid
+        WHERE mobile_backup_sessions.status = ?
+        ORDER BY mobile_backup_sessions.started_at DESC
+        LIMIT 1
+        """,
+        (MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,),
+    ).fetchone()
+    if row is None:
+        return None
+    return ActiveMobileBackupSession(
+        session_id=row["session_id"],
+        device_uuid=row["device_uuid"],
+        folder_path=row["folder_path"],
+        device_name=row["device_name"],
+    )
 
 
 def get_mobile_folder_transfer_states(conn: sqlite3.Connection) -> dict[str, str]:
