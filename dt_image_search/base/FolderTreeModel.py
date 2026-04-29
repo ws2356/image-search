@@ -19,6 +19,16 @@ class _FolderTreeNode:
     key: str
 
 
+@dataclass
+class _PendingFsRowChange:
+    parent_path: str
+    start: int
+    end: int
+    first_row: int
+    last_row: int
+    before_visible_count: int
+
+
 class FolderTreeItemRef:
     def __init__(self, model: "FolderTreeModel", node: _FolderTreeNode):
         self._model = model
@@ -41,19 +51,26 @@ class FolderTreeItemRef:
 
 
 class FolderTreeFsProxyModel(QIdentityProxyModel):
+    @staticmethod
+    def _normalized_real_path(path: str) -> str:
+        try:
+            return normalized_folder_path(Path(path).resolve().as_posix()).replace("\\", "/")
+        except OSError:
+            return normalized_folder_path(path).replace("\\", "/")
+
     def _source_model(self) -> QFileSystemModel:
         source_model = self.sourceModel()
         assert isinstance(source_model, QFileSystemModel)
         return source_model
 
     def index_for_path(self, path: str) -> QModelIndex:
-        normalized_path = normalized_folder_path(path).replace("\\", "/")
+        normalized_path = self._normalized_real_path(path)
         return self.mapFromSource(self._source_model().index(normalized_path))
 
     def file_path(self, index: QModelIndex) -> str:
         if not index.isValid():
             return ""
-        return normalized_folder_path(self._source_model().filePath(self.mapToSource(index))).replace("\\", "/")
+        return self._normalized_real_path(self._source_model().filePath(self.mapToSource(index)))
 
     def is_dir(self, index: QModelIndex) -> bool:
         if not index.isValid():
@@ -95,6 +112,8 @@ class FolderTreeModel(QAbstractItemModel):
         self._mobile_transfer_states_by_path: dict[str, str] = {}
         self._mobile_folder_summaries_by_path: dict[str, dict[str, object]] = {}
         self._node_cache: dict[tuple[str, str], _FolderTreeNode] = {}
+        self._pending_fs_row_insertions: list[_PendingFsRowChange] = []
+        self._pending_fs_row_removals: list[_PendingFsRowChange] = []
         self._root_registry_model = QStandardItemModel(self)
         self._local_section_item: QStandardItem | None = None
         self._mobile_section_item: QStandardItem | None = None
@@ -103,6 +122,11 @@ class FolderTreeModel(QAbstractItemModel):
         self._fs_source_model.setRootPath(self._filesystem_root_path())
         self._fs_proxy_model = FolderTreeFsProxyModel(self)
         self._fs_proxy_model.setSourceModel(self._fs_source_model)
+        self._fs_proxy_model.rowsAboutToBeInserted.connect(self._on_fs_rows_about_to_be_inserted)
+        self._fs_proxy_model.rowsInserted.connect(self._on_fs_rows_inserted)
+        self._fs_proxy_model.rowsAboutToBeRemoved.connect(self._on_fs_rows_about_to_be_removed)
+        self._fs_proxy_model.rowsRemoved.connect(self._on_fs_rows_removed)
+        self._fs_proxy_model.dataChanged.connect(self._on_fs_data_changed)
         if self._sectioned_view:
             self._ensure_section_items()
 
@@ -168,9 +192,11 @@ class FolderTreeModel(QAbstractItemModel):
     def repopulate_folder_item(self, child_path: str):
         if self.get_containing_root_folder(child_path) is None:
             return
-        log("debug", message=f"FolderTreeModel/repopulate_folder_item: refreshing {child_path}")
-        self.beginResetModel()
-        self.endResetModel()
+        folder_proxy_index = self._fs_proxy_model.index_for_path(child_path)
+        if not folder_proxy_index.isValid():
+            return
+        if self._fs_proxy_model.canFetchMore(folder_proxy_index):
+            self._fs_proxy_model.fetchMore(folder_proxy_index)
 
     def get_containing_root_folder(self, child_path: str) -> FolderTreeItemRef | None:
         normalized_path = normalized_folder_path(child_path).replace("\\", "/")
@@ -456,23 +482,13 @@ class FolderTreeModel(QAbstractItemModel):
         parent_proxy_index = self._fs_proxy_model.index_for_path(parent_path)
         if not parent_proxy_index.isValid():
             return []
-        if self._fs_proxy_model.canFetchMore(parent_proxy_index):
-            self._fs_proxy_model.fetchMore(parent_proxy_index)
 
         child_paths: list[str] = []
         for row in range(self._fs_proxy_model.rowCount(parent_proxy_index)):
             child_index = self._fs_proxy_model.index(row, 0, parent_proxy_index)
-            if not child_index.isValid() or not self._fs_proxy_model.is_dir(child_index):
+            if not self._is_visible_fs_child_index(child_index):
                 continue
-            child_path = self._fs_proxy_model.file_path(child_index)
-            if not child_path:
-                continue
-            child_dir = Path(child_path)
-            if not self.folder_predicate(child_dir):
-                continue
-            if self._is_mobile_folder_path(child_path):
-                continue
-            child_paths.append(child_path)
+            child_paths.append(self._fs_proxy_model.file_path(child_index))
         child_paths.sort(key=str.casefold)
         return child_paths
 
@@ -622,6 +638,205 @@ class FolderTreeModel(QAbstractItemModel):
             root_index = self._index_for_node(self._node(self._ROOT_NODE_KIND, root_path))
             if root_index.isValid():
                 self.dataChanged.emit(root_index, root_index, roles)
+
+    def _adapter_parent_index_for_fs_parent(self, fs_parent_index: QModelIndex) -> tuple[QModelIndex, str] | None:
+        if not fs_parent_index.isValid():
+            return None
+        parent_path = self._fs_proxy_model.file_path(fs_parent_index)
+        if not parent_path:
+            return None
+        if self._has_root_folder(parent_path):
+            node = self._node(self._ROOT_NODE_KIND, parent_path)
+            return self._index_for_node(node), parent_path
+
+        containing_root = self.get_containing_root_folder(parent_path)
+        if containing_root is None or self._is_mobile_folder_path(parent_path):
+            return None
+        node = self._node(self._FS_NODE_KIND, parent_path)
+        return self._index_for_node(node), parent_path
+
+    def _is_visible_fs_child_index(self, child_index: QModelIndex) -> bool:
+        if not child_index.isValid() or not self._fs_proxy_model.is_dir(child_index):
+            return False
+        child_path = self._fs_proxy_model.file_path(child_index)
+        if not child_path or self._is_mobile_folder_path(child_path):
+            return False
+        return self.folder_predicate(Path(self._public_path(child_path)))
+
+    def _visible_child_count_before_source_row(self, fs_parent_index: QModelIndex, stop_row: int) -> int:
+        visible_count = 0
+        for row in range(max(stop_row, 0)):
+            child_index = self._fs_proxy_model.index(row, 0, fs_parent_index)
+            if self._is_visible_fs_child_index(child_index):
+                visible_count += 1
+        return visible_count
+
+    def _directory_child_paths_from_disk(self, parent_path: str) -> list[str]:
+        try:
+            child_paths: list[str] = []
+            for child in sorted(Path(self._public_path(parent_path)).iterdir(), key=lambda path: path.name.casefold()):
+                if not child.is_dir():
+                    continue
+                child_paths.append(normalized_folder_path(child.resolve().as_posix()).replace("\\", "/"))
+            return child_paths
+        except OSError:
+            return []
+
+    def _is_visible_child_path(self, child_path: str) -> bool:
+        if self._is_mobile_folder_path(child_path):
+            return False
+        return self.folder_predicate(Path(self._public_path(child_path)))
+
+    def _visible_child_count_in_range(self, fs_parent_index: QModelIndex, start: int, end: int) -> int:
+        visible_count = 0
+        for row in range(start, end + 1):
+            child_index = self._fs_proxy_model.index(row, 0, fs_parent_index)
+            if self._is_visible_fs_child_index(child_index):
+                visible_count += 1
+        return visible_count
+
+    def _take_pending_fs_change(
+        self,
+        pending_changes: list[_PendingFsRowChange],
+        *,
+        parent_path: str,
+        start: int,
+        end: int,
+    ) -> _PendingFsRowChange | None:
+        for idx, pending_change in enumerate(pending_changes):
+            if (
+                pending_change.parent_path == parent_path
+                and pending_change.start == start
+                and pending_change.end == end
+            ):
+                return pending_changes.pop(idx)
+        return None
+
+    def _on_fs_rows_about_to_be_inserted(self, fs_parent_index: QModelIndex, start: int, end: int) -> None:
+        adapter_parent = self._adapter_parent_index_for_fs_parent(fs_parent_index)
+        if adapter_parent is None:
+            return
+        adapter_parent_index, parent_path = adapter_parent
+        child_paths = self._directory_child_paths_from_disk(parent_path)
+        if start >= len(child_paths):
+            return
+        inserted_child_paths = child_paths[start:min(end + 1, len(child_paths))]
+        inserted_visible_count = sum(1 for child_path in inserted_child_paths if self._is_visible_child_path(child_path))
+        if inserted_visible_count <= 0:
+            return
+        first_row = sum(1 for child_path in child_paths[:start] if self._is_visible_child_path(child_path))
+        last_row = first_row + inserted_visible_count - 1
+        before_visible_count = sum(1 for child_path in child_paths if self._is_visible_child_path(child_path)) - inserted_visible_count
+        self.beginInsertRows(adapter_parent_index, first_row, last_row)
+        self._pending_fs_row_insertions.append(
+            _PendingFsRowChange(
+                parent_path=parent_path,
+                start=start,
+                end=end,
+                first_row=first_row,
+                last_row=last_row,
+                before_visible_count=before_visible_count,
+            )
+        )
+
+    def _on_fs_rows_inserted(self, fs_parent_index: QModelIndex, start: int, end: int) -> None:
+        adapter_parent = self._adapter_parent_index_for_fs_parent(fs_parent_index)
+        if adapter_parent is None:
+            return
+        _adapter_parent_index, parent_path = adapter_parent
+        pending_change = self._take_pending_fs_change(
+            self._pending_fs_row_insertions,
+            parent_path=parent_path,
+            start=start,
+            end=end,
+        )
+        if pending_change is None:
+            return
+        self.endInsertRows()
+        actual_inserted_count = len(self._child_directory_paths(parent_path)) - pending_change.before_visible_count
+        expected_inserted_count = pending_change.last_row - pending_change.first_row + 1
+        if actual_inserted_count != expected_inserted_count:
+            log(
+                "warning",
+                message=(
+                    "FolderTreeModel/_on_fs_rows_inserted: inserted visibility mismatch for "
+                    f"{parent_path}; expected {expected_inserted_count}, got {actual_inserted_count}; resetting model"
+                ),
+            )
+            self.beginResetModel()
+            self.endResetModel()
+
+    def _on_fs_rows_about_to_be_removed(self, fs_parent_index: QModelIndex, start: int, end: int) -> None:
+        adapter_parent = self._adapter_parent_index_for_fs_parent(fs_parent_index)
+        if adapter_parent is None:
+            return
+        adapter_parent_index, parent_path = adapter_parent
+        visible_count = self._visible_child_count_in_range(fs_parent_index, start, end)
+        if visible_count <= 0:
+            return
+        first_row = self._visible_child_count_before_source_row(fs_parent_index, start)
+        last_row = first_row + visible_count - 1
+        before_visible_count = self.rowCount(adapter_parent_index)
+        self.beginRemoveRows(adapter_parent_index, first_row, last_row)
+        self._pending_fs_row_removals.append(
+            _PendingFsRowChange(
+                parent_path=parent_path,
+                start=start,
+                end=end,
+                first_row=first_row,
+                last_row=last_row,
+                before_visible_count=before_visible_count,
+            )
+        )
+
+    def _on_fs_rows_removed(self, fs_parent_index: QModelIndex, start: int, end: int) -> None:
+        adapter_parent = self._adapter_parent_index_for_fs_parent(fs_parent_index)
+        if adapter_parent is None:
+            return
+        _adapter_parent_index, parent_path = adapter_parent
+        pending_change = self._take_pending_fs_change(
+            self._pending_fs_row_removals,
+            parent_path=parent_path,
+            start=start,
+            end=end,
+        )
+        if pending_change is None:
+            return
+        self.endRemoveRows()
+        actual_removed_count = pending_change.before_visible_count - len(self._child_directory_paths(parent_path))
+        expected_removed_count = pending_change.last_row - pending_change.first_row + 1
+        if actual_removed_count != expected_removed_count:
+            log(
+                "warning",
+                message=(
+                    "FolderTreeModel/_on_fs_rows_removed: removal visibility mismatch for "
+                    f"{parent_path}; expected {expected_removed_count}, got {actual_removed_count}; resetting model"
+                ),
+            )
+            self.beginResetModel()
+            self.endResetModel()
+
+    def _on_fs_data_changed(
+        self,
+        top_left: QModelIndex,
+        bottom_right: QModelIndex,
+        roles: list[int],
+    ) -> None:
+        if not top_left.isValid() or not bottom_right.isValid():
+            return
+        fs_parent_index = top_left.parent()
+        adapter_parent = self._adapter_parent_index_for_fs_parent(fs_parent_index)
+        if adapter_parent is None:
+            return
+
+        for row in range(top_left.row(), bottom_right.row() + 1):
+            child_index = self._fs_proxy_model.index(row, 0, fs_parent_index)
+            if not self._is_visible_fs_child_index(child_index):
+                continue
+            child_path = self._fs_proxy_model.file_path(child_index)
+            adapter_index = self._index_for_node(self._node(self._FS_NODE_KIND, child_path))
+            if adapter_index.isValid():
+                self.dataChanged.emit(adapter_index, adapter_index, [Qt.DisplayRole, Qt.UserRole])
 
     @staticmethod
     def _public_path(normalized_path: str) -> str:

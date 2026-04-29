@@ -136,7 +136,6 @@ class BrowseController(BaseController):
         if is_same_folder_path(containing_root_path, folder_path):
             return containing_root
 
-        self.folder_list_model().repopulate_folder_item(folder_path)
         folder_item = self.folder_list_model().find_folder_item(folder_path)
         return folder_item or containing_root
 
@@ -213,8 +212,7 @@ class BrowseController(BaseController):
         log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: processing event {event.event_type} for {event.src_path}")
         deleted_item = self._try_delete_root_folder(event) if event.event_type == 'deleted' else None
         if not deleted_item:
-            log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: not a root deletion, repopulating {event.src_path}")
-            self._repopulate_folder_item(event.src_path)
+            log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: not a root deletion, relying on QFileSystemModel update for {event.src_path}")
         else:
              log("debug", message=f"BrowseController/_on_notify_folder_changed_main_thread: root folder deleted: {event.src_path}")
 
@@ -262,20 +260,7 @@ class BrowseController(BaseController):
         return None
 
     def _repopulate_folder_item(self, src_path: str):
-        log("debug", message=f"BrowseController/_repopulate_folder_item: repopulating {src_path}")
-        affected_root_item = self.folder_list_model().get_containing_root_folder(src_path)
-        if affected_root_item:
-             log("debug", message=f"BrowseController/_repopulate_folder_item: found affected root item {affected_root_item.data(Qt.UserRole)}")
-             self.folder_list_model().repopulate_folder_item(src_path)
-             self._refresh_mobile_transfer_states()
-             
-             # Safely get data from item
-             data = affected_root_item.data(Qt.UserRole)
-             if data:
-                 self._selected_folder_path = data
-                 log("debug", message=f"BrowseController/_repopulate_folder_item: updated selection to {self._selected_folder_path}")
-             else:
-                 log("warning", message="BrowseController/_repopulate_folder_item: affected root item has no data")
+        log("debug", message=f"BrowseController/_repopulate_folder_item: source-driven tree update already covers {src_path}")
 
     def _on_mobile_transfer_status_poll_timeout(self) -> None:
         assert QThread.isMainThread()
