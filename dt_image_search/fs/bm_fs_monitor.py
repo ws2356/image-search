@@ -80,6 +80,8 @@ def stop_watch():
         _parent_folder_watch_map.clear()
 
 def add_folder(path: str):
+    if not os.path.exists(path):
+        return
     path = normalized_folder_path(path).replace('\\', '/')
 
     # if _fs_observer is not None:

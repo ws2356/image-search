@@ -144,11 +144,16 @@ def resume_index_workers(ctx: BMContext, is_init: bool = False):
         with create_db_conn(ctx=ctx) as conn:
             log("info", message="Resuming index workers for incomplete folders - db connected")
             all_folders = get_all_folders(conn)
-            folders = [folder for folder in all_folders if folder.status in folder_statuses_to_resume]
-            for folder in folders:
-                add_index_worker(ctx, folder)
+            folders = [folder for folder in all_folders if folder.status in folder_statuses_to_resume and os.path.exists(folder.path)]
             if not folders:
                 add_index_worker(ctx, None)  # Try to add a worker from pending queue if no folders need indexing
+                return
+            for folder in folders:
+                # check folder path exists before adding worker
+                if os.path.exists(folder.path):
+                    add_index_worker(ctx, folder)
+                else:
+                    log("debug", message=f"Folder path does not exist, skipping index worker for folder {folder.id}: {folder.path}")
         
     _resume_thread = threading.Thread(target=resume_logic, daemon=True)
     _resume_thread.start()
