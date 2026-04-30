@@ -127,6 +127,16 @@ def ensure_metadata_ready!(path)
   UI.user_error!("Metadata path must contain at least one locale directory: #{path}")
 end
 
+def ensure_associated_domains_entitlement!(ios_root_path)
+  entitlements_path = File.join(ios_root_path, "App/AlbumTransporterApp.entitlements")
+  UI.user_error!("Associated domains entitlements file not found: #{entitlements_path}") unless File.exist?(entitlements_path)
+
+  entitlements_content = File.read(entitlements_path)
+  return if entitlements_content.include?("applinks:dl.boldman.net")
+
+  UI.user_error!("Associated domains entitlement must include applinks:dl.boldman.net")
+end
+
 def build_upload_flags(options)
   options ||= {}
   upload_binary = truthy?(options[:upload_binary], default: true)
@@ -177,12 +187,16 @@ platform :ios do
     if flags[:upload_binary]
       UI.user_error!("Set IOS_CODE_SIGN_IDENTITY to the Keychain certificate name for app uploads.") if certificate_name.to_s.empty?
       ensure_codesigning_identity!(certificate_name)
+      ensure_associated_domains_entitlement!(ios_root)
       if keychain_path && !keychain_path.empty? && !File.exist?(keychain_path)
         UI.user_error!("Configured keychain path does not exist: #{keychain_path}")
       end
       if signing_style == "manual" && provisioning_profile_specifier.to_s.empty?
         UI.user_error!("Set IOS_PROVISIONING_PROFILE_SPECIFIER when IOS_SIGNING_STYLE=manual.")
       end
+      UI.important(
+        "Ensure the provisioning profile for net.boldman.albumtransporter includes the Associated Domains capability."
+      )
     end
 
     if api_key_configured?

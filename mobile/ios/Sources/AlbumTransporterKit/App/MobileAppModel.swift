@@ -19,6 +19,7 @@ final class MobileAppModel: ObservableObject {
     @Published var isShowingLowBatteryWarning = false
     @Published var isShowingMediaAccessAlert = false
     @Published var isShowingRemoveAfterBackupPrompt = false
+    @Published var isShowingIncomingLinkReplacementConfirmation = false
     @Published var mediaAccessAlertMessage = "Do you want to expand access permission to back up more or all media files in your photo library?"
 
     private var hasLoaded = false
@@ -29,6 +30,9 @@ final class MobileAppModel: ObservableObject {
     private var isAwaitingLowBatteryDecision = false
     private var isAwaitingRemoveAfterBackupDecision = false
     private var isRunningPermissionsPreflight = false
+    private var pendingIncomingUniversalLinkPayload: String?
+    private var isProcessingIncomingUniversalLink = false
+    private let universalLinkHost = "dl.boldman.net"
     private let stateStore: AppStateStore
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
     private let pairingService: PairingService
@@ -120,6 +124,8 @@ final class MobileAppModel: ObservableObject {
     }
 
     func openScanFlow() async {
+        pendingIncomingUniversalLinkPayload = nil
+        isShowingIncomingLinkReplacementConfirmation = false
         beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
@@ -133,6 +139,40 @@ final class MobileAppModel: ObservableObject {
         route = .scanAndPair
         recordTelemetry(.scanStarted)
         persistSnapshot()
+    }
+
+    func handleIncomingUniversalLink(_ url: URL) async {
+        guard isSupportedUniversalLink(url) else {
+            return
+        }
+        let payload = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !payload.isEmpty else {
+            return
+        }
+
+        if route == .transfer {
+            pendingIncomingUniversalLinkPayload = payload
+            isShowingIncomingLinkReplacementConfirmation = true
+            return
+        }
+
+        await processIncomingUniversalLinkPayload(payload)
+    }
+
+    func confirmIncomingUniversalLinkReplacement() async {
+        guard let payload = pendingIncomingUniversalLinkPayload else {
+            isShowingIncomingLinkReplacementConfirmation = false
+            return
+        }
+        pendingIncomingUniversalLinkPayload = nil
+        isShowingIncomingLinkReplacementConfirmation = false
+        await stopTransferForIncomingLinkReplacementIfNeeded()
+        await processIncomingUniversalLinkPayload(payload)
+    }
+
+    func cancelIncomingUniversalLinkReplacement() {
+        pendingIncomingUniversalLinkPayload = nil
+        isShowingIncomingLinkReplacementConfirmation = false
     }
 
     func beginPairing() async {
@@ -376,6 +416,8 @@ final class MobileAppModel: ObservableObject {
         isAwaitingMediaAccessDecision = false
         isAwaitingLowBatteryDecision = false
         isAwaitingRemoveAfterBackupDecision = false
+        pendingIncomingUniversalLinkPayload = nil
+        isShowingIncomingLinkReplacementConfirmation = false
         isShowingMediaAccessAlert = false
         isShowingLowBatteryWarning = false
         isShowingRemoveAfterBackupPrompt = false
@@ -466,6 +508,46 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
+    private func stopTransferForIncomingLinkReplacementIfNeeded() async {
+        guard route == .transfer else {
+            return
+        }
+        stopTransferProgressPolling()
+        _ = await transferService.stopTransfer(current: transferSnapshot)
+        transitionBackupFlow(.transferStopped)
+        updateHomeSummaryAfterStoppedTransfer()
+        transferStartedAt = nil
+        route = .home
+
+        recordTelemetry(
+            .transferStopped,
+            attributes: [
+                "transfer.stop_reason": .string("replaced_by_universal_link")
+            ]
+        )
+        incrementTelemetryMetric(
+            .backupFailures,
+            attributes: [
+                "backup.failure_reason": .string("replaced_by_universal_link")
+            ]
+        )
+        endTelemetrySpan(
+            .transferFlow,
+            attributes: [
+                "transfer.stop_reason": .string("replaced_by_universal_link")
+            ],
+            status: .error("replaced_by_universal_link")
+        )
+        endTelemetrySpan(
+            .backupSession,
+            attributes: [
+                "backup.failure_reason": .string("replaced_by_universal_link")
+            ],
+            status: .error("replaced_by_universal_link")
+        )
+        persistSnapshot()
+    }
+
     func completeTransfer() async {
         stopTransferProgressPolling()
         transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
@@ -547,12 +629,33 @@ final class MobileAppModel: ObservableObject {
         isAwaitingMediaAccessDecision = false
         isAwaitingLowBatteryDecision = false
         isAwaitingRemoveAfterBackupDecision = false
+        pendingIncomingUniversalLinkPayload = nil
+        isShowingIncomingLinkReplacementConfirmation = false
         isShowingMediaAccessAlert = false
         isShowingLowBatteryWarning = false
         isShowingRemoveAfterBackupPrompt = false
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
         persistSnapshot()
+    }
+
+    private func isSupportedUniversalLink(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else {
+            return false
+        }
+        return host == universalLinkHost
+    }
+
+    private func processIncomingUniversalLinkPayload(_ payload: String) async {
+        guard !isProcessingIncomingUniversalLink else {
+            return
+        }
+        isProcessingIncomingUniversalLink = true
+        defer { isProcessingIncomingUniversalLink = false }
+
+        await openScanFlow()
+        scannedQRCodeValue = payload
+        await beginPairing()
     }
 
     private func startTransfer() async {

@@ -308,6 +308,162 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertNil(decoded.suggestedUSBPort)
     }
 
+    func test_handle_incoming_universal_link_routes_to_permissions_after_pairing() async {
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        await model.handleIncomingUniversalLink(URL(string: PairingQRCodePayload.demoScanValue)!)
+
+        XCTAssertEqual(model.route, .permissions)
+        XCTAssertEqual(model.pairingStatus.phase, .paired)
+        XCTAssertEqual(model.scannedQRCodeValue, PairingQRCodePayload.demoScanValue)
+    }
+
+    func test_handle_incoming_universal_link_with_invalid_payload_shows_pairing_failure() async {
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        await model.handleIncomingUniversalLink(URL(string: "https://dl.boldman.net?sid=missing-fields")!)
+
+        XCTAssertEqual(model.route, .scanAndPair)
+        XCTAssertEqual(model.pairingStatus.phase, .failed)
+        XCTAssertTrue(model.pairingStatus.message.contains("missing the required field"))
+    }
+
+    func test_handle_incoming_universal_link_prompts_before_replacing_active_transfer() async {
+        let inFlightSnapshot = TransferSnapshot(
+            transferredCount: 1,
+            totalCount: 5,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Sending items to desktop.",
+            guidanceMessage: "Keep app in foreground.",
+            isIncompleteLibrary: false
+        )
+        let finalSnapshot = TransferSnapshot(
+            transferredCount: 5,
+            totalCount: 5,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Completed transfer.",
+            guidanceMessage: "Done.",
+            isIncompleteLibrary: false
+        )
+        let transferService = DelayedTransferService(
+            inFlightSnapshot: inFlightSnapshot,
+            finalSnapshot: finalSnapshot,
+            transferDurationNanoseconds: 500_000_000
+        )
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: transferService,
+            telemetryClient: RecordingTelemetryClient(),
+            transferProgressPollingIntervalNanoseconds: 10_000_000
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await model.startBackup()
+        let transferTask = Task {
+            await model.selectRemoveAfterBackupPreferenceAndContinue(false)
+        }
+        try? await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertEqual(model.route, .transfer)
+
+        await model.handleIncomingUniversalLink(URL(string: PairingQRCodePayload.demoScanValue)!)
+
+        XCTAssertTrue(model.isShowingIncomingLinkReplacementConfirmation)
+        model.cancelIncomingUniversalLinkReplacement()
+        XCTAssertFalse(model.isShowingIncomingLinkReplacementConfirmation)
+        XCTAssertEqual(model.route, .transfer)
+
+        await transferTask.value
+    }
+
+    func test_confirm_incoming_universal_link_replacement_stops_transfer_and_starts_new_pairing() async {
+        let inFlightSnapshot = TransferSnapshot(
+            transferredCount: 1,
+            totalCount: 5,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Sending items to desktop.",
+            guidanceMessage: "Keep app in foreground.",
+            isIncompleteLibrary: false
+        )
+        let finalSnapshot = TransferSnapshot(
+            transferredCount: 5,
+            totalCount: 5,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Completed transfer.",
+            guidanceMessage: "Done.",
+            isIncompleteLibrary: false
+        )
+        let transferService = DelayedTransferService(
+            inFlightSnapshot: inFlightSnapshot,
+            finalSnapshot: finalSnapshot,
+            transferDurationNanoseconds: 500_000_000
+        )
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: transferService,
+            telemetryClient: RecordingTelemetryClient(),
+            transferProgressPollingIntervalNanoseconds: 10_000_000
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await model.startBackup()
+        let transferTask = Task {
+            await model.selectRemoveAfterBackupPreferenceAndContinue(false)
+        }
+        try? await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertEqual(model.route, .transfer)
+
+        let replacementLink = "https://dl.boldman.net?v=2&ept=desktop.local:38933&sid=pairing-replacement-001&opt=456123&usp=50211"
+        await model.handleIncomingUniversalLink(URL(string: replacementLink)!)
+        XCTAssertTrue(model.isShowingIncomingLinkReplacementConfirmation)
+
+        await model.confirmIncomingUniversalLinkReplacement()
+
+        XCTAssertFalse(model.isShowingIncomingLinkReplacementConfirmation)
+        XCTAssertEqual(model.route, .permissions)
+        XCTAssertEqual(model.pairingStatus.phase, .paired)
+        XCTAssertEqual(model.scannedQRCodeValue, replacementLink)
+        let stopCallCount = await transferService.stopCallCount()
+        XCTAssertEqual(stopCallCount, 1)
+
+        await transferTask.value
+    }
+
     func test_open_scan_flow_returns_without_waiting_for_slow_side_effect_io() async {
         let model = MobileAppModel(
             stateStore: SlowAppStateStore(saveDelay: .milliseconds(600)),
@@ -718,6 +874,60 @@ private actor ForegroundRecoveryTrackingTransferService: TransferService {
 
     func foregroundRecoveryCallCount() -> Int {
         foregroundRecoveryCalls
+    }
+}
+
+private actor DelayedTransferService: TransferService {
+    private let inFlightSnapshot: TransferSnapshot
+    private let finalSnapshot: TransferSnapshot
+    private let transferDurationNanoseconds: UInt64
+    private var stopCalls = 0
+    private var snapshot: TransferSnapshot?
+
+    init(
+        inFlightSnapshot: TransferSnapshot,
+        finalSnapshot: TransferSnapshot,
+        transferDurationNanoseconds: UInt64
+    ) {
+        self.inFlightSnapshot = inFlightSnapshot
+        self.finalSnapshot = finalSnapshot
+        self.transferDurationNanoseconds = transferDurationNanoseconds
+    }
+
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        snapshot = inFlightSnapshot
+        progress(inFlightSnapshot)
+        try? await Task.sleep(nanoseconds: transferDurationNanoseconds)
+        snapshot = finalSnapshot
+        return finalSnapshot
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        _ = current
+        stopCalls += 1
+        return .stoppedByUser
+    }
+
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        self.snapshot = snapshot
+        progress(snapshot)
+        return snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        snapshot
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
+
+    func stopCallCount() -> Int {
+        stopCalls
     }
 }
 

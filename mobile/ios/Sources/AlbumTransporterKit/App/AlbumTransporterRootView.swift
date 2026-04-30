@@ -1,5 +1,6 @@
-import Factory
 import SwiftUI
+import Foundation
+import Factory
 #if os(iOS)
 import UIKit
 #endif
@@ -112,6 +113,37 @@ public struct AlbumTransporterRootView: View {
                 }
             } message: {
                 Text("Choose whether successfully transferred photos and videos should be moved to Recently Removed on this device after backup completes.")
+            }
+            .confirmationDialog(
+                "Start a new backup session?",
+                isPresented: $model.isShowingIncomingLinkReplacementConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Start New Session", role: .destructive) {
+                    model.recordInteraction(name: "incoming_link_replace_confirmed", location: "incoming_link_confirmation")
+                    Task {
+                        await model.confirmIncomingUniversalLinkReplacement()
+                    }
+                }
+                Button("Keep Current Backup", role: .cancel) {
+                    model.recordInteraction(name: "incoming_link_replace_cancelled", location: "incoming_link_confirmation")
+                    model.cancelIncomingUniversalLinkReplacement()
+                }
+            } message: {
+                Text("A new desktop pairing link was opened. Starting it now will stop the current transfer.")
+            }
+            .onOpenURL { url in
+                Task {
+                    await model.handleIncomingUniversalLink(url)
+                }
+            }
+            .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { userActivity in
+                guard let url = userActivity.webpageURL else {
+                    return
+                }
+                Task {
+                    await model.handleIncomingUniversalLink(url)
+                }
             }
     }
 
