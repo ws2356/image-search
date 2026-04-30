@@ -135,16 +135,23 @@ struct LiveQRCodeScannerScreen: View {
     }
 
     private func instructionBanner(bottomInset: CGFloat) -> some View {
-        Text("Point at the QR code shown on your PC screen")
-            .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(.white)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(Color.black.opacity(0.60))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal, 24)
-            .padding(.bottom, max(bottomInset + 24, 32))
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Pair and back up your photo library to pc:")
+                .font(.system(size: 15, weight: .semibold))
+            Text("        1. Open https://aurora.boldman.net on your PC browser then install and launch AuSearch.")
+            Text("        2. Click 'Add Folder'.")
+            Text("        3. Select 'Mobile Device'.")
+        }
+        .font(.system(size: 14, weight: .medium))
+        .foregroundStyle(.white)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color.black.opacity(0.60))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 24)
+        .padding(.bottom, max(bottomInset + 24, 32))
     }
 
     private func statusPanel<Content: View>(@ViewBuilder content: () -> Content) -> some View {

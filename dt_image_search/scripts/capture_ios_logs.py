@@ -24,6 +24,7 @@ from pymobiledevice3.services.syslog import SyslogService
 DEFAULT_FILTER_TERMS = [
     "AlbumTransporterKit",
     "AlbumTransporterApp",
+    "AuBackup",
     "USBTransport",
     "USBRuntime",
     "AdaptiveTransfer",
@@ -35,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Capture iOS syslog lines to a local file using pymobiledevice3. "
-            "By default this stores only Album Transporter mobile-folder related lines."
+            "By default this stores only AuBackup mobile-folder related lines."
         )
     )
     parser.add_argument(

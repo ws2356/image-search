@@ -684,7 +684,7 @@ class MobilePairingDialog(QDialog):
         title.setStyleSheet("color: #1f2937;")
         layout.addWidget(title)
 
-        subtitle = QLabel("Scan this QR code from Album Transporter on your mobile device. The code is valid for 15 minutes.")
+        subtitle = QLabel("Scan this QR code from AuBackup on your mobile device. The code is valid for 15 minutes.")
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: #666666; font-size: 13px;")
         layout.addWidget(subtitle)
