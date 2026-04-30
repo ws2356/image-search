@@ -76,21 +76,33 @@ private enum USBTransportDebugLogger {
     )
 
     static func debug(_ message: String) {
+        #if DEBUG
+        return
+        #endif
         logger.debug("\(message, privacy: .public)")
         appendToDiagnosticsFile(level: "DEBUG", message: message)
     }
 
     static func info(_ message: String) {
+        #if DEBUG
+        return
+        #endif
         logger.info("\(message, privacy: .public)")
         appendToDiagnosticsFile(level: "INFO", message: message)
     }
 
     static func warning(_ message: String) {
+        #if DEBUG
+        return
+        #endif
         logger.warning("\(message, privacy: .public)")
         appendToDiagnosticsFile(level: "WARN", message: message)
     }
 
     static func error(_ message: String) {
+        #if DEBUG
+        return
+        #endif
         logger.error("\(message, privacy: .public)")
         appendToDiagnosticsFile(level: "ERROR", message: message)
     }
