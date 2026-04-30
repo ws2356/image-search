@@ -20,6 +20,24 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
     }
 
+    func test_load_does_not_trigger_transfer_recovery_while_idle() async {
+        let transferService = ForegroundRecoveryTrackingTransferService()
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: transferService,
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let recoveryCallCount = await transferService.foregroundRecoveryCallCount()
+        XCTAssertEqual(recoveryCallCount, 0)
+    }
+
     func test_start_backup_shows_low_battery_alert_when_needed() async {
         let lowBatteryFullAccess = PermissionSummary(
             cameraGranted: true,
@@ -307,6 +325,24 @@ final class MobileAppModelTests: XCTestCase {
         let elapsed = start.duration(to: clock.now)
         XCTAssertEqual(model.route, .scanAndPair)
         XCTAssertLessThan(elapsed, .milliseconds(250))
+    }
+
+    func test_handle_app_did_become_active_does_not_trigger_transfer_recovery_while_idle() async {
+        let transferService = ForegroundRecoveryTrackingTransferService()
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: transferService,
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.handleAppDidBecomeActive()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let recoveryCallCount = await transferService.foregroundRecoveryCallCount()
+        XCTAssertEqual(recoveryCallCount, 0)
     }
 
     func test_complete_transfer_moves_assets_to_recently_removed_when_enabled() async {
@@ -644,6 +680,44 @@ private actor StopTrackingTransferService: TransferService {
 
     func stopCallCount() -> Int {
         stopCalls
+    }
+}
+
+private actor ForegroundRecoveryTrackingTransferService: TransferService {
+    private var foregroundRecoveryCalls = 0
+
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(.demo)
+        return .demo
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        .stoppedByUser
+    }
+
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(snapshot)
+        return snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        .demo
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
+
+    func handleAppDidBecomeActive() async {
+        foregroundRecoveryCalls += 1
+    }
+
+    func foregroundRecoveryCallCount() -> Int {
+        foregroundRecoveryCalls
     }
 }
 

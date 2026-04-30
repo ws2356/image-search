@@ -442,6 +442,13 @@ class UsbWebSocketTransportAdapter:
             except TimeoutError:
                 continue
             except ConnectionClosed:
+                self._safe_log(
+                    "warning",
+                    message=(
+                        "UsbWebSocketTransportAdapter/_run_websocket_session: "
+                        "USB websocket connection closed by mobile runtime."
+                    ),
+                )
                 return
             try:
                 self._handle_incoming_message(
@@ -899,7 +906,14 @@ class UsbWebSocketTransportAdapter:
                 UsbTunnelDeviceNotFoundError,
                 UsbTunnelConnectError,
                 OSError,
-            ):
+            ) as exc:
+                self._safe_log(
+                    "debug",
+                    message=(
+                        "UsbWebSocketTransportAdapter/_probe_device_for_ports: "
+                        f"device={usb_device.udid} port={port} failed: {exc}"
+                    ),
+                )
                 continue
             return (
                 UsbTunnelTarget(

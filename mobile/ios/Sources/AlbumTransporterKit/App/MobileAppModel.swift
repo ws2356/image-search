@@ -862,6 +862,19 @@ final class MobileAppModel: ObservableObject {
                 group.addTask { [weak self] in
                     do {
                         for try await _ in NotificationCenter.default.notifications(
+                            named: UIApplication.didBecomeActiveNotification
+                        ) {
+                            guard let self else {
+                                return
+                            }
+                            await self.handleAppDidBecomeActive()
+                        }
+                    } catch {}
+                }
+
+                group.addTask { [weak self] in
+                    do {
+                        for try await _ in NotificationCenter.default.notifications(
                             named: UIApplication.willTerminateNotification
                         ) {
                             guard let self else {
@@ -888,6 +901,18 @@ final class MobileAppModel: ObservableObject {
         let transferService = transferService
         Task.detached(priority: .utility) {
             await transferService.handleMemoryWarning()
+        }
+    }
+
+    func handleAppDidBecomeActive() async {
+        let pairingService = pairingService
+        let shouldRecoverTransferTransport = route == .transfer
+        let transferService = transferService
+        Task.detached(priority: .utility) {
+            await pairingService.primeNetworkAccess()
+            if shouldRecoverTransferTransport {
+                await transferService.handleAppDidBecomeActive()
+            }
         }
     }
 

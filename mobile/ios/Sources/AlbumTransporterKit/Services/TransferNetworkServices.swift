@@ -510,6 +510,10 @@ protocol USBTransportConnectivityChecking: Sendable {
     func isUSBTransportConnected() async -> Bool
 }
 
+protocol USBTransportForegroundRecovering: Sendable {
+    func recoverUSBTransportAfterForegroundResume(for desktop: TrustedDesktopRecord) async
+}
+
 enum TransferClientError: Error, Sendable {
     case invalidHTTPResponse
     case unsupportedResponseSchema
@@ -2469,6 +2473,16 @@ actor PhotoLibraryTransferService: TransferService {
         snapshot.transferSpeedText = currentTransferSpeedText()
         currentSnapshot = snapshot
         return snapshot
+    }
+
+    func handleAppDidBecomeActive() async {
+        guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
+            return
+        }
+        guard let usbForegroundRecovery = transferClient as? any USBTransportForegroundRecovering else {
+            return
+        }
+        await usbForegroundRecovery.recoverUSBTransportAfterForegroundResume(for: trustedDesktop)
     }
 
     func handleMemoryWarning() async {

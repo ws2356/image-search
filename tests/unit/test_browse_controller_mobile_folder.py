@@ -148,6 +148,51 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             add_folder_mock.assert_called_once_with(folder_path.as_posix())
             add_index_worker_mock.assert_called_once()
 
+    def test_ensure_folder_registered_creates_missing_mobile_folder_before_adding_root(self):
+        destination_parent = (Path(self._temp_dir.name) / "Mobile Backups").resolve()
+        destination_parent.mkdir(parents=True, exist_ok=True)
+        folder_path = (destination_parent / "Alice iPhone").resolve()
+        self.assertFalse(folder_path.exists())
+
+        updated_at = datetime.now(timezone.utc).isoformat()
+        with create_db_conn(ctx=self._ctx) as conn:
+            parent_folder = insert_folder(conn, destination_parent.as_posix())
+            self.assertIsNotNone(parent_folder)
+            folder = insert_folder(conn, folder_path.as_posix())
+            self.assertIsNotNone(folder)
+            conn.execute(
+                """
+                INSERT INTO mobile_devices (
+                    device_uuid,
+                    platform,
+                    device_name,
+                    trust_key_b64,
+                    paired_at,
+                    last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                ("device-missing-root-001", "ios", "Alice iPhone", "trust-key", updated_at, updated_at),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_folders (folder_id, device_uuid, transfer_state, transfer_state_updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (folder.id, "device-missing-root-001", MOBILE_TRANSFER_STATE_TRANSFERRING, updated_at),
+            )
+            conn.commit()
+
+        with self._controller_context() as (controller, add_folder_mock, add_index_worker_mock):
+            controller.ensure_folder_registered(folder_path.as_posix(), select_folder=False)
+
+            self.assertTrue(folder_path.is_dir())
+            folder_item = controller.folder_list_model().find_folder_item(folder_path.as_posix())
+            self.assertIsNotNone(folder_item)
+            self.assertIsNotNone(folder_item.parent())
+            self.assertEqual(folder_item.parent().text(), "MOBILE")
+            add_folder_mock.assert_called_once_with(folder_path.as_posix())
+            add_index_worker_mock.assert_called_once()
+
     def test_mobile_folder_badge_tracks_polled_db_transfer_state(self):
         folder_path = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
         folder_path.mkdir(parents=True, exist_ok=True)

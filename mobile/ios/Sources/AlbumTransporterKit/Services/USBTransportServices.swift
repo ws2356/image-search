@@ -75,12 +75,24 @@ private enum USBTransportDebugLogger {
         category: "USBTransport"
     )
 
+    static func debug(_ message: String) {
+        logger.debug("\(message, privacy: .public)")
+        appendToDiagnosticsFile(level: "DEBUG", message: message)
+    }
+
     static func info(_ message: String) {
         logger.info("\(message, privacy: .public)")
+        appendToDiagnosticsFile(level: "INFO", message: message)
     }
 
     static func warning(_ message: String) {
         logger.warning("\(message, privacy: .public)")
+        appendToDiagnosticsFile(level: "WARN", message: message)
+    }
+
+    static func error(_ message: String) {
+        logger.error("\(message, privacy: .public)")
+        appendToDiagnosticsFile(level: "ERROR", message: message)
     }
 
     static func describe(_ error: Error) -> String {
@@ -92,6 +104,39 @@ private enum USBTransportDebugLogger {
         }
         let nsError = error as NSError
         return "\(type(of: error)): \(error.localizedDescription) [\(nsError.domain)#\(nsError.code)]"
+    }
+
+    private static func appendToDiagnosticsFile(level: String, message: String) {
+        let sanitizedMessage = message.replacingOccurrences(of: "\n", with: "\\n")
+        let line = "\(Date().formatted(.iso8601)) [\(level)] \(sanitizedMessage)\n"
+        guard let data = line.data(using: .utf8) else {
+            return
+        }
+        do {
+            let fileURL = try diagnosticsFileURL()
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                let fileHandle = try FileHandle(forWritingTo: fileURL)
+                defer {
+                    try? fileHandle.close()
+                }
+                try fileHandle.seekToEnd()
+                try fileHandle.write(contentsOf: data)
+            } else {
+                try data.write(to: fileURL, options: .atomic)
+            }
+        } catch {
+            logger.error("USB debug file write failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func diagnosticsFileURL() throws -> URL {
+        let appSupportURL = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        return appSupportURL.appendingPathComponent("usb_transport_debug.log")
     }
 }
 
@@ -117,13 +162,18 @@ private func normalizedCapabilityExchangeFlags(_ capabilityFlags: [String: Int])
 }
 
 actor USBWebSocketTransportRuntime {
+    private static let bootstrapPortFallbackWindow = 20
+    private static let forcedRestartCooldownSeconds: TimeInterval = 1.5
     private var listener: NWListener?
+    private var activeListenerID: UUID?
     private var activeConnection: NWConnection?
     private var isActiveConnectionReady = false
     private var isConnectionAuthenticated = false
     private var bootstrapSessionID: String?
     private var bootstrapOneTimePasscode: String?
     private var bootstrapPort: Int?
+    private var activeListenerPort: Int?
+    private var lastForcedRestartAt: Date?
     private var pendingResponses: [String: CheckedContinuation<USBTransportRuntimeResponse, Error>] = [:]
     private var activeStreamingRequestIDs: Set<String> = []
     private let queue = DispatchQueue(label: "AlbumTransporterKit.USBTransportRuntime")
@@ -136,25 +186,52 @@ actor USBWebSocketTransportRuntime {
     func prepareBootstrap(
         sessionID: String,
         oneTimePasscode: String,
-        suggestedPort: Int
+        suggestedPort: Int,
+        forceRestart: Bool = false
     ) throws {
         guard (1 ... 65_535).contains(suggestedPort) else {
             throw USBTransportRuntimeError.invalidSuggestedPort
         }
 
-        if bootstrapSessionID == sessionID,
-           bootstrapOneTimePasscode == oneTimePasscode,
-           bootstrapPort == suggestedPort,
-           listener != nil
+        USBTransportDebugLogger.info(
+            "USBRuntime/prepareBootstrap session_id=\(sessionID) suggested_port=\(suggestedPort) force_restart=\(forceRestart)"
+        )
+
+        let hasMatchingBootstrap = bootstrapSessionID == sessionID
+            && bootstrapOneTimePasscode == oneTimePasscode
+            && bootstrapPort == suggestedPort
+
+        if forceRestart,
+           hasMatchingBootstrap,
+           listener != nil,
+           let lastForcedRestartAt,
+           Date().timeIntervalSince(lastForcedRestartAt) < Self.forcedRestartCooldownSeconds
         {
+            USBTransportDebugLogger.debug(
+                "USBRuntime/prepareBootstrap_force_restart_suppressed "
+                    + "session_id=\(sessionID) suggested_port=\(suggestedPort)"
+            )
             return
         }
 
+        if !forceRestart,
+           hasMatchingBootstrap,
+           listener != nil
+        {
+            USBTransportDebugLogger.debug(
+                "USBRuntime/prepareBootstrap_reused session_id=\(sessionID) suggested_port=\(suggestedPort)"
+            )
+            return
+        }
+
+        if forceRestart {
+            lastForcedRestartAt = Date()
+        }
         resetRuntimeState()
         bootstrapSessionID = sessionID
         bootstrapOneTimePasscode = oneTimePasscode
         bootstrapPort = suggestedPort
-        try startListener(on: suggestedPort)
+        try startListener(near: suggestedPort)
     }
 
     func sendRequest<Request: Encodable & Sendable>(
@@ -283,9 +360,18 @@ actor USBWebSocketTransportRuntime {
         activeConnection != nil && isActiveConnectionReady && isConnectionAuthenticated
     }
 
+    func hasPreparedBootstrap(sessionID: String, suggestedPort: Int) -> Bool {
+        bootstrapSessionID == sessionID && bootstrapPort == suggestedPort && listener != nil
+    }
+
+    func listenerPort() -> Int? {
+        activeListenerPort
+    }
+
     private func resetRuntimeState() {
         listener?.cancel()
         listener = nil
+        activeListenerID = nil
         activeConnection?.cancel()
         activeConnection = nil
         isActiveConnectionReady = false
@@ -294,7 +380,31 @@ actor USBWebSocketTransportRuntime {
         bootstrapSessionID = nil
         bootstrapOneTimePasscode = nil
         bootstrapPort = nil
+        activeListenerPort = nil
         failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
+    }
+
+    private func startListener(near suggestedPort: Int) throws {
+        var lastError: USBTransportRuntimeError?
+        for candidatePort in candidateBootstrapPorts(around: suggestedPort) {
+            do {
+                try startListener(on: candidatePort)
+                activeListenerPort = candidatePort
+                USBTransportDebugLogger.info(
+                    "USBRuntime/listener_started requested_port=\(suggestedPort) active_port=\(candidatePort)"
+                )
+                return
+            } catch let error as USBTransportRuntimeError {
+                lastError = error
+                USBTransportDebugLogger.warning(
+                    "USBRuntime/listener_candidate_failed requested_port=\(suggestedPort) candidate_port=\(candidatePort) error=\(error.localizedDescription)"
+                )
+                continue
+            }
+        }
+        throw lastError ?? USBTransportRuntimeError.listenerStartFailed(
+            message: "Desktop USB transport listener could not bind any bootstrap port candidates."
+        )
     }
 
     private func startListener(on port: Int) throws {
@@ -310,38 +420,70 @@ actor USBWebSocketTransportRuntime {
 
         do {
             let listener = try NWListener(using: parameters, on: endpointPort)
+            let listenerID = UUID()
             listener.stateUpdateHandler = { [weak self] state in
                 Task {
-                    await self?.handleListenerState(state)
+                    await self?.handleListenerState(state, listenerID: listenerID)
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in
                 Task {
-                    await self?.acceptConnection(connection)
+                    await self?.acceptConnection(connection, listenerID: listenerID)
                 }
             }
             listener.start(queue: queue)
             self.listener = listener
+            activeListenerID = listenerID
         } catch {
             throw USBTransportRuntimeError.listenerStartFailed(message: error.localizedDescription)
         }
     }
 
-    private func handleListenerState(_ state: NWListener.State) {
+    private func candidateBootstrapPorts(around suggestedPort: Int) -> [Int] {
+        var candidatePorts: [Int] = [suggestedPort]
+        for offset in 1 ... Self.bootstrapPortFallbackWindow {
+            let higherPort = suggestedPort + offset
+            if higherPort <= 65_535 {
+                candidatePorts.append(higherPort)
+            }
+            let lowerPort = suggestedPort - offset
+            if lowerPort >= 1 {
+                candidatePorts.append(lowerPort)
+            }
+        }
+        return candidatePorts
+    }
+
+    private func handleListenerState(_ state: NWListener.State, listenerID: UUID) {
+        guard activeListenerID == listenerID else {
+            USBTransportDebugLogger.debug("USBRuntime/listener_state_ignored_stale \(String(describing: state))")
+            return
+        }
+        USBTransportDebugLogger.debug("USBRuntime/listener_state \(String(describing: state))")
         switch state {
         case .failed(let error):
             listener = nil
+            activeListenerID = nil
+            activeListenerPort = nil
             failAllPendingResponses(
                 with: USBTransportRuntimeError.listenerStartFailed(message: error.localizedDescription)
             )
         case .cancelled:
             listener = nil
+            activeListenerID = nil
+            activeListenerPort = nil
         default:
             break
         }
     }
 
-    private func acceptConnection(_ connection: NWConnection) {
+    private func acceptConnection(_ connection: NWConnection, listenerID: UUID) {
+        guard activeListenerID == listenerID else {
+            USBTransportDebugLogger.debug("USBRuntime/accept_connection_ignored_stale_listener")
+            connection.cancel()
+            return
+        }
+        USBTransportDebugLogger.info("USBRuntime/accept_connection")
         activeConnection?.cancel()
         activeConnection = connection
         isActiveConnectionReady = false
@@ -363,18 +505,21 @@ actor USBWebSocketTransportRuntime {
         switch state {
         case .ready:
             isActiveConnectionReady = true
+            USBTransportDebugLogger.info("USBRuntime/connection_ready authenticated=\(isConnectionAuthenticated)")
         case .failed(let error):
             isActiveConnectionReady = false
             isConnectionAuthenticated = false
             activeConnection = nil
             activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
+            USBTransportDebugLogger.warning("USBRuntime/connection_failed error=\(error.localizedDescription)")
         case .cancelled:
             isActiveConnectionReady = false
             isConnectionAuthenticated = false
             activeConnection = nil
             activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
+            USBTransportDebugLogger.warning("USBRuntime/connection_cancelled")
         default:
             break
         }
@@ -407,6 +552,7 @@ actor USBWebSocketTransportRuntime {
             activeConnection = nil
             activeStreamingRequestIDs.removeAll(keepingCapacity: false)
             failAllPendingResponses(with: USBTransportRuntimeError.sendFailed(message: error.localizedDescription))
+            USBTransportDebugLogger.warning("USBRuntime/receive_error error=\(error.localizedDescription)")
             return
         }
 
@@ -467,25 +613,29 @@ actor USBWebSocketTransportRuntime {
         let challengeResult = evaluateDesktopAuthChallenge(body: body)
         let responseBody: [String: Any]
         let statusCode: Int
-        if challengeResult.accepted {
-            statusCode = 200
-            responseBody = [
-                "schema": MobileTransportProtocol.schema,
-                "status": "accepted",
-                "proof": challengeResult.proof,
-            ]
-            isConnectionAuthenticated = true
-        } else {
-            statusCode = 401
-            responseBody = [
-                "schema": MobileTransportProtocol.schema,
-                "status": "rejected",
-                "message": challengeResult.message,
-            ]
-            isConnectionAuthenticated = false
-            activeStreamingRequestIDs.removeAll(keepingCapacity: false)
-            failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
-        }
+            if challengeResult.accepted {
+                statusCode = 200
+                responseBody = [
+                    "schema": MobileTransportProtocol.schema,
+                    "status": "accepted",
+                    "proof": challengeResult.proof,
+                ]
+                isConnectionAuthenticated = true
+                USBTransportDebugLogger.info("USBRuntime/auth_challenge_accepted session_id=\(sidOrUnknown(body))")
+            } else {
+                statusCode = 401
+                responseBody = [
+                    "schema": MobileTransportProtocol.schema,
+                    "status": "rejected",
+                    "message": challengeResult.message,
+                ]
+                isConnectionAuthenticated = false
+                activeStreamingRequestIDs.removeAll(keepingCapacity: false)
+                failAllPendingResponses(with: USBTransportRuntimeError.connectionUnavailable)
+                USBTransportDebugLogger.warning(
+                    "USBRuntime/auth_challenge_rejected session_id=\(sidOrUnknown(body)) message=\(challengeResult.message)"
+                )
+            }
 
         let responseEnvelope = [
             "schema": MobileTransportProtocol.schema,
@@ -586,7 +736,14 @@ actor USBWebSocketTransportRuntime {
             }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
+        USBTransportDebugLogger.warning(
+            "USBRuntime/waitForReadyConnection_timeout timeout_seconds=\(timeout) active_listener_port=\(activeListenerPort ?? -1) is_ready=\(isActiveConnectionReady) authenticated=\(isConnectionAuthenticated)"
+        )
         throw USBTransportRuntimeError.connectionUnavailable
+    }
+
+    private func sidOrUnknown(_ body: [String: Any]) -> String {
+        (body["sid"] as? String) ?? "-"
     }
 
     private func sendText(
@@ -812,21 +969,29 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
         )
     }
 
+    func prepareUSBTransportIfNeeded(using payload: PairingQRCodePayload) async throws {
+        guard let suggestedUSBPort = payload.suggestedUSBPort else {
+            throw PairingServiceError.transport(message: "The QR payload is missing the USB bootstrap port.")
+        }
+        let shouldForceRestart = !(await runtime.isConnected())
+        USBTransportDebugLogger.info(
+            "PairingUSB/prepare session_id=\(payload.sessionID) suggested_port=\(suggestedUSBPort) force_restart=\(shouldForceRestart)"
+        )
+        try await runtime.prepareBootstrap(
+            sessionID: payload.sessionID,
+            oneTimePasscode: payload.oneTimePasscode,
+            suggestedPort: suggestedUSBPort,
+            forceRestart: shouldForceRestart
+        )
+    }
+
     private func sendPairingRequest<RequestBody: Encodable & Sendable>(
         using payload: PairingQRCodePayload,
         operation: String,
         request: RequestBody
     ) async throws -> PairingClaimResponse {
-        guard let suggestedUSBPort = payload.suggestedUSBPort else {
-            throw PairingServiceError.transport(message: "The QR payload is missing the USB bootstrap port.")
-        }
-
         do {
-            try await runtime.prepareBootstrap(
-                sessionID: payload.sessionID,
-                oneTimePasscode: payload.oneTimePasscode,
-                suggestedPort: suggestedUSBPort
-            )
+            try await prepareUSBTransportIfNeeded(using: payload)
             let runtimeResponse = try await runtime.sendRequest(
                 operation: operation,
                 bodySchema: PairingProtocol.schema,
@@ -916,11 +1081,46 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         else {
             return
         }
+        let shouldForceRestart = !(await runtime.isConnected())
+        USBTransportDebugLogger.info(
+            "TransferUSB/prepare session_id=\(desktop.lastSessionID) suggested_port=\(suggestedPort) force_restart=\(shouldForceRestart)"
+        )
         try await runtime.prepareBootstrap(
             sessionID: desktop.lastSessionID,
             oneTimePasscode: oneTimePasscode,
-            suggestedPort: suggestedPort
+            suggestedPort: suggestedPort,
+            forceRestart: shouldForceRestart
         )
+    }
+
+    func recoverUSBTransportAfterForegroundResume(for desktop: TrustedDesktopRecord) async {
+        guard
+            let oneTimePasscode = desktop.usbOneTimePasscode,
+            let suggestedPort = desktop.usbSuggestedPort
+        else {
+            return
+        }
+        if await runtime.isConnected() {
+            return
+        }
+        do {
+            try await runtime.prepareBootstrap(
+                sessionID: desktop.lastSessionID,
+                oneTimePasscode: oneTimePasscode,
+                suggestedPort: suggestedPort,
+                forceRestart: true
+            )
+            USBTransportDebugLogger.info(
+                "WebSocketMobileTransferClient/recoverUSBTransportAfterForegroundResume "
+                    + "session_id=\(desktop.lastSessionID) suggested_port=\(suggestedPort)"
+            )
+        } catch {
+            USBTransportDebugLogger.warning(
+                "WebSocketMobileTransferClient/recoverUSBTransportAfterForegroundResume_failed "
+                    + "session_id=\(desktop.lastSessionID) suggested_port=\(suggestedPort) "
+                    + "error=\(USBTransportDebugLogger.describe(error))"
+            )
+        }
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {
@@ -1243,7 +1443,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
     }
 }
 
-actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving {
+actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving, USBTransportForegroundRecovering {
     private static let preferredTransportRetryCooldownSeconds: TimeInterval = 3
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
@@ -1514,6 +1714,13 @@ actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransfe
         return [desktop.transport]
     }
 
+    func recoverUSBTransportAfterForegroundResume(for desktop: TrustedDesktopRecord) async {
+        guard let usbForegroundRecovery = usbClient as? any USBTransportForegroundRecovering else {
+            return
+        }
+        await usbForegroundRecovery.recoverUSBTransportAfterForegroundResume(for: desktop)
+    }
+
     private func executeWithFallback<Result>(
         operationName: String,
         desktop: TrustedDesktopRecord,
@@ -1537,12 +1744,14 @@ actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransfe
             do {
                 let result = try await usbOperation()
                 clearPreferredTransportUnavailable(.usb, desktop: desktop)
-                recordResolvedTransport(
-                    desktop: desktop,
-                    transport: .usb,
-                    operationName: operationName,
-                    reason: "usb_success"
-                )
+                if preferredTransport == nil {
+                    recordResolvedTransport(
+                        desktop: desktop,
+                        transport: .usb,
+                        operationName: operationName,
+                        reason: "usb_success"
+                    )
+                }
                 return result
             } catch {
                 if preferredTransport == .usb {
@@ -1568,12 +1777,14 @@ actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransfe
             do {
                 let result = try await lanOperation()
                 clearPreferredTransportUnavailable(.lan, desktop: desktop)
-                recordResolvedTransport(
-                    desktop: desktop,
-                    transport: .lan,
-                    operationName: operationName,
-                    reason: "lan_success"
-                )
+                if preferredTransport == nil {
+                    recordResolvedTransport(
+                        desktop: desktop,
+                        transport: .lan,
+                        operationName: operationName,
+                        reason: "lan_success"
+                    )
+                }
                 return result
             } catch {
                 if preferredTransport == .lan {

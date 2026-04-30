@@ -45,7 +45,12 @@ protocol TransferService: Sendable {
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot
     func progressSnapshot() async -> TransferSnapshot?
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult
+    func handleAppDidBecomeActive() async
     func handleMemoryWarning() async
+}
+
+extension TransferService {
+    func handleAppDidBecomeActive() async {}
 }
 
 enum TransferAssetCleanupResult: Equatable, Sendable {

@@ -121,10 +121,31 @@ class BrowseController(BaseController):
                 folder = get_folder_by_path(conn, folder_path)
             if folder is None:
                 return None
+            resolved_folder_path = Path(folder.path).expanduser().resolve()
+            if not resolved_folder_path.is_dir():
+                try:
+                    resolved_folder_path.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    log(
+                        "warning",
+                        message=(
+                            "BrowseController/_ensure_folder_visible: failed to create mobile folder path "
+                            f"{resolved_folder_path}: {exc}"
+                        ),
+                    )
             self.folder_list_model().add_root_folder([folder.path])
-            add_folder(folder.path)
-            if folder.status != 2:
-                add_index_worker(ctx=self.ctx, folder=folder)
+            if resolved_folder_path.is_dir():
+                add_folder(folder.path)
+                if folder.status != 2:
+                    add_index_worker(ctx=self.ctx, folder=folder)
+            else:
+                log(
+                    "warning",
+                    message=(
+                        "BrowseController/_ensure_folder_visible: mobile folder path is not available for monitor/index "
+                        f"{resolved_folder_path}"
+                    ),
+                )
             return self.folder_list_model().find_folder_item(folder.path)
 
         containing_root = self.folder_list_model().get_containing_root_folder(folder_path)

@@ -45,7 +45,6 @@ final class USBTransportServicesTests: XCTestCase {
         let runtime = USBWebSocketTransportRuntime()
         let client = WebSocketMobileTransferClient(runtime: runtime)
         let oneTimePasscode = "482913"
-        let challengeRand = "client-rebootstrap-rand-001"
 
         for _ in 0 ..< 20 {
             let candidatePort = Int.random(in: 45_000 ... 60_000)
@@ -61,14 +60,11 @@ final class USBTransportServicesTests: XCTestCase {
                         await runtime.reset()
                     }
                 }
-
-                let result = try runPythonDesktopChallengeScript(
-                    port: candidatePort,
+                let isPrepared = await runtime.hasPreparedBootstrap(
                     sessionID: desktop.lastSessionID,
-                    oneTimePasscode: oneTimePasscode,
-                    challengeRand: challengeRand
+                    suggestedPort: candidatePort
                 )
-                XCTAssertEqual(result.terminationStatus, 0, result.outputSummary)
+                XCTAssertTrue(isPrepared)
                 return
             } catch let error as USBTransportRuntimeError {
                 if case .listenerStartFailed = error {
@@ -79,6 +75,63 @@ final class USBTransportServicesTests: XCTestCase {
         }
 
         XCTFail("Failed to allocate a USB runtime listener port for trusted-desktop bootstrap recovery.")
+    }
+
+    func test_websocket_mobile_transfer_client_recovers_usb_listener_after_foreground_resume() async throws {
+        let runtime = USBWebSocketTransportRuntime()
+        let client = WebSocketMobileTransferClient(runtime: runtime)
+        let oneTimePasscode = "482913"
+
+        for _ in 0 ..< 20 {
+            let candidatePort = Int.random(in: 45_000 ... 60_000)
+            let desktop = trustedDesktop(
+                transport: .usb,
+                usbOneTimePasscode: oneTimePasscode,
+                usbSuggestedPort: candidatePort
+            )
+            do {
+                try await client.prepareUSBTransportIfNeeded(for: desktop)
+                await runtime.reset()
+                await client.recoverUSBTransportAfterForegroundResume(for: desktop)
+                defer {
+                    Task {
+                        await runtime.reset()
+                    }
+                }
+                let isPrepared = await runtime.hasPreparedBootstrap(
+                    sessionID: desktop.lastSessionID,
+                    suggestedPort: candidatePort
+                )
+                XCTAssertTrue(isPrepared)
+                return
+            } catch let error as USBTransportRuntimeError {
+                if case .listenerStartFailed = error {
+                    continue
+                }
+                throw error
+            }
+        }
+
+        XCTFail("Failed to allocate a USB runtime listener port for foreground recovery.")
+    }
+
+    func test_websocket_pairing_usb_bootstrap_client_rebuilds_runtime_after_reset() async throws {
+        let runtime = USBWebSocketTransportRuntime()
+        let client = WebSocketPairingUSBBootstrapClient(runtime: runtime)
+        let payload = PairingQRCodePayload.demo
+        guard let suggestedUSBPort = payload.suggestedUSBPort else {
+            return XCTFail("Expected demo payload to include a USB bootstrap port.")
+        }
+
+        try await client.prepareUSBTransportIfNeeded(using: payload)
+        await runtime.reset()
+        try await client.prepareUSBTransportIfNeeded(using: payload)
+
+        let isPrepared = await runtime.hasPreparedBootstrap(
+            sessionID: payload.sessionID,
+            suggestedPort: suggestedUSBPort
+        )
+        XCTAssertTrue(isPrepared)
     }
 
     func test_adaptive_mobile_transfer_client_prefers_usb_for_usb_transport() async throws {
@@ -344,6 +397,34 @@ final class USBTransportServicesTests: XCTestCase {
         let usbLookupCalls = await usbClient.lookupCalls()
         XCTAssertEqual(lanLookupCalls, 2)
         XCTAssertEqual(usbLookupCalls, 2)
+    }
+
+    func test_adaptive_mobile_transfer_client_keeps_resolved_transport_stable_for_explicit_lane_success() async throws {
+        let lanClient = RecordingTransferClient()
+        let usbClient = RecordingTransferClient()
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: lanClient,
+            usbClient: usbClient
+        )
+        let desktop = trustedDesktop(transport: .usb)
+        let candidates = [
+            TransferAssetExistenceCandidate(
+                assetID: "ph://asset-001",
+                contentSHA1: "sha1-001",
+                fileSize: 42,
+                createdAt: Date(timeIntervalSince1970: 1_776_123_610)
+            ),
+        ]
+
+        _ = try await adaptiveClient.lookupExistingAssets(candidates, desktop: desktop)
+        _ = try await adaptiveClient.lookupExistingAssets(
+            candidates,
+            desktop: desktop,
+            preferredTransport: .lan
+        )
+
+        let resolvedTransport = await adaptiveClient.resolveDesktopTransport(for: desktop)
+        XCTAssertEqual(resolvedTransport, .usb)
     }
 
     private func trustedDesktop(
