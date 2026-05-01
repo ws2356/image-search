@@ -170,6 +170,7 @@ class MobileTransferService:
                     session_status=MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
                     folder_transfer_state=folder_transfer_state,
                     updated_at=current_time,
+                    total_assets=request.total_assets,
                     transferred_count=0,
                     failed_count=0,
                 )

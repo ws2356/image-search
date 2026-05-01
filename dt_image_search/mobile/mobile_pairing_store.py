@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS mobile_backup_sessions (
     device_uuid TEXT NOT NULL REFERENCES mobile_devices(device_uuid),
     folder_id INTEGER NOT NULL REFERENCES folders(id),
     status TEXT NOT NULL,
+    total_assets INTEGER NOT NULL DEFAULT 0,
     transferred_count INTEGER NOT NULL DEFAULT 0,
     failed_count INTEGER NOT NULL DEFAULT 0,
     started_at TEXT NOT NULL,
@@ -388,6 +389,7 @@ def insert_mobile_backup_session(
     status: str,
     started_at: datetime,
     paired_at: datetime,
+    total_assets: int = 0,
 ) -> None:
     conn.execute(
         """
@@ -396,17 +398,19 @@ def insert_mobile_backup_session(
             device_uuid,
             folder_id,
             status,
+            total_assets,
             transferred_count,
             failed_count,
             started_at,
             paired_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             session_id,
             device_uuid,
             folder_id,
             status,
+            max(0, int(total_assets)),
             0,
             0,
             started_at.isoformat(),
@@ -589,6 +593,7 @@ def update_mobile_transfer_state(
     folder_transfer_state: str,
     updated_at: datetime,
     ended_at: datetime | None = None,
+    total_assets: int | None = None,
     transferred_count: int | None = None,
     failed_count: int | None = None,
 ) -> None:
@@ -597,6 +602,7 @@ def update_mobile_transfer_state(
         UPDATE mobile_backup_sessions
         SET status = ?,
             ended_at = COALESCE(?, ended_at),
+            total_assets = COALESCE(?, total_assets),
             transferred_count = COALESCE(?, transferred_count),
             failed_count = COALESCE(?, failed_count)
         WHERE session_id = ? AND device_uuid = ?
@@ -604,6 +610,7 @@ def update_mobile_transfer_state(
         (
             session_status,
             ended_at.isoformat() if ended_at is not None else None,
+            total_assets,
             transferred_count,
             failed_count,
             session_id,
@@ -699,7 +706,9 @@ def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, d
             """
             SELECT
                 status,
+                total_assets,
                 transferred_count,
+                failed_count,
                 COALESCE(ended_at, paired_at, started_at) AS latest_transfer_at
             FROM mobile_backup_sessions
             WHERE device_uuid = ?
@@ -708,7 +717,9 @@ def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, d
             """,
             (device_uuid,),
         ).fetchone()
+        total_assets = int(latest_session_row["total_assets"]) if latest_session_row is not None else 0
         transferred_count = int(latest_session_row["transferred_count"]) if latest_session_row is not None else 0
+        failed_count = int(latest_session_row["failed_count"]) if latest_session_row is not None else 0
         last_transfer_status = latest_session_row["status"] if latest_session_row is not None else None
         last_transfer_at = latest_session_row["latest_transfer_at"] if latest_session_row is not None else None
 
@@ -727,7 +738,9 @@ def get_mobile_folder_summaries_by_path(conn: sqlite3.Connection) -> dict[str, d
             last_backup_at = latest_successful_backup_row["last_backup_at"]
 
         summaries_by_path[_normalized_folder_key(folder_row["folder_path"])] = {
+            "total_assets": total_assets,
             "transferred_count": transferred_count,
+            "failed_count": failed_count,
             "last_backup_at": last_backup_at,
             "platform": folder_row["platform"],
             "last_transfer_status": last_transfer_status,
@@ -859,6 +872,8 @@ def _ensure_mobile_asset_signature_columns(conn: sqlite3.Connection) -> None:
 
 def _ensure_mobile_backup_session_columns(conn: sqlite3.Connection) -> None:
     existing_columns = _table_columns(conn, "mobile_backup_sessions")
+    if "total_assets" not in existing_columns:
+        conn.execute("ALTER TABLE mobile_backup_sessions ADD COLUMN total_assets INTEGER NOT NULL DEFAULT 0")
     if "transferred_count" not in existing_columns:
         conn.execute("ALTER TABLE mobile_backup_sessions ADD COLUMN transferred_count INTEGER NOT NULL DEFAULT 0")
     if "failed_count" not in existing_columns:

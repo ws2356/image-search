@@ -13,6 +13,7 @@ class TestFolderTreeItemDelegateMobileSubtitle(unittest.TestCase):
         subtitle = FolderTreeItemDelegate._subtitle_text(
             transfer_state="",
             transferred_count=4,
+            total_assets=0,
             last_backup_at=None,
             last_transfer_status="stopped_by_mobile",
             last_transfer_at="2026-04-09T12:34:56+00:00",
@@ -23,6 +24,7 @@ class TestFolderTreeItemDelegateMobileSubtitle(unittest.TestCase):
         subtitle = FolderTreeItemDelegate._subtitle_text(
             transfer_state="",
             transferred_count=0,
+            total_assets=0,
             last_backup_at=None,
             last_transfer_status="completed",
             last_transfer_at="2026-04-09T12:34:56+00:00",
@@ -33,6 +35,7 @@ class TestFolderTreeItemDelegateMobileSubtitle(unittest.TestCase):
         subtitle = FolderTreeItemDelegate._subtitle_text(
             transfer_state="",
             transferred_count=181,
+            total_assets=0,
             last_backup_at=None,
             last_transfer_status="failed",
             last_transfer_at="2026-04-09T12:34:56+00:00",
@@ -43,11 +46,26 @@ class TestFolderTreeItemDelegateMobileSubtitle(unittest.TestCase):
         subtitle = FolderTreeItemDelegate._subtitle_text(
             transfer_state="transferring",
             transferred_count=7,
+            total_assets=20,
             last_backup_at=None,
             last_transfer_status="stopped_by_mobile",
             last_transfer_at="2026-04-09T12:34:56+00:00",
         )
-        self.assertEqual(subtitle, "7 files transferred")
+        self.assertEqual(subtitle, "7/20 files transferred")
+
+    def test_transfer_progress_ratio_is_linear_for_known_total(self):
+        ratio = FolderTreeItemDelegate._transfer_progress_ratio(
+            transferred_count=25,
+            total_assets=100,
+        )
+        self.assertAlmostEqual(ratio, 0.25)
+
+    def test_transfer_progress_ratio_is_zero_without_total(self):
+        ratio = FolderTreeItemDelegate._transfer_progress_ratio(
+            transferred_count=25,
+            total_assets=0,
+        )
+        self.assertEqual(ratio, 0.0)
 
 
 if __name__ == "__main__":

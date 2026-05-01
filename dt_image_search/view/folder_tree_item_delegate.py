@@ -92,6 +92,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         title_text = str(index.data(Qt.DisplayRole) or "")
         transfer_state = str(index.data(FolderTreeModel.MOBILE_TRANSFER_STATE_ROLE) or "")
         transferred_count = int(index.data(FolderTreeModel.MOBILE_TRANSFERRED_COUNT_ROLE) or 0)
+        total_assets = int(index.data(FolderTreeModel.MOBILE_TOTAL_ASSETS_ROLE) or 0)
         last_backup_at = index.data(FolderTreeModel.MOBILE_LAST_BACKUP_AT_ROLE)
         last_transfer_status = index.data(FolderTreeModel.MOBILE_LAST_TRANSFER_STATUS_ROLE)
         last_transfer_at = index.data(FolderTreeModel.MOBILE_LAST_TRANSFER_AT_ROLE)
@@ -139,6 +140,7 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         subtitle_text = self._subtitle_text(
             transfer_state=transfer_state,
             transferred_count=transferred_count,
+            total_assets=total_assets,
             last_backup_at=last_backup_at,
             last_transfer_status=last_transfer_status,
             last_transfer_at=last_transfer_at,
@@ -151,7 +153,12 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
 
         if transfer_state == "transferring":
             bar_rect = QRect(content_rect.left(), subtitle_rect.bottom() + 2, content_rect.width(), 4)
-            self._draw_progress_bar(painter, bar_rect, transferred_count=transferred_count)
+            self._draw_progress_bar(
+                painter,
+                bar_rect,
+                transferred_count=transferred_count,
+                total_assets=total_assets,
+            )
 
         painter.restore()
 
@@ -216,21 +223,37 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         return badge_rect
 
     @staticmethod
-    def _draw_progress_bar(painter: QPainter, bar_rect: QRect, *, transferred_count: int) -> None:
+    def _draw_progress_bar(
+        painter: QPainter,
+        bar_rect: QRect,
+        *,
+        transferred_count: int,
+        total_assets: int,
+    ) -> None:
         if not bar_rect.isValid():
             return
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor("#DBEAFE"))
         painter.drawRoundedRect(bar_rect, 2, 2)
 
-        if transferred_count <= 0:
-            progress_ratio = 0.28
-        else:
-            progress_ratio = min(0.9, max(0.2, transferred_count / (transferred_count + 20.0)))
+        progress_ratio = FolderTreeItemDelegate._transfer_progress_ratio(
+            transferred_count=transferred_count,
+            total_assets=total_assets,
+        )
+        if progress_ratio <= 0:
+            return
         fill_width = max(2, int(bar_rect.width() * progress_ratio))
         fill_rect = QRect(bar_rect.left(), bar_rect.top(), fill_width, bar_rect.height())
         painter.setBrush(QColor("#3B82F6"))
         painter.drawRoundedRect(fill_rect, 2, 2)
+
+    @staticmethod
+    def _transfer_progress_ratio(*, transferred_count: int, total_assets: int) -> float:
+        safe_total_assets = max(total_assets, 0)
+        if safe_total_assets <= 0:
+            return 0.0
+        safe_transferred_count = max(transferred_count, 0)
+        return min(1.0, safe_transferred_count / float(safe_total_assets))
 
     @staticmethod
     def _subtitle_text(
@@ -240,9 +263,13 @@ class FolderTreeItemDelegate(QStyledItemDelegate):
         last_backup_at: object,
         last_transfer_status: object,
         last_transfer_at: object,
+        total_assets: int = 0,
     ) -> str:
         if transfer_state == "transferring":
-            return f"{max(transferred_count, 0)} files transferred"
+            safe_transferred_count = max(transferred_count, 0)
+            if total_assets > 0:
+                return f"{safe_transferred_count}/{total_assets} files transferred"
+            return f"{safe_transferred_count} files transferred"
         if isinstance(last_transfer_status, str) and last_transfer_status == "stopped_by_mobile":
             return _stopped_backup_subtitle(last_transfer_at)
         if isinstance(last_transfer_status, str) and last_transfer_status == "failed":

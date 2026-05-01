@@ -92,6 +92,8 @@ class FolderTreeModel(QAbstractItemModel):
     MOBILE_PLATFORM_ROLE = Qt.UserRole + 4
     MOBILE_LAST_TRANSFER_STATUS_ROLE = Qt.UserRole + 5
     MOBILE_LAST_TRANSFER_AT_ROLE = Qt.UserRole + 6
+    MOBILE_TOTAL_ASSETS_ROLE = Qt.UserRole + 7
+    MOBILE_FAILED_COUNT_ROLE = Qt.UserRole + 8
     _LOCAL_SECTION_KIND = "local"
     _MOBILE_SECTION_KIND = "mobile"
     _SECTION_NODE_KIND = "section"
@@ -259,6 +261,8 @@ class FolderTreeModel(QAbstractItemModel):
                 self.MOBILE_PLATFORM_ROLE,
                 self.MOBILE_LAST_TRANSFER_STATUS_ROLE,
                 self.MOBILE_LAST_TRANSFER_AT_ROLE,
+                self.MOBILE_TOTAL_ASSETS_ROLE,
+                self.MOBILE_FAILED_COUNT_ROLE,
             ]
         )
 
@@ -406,6 +410,10 @@ class FolderTreeModel(QAbstractItemModel):
             return summary.get("last_transfer_status")
         if role == self.MOBILE_LAST_TRANSFER_AT_ROLE:
             return summary.get("last_transfer_at")
+        if role == self.MOBILE_TOTAL_ASSETS_ROLE:
+            return int(summary.get("total_assets", 0))
+        if role == self.MOBILE_FAILED_COUNT_ROLE:
+            return int(summary.get("failed_count", 0))
         return None
 
     def _node(self, kind: str, key: str) -> _FolderTreeNode:

@@ -22,7 +22,6 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 ```
 
 Validate Fastlane, signing, and upload prerequisites
-including Universal Link entitlements and Associated Domains provisioning capability.
 
 ### ios build_ipa
 

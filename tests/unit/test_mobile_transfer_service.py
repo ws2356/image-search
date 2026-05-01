@@ -161,12 +161,13 @@ class TestMobileTransferService(unittest.TestCase):
             self.assertEqual(asset_row["local_relative_path"], "2026-04/IMG_0001-2.JPG")
 
             session_row = conn.execute(
-                "SELECT status, ended_at FROM mobile_backup_sessions WHERE session_id = ?",
+                "SELECT status, ended_at, total_assets FROM mobile_backup_sessions WHERE session_id = ?",
                 (pairing_context["session_id"],),
             ).fetchone()
             self.assertIsNotNone(session_row)
             self.assertEqual(session_row["status"], "completed")
             self.assertIsNotNone(session_row["ended_at"])
+            self.assertEqual(session_row["total_assets"], 1)
 
             folder_row = conn.execute(
                 "SELECT transfer_state FROM mobile_folders WHERE device_uuid = ?",
@@ -648,6 +649,30 @@ class TestMobileTransferService(unittest.TestCase):
         index_rows = conn.execute("PRAGMA index_list(mobile_assets)").fetchall()
         index_names = {row[1] for row in index_rows}
         self.assertIn("idx_mobile_assets_device_signature", index_names)
+
+    def test_ensure_mobile_pairing_schema_adds_total_assets_to_legacy_mobile_backup_sessions_table(self):
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+
+        conn.executescript(
+            """
+            CREATE TABLE mobile_backup_sessions (
+                session_id TEXT PRIMARY KEY,
+                device_uuid TEXT NOT NULL,
+                folder_id INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                paired_at TEXT,
+                ended_at TEXT
+            );
+            """
+        )
+
+        ensure_mobile_pairing_schema(conn)
+
+        table_info = conn.execute("PRAGMA table_info(mobile_backup_sessions)").fetchall()
+        column_names = {row[1] for row in table_info}
+        self.assertIn("total_assets", column_names)
 
     def _pair_device(self) -> dict[str, str]:
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)

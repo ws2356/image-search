@@ -228,18 +228,20 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
                     device_uuid,
                     folder_id,
                     status,
+                    total_assets,
                     transferred_count,
                     failed_count,
                     started_at,
                     paired_at,
                     ended_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     "session-001",
                     "device-001",
                     folder.id,
                     MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
+                    20,
                     6,
                     0,
                     updated_at,
@@ -258,6 +260,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
                 MOBILE_TRANSFER_STATE_TRANSFERRING,
             )
             self.assertEqual(folder_item.data(controller.folder_list_model().MOBILE_TRANSFERRED_COUNT_ROLE), 6)
+            self.assertEqual(folder_item.data(controller.folder_list_model().MOBILE_TOTAL_ASSETS_ROLE), 20)
             self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_LAST_BACKUP_AT_ROLE))
 
             completed_at = datetime.now(timezone.utc).isoformat()
