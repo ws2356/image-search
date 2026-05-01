@@ -29,7 +29,12 @@ struct HomeView: View {
     }
 
     private var hasSessionHistory: Bool {
-        summary.lastBackupDescription != nil || summary.previouslyTransferredDescription != nil
+        hasStatsCardContent
+    }
+
+    private var hasStatsCardContent: Bool {
+        summary.lastBackupDescription != nil
+            || ((summary.pendingItemCount ?? 0) > 0)
     }
 
     // MARK: - First-time user
@@ -118,7 +123,9 @@ struct HomeView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
 
-                statsCard
+                if hasStatsCardContent {
+                    statsCard
+                }
 
                 Button(action: onPrimaryAction) {
                     HStack(spacing: 8) {
@@ -270,7 +277,9 @@ struct HomeView: View {
                     title: "Last backup",
                     subtitle: lastBackup
                 )
-                Divider().padding(.leading, 50)
+                if let pending = summary.pendingItemCount, pending > 0 {
+                    Divider().padding(.leading, 50)
+                }
             }
 
             if let pending = summary.pendingItemCount, pending > 0 {
@@ -281,17 +290,6 @@ struct HomeView: View {
                     title: "\(pending) new items detected",
                     subtitle: nil,
                     titleBold: true
-                )
-                Divider().padding(.leading, 50)
-            }
-
-            if let transferred = summary.previouslyTransferredDescription {
-                statsRow(
-                    iconColor: Color(hex: 0x30D158),
-                    iconBg: Color(hex: 0xE6F9ED),
-                    iconName: "checkmark.circle",
-                    title: "Previously transferred",
-                    subtitle: transferred
                 )
             }
         }
