@@ -278,7 +278,6 @@ class TestMobileTransferService(unittest.TestCase):
             trust_key_b64=trust_key_b64,
             locator_fields={
                 "session_id": session_id,
-                "device_uuid": device_uuid,
             },
         )
         start_status, start_response = self._post_json(
@@ -286,6 +285,7 @@ class TestMobileTransferService(unittest.TestCase):
             encrypted_start_payload,
         )
         if is_mobile_encrypted_payload(start_response):
+            self.assertNotIn("device_uuid", start_response)
             start_response = decrypt_mobile_json_payload(
                 encrypted_payload=start_response,
                 trust_key_b64=trust_key_b64,
@@ -317,7 +317,6 @@ class TestMobileTransferService(unittest.TestCase):
             trust_key_b64=trust_key_b64,
             locator_fields={
                 "session_id": session_id,
-                "device_uuid": device_uuid,
             },
         )
         stream_start_status, stream_start_response = self._post_transfer_asset_json(
@@ -327,6 +326,7 @@ class TestMobileTransferService(unittest.TestCase):
             payload=encrypted_metadata_payload,
         )
         if is_mobile_encrypted_payload(stream_start_response):
+            self.assertNotIn("device_uuid", stream_start_response)
             stream_start_response = decrypt_mobile_json_payload(
                 encrypted_payload=stream_start_response,
                 trust_key_b64=trust_key_b64,
@@ -344,6 +344,7 @@ class TestMobileTransferService(unittest.TestCase):
             chunk=encrypted_chunk,
         )
         if is_mobile_encrypted_payload(chunk_response):
+            self.assertNotIn("device_uuid", chunk_response)
             chunk_response = decrypt_mobile_json_payload(
                 encrypted_payload=chunk_response,
                 trust_key_b64=trust_key_b64,
@@ -361,6 +362,7 @@ class TestMobileTransferService(unittest.TestCase):
             },
         )
         if is_mobile_encrypted_payload(stored_response):
+            self.assertNotIn("device_uuid", stored_response)
             stored_response = decrypt_mobile_json_payload(
                 encrypted_payload=stored_response,
                 trust_key_b64=trust_key_b64,
@@ -389,7 +391,6 @@ class TestMobileTransferService(unittest.TestCase):
             trust_key_b64=trust_key_b64,
             locator_fields={
                 "session_id": session_id,
-                "device_uuid": device_uuid,
             },
         )
         complete_status, complete_response = self._post_json(
@@ -397,6 +398,7 @@ class TestMobileTransferService(unittest.TestCase):
             encrypted_complete_payload,
         )
         if is_mobile_encrypted_payload(complete_response):
+            self.assertNotIn("device_uuid", complete_response)
             complete_response = decrypt_mobile_json_payload(
                 encrypted_payload=complete_response,
                 trust_key_b64=trust_key_b64,
