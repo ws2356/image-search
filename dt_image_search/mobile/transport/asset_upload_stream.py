@@ -30,6 +30,7 @@ class _PendingTransferAssetUpload:
     temp_file_path: Path
     temp_file_handle: BinaryIO
     content_sha1: _Digest
+    encryption_trust_key_b64: str | None = None
     content_length: int = 0
 
     def append_chunk(self, chunk: bytes) -> None:
@@ -46,6 +47,7 @@ class _PendingTransferAssetUpload:
             content_length=self.content_length,
             temp_file_path=str(self.temp_file_path),
             content_sha1=self.content_sha1.hexdigest(),
+            encryption_trust_key_b64=self.encryption_trust_key_b64,
         )
 
     def close(self) -> None:
@@ -80,6 +82,7 @@ class TransferAssetUploadStream:
         *,
         request_id: str,
         metadata_payload: dict[str, object],
+        encryption_trust_key_b64: str | None = None,
         exclusive: bool = False,
     ) -> None:
         staged_file = tempfile.NamedTemporaryFile(
@@ -94,6 +97,7 @@ class TransferAssetUploadStream:
             temp_file_path=Path(staged_file.name),
             temp_file_handle=staged_file,
             content_sha1=hashlib.sha1(),
+            encryption_trust_key_b64=encryption_trust_key_b64,
             content_length=0,
         )
         if exclusive:
@@ -158,6 +162,28 @@ class TransferAssetUploadStream:
         if self._active_request_id == request_id:
             self._active_request_id = None
         return pending_upload.to_payload()
+
+    def encryption_trust_key(self, *, request_id: str | None = None) -> str | None:
+        resolved_request_id = request_id
+        if resolved_request_id is None:
+            resolved_request_id = self.active_request_id
+        if resolved_request_id is None:
+            return None
+        pending_upload = self._pending_by_request_id.get(resolved_request_id)
+        if pending_upload is None:
+            return None
+        return pending_upload.encryption_trust_key_b64
+
+    def metadata_payload(self, *, request_id: str | None = None) -> dict[str, object] | None:
+        resolved_request_id = request_id
+        if resolved_request_id is None:
+            resolved_request_id = self.active_request_id
+        if resolved_request_id is None:
+            return None
+        pending_upload = self._pending_by_request_id.get(resolved_request_id)
+        if pending_upload is None:
+            return None
+        return dict(pending_upload.metadata_payload)
 
     def discard(self, *, request_id: str) -> dict[str, object] | None:
         pending_upload = self._pending_by_request_id.pop(request_id, None)
