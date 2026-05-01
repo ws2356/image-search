@@ -1663,8 +1663,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         return try MobilePayloadEncryption.encryptPayloadObject(
             bodyValue,
             trustKeyBase64: desktop.sharedKeyBase64,
-            sessionID: desktop.lastSessionID,
-            deviceUUID: desktop.mobileDeviceUUID
+            sessionID: desktop.lastSessionID
         )
     }
 

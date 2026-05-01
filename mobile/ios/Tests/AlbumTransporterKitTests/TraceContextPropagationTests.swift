@@ -151,6 +151,7 @@ final class TraceContextPropagationTests: XCTestCase {
 
         let requestBody = try XCTUnwrap(TraceContextCapturingURLProtocol.capturedJSONObject)
         XCTAssertEqual(requestBody["schema"] as? String, MobilePayloadEncryptionProtocol.schema)
+        XCTAssertNil(requestBody["device_uuid"])
     }
 
     private func makeSession() -> URLSession {
