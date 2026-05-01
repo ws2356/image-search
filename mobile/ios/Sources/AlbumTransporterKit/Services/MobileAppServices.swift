@@ -112,13 +112,37 @@ enum PairingError: Error, Equatable, Sendable {
 
 protocol PairingBootstrapClient: Sendable {
     func primeInternetAccess() async
-    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse
-    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse
+    func exchangePairingCapabilities(
+        at endpoint: URL,
+        request: PairingCapabilityExchangeRequest
+    ) async throws -> PairingCapabilityExchangeResponse
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse
+    func fetchPairingState(
+        at endpoint: URL,
+        request: PairingStateRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse
 }
 
 protocol PairingUSBBootstrapClient: Sendable {
-    func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse
-    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse
+    func exchangePairingCapabilities(
+        using payload: PairingQRCodePayload,
+        request: PairingCapabilityExchangeRequest
+    ) async throws -> PairingCapabilityExchangeResponse
+    func claimPairing(
+        using payload: PairingQRCodePayload,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse
+    func fetchPairingState(
+        using payload: PairingQRCodePayload,
+        request: PairingStateRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse
 }
 
 protocol LocalDeviceIdentityProviding: Sendable {
@@ -375,6 +399,11 @@ enum PairingProtocol {
     static let schema = "dtis.mobile-pairing.v1"
 }
 
+enum PairingCapabilityExchangeProtocol {
+    static let schema = "dtis.mobile-pairing-capabilities.v1"
+    static let exchangePath = "/api/mobile/pairing/capabilities"
+}
+
 extension PairingService {
     func primeNetworkAccess() async {}
 }
@@ -382,18 +411,110 @@ extension PairingService {
 extension PairingBootstrapClient {
     func primeInternetAccess() async {}
 
-    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
+    func exchangePairingCapabilities(
+        at endpoint: URL,
+        request: PairingCapabilityExchangeRequest
+    ) async throws -> PairingCapabilityExchangeResponse {
         _ = endpoint
         _ = request
+        throw PairingServiceError.transport(
+            message: "Desktop pairing capability exchange is unavailable."
+        )
+    }
+
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = endpoint
+        _ = request
+        _ = encryptionTrustKeyBase64
+        throw PairingServiceError.transport(message: "Desktop pairing claim is unavailable.")
+    }
+
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest
+    ) async throws -> PairingClaimResponse {
+        try await claimPairing(
+            at: endpoint,
+            request: request,
+            encryptionTrustKeyBase64: nil
+        )
+    }
+
+    func fetchPairingState(
+        at endpoint: URL,
+        request: PairingStateRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = endpoint
+        _ = request
+        _ = encryptionTrustKeyBase64
         throw PairingServiceError.transport(message: "Desktop pairing state polling is unavailable.")
+    }
+
+    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
+        try await fetchPairingState(
+            at: endpoint,
+            request: request,
+            encryptionTrustKeyBase64: nil
+        )
     }
 }
 
 extension PairingUSBBootstrapClient {
-    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse {
+    func exchangePairingCapabilities(
+        using payload: PairingQRCodePayload,
+        request: PairingCapabilityExchangeRequest
+    ) async throws -> PairingCapabilityExchangeResponse {
         _ = payload
         _ = request
+        throw PairingServiceError.transport(
+            message: "Desktop USB pairing capability exchange is unavailable."
+        )
+    }
+
+    func claimPairing(
+        using payload: PairingQRCodePayload,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = payload
+        _ = request
+        _ = encryptionTrustKeyBase64
+        throw PairingServiceError.transport(message: "Desktop USB pairing claim is unavailable.")
+    }
+
+    func claimPairing(
+        using payload: PairingQRCodePayload,
+        request: PairingClaimRequest
+    ) async throws -> PairingClaimResponse {
+        try await claimPairing(
+            using: payload,
+            request: request,
+            encryptionTrustKeyBase64: nil
+        )
+    }
+
+    func fetchPairingState(
+        using payload: PairingQRCodePayload,
+        request: PairingStateRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = payload
+        _ = request
+        _ = encryptionTrustKeyBase64
         throw PairingServiceError.transport(message: "Desktop USB pairing state polling is unavailable.")
+    }
+
+    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse {
+        try await fetchPairingState(
+            using: payload,
+            request: request,
+            encryptionTrustKeyBase64: nil
+        )
     }
 }
 
@@ -464,7 +585,51 @@ struct PairingStateRequest: Codable, Sendable {
     }
 }
 
-struct PairingClaimResponse: Codable, Sendable {
+enum PairingCapabilityExchangeStatus: String, Codable, Sendable {
+    case accepted
+    case rejected
+}
+
+protocol PairingSchemaResponse: Sendable {
+    var schema: String { get }
+    var message: String { get }
+}
+
+struct PairingCapabilityExchangeRequest: Codable, Sendable {
+    var schema = PairingCapabilityExchangeProtocol.schema
+    var sessionID: String
+    var oneTimePasscode: String
+    var platform: String
+    var capabilities: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case sessionID = "sid"
+        case oneTimePasscode = "opt"
+        case platform
+        case capabilities
+    }
+}
+
+struct PairingCapabilityExchangeResponse: Codable, Sendable, PairingSchemaResponse {
+    var schema: String
+    var status: PairingCapabilityExchangeStatus
+    var message: String
+    var sessionID: String?
+    var platform: String?
+    var capabilities: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case status
+        case message
+        case sessionID = "sid"
+        case platform
+        case capabilities
+    }
+}
+
+struct PairingClaimResponse: Codable, Sendable, PairingSchemaResponse {
     var schema: String
     var backupState: PairingWireState
     var message: String
@@ -624,6 +789,77 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
     var usbOneTimePasscode: String? = nil
     var usbSuggestedPort: Int? = nil
     var pairedAt: Date
+    var encryptionEnabled: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case desktopDeviceID
+        case desktopName
+        case endpointURL
+        case mobileDeviceUUID
+        case sharedKeyBase64
+        case transport
+        case lastSessionID
+        case usbOneTimePasscode
+        case usbSuggestedPort
+        case pairedAt
+        case encryptionEnabled
+    }
+
+    init(
+        desktopDeviceID: String,
+        desktopName: String,
+        endpointURL: URL,
+        mobileDeviceUUID: String,
+        sharedKeyBase64: String,
+        transport: TransferTransport,
+        lastSessionID: String,
+        usbOneTimePasscode: String? = nil,
+        usbSuggestedPort: Int? = nil,
+        pairedAt: Date,
+        encryptionEnabled: Bool = false
+    ) {
+        self.desktopDeviceID = desktopDeviceID
+        self.desktopName = desktopName
+        self.endpointURL = endpointURL
+        self.mobileDeviceUUID = mobileDeviceUUID
+        self.sharedKeyBase64 = sharedKeyBase64
+        self.transport = transport
+        self.lastSessionID = lastSessionID
+        self.usbOneTimePasscode = usbOneTimePasscode
+        self.usbSuggestedPort = usbSuggestedPort
+        self.pairedAt = pairedAt
+        self.encryptionEnabled = encryptionEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        desktopDeviceID = try container.decode(String.self, forKey: .desktopDeviceID)
+        desktopName = try container.decode(String.self, forKey: .desktopName)
+        endpointURL = try container.decode(URL.self, forKey: .endpointURL)
+        mobileDeviceUUID = try container.decode(String.self, forKey: .mobileDeviceUUID)
+        sharedKeyBase64 = try container.decode(String.self, forKey: .sharedKeyBase64)
+        transport = try container.decode(TransferTransport.self, forKey: .transport)
+        lastSessionID = try container.decode(String.self, forKey: .lastSessionID)
+        usbOneTimePasscode = try container.decodeIfPresent(String.self, forKey: .usbOneTimePasscode)
+        usbSuggestedPort = try container.decodeIfPresent(Int.self, forKey: .usbSuggestedPort)
+        pairedAt = try container.decode(Date.self, forKey: .pairedAt)
+        encryptionEnabled = try container.decodeIfPresent(Bool.self, forKey: .encryptionEnabled) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(desktopDeviceID, forKey: .desktopDeviceID)
+        try container.encode(desktopName, forKey: .desktopName)
+        try container.encode(endpointURL, forKey: .endpointURL)
+        try container.encode(mobileDeviceUUID, forKey: .mobileDeviceUUID)
+        try container.encode(sharedKeyBase64, forKey: .sharedKeyBase64)
+        try container.encode(transport, forKey: .transport)
+        try container.encode(lastSessionID, forKey: .lastSessionID)
+        try container.encodeIfPresent(usbOneTimePasscode, forKey: .usbOneTimePasscode)
+        try container.encodeIfPresent(usbSuggestedPort, forKey: .usbSuggestedPort)
+        try container.encode(pairedAt, forKey: .pairedAt)
+        try container.encode(encryptionEnabled, forKey: .encryptionEnabled)
+    }
 }
 
 enum PairingDateCodec {
