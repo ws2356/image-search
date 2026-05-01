@@ -1411,8 +1411,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             let encryptedPayload = try MobilePayloadEncryption.encryptPayloadObject(
                 bodyValue,
                 trustKeyBase64: desktop.sharedKeyBase64,
-                sessionID: desktop.lastSessionID,
-                deviceUUID: desktop.mobileDeviceUUID
+                sessionID: desktop.lastSessionID
             )
             let encryptedData = try JSONEncoder.pairingEncoder.encode(encryptedPayload)
             guard let encryptedValue = try JSONSerialization.jsonObject(with: encryptedData) as? [String: Any] else {
