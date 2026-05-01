@@ -16,8 +16,17 @@ from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_STATE_START,
     TransferAssetUploadStream,
 )
+from dt_image_search.mobile.mobile_payload_encryption import (
+    MOBILE_ENCRYPTED_BINARY_CHUNK_OVERHEAD_BYTES,
+    MobilePayloadEncryptionError,
+    decrypt_mobile_binary_chunk,
+    decrypt_mobile_json_payload,
+    encrypt_mobile_json_payload,
+    is_mobile_encrypted_payload,
+)
 from dt_image_search.mobile.transport.contracts import (
     CAPABILITY_EXCHANGE_OPERATION,
+    PAIRING_CAPABILITY_EXCHANGE_OPERATION,
     PAIRING_CLAIM_OPERATION,
     PAIRING_STATE_OPERATION,
     TRANSFER_ASSET_OPERATION,
@@ -63,6 +72,8 @@ class LanHttpTransportAdapter:
         format_pairing_endpoint_url: Callable[[str, int], str],
         pairing_claim_path: str,
         pairing_state_path: str,
+        pairing_capability_exchange_path: str,
+        pairing_capability_exchange_schema: str,
         pairing_protocol_schema: str,
         pairing_rejected_status: str,
         transfer_schema: str,
@@ -75,6 +86,7 @@ class LanHttpTransportAdapter:
         transfer_asset_path: str,
         transfer_complete_path: str,
         log_handler: Callable[..., None],
+        resolve_transfer_trust_key: Callable[[str, str], str | None] | None = None,
         handle_transfer_asset_stream_error: Callable[[dict[str, object] | None, OSError], tuple[int, dict[str, object]]] | None = None,
     ):
         self._listen_host = listen_host
@@ -84,6 +96,8 @@ class LanHttpTransportAdapter:
         self._format_pairing_endpoint_url = format_pairing_endpoint_url
         self._pairing_claim_path = pairing_claim_path
         self._pairing_state_path = pairing_state_path
+        self._pairing_capability_exchange_path = pairing_capability_exchange_path
+        self._pairing_capability_exchange_schema = pairing_capability_exchange_schema
         self._pairing_protocol_schema = pairing_protocol_schema
         self._pairing_rejected_status = pairing_rejected_status
         self._transfer_schema = transfer_schema
@@ -96,6 +110,7 @@ class LanHttpTransportAdapter:
         self._transfer_asset_path = transfer_asset_path
         self._transfer_complete_path = transfer_complete_path
         self._log_handler = log_handler
+        self._resolve_transfer_trust_key = resolve_transfer_trust_key
         self._handle_transfer_asset_stream_error = handle_transfer_asset_stream_error
 
         self._lock = threading.RLock()
@@ -201,6 +216,20 @@ class LanHttpTransportAdapter:
                         self._dispatch_operation(PAIRING_STATE_OPERATION, request_payload)
                         return
 
+                    if parsed_path.path == adapter._pairing_capability_exchange_path:
+                        request_payload = self._read_json_payload(
+                            schema=adapter._pairing_capability_exchange_schema,
+                            status="rejected",
+                            parse_error_message="Desktop could not parse the pairing capability exchange JSON payload.",
+                            object_error_message=(
+                                "Desktop requires JSON object payloads for pairing capability exchange requests."
+                            ),
+                        )
+                        if request_payload is None:
+                            return
+                        self._dispatch_operation(PAIRING_CAPABILITY_EXCHANGE_OPERATION, request_payload)
+                        return
+
                     if parsed_path.path == adapter._transfer_start_path:
                         request_payload = self._read_json_payload(
                             schema=adapter._transfer_schema,
@@ -291,17 +320,38 @@ class LanHttpTransportAdapter:
                             metadata_payload = dict(request_payload)
                             metadata_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
                             metadata_payload.pop("chunk_size", None)
+                            encrypted_chunk_trust_key: str | None = None
+                            if is_mobile_encrypted_payload(metadata_payload):
+                                (
+                                    metadata_payload,
+                                    encrypted_chunk_trust_key,
+                                    decrypt_error_message,
+                                ) = adapter._decrypt_transfer_asset_stream_metadata(
+                                    metadata_payload
+                                )
+                                if decrypt_error_message is not None:
+                                    self._write_json_response(
+                                        400,
+                                        {
+                                            "schema": adapter._transfer_schema,
+                                            "status": "rejected",
+                                            "message": decrypt_error_message,
+                                        },
+                                    )
+                                    return
                             try:
                                 with adapter._lock:
                                     adapter._asset_upload_stream.start(
                                         request_id=request_id,
                                         metadata_payload=metadata_payload,
+                                        encryption_trust_key_b64=encrypted_chunk_trust_key,
                                     )
                             except OSError as exc:
                                 self._write_transfer_asset_stream_error_response(
                                     request_id=None,
                                     metadata_payload=metadata_payload,
                                     error=exc,
+                                    encryption_trust_key_b64=encrypted_chunk_trust_key,
                                 )
                                 return
                             self._write_json_response(
@@ -312,6 +362,10 @@ class LanHttpTransportAdapter:
                                     "message": "Desktop accepted transfer asset stream metadata.",
                                     "request_id": request_id,
                                 },
+                                encryption_trust_key_b64=encrypted_chunk_trust_key,
+                                encryption_locator_fields=self._transfer_response_locator_fields(
+                                    metadata_payload
+                                ),
                             )
                             return
 
@@ -338,7 +392,10 @@ class LanHttpTransportAdapter:
                                     },
                                 )
                                 return
-                            if content_length > TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES:
+                            if content_length > (
+                                TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES
+                                + MOBILE_ENCRYPTED_BINARY_CHUNK_OVERHEAD_BYTES
+                            ):
                                 self._write_json_response(
                                     400,
                                     {
@@ -358,6 +415,7 @@ class LanHttpTransportAdapter:
                                     request_id=request_id,
                                     metadata_payload=None,
                                     error=exc,
+                                    encryption_trust_key_b64=None,
                                 )
                                 return
                             if len(chunk) != content_length:
@@ -368,6 +426,32 @@ class LanHttpTransportAdapter:
                                         "status": "rejected",
                                         "message": "Desktop received an incomplete transfer asset stream chunk.",
                                     },
+                                )
+                                return
+                            try:
+                                encrypted_chunk_response_locators: dict[str, str] | None = None
+                                with adapter._lock:
+                                    encrypted_chunk_trust_key = adapter._asset_upload_stream.encryption_trust_key(
+                                        request_id=request_id,
+                                    )
+                                    encrypted_chunk_response_locators = self._transfer_response_locator_fields(
+                                        adapter._asset_upload_stream.metadata_payload(request_id=request_id)
+                                    )
+                                if encrypted_chunk_trust_key is not None:
+                                    chunk = decrypt_mobile_binary_chunk(
+                                        encrypted_chunk=chunk,
+                                        trust_key_b64=encrypted_chunk_trust_key,
+                                    )
+                            except MobilePayloadEncryptionError as exc:
+                                self._write_json_response(
+                                    400,
+                                    {
+                                        "schema": adapter._transfer_schema,
+                                        "status": "rejected",
+                                        "message": str(exc),
+                                    },
+                                    encryption_trust_key_b64=encrypted_chunk_trust_key,
+                                    encryption_locator_fields=encrypted_chunk_response_locators,
                                 )
                                 return
                             append_error = None
@@ -382,6 +466,7 @@ class LanHttpTransportAdapter:
                                     request_id=request_id,
                                     metadata_payload=None,
                                     error=exc,
+                                    encryption_trust_key_b64=encrypted_chunk_trust_key,
                                 )
                                 return
                             if append_error is not None:
@@ -392,6 +477,8 @@ class LanHttpTransportAdapter:
                                         "status": "rejected",
                                         "message": append_error,
                                     },
+                                    encryption_trust_key_b64=encrypted_chunk_trust_key,
+                                    encryption_locator_fields=encrypted_chunk_response_locators,
                                 )
                                 return
                             self._write_json_response(
@@ -402,6 +489,8 @@ class LanHttpTransportAdapter:
                                     "message": "Desktop accepted transfer asset stream chunk.",
                                     "request_id": request_id,
                                 },
+                                encryption_trust_key_b64=encrypted_chunk_trust_key,
+                                encryption_locator_fields=encrypted_chunk_response_locators,
                             )
                             return
 
@@ -416,6 +505,7 @@ class LanHttpTransportAdapter:
                                     request_id=request_id,
                                     metadata_payload=None,
                                     error=exc,
+                                    encryption_trust_key_b64=None,
                                 )
                                 return
                             if isinstance(payload_or_error, str):
@@ -493,9 +583,14 @@ class LanHttpTransportAdapter:
                 request_id: str | None,
                 metadata_payload: dict[str, object] | None,
                 error: OSError,
+                encryption_trust_key_b64: str | None = None,
             ) -> None:
                 if request_id is not None:
                     with adapter._lock:
+                        if encryption_trust_key_b64 is None:
+                            encryption_trust_key_b64 = adapter._asset_upload_stream.encryption_trust_key(
+                                request_id=request_id
+                            )
                         discarded_payload = adapter._asset_upload_stream.discard(request_id=request_id)
                     if metadata_payload is None:
                         metadata_payload = discarded_payload
@@ -505,7 +600,13 @@ class LanHttpTransportAdapter:
                     metadata_payload=metadata_payload,
                     error=error,
                 )
-                self._write_json_response(status_code, response_payload)
+                locator_fields = self._transfer_response_locator_fields(metadata_payload)
+                self._write_json_response(
+                    status_code,
+                    response_payload,
+                    encryption_trust_key_b64=encryption_trust_key_b64,
+                    encryption_locator_fields=locator_fields,
+                )
 
             def _read_json_payload(
                 self,
@@ -543,8 +644,42 @@ class LanHttpTransportAdapter:
                     return None
                 return request_payload
 
-            def _write_json_response(self, status_code: int, payload: dict[str, object]) -> None:
-                encoded_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+            def _write_json_response(
+                self,
+                status_code: int,
+                payload: dict[str, object],
+                *,
+                encryption_trust_key_b64: str | None = None,
+                encryption_locator_fields: dict[str, str] | None = None,
+            ) -> None:
+                encoded_payload = payload
+                if encryption_trust_key_b64 is not None:
+                    if not encryption_locator_fields:
+                        status_code = 500
+                        encoded_payload = {
+                            "schema": adapter._transfer_schema,
+                            "status": "rejected",
+                            "message": "Desktop could not build encrypted response locators.",
+                        }
+                    else:
+                        try:
+                            encoded_payload = encrypt_mobile_json_payload(
+                                payload=payload,
+                                trust_key_b64=encryption_trust_key_b64,
+                                locator_fields=encryption_locator_fields,
+                            )
+                        except MobilePayloadEncryptionError as exc:
+                            status_code = 500
+                            encoded_payload = {
+                                "schema": adapter._transfer_schema,
+                                "status": "rejected",
+                                "message": str(exc),
+                            }
+                encoded_body = json.dumps(
+                    encoded_payload,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
                 self.close_connection = True
                 self.send_response(status_code)
                 self.send_header("Content-Type", "application/json")
@@ -552,6 +687,23 @@ class LanHttpTransportAdapter:
                 self.send_header("Content-Length", str(len(encoded_body)))
                 self.end_headers()
                 self.wfile.write(encoded_body)
+
+            @staticmethod
+            def _transfer_response_locator_fields(
+                metadata_payload: dict[str, object] | None,
+            ) -> dict[str, str] | None:
+                if metadata_payload is None:
+                    return None
+                session_id = metadata_payload.get("session_id")
+                device_uuid = metadata_payload.get("device_uuid")
+                if not isinstance(session_id, str) or not session_id.strip():
+                    return None
+                if not isinstance(device_uuid, str) or not device_uuid.strip():
+                    return None
+                return {
+                    "session_id": session_id.strip(),
+                    "device_uuid": device_uuid.strip(),
+                }
 
         return PairingHandler
 
@@ -571,6 +723,49 @@ class LanHttpTransportAdapter:
             operation=operation,
             remote_address=remote_address,
         )
+
+    def _decrypt_transfer_asset_stream_metadata(
+        self,
+        metadata_payload: dict[str, object],
+    ) -> tuple[dict[str, object], str | None, str | None]:
+        if self._resolve_transfer_trust_key is None:
+            return (
+                metadata_payload,
+                None,
+                "Desktop does not support encrypted transfer asset metadata requests.",
+            )
+        session_id = metadata_payload.get("session_id")
+        device_uuid = metadata_payload.get("device_uuid")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return (
+                metadata_payload,
+                None,
+                "Desktop rejected encrypted transfer asset metadata field 'session_id'.",
+            )
+        if not isinstance(device_uuid, str) or not device_uuid.strip():
+            return (
+                metadata_payload,
+                None,
+                "Desktop rejected encrypted transfer asset metadata field 'device_uuid'.",
+            )
+        trust_key_b64 = self._resolve_transfer_trust_key(
+            session_id=session_id.strip(),
+            device_uuid=device_uuid.strip(),
+        )
+        if trust_key_b64 is None:
+            return (
+                metadata_payload,
+                None,
+                "Desktop rejected the transfer session.",
+            )
+        try:
+            decrypted_payload = decrypt_mobile_json_payload(
+                encrypted_payload=metadata_payload,
+                trust_key_b64=trust_key_b64,
+            )
+        except MobilePayloadEncryptionError as exc:
+            return metadata_payload, None, str(exc)
+        return decrypted_payload, trust_key_b64, None
 
     def _safe_log(
         self,

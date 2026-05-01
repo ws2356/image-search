@@ -19,6 +19,8 @@ from dt_image_search.mobile.mobile_pairing_service import (
     MobileBackupAgainDecision,
     MobileBackupAgainSessionContext,
     MobilePairingService,
+    PAIRING_CAPABILITY_EXCHANGE_PATH,
+    PAIRING_CAPABILITY_EXCHANGE_SCHEMA,
     PAIRING_STATE_PATH,
     PairingResultState,
     _desktop_name_for_build,
@@ -414,6 +416,31 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(response_payload["backup_state"], "pending_pairing")
         self.assertIn("Desktop failed while processing the pairing request.", response_payload["message"])
 
+    def test_live_pairing_capability_exchange_endpoint_advertises_encryption(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.IOS)
+
+        capability_status, capability_payload = self._post_json_request(
+            path=PAIRING_CAPABILITY_EXCHANGE_PATH,
+            payload={
+                "schema": PAIRING_CAPABILITY_EXCHANGE_SCHEMA,
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "ios",
+                "capabilities": {
+                    "encryption": 1,
+                },
+            },
+        )
+
+        self.assertEqual(capability_status, 200)
+        self.assertEqual(capability_payload["schema"], PAIRING_CAPABILITY_EXCHANGE_SCHEMA)
+        self.assertEqual(capability_payload["status"], "accepted")
+        self.assertEqual(capability_payload["sid"], session.session_id)
+        self.assertEqual(capability_payload["platform"], "ios")
+        self.assertEqual(capability_payload["capabilities"], {"encryption": 1})
+
     def test_live_capability_exchange_http_endpoint_accepts_authenticated_request(self):
         now = datetime.now(timezone.utc)
         session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
@@ -458,7 +485,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(exchange_payload["status"], "accepted")
         self.assertEqual(exchange_payload["session_id"], session.session_id)
         self.assertEqual(exchange_payload["device_uuid"], device_uuid)
-        self.assertEqual(exchange_payload["capabilities"], {})
+        self.assertEqual(exchange_payload["capabilities"], {"encryption": 1})
 
     def test_live_capability_exchange_http_endpoint_rejects_invalid_trust_key(self):
         now = datetime.now(timezone.utc)
