@@ -32,6 +32,10 @@ fi
 
 "$this_dir/build_pyinstaller.sh"
 
+set -a; . "$repo_root/.env"; set +a
+APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
+export APPLE_APP_SPECIFIC_PASSWORD
+
 "$this_dir/distribute_macos.sh" --app-path "$repo_root/pyinstaller-dist/AuSearch.app"
 
 (cd "$parent_repo_root" && "$this_dir/create_github_release.sh" \
