@@ -186,7 +186,7 @@ class UsbWebSocketTransportAdapter:
         background_probe_interval_seconds: float = 6.0,
         background_response_poll_timeout_seconds: float = 1.0,
         is_desktop_foreground_fn: Callable[[], bool] | None = None,
-        resolve_transfer_trust_key: Callable[[str, str], str | None] | None = None,
+        resolve_transfer_trust_key: Callable[..., str | None] | None = None,
     ):
         if probe_interval_seconds <= 0:
             raise ValueError("USB probe_interval_seconds must be greater than zero.")
@@ -807,22 +807,14 @@ class UsbWebSocketTransportAdapter:
                 "Desktop does not support encrypted transfer asset metadata requests.",
             )
         session_id = metadata_payload.get("session_id")
-        device_uuid = metadata_payload.get("device_uuid")
         if not isinstance(session_id, str) or not session_id.strip():
             return (
                 metadata_payload,
                 None,
                 "Desktop rejected encrypted transfer asset metadata field 'session_id'.",
             )
-        if not isinstance(device_uuid, str) or not device_uuid.strip():
-            return (
-                metadata_payload,
-                None,
-                "Desktop rejected encrypted transfer asset metadata field 'device_uuid'.",
-            )
         trust_key_b64 = self._resolve_transfer_trust_key(
             session_id=session_id.strip(),
-            device_uuid=device_uuid.strip(),
         )
         if trust_key_b64 is None:
             return (

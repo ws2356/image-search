@@ -24,6 +24,7 @@ from dt_image_search.mobile.mobile_backup_state_machine import (
 from dt_image_search.mobile.mobile_pairing_store import (
     derive_pairing_key_b64,
     get_mobile_transfer_context,
+    get_mobile_transfer_context_by_session_id,
     get_or_create_desktop_device_id,
     get_or_create_mobile_folder,
     insert_mobile_backup_session,
@@ -1100,15 +1101,10 @@ class MobilePairingService:
             decrypted_payload,
             "session_id",
         ) or self._extract_transfer_required_field(request.payload, "session_id")
-        response_device_uuid = self._extract_transfer_required_field(
-            decrypted_payload,
-            "device_uuid",
-        ) or self._extract_transfer_required_field(request.payload, "device_uuid")
         response_payload = self._encrypt_response_payload_if_needed(
             response_payload=response_payload,
             trust_key_b64=encryption_trust_key_b64,
             session_id=response_session_id,
-            device_uuid=response_device_uuid,
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -1133,15 +1129,10 @@ class MobilePairingService:
             decrypted_payload,
             "session_id",
         ) or self._extract_transfer_required_field(request.payload, "session_id")
-        response_device_uuid = self._extract_transfer_required_field(
-            decrypted_payload,
-            "device_uuid",
-        ) or self._extract_transfer_required_field(request.payload, "device_uuid")
         response_payload = self._encrypt_response_payload_if_needed(
             response_payload=response_payload,
             trust_key_b64=encryption_trust_key_b64,
             session_id=response_session_id,
-            device_uuid=response_device_uuid,
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -1166,15 +1157,10 @@ class MobilePairingService:
             decrypted_payload,
             "session_id",
         ) or self._extract_transfer_required_field(request.payload, "session_id")
-        response_device_uuid = self._extract_transfer_required_field(
-            decrypted_payload,
-            "device_uuid",
-        ) or self._extract_transfer_required_field(request.payload, "device_uuid")
         response_payload = self._encrypt_response_payload_if_needed(
             response_payload=response_payload,
             trust_key_b64=encryption_trust_key_b64,
             session_id=response_session_id,
-            device_uuid=response_device_uuid,
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -1200,15 +1186,10 @@ class MobilePairingService:
             decrypted_payload,
             "session_id",
         ) or self._extract_transfer_required_field(request.payload, "session_id")
-        response_device_uuid = self._extract_transfer_required_field(
-            decrypted_payload,
-            "device_uuid",
-        ) or self._extract_transfer_required_field(request.payload, "device_uuid")
         response_payload = self._encrypt_response_payload_if_needed(
             response_payload=response_payload,
             trust_key_b64=encryption_trust_key_b64,
             session_id=response_session_id,
-            device_uuid=response_device_uuid,
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -1235,15 +1216,10 @@ class MobilePairingService:
             request.payload.metadata_payload,
             "session_id",
         )
-        response_device_uuid = self._extract_transfer_required_field(
-            request.payload.metadata_payload,
-            "device_uuid",
-        )
         response_payload = self._encrypt_response_payload_if_needed(
             response_payload=response_payload,
             trust_key_b64=request.payload.encryption_trust_key_b64,
             session_id=response_session_id,
-            device_uuid=response_device_uuid,
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -1271,15 +1247,10 @@ class MobilePairingService:
             decrypted_payload,
             "session_id",
         ) or self._extract_transfer_required_field(request.payload, "session_id")
-        response_device_uuid = self._extract_transfer_required_field(
-            decrypted_payload,
-            "device_uuid",
-        ) or self._extract_transfer_required_field(request.payload, "device_uuid")
         response_payload = self._encrypt_response_payload_if_needed(
             response_payload=response_payload,
             trust_key_b64=encryption_trust_key_b64,
             session_id=response_session_id,
-            device_uuid=response_device_uuid,
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -1445,7 +1416,6 @@ class MobilePairingService:
         if not is_mobile_encrypted_payload(request_payload):
             return request_payload, None, None
         session_id = request_payload.get("session_id")
-        device_uuid = request_payload.get("device_uuid")
         if not isinstance(session_id, str) or not session_id.strip():
             return (
                 request_payload,
@@ -1456,19 +1426,8 @@ class MobilePairingService:
                 ),
                 None,
             )
-        if not isinstance(device_uuid, str) or not device_uuid.strip():
-            return (
-                request_payload,
-                _json_rejected_response(
-                    status_code=400,
-                    schema=response_schema,
-                    message="The transfer request is missing the required field 'device_uuid'.",
-                ),
-                None,
-            )
         trust_key_b64 = self._resolve_transfer_trust_key(
             session_id=session_id.strip(),
-            device_uuid=device_uuid.strip(),
         )
         if trust_key_b64 is None:
             return (
@@ -1564,14 +1523,20 @@ class MobilePairingService:
         self,
         *,
         session_id: str,
-        device_uuid: str,
+        device_uuid: str | None = None,
     ) -> str | None:
         with create_db_conn(ctx=self._ctx) as conn:
-            transfer_context = get_mobile_transfer_context(
-                conn,
-                session_id=session_id,
-                device_uuid=device_uuid,
-            )
+            if device_uuid is None:
+                transfer_context = get_mobile_transfer_context_by_session_id(
+                    conn,
+                    session_id=session_id,
+                )
+            else:
+                transfer_context = get_mobile_transfer_context(
+                    conn,
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                )
             if transfer_context is None:
                 return None
             return transfer_context.trust_key_b64

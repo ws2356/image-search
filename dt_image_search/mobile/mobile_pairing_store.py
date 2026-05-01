@@ -456,6 +456,41 @@ def get_mobile_transfer_context(
     )
 
 
+def get_mobile_transfer_context_by_session_id(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+) -> MobileTransferContext | None:
+    row = conn.execute(
+        """
+        SELECT
+            mobile_backup_sessions.session_id AS session_id,
+            mobile_backup_sessions.device_uuid AS device_uuid,
+            mobile_backup_sessions.folder_id AS folder_id,
+            folders.path AS folder_path,
+            mobile_folders.transfer_state AS folder_transfer_state,
+            mobile_devices.trust_key_b64 AS trust_key_b64
+        FROM mobile_backup_sessions
+        JOIN mobile_devices ON mobile_devices.device_uuid = mobile_backup_sessions.device_uuid
+        JOIN folders ON folders.id = mobile_backup_sessions.folder_id
+        LEFT JOIN mobile_folders ON mobile_folders.folder_id = mobile_backup_sessions.folder_id
+        WHERE mobile_backup_sessions.session_id = ?
+        LIMIT 1
+        """,
+        (session_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return MobileTransferContext(
+        session_id=row["session_id"],
+        device_uuid=row["device_uuid"],
+        folder_id=int(row["folder_id"]),
+        folder_path=row["folder_path"],
+        folder_transfer_state=row["folder_transfer_state"],
+        trust_key_b64=row["trust_key_b64"],
+    )
+
+
 def get_mobile_asset_record(
     conn: sqlite3.Connection,
     *,
