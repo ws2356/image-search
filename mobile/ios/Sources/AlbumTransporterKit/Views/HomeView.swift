@@ -162,7 +162,7 @@ struct HomeView: View {
                     Image(systemName: "cable.connector")
                         .foregroundStyle(Color(hex: 0x3B5FC0))
                         .font(.system(size: 13))
-                    Text("USB backups are usually up to 5× faster than Wi-Fi. Plug in anytime—AuBackup will switch to USB automatically.")
+                    Text("USB backups can be up to 5× faster than Wi-Fi. Plug in anytime—AuBackup will switch to USB automatically.")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(hex: 0x3B5FC0))
                         .lineSpacing(2)

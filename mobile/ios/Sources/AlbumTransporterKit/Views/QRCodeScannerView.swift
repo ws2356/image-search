@@ -136,7 +136,7 @@ struct LiveQRCodeScannerScreen: View {
 
     private func instructionBanner(bottomInset: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Pair your pc and phone to back up your photo library to pc:")
+            Text("Start a QR code based backup session on your pc:")
                 .font(.system(size: 15, weight: .semibold))
             Text("        1. Open https://aurora.boldman.net on your PC browser then install and launch AuSearch.")
             Text("        2. Click 'Add Folder'.")
