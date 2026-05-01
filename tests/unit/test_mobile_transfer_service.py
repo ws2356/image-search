@@ -249,6 +249,48 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
+    def test_start_request_rejects_stopped_session(self):
+        pairing_context = self._pair_device()
+        session_id = pairing_context["session_id"]
+        device_uuid = pairing_context["device_uuid"]
+        trust_key_b64 = pairing_context["trust_key_b64"]
+
+        with create_db_conn(ctx=self._ctx) as conn:
+            conn.execute(
+                """
+                UPDATE mobile_backup_sessions
+                SET status = ?, ended_at = ?
+                WHERE session_id = ? AND device_uuid = ?
+                """,
+                (
+                    "stopped_by_mobile",
+                    "2026-04-10T01:00:00+00:00",
+                    session_id,
+                    device_uuid,
+                ),
+            )
+            conn.commit()
+
+        status_code, response_payload = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            {
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": session_id,
+                "device_uuid": device_uuid,
+                "trust_proof": derive_trust_proof_b64(
+                    trust_key_b64=trust_key_b64,
+                    purpose=MOBILE_TRANSFER_START_PROOF_PURPOSE,
+                    schema=MOBILE_TRANSFER_SCHEMA,
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                ),
+                "total_assets": 2,
+            },
+        )
+
+        self.assertEqual(status_code, 403)
+        self.assertEqual(response_payload["status"], "rejected")
+
     def test_complete_request_logs_correlated_transfer_telemetry_attributes(self):
         pairing_context = self._pair_device()
 

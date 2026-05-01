@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+import sqlite3
 import threading
 from typing import Callable
 
@@ -26,9 +28,18 @@ from dt_image_search.mobile.mobile_pairing_service import (
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobileSourceType
 from dt_image_search.mobile.mobile_pairing_store import (
+    MOBILE_BACKUP_SESSION_STATUS_STOPPED,
     ActiveMobileBackupSession,
     get_active_mobile_backup_session,
+    get_mobile_transfer_context,
     get_mobile_folder_binding_by_path,
+    update_mobile_transfer_state,
+)
+from dt_image_search.mobile.mobile_backup_state_machine import (
+    MobileBackupEvent,
+    MobileBackupState,
+    folder_transfer_state_from_backup_state,
+    resolve_next_backup_state,
 )
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_STARTED_EVENT,
@@ -191,7 +202,12 @@ class MobileFolderCoordinator(QObject):
         if active_session is None:
             return False
 
-        self._show_active_backup_in_progress_message(parent, active_session)
+        should_stop_existing = self._prompt_stop_active_backup_and_restart(parent, active_session)
+        if should_stop_existing:
+            if self._stop_active_backup_session(active_session):
+                return False
+            self._show_active_backup_stop_failed_message(parent, active_session)
+            return True
         log(
             "info",
             message=(
@@ -201,7 +217,74 @@ class MobileFolderCoordinator(QObject):
         )
         return True
 
-    def _show_active_backup_in_progress_message(
+    def _prompt_stop_active_backup_and_restart(
+        self,
+        parent: QWidget | None,
+        active_session: ActiveMobileBackupSession,
+    ) -> bool:
+        dialog = QMessageBox(parent)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle(self._ACTIVE_BACKUP_DIALOG_TITLE)
+        dialog.setText("Another mobile backup is already in progress.")
+        dialog.setInformativeText(
+            "Stopping it will mark the current session as stopped and allow a new backup to start.\n\n"
+            f"Current backup: {active_session.device_name}\n"
+            f"Folder: {active_session.folder_path}"
+        )
+        stop_button = dialog.addButton(
+            "Stop Current Backup and Start New",
+            QMessageBox.ButtonRole.DestructiveRole,
+        )
+        keep_button = dialog.addButton(
+            "Keep Current Backup",
+            QMessageBox.ButtonRole.RejectRole,
+        )
+        dialog.setDefaultButton(keep_button)
+        dialog.exec()
+        return dialog.clickedButton() is stop_button
+
+    def _stop_active_backup_session(self, active_session: ActiveMobileBackupSession) -> bool:
+        current_time = datetime.now(timezone.utc)
+        try:
+            with create_db_conn(ctx=self.ctx) as conn:
+                transfer_context = get_mobile_transfer_context(
+                    conn,
+                    session_id=active_session.session_id,
+                    device_uuid=active_session.device_uuid,
+                )
+                if transfer_context is None:
+                    return False
+                folder_transfer_state = folder_transfer_state_from_backup_state(
+                    resolve_next_backup_state(
+                        current_folder_transfer_state=transfer_context.folder_transfer_state,
+                        event=MobileBackupEvent.TRANSFER_STOPPED,
+                        fallback_state=MobileBackupState.TRANSFER_IN_PROGRESS,
+                    )
+                )
+                update_mobile_transfer_state(
+                    conn,
+                    session_id=active_session.session_id,
+                    device_uuid=active_session.device_uuid,
+                    session_status=MOBILE_BACKUP_SESSION_STATUS_STOPPED,
+                    folder_transfer_state=folder_transfer_state,
+                    updated_at=current_time,
+                    ended_at=current_time,
+                )
+        except (sqlite3.Error, OSError, RuntimeError):
+            return False
+        log(
+            "info",
+            message=(
+                "MobileFolderCoordinator/_stop_active_backup_session: "
+                f"marked session {active_session.session_id} as stopped_by_user"
+            ),
+        )
+        status_bar_messenger.show_status_message.emit(
+            f"Stopped active mobile backup for {active_session.device_name}. Starting a new session."
+        )
+        return True
+
+    def _show_active_backup_stop_failed_message(
         self,
         parent: QWidget | None,
         active_session: ActiveMobileBackupSession,
@@ -210,7 +293,7 @@ class MobileFolderCoordinator(QObject):
             parent,
             self._ACTIVE_BACKUP_DIALOG_TITLE,
             (
-                "Another mobile backup is already in progress.\n\n"
+                "Desktop could not stop the active mobile backup session.\n\n"
                 f"Current backup: {active_session.device_name}\n"
                 f"Folder: {active_session.folder_path}\n\n"
                 "Try again after the current session completes."

@@ -15,6 +15,7 @@ import uuid
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_store import (
+    MOBILE_BACKUP_SESSION_STATUS_PAIRED,
     MOBILE_BACKUP_SESSION_STATUS_COMPLETED,
     MOBILE_BACKUP_SESSION_STATUS_FAILED,
     MOBILE_BACKUP_SESSION_STATUS_STOPPED,
@@ -146,6 +147,11 @@ class MobileTransferService:
                 )
                 if transfer_context is None:
                     return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if transfer_context.session_status not in (
+                    MOBILE_BACKUP_SESSION_STATUS_PAIRED,
+                    MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
+                ):
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
                 if not is_valid_trust_proof(
                     trust_key_b64=transfer_context.trust_key_b64,
                     purpose=MOBILE_TRANSFER_START_PROOF_PURPOSE,
@@ -235,6 +241,8 @@ class MobileTransferService:
                     device_uuid=request.device_uuid,
                 )
                 if transfer_context is None:
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if transfer_context.session_status != MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING:
                     return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
                 if not is_valid_trust_proof(
                     trust_key_b64=transfer_context.trust_key_b64,
@@ -346,6 +354,9 @@ class MobileTransferService:
                     device_uuid=metadata.device_uuid,
                 )
                 if transfer_context is None:
+                    _cleanup_temp_upload_file(staged_temp_file_path)
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if transfer_context.session_status != MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING:
                     _cleanup_temp_upload_file(staged_temp_file_path)
                     return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
                 if not is_valid_trust_proof(
@@ -585,6 +596,8 @@ class MobileTransferService:
                 )
                 if transfer_context is None:
                     return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
+                if transfer_context.session_status != MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING:
+                    return _response(status_code=403, status="rejected", message="Desktop rejected the transfer session.")
                 if not is_valid_trust_proof(
                     trust_key_b64=transfer_context.trust_key_b64,
                     purpose=MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE,
@@ -696,13 +709,17 @@ class MobileTransferService:
                             session_id=metadata.session_id,
                             device_uuid=metadata.device_uuid,
                         )
-                        if transfer_context is not None and is_valid_trust_proof(
+                        if (
+                            transfer_context is not None
+                            and transfer_context.session_status == MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING
+                            and is_valid_trust_proof(
                             trust_key_b64=transfer_context.trust_key_b64,
                             purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
                             schema=metadata.schema,
                             session_id=metadata.session_id,
                             device_uuid=metadata.device_uuid,
                             trust_proof_b64=metadata.trust_proof,
+                            )
                         ):
                             self._mark_transfer_failed(
                                 conn=conn,

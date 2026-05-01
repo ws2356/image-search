@@ -260,7 +260,11 @@ class TestMobileFolderCoordinator(unittest.TestCase):
 
         with (
             patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()),
-            patch.object(mobile_folder_controller_module.QMessageBox, "warning") as warning_mock,
+            patch.object(
+                mobile_folder_controller_module.MobileFolderCoordinator,
+                "_prompt_stop_active_backup_and_restart",
+                return_value=False,
+            ) as prompt_stop_mock,
             patch.object(
                 mobile_folder_controller_module.ParentFolderSelectionDialog,
                 "select_destination_parent",
@@ -273,12 +277,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         self.assertIsNone(result_session)
         get_pairing_service_mock.assert_not_called()
         select_destination_parent_mock.assert_not_called()
-        warning_mock.assert_called_once()
-        self.assertEqual(
-            warning_mock.call_args.args[1],
-            mobile_folder_controller_module.MobileFolderCoordinator._ACTIVE_BACKUP_DIALOG_TITLE,
-        )
-        self.assertIn("Try again after the current session completes.", warning_mock.call_args.args[2])
+        prompt_stop_mock.assert_called_once()
 
     def test_start_backup_again_flow_starts_pairing_from_selected_mobile_folder_parent(self):
         destination_parent = (Path(self._temp_dir.name) / "Mobile Backups").resolve()
@@ -430,7 +429,11 @@ class TestMobileFolderCoordinator(unittest.TestCase):
 
         with (
             patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()),
-            patch.object(mobile_folder_controller_module.QMessageBox, "warning") as warning_mock,
+            patch.object(
+                mobile_folder_controller_module.MobileFolderCoordinator,
+                "_prompt_stop_active_backup_and_restart",
+                return_value=False,
+            ) as prompt_stop_mock,
         ):
             coordinator = mobile_folder_controller_module.MobileFolderCoordinator(self._ctx)
             with patch.object(coordinator, "_get_pairing_service") as get_pairing_service_mock:
@@ -438,8 +441,119 @@ class TestMobileFolderCoordinator(unittest.TestCase):
 
         self.assertIsNone(result_session)
         get_pairing_service_mock.assert_not_called()
-        warning_mock.assert_called_once()
-        self.assertIn("Try again after the current session completes.", warning_mock.call_args.args[2])
+        prompt_stop_mock.assert_called_once()
+
+    def test_start_pairing_flow_stops_active_session_and_continues_when_user_confirms(self):
+        destination_parent = Path(self._temp_dir.name).resolve()
+        destination_parent.mkdir(parents=True, exist_ok=True)
+        active_mobile_folder = (destination_parent / "Alice iPhone").resolve()
+        active_mobile_folder.mkdir(parents=True, exist_ok=True)
+
+        pairing_session = MobilePairingSessionDraft.create(
+            destination_parent=destination_parent.as_posix(),
+            desktop_endpoint_url="http://127.0.0.1:54921/api/mobile/pairing/claim",
+        )
+        fake_pairing_service = _FakePairingService(pairing_session)
+
+        with create_db_conn(ctx=self._ctx) as conn:
+            folder = insert_folder(conn, active_mobile_folder.as_posix())
+            self.assertIsNotNone(folder)
+            conn.execute(
+                """
+                INSERT INTO mobile_devices (
+                    device_uuid,
+                    platform,
+                    device_name,
+                    trust_key_b64,
+                    paired_at,
+                    last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "ios-device-transfer-001",
+                    "ios",
+                    "Alice iPhone",
+                    "trust-transfer",
+                    "2026-04-10T00:00:00+00:00",
+                    "2026-04-10T00:00:00+00:00",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_folders (folder_id, device_uuid, transfer_state, transfer_state_updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    int(folder.id),
+                    "ios-device-transfer-001",
+                    "transferring",
+                    "2026-04-10T00:00:00+00:00",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO mobile_backup_sessions (
+                    session_id,
+                    device_uuid,
+                    folder_id,
+                    status,
+                    transferred_count,
+                    failed_count,
+                    started_at,
+                    paired_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "active-transfer-session",
+                    "ios-device-transfer-001",
+                    int(folder.id),
+                    "transferring",
+                    12,
+                    0,
+                    "2026-04-10T00:00:00+00:00",
+                    "2026-04-10T00:00:00+00:00",
+                ),
+            )
+            conn.commit()
+
+        with (
+            patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()),
+            patch.object(
+                mobile_folder_controller_module.MobileFolderCoordinator,
+                "_prompt_stop_active_backup_and_restart",
+                return_value=True,
+            ),
+            patch.object(
+                mobile_folder_controller_module.MobileFolderCoordinator,
+                "_ensure_usb_prerequisites",
+                return_value=True,
+            ),
+            patch.object(
+                mobile_folder_controller_module.ParentFolderSelectionDialog,
+                "select_destination_parent",
+                return_value=destination_parent.as_posix(),
+            ),
+            patch.object(mobile_folder_controller_module, "MobilePairingDialog", _FakePairingDialog),
+        ):
+            coordinator = mobile_folder_controller_module.MobileFolderCoordinator(self._ctx)
+            with patch.object(coordinator, "_get_pairing_service", return_value=fake_pairing_service):
+                result_session = coordinator.start_pairing_flow()
+
+        self.assertIsNotNone(result_session)
+        self.assertEqual(fake_pairing_service.started_with, destination_parent.as_posix())
+
+        with create_db_conn(ctx=self._ctx) as conn:
+            stopped_row = conn.execute(
+                """
+                SELECT status, ended_at
+                FROM mobile_backup_sessions
+                WHERE session_id = ?
+                """,
+                ("active-transfer-session",),
+            ).fetchone()
+        self.assertIsNotNone(stopped_row)
+        self.assertEqual(stopped_row["status"], "stopped_by_mobile")
+        self.assertIsNotNone(stopped_row["ended_at"])
 
     def test_resolve_backup_again_mismatch_uses_prompt_result_on_main_thread(self):
         with patch.object(mobile_folder_controller_module.default_bus, "subscribe", return_value=_DummySubscription()):
