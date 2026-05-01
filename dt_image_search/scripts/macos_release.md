@@ -167,3 +167,19 @@ bundle without redoing the whole signing + notarization chain.
 - [ ] `codesign --verify --deep --strict AuSearch.app` exits 0
 - [ ] `spctl --assess --type execute AuSearch.app` exits 0 (after notarization)
 - [ ] DMG mounts and drag-to-/Applications works on a test machine
+
+---
+
+## Create GitHub release via CLI
+
+After you have the final DMG, create (or update) a GitHub release and upload the DMG asset:
+
+```bash
+bash dt_image_search/scripts/create_github_release.sh \
+    --tag v1.2.3 \
+    --title "AuSearch v1.2.3" \
+    --notes-file ./release-notes.md \
+    --dmg-path ./pyinstaller-dist-prod/AuSearch.dmg
+```
+
+You can also pass release notes inline with `--notes "..."`.
