@@ -399,7 +399,12 @@ final class PairingServiceTests: XCTestCase {
 private struct StaticPairingBootstrapClient: PairingBootstrapClient {
     let response: PairingClaimResponse
 
-    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = encryptionTrustKeyBase64
         XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
         XCTAssertEqual(request.sessionID, PairingQRCodePayload.demo.sessionID)
         XCTAssertEqual(request.oneTimePasscode, PairingQRCodePayload.demo.oneTimePasscode)
@@ -411,7 +416,12 @@ private struct StaticPairingBootstrapClient: PairingBootstrapClient {
 private struct StaticUSBPairingBootstrapClient: PairingUSBBootstrapClient {
     let result: Result<PairingClaimResponse, PairingServiceError>
 
-    func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        using payload: PairingQRCodePayload,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = encryptionTrustKeyBase64
         XCTAssertEqual(payload.sessionID, request.sessionID)
         switch result {
         case .success(let response):
@@ -430,7 +440,12 @@ private actor RetryingPairingBootstrapClient: PairingBootstrapClient {
         self.scriptedResults = scriptedResults
     }
 
-    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = encryptionTrustKeyBase64
         endpointLog.append(endpoint.absoluteString)
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
         guard let result = scriptedResults[endpoint.absoluteString] else {
@@ -461,13 +476,23 @@ private actor PollingPairingBootstrapClient: PairingBootstrapClient {
         scriptedStateResponses = stateResponses
     }
 
-    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = encryptionTrustKeyBase64
         XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
         return claimResponse
     }
 
-    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
+    func fetchPairingState(
+        at endpoint: URL,
+        request: PairingStateRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = encryptionTrustKeyBase64
         XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
         XCTAssertEqual(request.sessionID, "pairing-demo-001")
         XCTAssertEqual(request.deviceUUID, "ios-device-001")

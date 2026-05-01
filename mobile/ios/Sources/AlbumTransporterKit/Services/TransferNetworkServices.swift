@@ -24,6 +24,10 @@ enum UpdatePromptProtocol {
     static let promptPath = "/api/mobile/update/prompt"
 }
 
+enum MobileTransferCapabilities {
+    static let encryption = MobilePayloadEncryptionProtocol.capabilityName
+}
+
 enum TransferAssetStreamProtocol {
     static let chunkSizeBytes = 5 * 1024 * 1024
     static let requestIDQueryField = "request_id"
@@ -763,6 +767,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
                 to: endpoint,
                 body: request,
                 responseType: TransferServerResponse.self,
+                desktop: desktop,
                 using: activeSession
             )
             TransferDebugLogger.info("Transfer start response \(TransferDebugLogger.responseSummary(response))")
@@ -806,6 +811,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
                 to: endpoint,
                 body: request,
                 responseType: TransferExistenceResponse.self,
+                desktop: desktop,
                 using: activeSession
             )
             switch response.status {
@@ -846,6 +852,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             body: request,
             responseType: CapabilityExchangeResponse.self,
             expectedSchema: CapabilityExchangeProtocol.schema,
+            desktop: desktop,
             using: activeSession
         )
         switch response.status {
@@ -884,6 +891,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             body: request,
             responseType: UpdatePromptResponse.self,
             expectedSchema: UpdatePromptProtocol.schema,
+            desktop: desktop,
             using: activeSession
         )
         switch response.status {
@@ -951,7 +959,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
                 requestID: requestID,
                 session: activeSession
             )
-            if asset.fileSize <= TransferAssetStreamProtocol.chunkSizeBytes {
+            let plaintextChunkSizeBytes = transferAssetChunkSizeBytes(for: desktop)
+            if asset.fileSize <= plaintextChunkSizeBytes {
                 try await uploadChunkedAssetFile(
                     asset.fileURL,
                     desktop: desktop,
@@ -965,7 +974,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
                 try await TransferAssetChunkStreamer.streamFile(
                     fileURL: asset.fileURL,
                     expectedSizeBytes: asset.fileSize,
-                    chunkSizeBytes: TransferAssetStreamProtocol.chunkSizeBytes
+                    chunkSizeBytes: plaintextChunkSizeBytes
                 ) { chunkData in
                     try Task.checkCancellation()
                     try await uploadChunkedAssetBytes(
@@ -1037,12 +1046,13 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         )
         let startRequest = TransferAssetStreamStartRequest(
             metadata: metadata,
-            chunkSize: TransferAssetStreamProtocol.chunkSizeBytes
+            chunkSize: transferAssetChunkSizeBytes(for: desktop)
         )
         let response = try await postJSON(
             to: endpoint,
             body: startRequest,
             responseType: TransferServerResponse.self,
+            desktop: desktop,
             using: session
         )
         guard response.status == .accepted else {
@@ -1059,9 +1069,9 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         guard !chunkData.isEmpty else {
             return
         }
-        guard chunkData.count <= TransferAssetStreamProtocol.chunkSizeBytes else {
+        guard chunkData.count <= transferAssetChunkSizeBytes(for: desktop) else {
             throw TransferClientError.transport(
-                message: "Desktop transfer chunk exceeded the maximum \(TransferAssetStreamProtocol.chunkSizeBytes)-byte limit."
+                message: "Desktop transfer chunk exceeded the maximum \(transferAssetChunkSizeBytes(for: desktop))-byte limit."
             )
         }
         let endpoint = try transferAssetStreamEndpoint(
@@ -1074,10 +1084,24 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         request.timeoutInterval = 60
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let payloadData: Data
+        if desktop.encryptionEnabled {
+            do {
+                payloadData = try MobilePayloadEncryption.encryptBinaryChunk(
+                    chunkData,
+                    trustKeyBase64: desktop.sharedKeyBase64
+                )
+            } catch {
+                throw TransferClientError.transport(message: "Desktop transfer could not encrypt asset chunk.")
+            }
+        } else {
+            payloadData = chunkData
+        }
         let response = try await uploadData(
             using: request,
-            bodyData: chunkData,
-            session: session
+            bodyData: payloadData,
+            session: session,
+            desktop: desktop
         )
         guard response.status == .accepted else {
             throw response.rejectionError
@@ -1100,10 +1124,26 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         request.timeoutInterval = 60
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if desktop.encryptionEnabled {
+            let fileData: Data
+            do {
+                fileData = try Data(contentsOf: fileURL)
+            } catch {
+                throw TransferClientError.transport(message: "Desktop transfer could not read local asset bytes.")
+            }
+            try await uploadChunkedAssetBytes(
+                fileData,
+                desktop: desktop,
+                requestID: requestID,
+                session: session
+            )
+            return
+        }
         let response = try await uploadFile(
             using: request,
             fileURL: fileURL,
-            session: session
+            session: session,
+            desktop: desktop
         )
         guard response.status == .accepted else {
             throw response.rejectionError
@@ -1124,6 +1164,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             to: endpoint,
             body: TransferAssetStreamCompleteRequest(),
             responseType: TransferServerResponse.self,
+            desktop: desktop,
             using: session
         )
     }
@@ -1159,6 +1200,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
                 to: endpoint,
                 body: request,
                 responseType: TransferServerResponse.self,
+                desktop: desktop,
                 using: activeSession
             )
             TransferDebugLogger.info("Transfer completion response \(TransferDebugLogger.responseSummary(response))")
@@ -1178,6 +1220,7 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         body: RequestBody,
         responseType: ResponseBody.Type,
         expectedSchema: String = TransferProtocol.schema,
+        desktop: TrustedDesktopRecord,
         using session: URLSession
     ) async throws -> ResponseBody {
         var urlRequest = URLRequest(url: endpoint)
@@ -1185,19 +1228,24 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         urlRequest.timeoutInterval = 30
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-        urlRequest.httpBody = try await encodeRequestBody(body)
+        urlRequest.httpBody = try await encodeRequestBody(
+            body,
+            desktop: desktop
+        )
         return try await execute(
             request: urlRequest,
             responseType: responseType,
             expectedSchema: expectedSchema,
-            using: session
+            using: session,
+            desktop: desktop
         )
     }
 
     private func uploadData(
         using request: URLRequest,
         bodyData: Data,
-        session: URLSession
+        session: URLSession,
+        desktop: TrustedDesktopRecord
     ) async throws -> TransferServerResponse {
         let data: Data
         let response: URLResponse
@@ -1206,13 +1254,19 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
         }
-        return try decodeResponse(data: data, response: response, responseType: TransferServerResponse.self)
+        return try decodeResponse(
+            data: data,
+            response: response,
+            responseType: TransferServerResponse.self,
+            desktop: desktop
+        )
     }
 
     private func uploadFile(
         using request: URLRequest,
         fileURL: URL,
-        session: URLSession
+        session: URLSession,
+        desktop: TrustedDesktopRecord
     ) async throws -> TransferServerResponse {
         let data: Data
         let response: URLResponse
@@ -1221,14 +1275,20 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
         }
-        return try decodeResponse(data: data, response: response, responseType: TransferServerResponse.self)
+        return try decodeResponse(
+            data: data,
+            response: response,
+            responseType: TransferServerResponse.self,
+            desktop: desktop
+        )
     }
 
     private func execute<ResponseBody: TransferSchemaResponse>(
         request: URLRequest,
         responseType: ResponseBody.Type,
         expectedSchema: String = TransferProtocol.schema,
-        using session: URLSession
+        using session: URLSession,
+        desktop: TrustedDesktopRecord
     ) async throws -> ResponseBody {
         let data: Data
         let response: URLResponse
@@ -1241,7 +1301,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
             data: data,
             response: response,
             responseType: responseType,
-            expectedSchema: expectedSchema
+            expectedSchema: expectedSchema,
+            desktop: desktop
         )
     }
 
@@ -1263,7 +1324,8 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         data: Data,
         response: URLResponse,
         responseType: ResponseBody.Type,
-        expectedSchema: String = TransferProtocol.schema
+        expectedSchema: String = TransferProtocol.schema,
+        desktop: TrustedDesktopRecord
     ) throws -> ResponseBody {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TransferClientError.invalidHTTPResponse
@@ -1271,7 +1333,11 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
 
         let bodyPreview = TransferDebugLogger.responseBodyPreview(from: data)
         do {
-            let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: data)
+            let responseData = try decodeResponsePayloadData(
+                data,
+                desktop: desktop
+            )
+            let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: responseData)
             guard decodedResponse.schema == expectedSchema else {
                 TransferDebugLogger.error(
                     "Unsupported transfer response schema http_status=\(httpResponse.statusCode) schema=\(decodedResponse.schema) expected=\(expectedSchema) body=\(bodyPreview)"
@@ -1299,6 +1365,29 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         }
     }
 
+    private func decodeResponsePayloadData(
+        _ data: Data,
+        desktop: TrustedDesktopRecord
+    ) throws -> Data {
+        guard desktop.encryptionEnabled else {
+            return data
+        }
+        guard let encryptedResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw TransferClientError.decoding(message: "Desktop transfer response is not a JSON object.")
+        }
+        guard MobilePayloadEncryption.isEncryptedPayload(encryptedResponse) else {
+            throw TransferClientError.decoding(message: "Desktop transfer response must be encrypted.")
+        }
+        let decryptedPayload = try MobilePayloadEncryption.decryptPayloadObject(
+            encryptedResponse,
+            trustKeyBase64: desktop.sharedKeyBase64
+        )
+        guard JSONSerialization.isValidJSONObject(decryptedPayload) else {
+            throw TransferClientError.decoding(message: "Desktop transfer response payload is invalid.")
+        }
+        return try JSONSerialization.data(withJSONObject: decryptedPayload, options: [])
+    }
+
     private func transferURL(for desktop: TrustedDesktopRecord, path: String) -> URL {
         var components = URLComponents(url: desktop.endpointURL, resolvingAgainstBaseURL: false)
         components?.path = path
@@ -1307,7 +1396,10 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         return components?.url ?? desktop.endpointURL
     }
 
-    private func encodeRequestBody<RequestBody: Encodable>(_ body: RequestBody) async throws -> Data {
+    private func encodeRequestBody<RequestBody: Encodable>(
+        _ body: RequestBody,
+        desktop: TrustedDesktopRecord
+    ) async throws -> Data {
         let encodedBody = try JSONEncoder.pairingEncoder.encode(body)
         guard var bodyValue = try JSONSerialization.jsonObject(with: encodedBody) as? [String: Any] else {
             throw TransferClientError.transport(message: "Desktop transfer request body could not be encoded.")
@@ -1315,10 +1407,34 @@ struct URLSessionMobileTransferClient: MobileTransferClient, ChunkProgressMobile
         for (key, value) in traceContextPayloadFields(await telemetryClient.currentTraceContext()) {
             bodyValue[key] = value
         }
+        if desktop.encryptionEnabled {
+            let encryptedPayload = try MobilePayloadEncryption.encryptPayloadObject(
+                bodyValue,
+                trustKeyBase64: desktop.sharedKeyBase64,
+                sessionID: desktop.lastSessionID,
+                deviceUUID: desktop.mobileDeviceUUID
+            )
+            let encryptedData = try JSONEncoder.pairingEncoder.encode(encryptedPayload)
+            guard let encryptedValue = try JSONSerialization.jsonObject(with: encryptedData) as? [String: Any] else {
+                throw TransferClientError.transport(message: "Desktop transfer request body could not be encrypted.")
+            }
+            bodyValue = encryptedValue
+        }
         guard JSONSerialization.isValidJSONObject(bodyValue) else {
             throw TransferClientError.transport(message: "Desktop transfer request body is invalid.")
         }
         return try JSONSerialization.data(withJSONObject: bodyValue, options: [])
+    }
+
+    private func transferAssetChunkSizeBytes(for desktop: TrustedDesktopRecord) -> Int {
+        guard desktop.encryptionEnabled else {
+            return TransferAssetStreamProtocol.chunkSizeBytes
+        }
+        return max(
+            1,
+            TransferAssetStreamProtocol.chunkSizeBytes
+                - MobilePayloadEncryptionProtocol.binaryChunkOverheadBytes
+        )
     }
 }
 
@@ -2547,7 +2663,7 @@ actor PhotoLibraryTransferService: TransferService {
         stopRequested = false
         successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
 
-        guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
+        guard var trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
@@ -2597,6 +2713,10 @@ actor PhotoLibraryTransferService: TransferService {
                 )
                 return await finalizingTransferRun(pausedSnapshot)
             }
+
+            trustedDesktop = await negotiateTransferEncryptionCapabilityIfNeeded(
+                trustedDesktop
+            )
 
             TransferDebugLogger.info(
                 "Starting backup run desktop=\(trustedDesktop.desktopName) session_id=\(trustedDesktop.lastSessionID) asset_count=\(totalCount) batch_size=\(Self.assetFetchBatchSize)"
@@ -2754,6 +2874,33 @@ actor PhotoLibraryTransferService: TransferService {
     private func finalizingTransferRun(_ snapshot: TransferSnapshot) async -> TransferSnapshot {
         await assetSource.releaseTransferRunResources()
         return snapshot
+    }
+
+    private func negotiateTransferEncryptionCapabilityIfNeeded(
+        _ desktop: TrustedDesktopRecord
+    ) async -> TrustedDesktopRecord {
+        guard let capabilityClient = transferClient as? any MobileCapabilityExchangeClient else {
+            return desktop
+        }
+        var updatedDesktop = desktop
+        do {
+            let response = try await capabilityClient.exchangeCapabilities(
+                [MobileTransferCapabilities.encryption: 1],
+                desktop: desktop
+            )
+            let encryptionEnabled = (response.capabilities?[MobileTransferCapabilities.encryption] ?? 0) == 1
+            if updatedDesktop.encryptionEnabled != encryptionEnabled {
+                updatedDesktop.encryptionEnabled = encryptionEnabled
+                await trustedDesktopStore.saveTrustedDesktop(updatedDesktop)
+            }
+            return updatedDesktop
+        } catch {
+            if updatedDesktop.encryptionEnabled {
+                updatedDesktop.encryptionEnabled = false
+                await trustedDesktopStore.saveTrustedDesktop(updatedDesktop)
+            }
+            return updatedDesktop
+        }
     }
 
     @discardableResult
