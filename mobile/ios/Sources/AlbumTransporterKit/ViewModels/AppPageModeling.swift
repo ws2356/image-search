@@ -35,3 +35,14 @@ protocol PermissionsPageModeling: AppPageModeling {
 }
 
 extension MobileAppModel: PermissionsPageModeling {}
+
+@MainActor
+protocol TransferPageModeling: AppPageModeling {
+    var isShowingStopConfirmation: Bool { get set }
+
+    func confirmStopTransfer() async
+    func recordDialogView(name: String)
+    func recordInteraction(name: String, location: String)
+}
+
+extension MobileAppModel: TransferPageModeling {}

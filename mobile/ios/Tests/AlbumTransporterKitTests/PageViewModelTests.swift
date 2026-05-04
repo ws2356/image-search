@@ -74,7 +74,7 @@ final class PageViewModelTests: XCTestCase {
 }
 
 @MainActor
-private final class StubPageModel: PermissionsPageModeling {
+private final class StubPageModel: PermissionsPageModeling, TransferPageModeling {
     var homeSummary = HomeSummary.firstLaunch
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
@@ -85,6 +85,7 @@ private final class StubPageModel: PermissionsPageModeling {
     var isShowingLowBatteryWarning = false
     var isShowingMediaAccessAlert = false
     var isShowingRemoveAfterBackupPrompt = false
+    var isShowingStopConfirmation = false
     var mediaAccessAlertMessage = "Media access recommended."
 
     var handleHomePrimaryActionCallCount = 0
@@ -123,6 +124,8 @@ private final class StubPageModel: PermissionsPageModeling {
     func requestStopTransfer() {
         requestStopTransferCallCount += 1
     }
+
+    func confirmStopTransfer() async {}
 
     func continuePastLowBatteryWarning() async {}
 

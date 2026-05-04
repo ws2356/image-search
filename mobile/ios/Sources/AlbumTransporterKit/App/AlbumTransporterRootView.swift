@@ -26,27 +26,6 @@ public struct AlbumTransporterRootView: View {
             .task(id: model.route) {
                 model.recordPageView(name: model.route.rawValue)
             }
-            .onChange(of: model.isShowingStopConfirmation) { isPresented in
-                guard isPresented else { return }
-                model.recordDialogView(name: "stop_confirmation")
-            }
-            .confirmationDialog(
-                "Stop backup?",
-                isPresented: $model.isShowingStopConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Stop Sending More Items", role: .destructive) {
-                    model.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
-                    Task {
-                        await model.confirmStopTransfer()
-                    }
-                }
-                Button("Keep Backing Up", role: .cancel) {
-                    model.recordInteraction(name: "stop_cancelled", location: "stop_confirmation")
-                }
-            } message: {
-                Text("The desktop may continue indexing items that already transferred before the stop request.")
-            }
             .confirmationDialog(
                 "Start a new backup session?",
                 isPresented: $model.isShowingIncomingLinkReplacementConfirmation,
@@ -172,13 +151,7 @@ public struct AlbumTransporterRootView: View {
             PermissionsGateView(viewModel: permissionsViewModel)
         case .transfer:
             let transferViewModel = TransferPageViewModel(model: model)
-            TransferSessionView(
-                snapshot: transferViewModel.snapshot,
-                onStop: {
-                    model.recordInteraction(name: "stop_backup_tapped", location: "transfer")
-                    transferViewModel.requestStopTransfer()
-                }
-            )
+            TransferSessionView(viewModel: transferViewModel)
         case .completed:
             let completionViewModel = CompletionPageViewModel(model: model)
             CompletionStateView(

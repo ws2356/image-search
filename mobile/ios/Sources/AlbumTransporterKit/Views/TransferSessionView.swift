@@ -1,11 +1,10 @@
 import SwiftUI
 
 struct TransferSessionView: View {
-    let snapshot: TransferSnapshot
-    let onStop: () -> Void
+    let viewModel: TransferPageViewModel
 
     private var progressPercent: Int {
-        Int(snapshot.progress * 100)
+        Int(viewModel.snapshot.progress * 100)
     }
 
     var body: some View {
@@ -17,7 +16,7 @@ struct TransferSessionView: View {
 
                 statsGrid
 
-                if let eta = snapshot.etaDescription {
+                if let eta = viewModel.snapshot.etaDescription {
                     VStack(spacing: 4) {
                         Text("Estimated time")
                             .font(.system(size: 13))
@@ -35,7 +34,7 @@ struct TransferSessionView: View {
 
                 guidanceHint
 
-                if snapshot.isIncompleteLibrary {
+                if viewModel.snapshot.isIncompleteLibrary {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
@@ -50,7 +49,7 @@ struct TransferSessionView: View {
                 }
 
                 VStack(spacing: 10) {
-                    Button(action: onStop) {
+                    Button(action: viewModel.requestStopTransfer) {
                         HStack(spacing: 6) {
                             Image(systemName: "stop.fill")
                             Text("Stop Backup")
@@ -69,11 +68,31 @@ struct TransferSessionView: View {
             .padding(.vertical, 16)
         }
         .compatibleScrollBounceBasedOnSize()
+        .onChange(of: viewModel.isShowingStopConfirmation) { isPresented in
+            guard isPresented else { return }
+            viewModel.recordStopConfirmationPresented()
+        }
+        .confirmationDialog(
+            "Stop backup?",
+            isPresented: viewModel.isShowingStopConfirmationBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Stop Sending More Items", role: .destructive) {
+                Task {
+                    await viewModel.confirmStopTransfer()
+                }
+            }
+            Button("Keep Backing Up", role: .cancel) {
+                viewModel.keepBackingUp()
+            }
+        } message: {
+            Text("The desktop may continue indexing items that already transferred before the stop request.")
+        }
     }
 
     private var transportBadges: some View {
         HStack(spacing: 6) {
-            ForEach(snapshot.activeTransportsForDisplay, id: \.rawValue) { transport in
+            ForEach(viewModel.snapshot.activeTransportsForDisplay, id: \.rawValue) { transport in
                 transportBadge(for: transport)
             }
         }
@@ -99,7 +118,7 @@ struct TransferSessionView: View {
                 .stroke(Color(hex: 0xE5E5EA), lineWidth: 12)
 
             Circle()
-                .trim(from: 0, to: snapshot.progress)
+                .trim(from: 0, to: viewModel.snapshot.progress)
                 .stroke(
                     transportColor,
                     style: StrokeStyle(lineWidth: 12, lineCap: .round)
@@ -110,7 +129,7 @@ struct TransferSessionView: View {
                 Text("\(progressPercent)%")
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(Color(hex: 0x1C1C1E))
-                Text(snapshot.transferSpeedText ?? "0.00 MB/s")
+                Text(viewModel.snapshot.transferSpeedText ?? "0.00 MB/s")
                     .font(.system(size: 13))
                     .foregroundStyle(Color(hex: 0x6E6E73))
             }
@@ -121,11 +140,15 @@ struct TransferSessionView: View {
 
     private var statsGrid: some View {
         HStack(spacing: 0) {
-            statColumn(label: "Sent", value: "\(snapshot.transferredCount)", color: Color(hex: 0x30D158))
+            statColumn(label: "Sent", value: "\(viewModel.snapshot.transferredCount)", color: Color(hex: 0x30D158))
             Divider().frame(height: 40)
-            statColumn(label: "Remaining", value: "\(snapshot.totalCount - snapshot.transferredCount)", color: Color(hex: 0x007AFF))
+            statColumn(
+                label: "Remaining",
+                value: "\(viewModel.snapshot.totalCount - viewModel.snapshot.transferredCount)",
+                color: Color(hex: 0x007AFF)
+            )
             Divider().frame(height: 40)
-            statColumn(label: "Failed", value: "\(snapshot.failedCount)", color: Color(hex: 0xFF453A))
+            statColumn(label: "Failed", value: "\(viewModel.snapshot.failedCount)", color: Color(hex: 0xFF453A))
         }
         .padding(.vertical, 14)
         .background(Color.white)
@@ -147,21 +170,21 @@ struct TransferSessionView: View {
 
     private var guidanceHint: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: snapshot.transport == .usb ? "checkmark.circle.fill" : "bolt.horizontal.fill")
-                .foregroundStyle(snapshot.transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x3B5FC0))
-            Text(snapshot.guidanceMessage)
+            Image(systemName: viewModel.snapshot.transport == .usb ? "checkmark.circle.fill" : "bolt.horizontal.fill")
+                .foregroundStyle(viewModel.snapshot.transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x3B5FC0))
+            Text(viewModel.snapshot.guidanceMessage)
                 .font(.system(size: 13))
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(snapshot.transport == .usb ? Color(hex: 0xE6F9ED) : Color(hex: 0xEEF2FF))
+        .background(viewModel.snapshot.transport == .usb ? Color(hex: 0xE6F9ED) : Color(hex: 0xEEF2FF))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var transportColor: Color {
-        snapshot.transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x007AFF)
+        viewModel.snapshot.transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x007AFF)
     }
 
     private func transportColor(for transport: TransferTransport) -> Color {

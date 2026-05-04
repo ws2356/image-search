@@ -34,11 +34,9 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
     }
 
     func test_transfer_in_progress_page() throws {
+        let transferModel = SnapshotTransferPageModel(snapshot: .snapshotMarketing)
         let viewController = makeHostedPage(title: "Backup in Progress") {
-            TransferSessionView(
-                snapshot: .snapshotMarketing,
-                onStop: {}
-            )
+            TransferSessionView(viewModel: TransferPageViewModel(model: transferModel))
         }
         try SnapshotSupport.assertSnapshot(pageName: "transfer-in-progress", viewController: viewController)
     }
@@ -89,4 +87,31 @@ private extension CompletionSummary {
         durationDescription: "24 min",
         completedAtDescription: "Today at 2:41 PM"
     )
+}
+
+@MainActor
+private final class SnapshotTransferPageModel: TransferPageModeling {
+    var homeSummary = HomeSummary.firstLaunch
+    var pairingStatus = PairingStatus.idle
+    var permissionSummary = PermissionSummary.demo
+    var removeAfterBackupEnabled = false
+    var transferSnapshot: TransferSnapshot
+    var completionSummary = CompletionSummary.demo
+    var scannedQRCodeValue = ""
+    var isShowingStopConfirmation = false
+
+    init(snapshot: TransferSnapshot) {
+        self.transferSnapshot = snapshot
+    }
+
+    func handleHomePrimaryAction() async {}
+    func openScanFlow() async {}
+    func beginPairing() async {}
+    func returnHome() async {}
+    func startBackup() async {}
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
+    func requestStopTransfer() {}
+    func confirmStopTransfer() async {}
+    func recordDialogView(name: String) {}
+    func recordInteraction(name: String, location: String) {}
 }
