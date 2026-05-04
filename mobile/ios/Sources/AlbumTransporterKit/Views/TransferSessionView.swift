@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TransferSessionView: View {
-    let viewModel: TransferPageViewModel
+    @ObservedObject var viewModel: TransferPageViewModel
 
     private var progressPercent: Int {
         Int(viewModel.snapshot.progress * 100)

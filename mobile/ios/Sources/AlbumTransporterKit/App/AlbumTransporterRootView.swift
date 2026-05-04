@@ -8,13 +8,18 @@ import UIKit
 @MainActor
 public struct AlbumTransporterRootView: View {
     @StateObject private var model: MobileAppModel
+    @StateObject private var permissionsViewModel: PermissionsPageViewModel
+    @StateObject private var transferViewModel: TransferPageViewModel
 
     public init() {
         self.init(container: .shared)
     }
 
     init(container: Container) {
-        _model = StateObject(wrappedValue: container.mobileAppModel())
+        let model = container.mobileAppModel()
+        _model = StateObject(wrappedValue: model)
+        _permissionsViewModel = StateObject(wrappedValue: PermissionsPageViewModel(model: model))
+        _transferViewModel = StateObject(wrappedValue: TransferPageViewModel(model: model))
     }
 
     public var body: some View {
@@ -101,10 +106,8 @@ public struct AlbumTransporterRootView: View {
             let pairingViewModel = PairingPageViewModel(model: model)
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
-            let permissionsViewModel = PermissionsPageViewModel(model: model)
             PermissionsGateView(viewModel: permissionsViewModel)
         case .transfer:
-            let transferViewModel = TransferPageViewModel(model: model)
             TransferSessionView(viewModel: transferViewModel)
         case .completed:
             let completionViewModel = CompletionPageViewModel(model: model)

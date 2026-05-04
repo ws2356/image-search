@@ -4,7 +4,7 @@ import Photos
 #endif
 
 struct PermissionsGateView: View {
-    let viewModel: PermissionsPageViewModel
+    @ObservedObject var viewModel: PermissionsPageViewModel
 
     var body: some View {
         ScrollView {
@@ -62,7 +62,7 @@ struct PermissionsGateView: View {
             guard isPresented else { return }
             viewModel.recordRemoveAfterBackupDialogPresented()
         }
-        .alert("Low battery detected", isPresented: viewModel.isShowingLowBatteryWarningBinding) {
+        .alert("Low battery detected", isPresented: $viewModel.isShowingLowBatteryWarning) {
             Button("Continue Anyway") {
                 Task {
                     await viewModel.continuePastLowBattery()
@@ -76,7 +76,7 @@ struct PermissionsGateView: View {
         } message: {
             Text("Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.")
         }
-        .alert("Full media access recommended", isPresented: viewModel.isShowingMediaAccessAlertBinding) {
+        .alert("Full media access recommended", isPresented: $viewModel.isShowingMediaAccessAlert) {
 #if os(iOS)
             Button("Update") {
                 viewModel.updateMediaAccessTapped()
@@ -95,7 +95,7 @@ struct PermissionsGateView: View {
         } message: {
             Text(viewModel.mediaAccessAlertMessage)
         }
-        .alert("After backup, remove transferred media?", isPresented: viewModel.isShowingRemoveAfterBackupPromptBinding) {
+        .alert("After backup, remove transferred media?", isPresented: $viewModel.isShowingRemoveAfterBackupPrompt) {
             Button("Remove", role: .destructive) {
                 Task {
                     await viewModel.selectRemoveAfterBackupPreference(true)

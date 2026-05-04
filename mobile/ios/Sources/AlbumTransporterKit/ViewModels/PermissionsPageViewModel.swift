@@ -1,8 +1,18 @@
 import SwiftUI
 
 @MainActor
-struct PermissionsPageViewModel {
+final class PermissionsPageViewModel: ObservableObject {
     private let model: any PermissionsPageModeling
+
+    @Published var isShowingLowBatteryWarning = false
+    @Published var isShowingMediaAccessAlert = false
+    @Published var isShowingRemoveAfterBackupPrompt = false
+    @Published var mediaAccessAlertMessage = "Do you want to expand access permission to back up more or all media files in your photo library?"
+
+    private var isAwaitingMediaAccessDecision = false
+    private var isAwaitingLowBatteryDecision = false
+    private var isAwaitingRemoveAfterBackupDecision = false
+    private var isRunningPermissionsPreflight = false
 
     init(model: any PermissionsPageModeling) {
         self.model = model
@@ -16,50 +26,39 @@ struct PermissionsPageViewModel {
         model.removeAfterBackupEnabled
     }
 
-    var isShowingLowBatteryWarning: Bool {
-        model.isShowingLowBatteryWarning
-    }
-
-    var isShowingMediaAccessAlert: Bool {
-        model.isShowingMediaAccessAlert
-    }
-
-    var isShowingRemoveAfterBackupPrompt: Bool {
-        model.isShowingRemoveAfterBackupPrompt
-    }
-
-    var mediaAccessAlertMessage: String {
-        model.mediaAccessAlertMessage
-    }
-
-    var isShowingLowBatteryWarningBinding: Binding<Bool> {
-        Binding(
-            get: { model.isShowingLowBatteryWarning },
-            set: { model.isShowingLowBatteryWarning = $0 }
-        )
-    }
-
-    var isShowingMediaAccessAlertBinding: Binding<Bool> {
-        Binding(
-            get: { model.isShowingMediaAccessAlert },
-            set: { model.isShowingMediaAccessAlert = $0 }
-        )
-    }
-
-    var isShowingRemoveAfterBackupPromptBinding: Binding<Bool> {
-        Binding(
-            get: { model.isShowingRemoveAfterBackupPrompt },
-            set: { model.isShowingRemoveAfterBackupPrompt = $0 }
-        )
-    }
-
     func startPreflight() async {
+        guard !isRunningPermissionsPreflight else {
+            return
+        }
+        isRunningPermissionsPreflight = true
+        resetPromptState()
+
+        let permissionSummary = await model.permissionService.loadPermissionSummary()
+        model.permissionSummary = permissionSummary
+        model.beginTelemetrySpan(.backupPreflight, attributes: [:])
+        model.recordTelemetry(.backupPreflightStarted, attributes: [:])
         model.recordInteraction(name: "start_backup_tapped", location: "permissions")
-        await model.startBackup()
+
+        guard permissionSummary.mediaScope == .full else {
+            isShowingMediaAccessAlert = true
+            isAwaitingMediaAccessDecision = true
+            model.recordTelemetry(
+                .mediaAccessPromptShown,
+                attributes: [
+                    "permission.excluded_category_present": .bool(
+                        permissionSummary.excludedCategoryDescription != nil
+                    )
+                ]
+            )
+            model.persistSnapshot()
+            return
+        }
+
+        await continueBackupPreflight()
     }
 
     func startBackup() async {
-        await model.startBackup()
+        await startPreflight()
     }
 
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
@@ -67,6 +66,7 @@ struct PermissionsPageViewModel {
     }
 
     func goBack() async {
+        resetPromptState()
         await model.returnHome()
     }
 
@@ -83,13 +83,26 @@ struct PermissionsPageViewModel {
     }
 
     func continuePastLowBattery() async {
+        guard isAwaitingLowBatteryDecision else {
+            return
+        }
+        isAwaitingLowBatteryDecision = false
+        isShowingLowBatteryWarning = false
         model.recordInteraction(name: "continue_anyway_tapped", location: "low_battery_warning")
-        await model.continuePastLowBatteryWarning()
+        model.recordTelemetry(.lowBatteryContinued, attributes: [:])
+        presentRemoveAfterBackupPrompt()
     }
 
     func cancelFromLowBattery() async {
+        guard isAwaitingLowBatteryDecision else {
+            return
+        }
+        isAwaitingLowBatteryDecision = false
+        isShowingLowBatteryWarning = false
         model.recordInteraction(name: "not_now_tapped", location: "low_battery_warning")
-        await model.cancelBackupFromLowBatteryWarning()
+        model.recordTelemetry(.lowBatteryCanceled, attributes: [:])
+        resetPromptState()
+        await model.abortPreflightAndReturnHome(reason: "low_battery_declined")
     }
 
     func updateMediaAccessTapped() {
@@ -97,19 +110,70 @@ struct PermissionsPageViewModel {
     }
 
     func continueAfterMediaAccessUpdate() async {
-        await model.continueBackupFromMediaAccess()
+        await continueBackupFromMediaAccess()
     }
 
     func continueBackupFromMediaAccessNotNow() async {
         model.recordInteraction(name: "not_now_tapped", location: "media_access_alert")
-        await model.continueBackupFromMediaAccess()
+        await continueBackupFromMediaAccess()
     }
 
     func selectRemoveAfterBackupPreference(_ shouldRemove: Bool) async {
+        guard isAwaitingRemoveAfterBackupDecision else {
+            return
+        }
+        isAwaitingRemoveAfterBackupDecision = false
+        isShowingRemoveAfterBackupPrompt = false
         model.recordInteraction(
             name: shouldRemove ? "remove_after_backup_selected" : "keep_originals_selected",
             location: "remove_after_backup_prompt"
         )
-        await model.selectRemoveAfterBackupPreferenceAndContinue(shouldRemove)
+        model.recordTelemetry(
+            .removeAfterBackupPreferenceSelected,
+            attributes: [
+                "backup.remove_after_backup_enabled": .bool(shouldRemove)
+            ]
+        )
+        model.setRemoveAfterBackupEnabled(shouldRemove)
+        isRunningPermissionsPreflight = false
+        await model.startTransfer()
+    }
+
+    private func continueBackupFromMediaAccess() async {
+        guard isAwaitingMediaAccessDecision else {
+            return
+        }
+        isAwaitingMediaAccessDecision = false
+        isShowingMediaAccessAlert = false
+        model.recordTelemetry(.mediaAccessContinued, attributes: [:])
+        await continueBackupPreflight()
+    }
+
+    private func continueBackupPreflight() async {
+        if model.permissionSummary.lowBatteryWarningNeeded && !model.permissionSummary.isCharging {
+            isShowingLowBatteryWarning = true
+            isAwaitingLowBatteryDecision = true
+            model.recordTelemetry(.lowBatteryPromptShown, attributes: [:])
+            model.persistSnapshot()
+            return
+        }
+
+        presentRemoveAfterBackupPrompt()
+    }
+
+    private func presentRemoveAfterBackupPrompt() {
+        isShowingRemoveAfterBackupPrompt = true
+        isAwaitingRemoveAfterBackupDecision = true
+        model.recordTelemetry(.removeAfterBackupPromptShown, attributes: [:])
+        model.persistSnapshot()
+    }
+
+    private func resetPromptState() {
+        isAwaitingMediaAccessDecision = false
+        isAwaitingLowBatteryDecision = false
+        isAwaitingRemoveAfterBackupDecision = false
+        isShowingMediaAccessAlert = false
+        isShowingLowBatteryWarning = false
+        isShowingRemoveAfterBackupPrompt = false
     }
 }

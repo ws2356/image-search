@@ -55,15 +55,16 @@ final class MobileAppModelTests: XCTestCase {
             transferService: StaticTransferService(),
             telemetryClient: RecordingTelemetryClient()
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
+        await permissionsViewModel.startPreflight()
 
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertTrue(model.isShowingLowBatteryWarning)
+        XCTAssertTrue(permissionsViewModel.isShowingLowBatteryWarning)
     }
 
     func test_begin_pairing_returns_home_when_desktop_stops_pairing() async {
@@ -102,20 +103,21 @@ final class MobileAppModelTests: XCTestCase {
             transferService: StaticTransferService(),
             telemetryClient: RecordingTelemetryClient()
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
+        await permissionsViewModel.startPreflight()
 
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertTrue(model.isShowingMediaAccessAlert)
-        XCTAssertFalse(model.mediaAccessAlertMessage.isEmpty)
+        XCTAssertTrue(permissionsViewModel.isShowingMediaAccessAlert)
+        XCTAssertFalse(permissionsViewModel.mediaAccessAlertMessage.isEmpty)
 
-        await model.continueBackupWithCurrentMediaAccess()
-        XCTAssertTrue(model.isShowingRemoveAfterBackupPrompt)
-        await model.selectRemoveAfterBackupPreferenceAndContinue(false)
+        await permissionsViewModel.continueBackupFromMediaAccessNotNow()
+        XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
+        await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         XCTAssertEqual(model.route, .completed)
     }
 
@@ -137,15 +139,16 @@ final class MobileAppModelTests: XCTestCase {
             transferService: transferService,
             telemetryClient: RecordingTelemetryClient()
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
-        XCTAssertTrue(model.isShowingLowBatteryWarning)
+        await permissionsViewModel.startPreflight()
+        XCTAssertTrue(permissionsViewModel.isShowingLowBatteryWarning)
 
-        await model.cancelBackupFromLowBatteryWarning()
+        await permissionsViewModel.cancelFromLowBattery()
 
         XCTAssertEqual(model.route, .home)
         XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
@@ -186,6 +189,7 @@ final class MobileAppModelTests: XCTestCase {
             telemetryClient: RecordingTelemetryClient(),
             transferProgressPollingIntervalNanoseconds: 10_000_000
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
@@ -193,7 +197,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.beginPairing()
 
         let transferTask = Task {
-            await model.startBackup()
+            await permissionsViewModel.startPreflight()
         }
         try? await Task.sleep(nanoseconds: 30_000_000)
         model.requestStopTransfer()
@@ -242,6 +246,7 @@ final class MobileAppModelTests: XCTestCase {
             telemetryClient: RecordingTelemetryClient(),
             transferProgressPollingIntervalNanoseconds: 10_000_000
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
@@ -249,11 +254,11 @@ final class MobileAppModelTests: XCTestCase {
         await model.beginPairing()
 
         let transferTask = Task {
-            await model.startBackup()
+            await permissionsViewModel.startPreflight()
         }
         try? await Task.sleep(nanoseconds: 10_000_000)
-        XCTAssertTrue(model.isShowingRemoveAfterBackupPrompt)
-        await model.selectRemoveAfterBackupPreferenceAndContinue(false)
+        XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
+        await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         try? await Task.sleep(nanoseconds: 30_000_000)
 
         XCTAssertTrue(model.route == .transfer || model.route == .completed)
@@ -267,6 +272,57 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.completionSummary.totalTransferredDescription, "5/5")
         XCTAssertNotNil(model.completionSummary.durationDescription)
         XCTAssertNotNil(model.completionSummary.completedAtDescription)
+    }
+
+    func test_start_backup_updates_transfer_snapshot_from_progress_callback() async {
+        let inFlightSnapshot = TransferSnapshot(
+            transferredCount: 4,
+            totalCount: 10,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: "3 min remaining",
+            statusMessage: "Sending media to desktop.",
+            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
+            isIncompleteLibrary: false
+        )
+        let finalSnapshot = TransferSnapshot(
+            transferredCount: 10,
+            totalCount: 10,
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
+            guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
+            isIncompleteLibrary: false
+        )
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: CallbackOnlyTransferService(
+                inFlightSnapshot: inFlightSnapshot,
+                finalSnapshot: finalSnapshot
+            ),
+            telemetryClient: RecordingTelemetryClient(),
+            transferProgressPollingIntervalNanoseconds: 10_000_000
+        )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await permissionsViewModel.startPreflight()
+        await permissionsViewModel.selectRemoveAfterBackupPreference(false)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(model.transferSnapshot.totalCount, 10)
+        XCTAssertGreaterThanOrEqual(model.transferSnapshot.transferredCount, 4)
+
+        try? await Task.sleep(nanoseconds: 180_000_000)
+        XCTAssertEqual(model.route, .completed)
+        XCTAssertEqual(model.transferSnapshot.transferredCount, 10)
     }
 
     func test_qr_payload_decoder_uses_url_query_format() {
@@ -379,14 +435,15 @@ final class MobileAppModelTests: XCTestCase {
             telemetryClient: RecordingTelemetryClient(),
             transferProgressPollingIntervalNanoseconds: 10_000_000
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
+        await permissionsViewModel.startPreflight()
         let transferTask = Task {
-            await model.selectRemoveAfterBackupPreferenceAndContinue(false)
+            await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         }
         try? await Task.sleep(nanoseconds: 40_000_000)
         XCTAssertEqual(model.route, .transfer)
@@ -436,14 +493,15 @@ final class MobileAppModelTests: XCTestCase {
             telemetryClient: RecordingTelemetryClient(),
             transferProgressPollingIntervalNanoseconds: 10_000_000
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
+        await permissionsViewModel.startPreflight()
         let transferTask = Task {
-            await model.selectRemoveAfterBackupPreferenceAndContinue(false)
+            await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         }
         try? await Task.sleep(nanoseconds: 40_000_000)
         XCTAssertEqual(model.route, .transfer)
@@ -521,15 +579,16 @@ final class MobileAppModelTests: XCTestCase {
             transferService: transferService,
             telemetryClient: RecordingTelemetryClient()
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         model.setRemoveAfterBackupEnabled(true)
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
-        XCTAssertTrue(model.isShowingRemoveAfterBackupPrompt)
-        await model.selectRemoveAfterBackupPreferenceAndContinue(true)
+        await permissionsViewModel.startPreflight()
+        XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
+        await permissionsViewModel.selectRemoveAfterBackupPreference(true)
 
         let cleanupCallCount = await transferService.cleanupCallCount()
         XCTAssertEqual(cleanupCallCount, 1)
@@ -589,13 +648,14 @@ final class MobileAppModelTests: XCTestCase {
             transferService: transferService,
             telemetryClient: telemetryClient
         )
+        let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
-        await model.startBackup()
-        await model.selectRemoveAfterBackupPreferenceAndContinue(true)
+        await permissionsViewModel.startPreflight()
+        await permissionsViewModel.selectRemoveAfterBackupPreference(true)
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         let preflightRecord = await telemetryClient.latestRecord(for: .backupPreflightStarted)
@@ -801,6 +861,44 @@ private actor CleanupTrackingTransferService: TransferService {
 
     func cleanupCallCount() -> Int {
         cleanupCalls
+    }
+}
+
+private actor CallbackOnlyTransferService: TransferService {
+    private let inFlightSnapshot: TransferSnapshot
+    private let finalSnapshot: TransferSnapshot
+
+    init(inFlightSnapshot: TransferSnapshot, finalSnapshot: TransferSnapshot) {
+        self.inFlightSnapshot = inFlightSnapshot
+        self.finalSnapshot = finalSnapshot
+    }
+
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(inFlightSnapshot)
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        progress(finalSnapshot)
+        return finalSnapshot
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        .stoppedByUser
+    }
+
+    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(snapshot)
+        return snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        nil
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
     }
 }
 

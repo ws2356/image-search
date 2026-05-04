@@ -12,7 +12,6 @@ protocol AppPageModeling: AnyObject {
     func openScanFlow() async
     func beginPairing() async
     func returnHome() async
-    func startBackup() async
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool)
     func requestStopTransfer()
     func recordInteraction(name: String, location: String)
@@ -22,15 +21,14 @@ extension MobileAppModel: AppPageModeling {}
 
 @MainActor
 protocol PermissionsPageModeling: AppPageModeling {
-    var isShowingLowBatteryWarning: Bool { get set }
-    var isShowingMediaAccessAlert: Bool { get set }
-    var isShowingRemoveAfterBackupPrompt: Bool { get set }
-    var mediaAccessAlertMessage: String { get }
+    var permissionSummary: PermissionSummary { get set }
+    var permissionService: PermissionService { get }
 
-    func continuePastLowBatteryWarning() async
-    func cancelBackupFromLowBatteryWarning() async
-    func continueBackupFromMediaAccess() async
-    func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes)
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes)
+    func persistSnapshot()
+    func abortPreflightAndReturnHome(reason: String) async
+    func startTransfer() async
     func recordDialogView(name: String)
 }
 

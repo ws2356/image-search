@@ -1,11 +1,18 @@
 import SwiftUI
+import Combine
 
 @MainActor
-struct TransferPageViewModel {
+final class TransferPageViewModel: ObservableObject {
     private let model: any TransferPageModeling
+    private var modelChangeCancellable: AnyCancellable?
 
     init(model: any TransferPageModeling) {
         self.model = model
+        if let observableModel = model as? MobileAppModel {
+            modelChangeCancellable = observableModel.objectWillChange.sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+        }
     }
 
     var snapshot: TransferSnapshot {
@@ -18,8 +25,8 @@ struct TransferPageViewModel {
 
     var isShowingStopConfirmationBinding: Binding<Bool> {
         Binding(
-            get: { model.isShowingStopConfirmation },
-            set: { model.isShowingStopConfirmation = $0 }
+            get: { self.model.isShowingStopConfirmation },
+            set: { self.model.isShowingStopConfirmation = $0 }
         )
     }
 

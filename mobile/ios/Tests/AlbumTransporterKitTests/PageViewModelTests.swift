@@ -43,12 +43,17 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.removeAfterBackupEnabled, model.removeAfterBackupEnabled)
 
         viewModel.setRemoveAfterBackupEnabled(true)
-        await viewModel.startBackup()
+        await viewModel.startPreflight()
+        XCTAssertTrue(viewModel.isShowingMediaAccessAlert)
         await viewModel.goBack()
 
         XCTAssertEqual(model.setRemoveAfterBackupEnabledCallCount, 1)
         XCTAssertTrue(model.removeAfterBackupEnabled)
-        XCTAssertEqual(model.startBackupCallCount, 1)
+        let loadCallCount = await model.permissionServiceLoadCallCount()
+        XCTAssertEqual(loadCallCount, 1)
+        XCTAssertEqual(model.beginTelemetrySpanCallCount, 1)
+        XCTAssertEqual(model.recordedTelemetryEvents.first, .backupPreflightStarted)
+        XCTAssertFalse(viewModel.isShowingMediaAccessAlert)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
@@ -87,14 +92,17 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var isShowingRemoveAfterBackupPrompt = false
     var isShowingStopConfirmation = false
     var mediaAccessAlertMessage = "Media access recommended."
+    let permissionServiceActor = StubPermissionService(summary: .demo)
+    var permissionService: PermissionService { permissionServiceActor }
 
     var handleHomePrimaryActionCallCount = 0
     var openScanFlowCallCount = 0
     var beginPairingCallCount = 0
     var returnHomeCallCount = 0
-    var startBackupCallCount = 0
     var setRemoveAfterBackupEnabledCallCount = 0
     var requestStopTransferCallCount = 0
+    var beginTelemetrySpanCallCount = 0
+    var recordedTelemetryEvents: [MobileTelemetryEvent] = []
 
     func handleHomePrimaryAction() async {
         handleHomePrimaryActionCallCount += 1
@@ -112,10 +120,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         returnHomeCallCount += 1
     }
 
-    func startBackup() async {
-        startBackupCallCount += 1
-    }
-
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
         removeAfterBackupEnabled = isEnabled
         setRemoveAfterBackupEnabledCallCount += 1
@@ -127,15 +131,48 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
 
     func confirmStopTransfer() async {}
 
-    func continuePastLowBatteryWarning() async {}
+    func permissionServiceLoadCallCount() async -> Int {
+        await permissionServiceActor.loadCallCount()
+    }
 
-    func cancelBackupFromLowBatteryWarning() async {}
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {
+        _ = span
+        _ = attributes
+        beginTelemetrySpanCallCount += 1
+    }
 
-    func continueBackupFromMediaAccess() async {}
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {
+        _ = attributes
+        recordedTelemetryEvents.append(event)
+    }
 
-    func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async {}
+    func persistSnapshot() {}
+
+    func abortPreflightAndReturnHome(reason: String) async {
+        _ = reason
+    }
+
+    func startTransfer() async {}
 
     func recordDialogView(name: String) {}
 
     func recordInteraction(name: String, location: String) {}
+}
+
+private actor StubPermissionService: PermissionService {
+    private var summary: PermissionSummary
+    private var loadPermissionSummaryCallCount = 0
+
+    init(summary: PermissionSummary) {
+        self.summary = summary
+    }
+
+    func loadPermissionSummary() async -> PermissionSummary {
+        loadPermissionSummaryCallCount += 1
+        return summary
+    }
+
+    func loadCallCount() -> Int {
+        loadPermissionSummaryCallCount
+    }
 }

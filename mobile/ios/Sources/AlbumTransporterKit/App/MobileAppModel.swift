@@ -8,7 +8,7 @@ import Combine
 final class MobileAppModel: ObservableObject {
     @Published private(set) var route: AppRoute = .home
     @Published private(set) var homeSummary = HomeSummary.firstLaunch
-    @Published private(set) var permissionSummary = PermissionSummary.demo
+    @Published var permissionSummary = PermissionSummary.demo
     @Published private(set) var removeAfterBackupEnabled = false
     @Published private(set) var pairingStatus = PairingStatus.idle
     @Published private(set) var transferSnapshot = TransferSnapshot.demo
@@ -16,27 +16,19 @@ final class MobileAppModel: ObservableObject {
     @Published var scannedQRCodeValue = ""
 
     @Published var isShowingStopConfirmation = false
-    @Published var isShowingLowBatteryWarning = false
-    @Published var isShowingMediaAccessAlert = false
-    @Published var isShowingRemoveAfterBackupPrompt = false
     @Published var isShowingIncomingLinkReplacementConfirmation = false
-    @Published var mediaAccessAlertMessage = "Do you want to expand access permission to back up more or all media files in your photo library?"
 
     private var hasLoaded = false
     private var transferProgressPollingTask: Task<Void, Never>?
     private let transferProgressPollingIntervalNanoseconds: UInt64
     private var transferStartedAt: Date?
-    private var isAwaitingMediaAccessDecision = false
-    private var isAwaitingLowBatteryDecision = false
-    private var isAwaitingRemoveAfterBackupDecision = false
-    private var isRunningPermissionsPreflight = false
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
     private let universalLinkHost = "dl.boldman.net"
     private let stateStore: AppStateStore
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
     private let pairingService: PairingService
-    private let permissionService: PermissionService
+    let permissionService: PermissionService
     private let transferService: TransferService
     private let sideEffectWorker: MobileAppSideEffectWorker
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
@@ -303,53 +295,6 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    func startBackup() async {
-        guard route == .permissions else {
-            return
-        }
-        guard !isRunningPermissionsPreflight else {
-            return
-        }
-        isRunningPermissionsPreflight = true
-        isAwaitingLowBatteryDecision = false
-        isAwaitingRemoveAfterBackupDecision = false
-        isShowingMediaAccessAlert = false
-        isShowingLowBatteryWarning = false
-        isShowingRemoveAfterBackupPrompt = false
-        isAwaitingMediaAccessDecision = false
-        permissionSummary = await permissionService.loadPermissionSummary()
-        beginTelemetrySpan(.backupPreflight)
-        recordTelemetry(.backupPreflightStarted)
-        guard permissionSummary.mediaScope == .full else {
-            isShowingMediaAccessAlert = true
-            isAwaitingMediaAccessDecision = true
-            recordTelemetry(
-                .mediaAccessPromptShown,
-                attributes: [
-                    "permission.excluded_category_present": .bool(permissionSummary.excludedCategoryDescription != nil)
-                ]
-            )
-            persistSnapshot()
-            return
-        }
-
-        await continueBackupPreflight()
-    }
-
-    func continueBackupFromMediaAccess() async {
-        guard isAwaitingMediaAccessDecision else {
-            return
-        }
-        isAwaitingMediaAccessDecision = false
-        isShowingMediaAccessAlert = false
-        recordTelemetry(.mediaAccessContinued)
-        await continueBackupPreflight()
-    }
-
-    func continueBackupWithCurrentMediaAccess() async {
-        await continueBackupFromMediaAccess()
-    }
-    
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
         guard removeAfterBackupEnabled != isEnabled else {
             return
@@ -358,72 +303,9 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    func continueBackupPreflight() async {
-        if permissionSummary.lowBatteryWarningNeeded && !permissionSummary.isCharging {
-            isShowingLowBatteryWarning = true
-            isAwaitingLowBatteryDecision = true
-            recordTelemetry(.lowBatteryPromptShown)
-            persistSnapshot()
-            return
-        }
-
-        presentRemoveAfterBackupPrompt()
-    }
-
-    private func presentRemoveAfterBackupPrompt() {
-        isShowingRemoveAfterBackupPrompt = true
-        isAwaitingRemoveAfterBackupDecision = true
-        recordTelemetry(.removeAfterBackupPromptShown)
-        persistSnapshot()
-    }
-
-    func continuePastLowBatteryWarning() async {
-        guard isAwaitingLowBatteryDecision else {
-            return
-        }
-        isAwaitingLowBatteryDecision = false
-        isShowingLowBatteryWarning = false
-        recordTelemetry(.lowBatteryContinued)
-        presentRemoveAfterBackupPrompt()
-    }
-
-    func cancelBackupFromLowBatteryWarning() async {
-        guard isAwaitingLowBatteryDecision else {
-            return
-        }
-        isAwaitingLowBatteryDecision = false
-        isShowingLowBatteryWarning = false
-        recordTelemetry(.lowBatteryCanceled)
-        await abortPreflightAndReturnHome(reason: "low_battery_declined")
-    }
-
-    func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async {
-        guard isAwaitingRemoveAfterBackupDecision else {
-            return
-        }
-        isAwaitingRemoveAfterBackupDecision = false
-        isShowingRemoveAfterBackupPrompt = false
-        recordTelemetry(
-            .removeAfterBackupPreferenceSelected,
-            attributes: [
-                "backup.remove_after_backup_enabled": .bool(isEnabled)
-            ]
-        )
-        setRemoveAfterBackupEnabled(isEnabled)
-        isRunningPermissionsPreflight = false
-        await startTransfer()
-    }
-
-    private func abortPreflightAndReturnHome(reason: String) async {
-        isRunningPermissionsPreflight = false
-        isAwaitingMediaAccessDecision = false
-        isAwaitingLowBatteryDecision = false
-        isAwaitingRemoveAfterBackupDecision = false
+    func abortPreflightAndReturnHome(reason: String) async {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
-        isShowingMediaAccessAlert = false
-        isShowingLowBatteryWarning = false
-        isShowingRemoveAfterBackupPrompt = false
         let interruptionSnapshot = TransferSnapshot(
             transferredCount: 0,
             totalCount: 0,
@@ -628,15 +510,8 @@ final class MobileAppModel: ObservableObject {
     func returnHome() async {
         stopTransferProgressPolling()
         transferStartedAt = nil
-        isRunningPermissionsPreflight = false
-        isAwaitingMediaAccessDecision = false
-        isAwaitingLowBatteryDecision = false
-        isAwaitingRemoveAfterBackupDecision = false
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
-        isShowingMediaAccessAlert = false
-        isShowingLowBatteryWarning = false
-        isShowingRemoveAfterBackupPrompt = false
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
         persistSnapshot()
@@ -661,14 +536,7 @@ final class MobileAppModel: ObservableObject {
         await beginPairing()
     }
 
-    private func startTransfer() async {
-        isRunningPermissionsPreflight = false
-        isAwaitingMediaAccessDecision = false
-        isAwaitingLowBatteryDecision = false
-        isAwaitingRemoveAfterBackupDecision = false
-        isShowingMediaAccessAlert = false
-        isShowingLowBatteryWarning = false
-        isShowingRemoveAfterBackupPrompt = false
+    func startTransfer() async {
         transferStartedAt = Date()
         transitionBackupFlow(.transferStarted)
         route = .transfer
@@ -692,7 +560,14 @@ final class MobileAppModel: ObservableObject {
         )
         persistSnapshot()
         startTransferProgressPolling()
-        transferSnapshot = await transferService.startTransfer(progress: { _ in })
+        transferSnapshot = await transferService.startTransfer(progress: { [weak self] snapshot in
+            Task { @MainActor [weak self] in
+                guard let self, self.route == .transfer else {
+                    return
+                }
+                self.transferSnapshot = snapshot
+            }
+        })
         stopTransferProgressPolling()
         guard route == .transfer else {
             persistSnapshot()
@@ -773,7 +648,7 @@ final class MobileAppModel: ObservableObject {
         return snapshot.pairingStatus.backupFlowState
     }
 
-    private func persistSnapshot() {
+    func persistSnapshot() {
         let snapshot = LaunchSnapshot(
             homeSummary: homeSummary,
             permissionSummary: permissionSummary,
@@ -787,7 +662,7 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
-    private func recordTelemetry(
+    func recordTelemetry(
         _ event: MobileTelemetryEvent,
         attributes: MobileTelemetryAttributes = [:]
     ) {
@@ -801,7 +676,7 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
-    private func beginTelemetrySpan(
+    func beginTelemetrySpan(
         _ span: MobileTelemetrySpan,
         attributes: MobileTelemetryAttributes = [:]
     ) {
