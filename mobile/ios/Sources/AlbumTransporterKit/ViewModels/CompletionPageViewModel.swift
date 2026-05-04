@@ -13,4 +13,9 @@ struct CompletionPageViewModel {
     func returnHome() async {
         await model.returnHome()
     }
+
+    func returnHomeTapped() async {
+        model.recordInteraction(name: "return_home_tapped", location: "completion")
+        await model.returnHome()
+    }
 }

@@ -1,9 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
-    let summary: HomeSummary
-    let onPrimaryAction: () -> Void
-    let onScanDesktop: () -> Void
+    let viewModel: HomePageViewModel
 
     private let setupSteps = [
         SetupStep(
@@ -37,6 +35,10 @@ struct HomeView: View {
             || ((summary.pendingItemCount ?? 0) > 0)
     }
 
+    private var summary: HomeSummary {
+        viewModel.summary
+    }
+
     // MARK: - First-time user
 
     private var firstTimeContent: some View {
@@ -44,7 +46,11 @@ struct HomeView: View {
             heroSection
             setupSection
 
-            Button(action: onPrimaryAction) {
+            Button {
+                Task {
+                    await viewModel.handlePrimaryActionTapped()
+                }
+            } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "qrcode.viewfinder")
                     Text("Scan QR Code")
@@ -127,7 +133,11 @@ struct HomeView: View {
                     statsCard
                 }
 
-                Button(action: onPrimaryAction) {
+                Button {
+                    Task {
+                        await viewModel.handlePrimaryActionTapped()
+                    }
+                } label: {
                     HStack(spacing: 8) {
                         Image(systemName: summary.primaryAction.systemImage)
                         Text(summary.primaryAction.title)
@@ -142,7 +152,11 @@ struct HomeView: View {
                 .buttonStyle(.plain)
 
                 if summary.primaryAction.showsSecondaryScanAction {
-                    Button(action: onScanDesktop) {
+                    Button {
+                        Task {
+                            await viewModel.openScanFlowTapped()
+                        }
+                    } label: {
                         Text("Reconnect")
                             .font(.system(size: 17, weight: .medium))
                             .frame(maxWidth: .infinity)

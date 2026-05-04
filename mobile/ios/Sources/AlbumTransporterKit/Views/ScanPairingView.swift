@@ -1,38 +1,48 @@
 import SwiftUI
 
 struct ScanPairingView: View {
-    let status: PairingStatus
-    @Binding var scannedQRCodeValue: String
-    let onStartPairing: () -> Void
-    let onBack: () -> Void
-    let onOpenSettings: () -> Void
+    let viewModel: PairingPageViewModel
 
     var body: some View {
         #if os(iOS)
         if #available(iOS 16.0, *) {
             LiveQRCodeScannerScreen(
-                status: status,
-                scannedQRCodeValue: $scannedQRCodeValue,
-                onStartPairing: onStartPairing,
-                onBack: onBack,
-                onOpenSettings: onOpenSettings
+                status: viewModel.status,
+                scannedQRCodeValue: viewModel.scannedQRCodeBinding,
+                onStartPairing: {
+                    Task {
+                        await viewModel.beginPairingTapped()
+                    }
+                },
+                onBack: {
+                    Task {
+                        await viewModel.backTapped()
+                    }
+                },
+                onOpenSettings: viewModel.openSettingsTapped
             )
             .toolbar(.hidden, for: .navigationBar)
         } else {
             LiveQRCodeScannerScreen(
-                status: status,
-                scannedQRCodeValue: $scannedQRCodeValue,
-                onStartPairing: onStartPairing,
-                onBack: onBack,
-                onOpenSettings: onOpenSettings
+                status: viewModel.status,
+                scannedQRCodeValue: viewModel.scannedQRCodeBinding,
+                onStartPairing: {
+                    Task {
+                        await viewModel.beginPairingTapped()
+                    }
+                },
+                onBack: {
+                    Task {
+                        await viewModel.backTapped()
+                    }
+                },
+                onOpenSettings: viewModel.openSettingsTapped
             )
             .navigationBarHidden(true)
         }
         #else
         PairingStatusView(
-            status: status,
-            onScanAgain: onStartPairing,
-            onBack: onBack
+            viewModel: viewModel
         )
         #endif
     }

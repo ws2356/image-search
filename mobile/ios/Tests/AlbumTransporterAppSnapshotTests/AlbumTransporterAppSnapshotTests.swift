@@ -23,12 +23,12 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
     }
 
     func test_home_new_user_page() throws {
+        let homeModel = SnapshotAppPageModel(
+            homeSummary: .firstLaunch,
+            completionSummary: .demo
+        )
         let viewController = makeHostedPage(title: "AuBackup") {
-            HomeView(
-                summary: .firstLaunch,
-                onPrimaryAction: {},
-                onScanDesktop: {}
-            )
+            HomeView(viewModel: HomePageViewModel(model: homeModel))
         }
         try SnapshotSupport.assertSnapshot(pageName: "home-new-user", viewController: viewController)
     }
@@ -42,11 +42,12 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
     }
 
     func test_backup_completion_page() throws {
+        let completionModel = SnapshotAppPageModel(
+            homeSummary: .firstLaunch,
+            completionSummary: .snapshotMarketing
+        )
         let viewController = makeHostedPage(title: "Backup Complete") {
-            CompletionStateView(
-                summary: .snapshotMarketing,
-                onReturnHome: {}
-            )
+            CompletionStateView(viewModel: CompletionPageViewModel(model: completionModel))
         }
         try SnapshotSupport.assertSnapshot(pageName: "backup-completion", viewController: viewController)
     }
@@ -87,6 +88,31 @@ private extension CompletionSummary {
         durationDescription: "24 min",
         completedAtDescription: "Today at 2:41 PM"
     )
+}
+
+@MainActor
+private final class SnapshotAppPageModel: AppPageModeling {
+    var homeSummary: HomeSummary
+    var pairingStatus = PairingStatus.idle
+    var permissionSummary = PermissionSummary.demo
+    var removeAfterBackupEnabled = false
+    var transferSnapshot = TransferSnapshot.demo
+    var completionSummary: CompletionSummary
+    var scannedQRCodeValue = ""
+
+    init(homeSummary: HomeSummary, completionSummary: CompletionSummary) {
+        self.homeSummary = homeSummary
+        self.completionSummary = completionSummary
+    }
+
+    func handleHomePrimaryAction() async {}
+    func openScanFlow() async {}
+    func beginPairing() async {}
+    func returnHome() async {}
+    func startBackup() async {}
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
+    func requestStopTransfer() {}
+    func recordInteraction(name: String, location: String) {}
 }
 
 @MainActor

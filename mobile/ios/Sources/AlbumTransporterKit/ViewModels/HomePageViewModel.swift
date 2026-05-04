@@ -14,7 +14,17 @@ struct HomePageViewModel {
         await model.handleHomePrimaryAction()
     }
 
+    func handlePrimaryActionTapped() async {
+        model.recordInteraction(name: "primary_action_tapped", location: "home")
+        await model.handleHomePrimaryAction()
+    }
+
     func openScanFlow() async {
+        await model.openScanFlow()
+    }
+
+    func openScanFlowTapped() async {
+        model.recordInteraction(name: "reconnect_tapped", location: "home")
         await model.openScanFlow()
     }
 }

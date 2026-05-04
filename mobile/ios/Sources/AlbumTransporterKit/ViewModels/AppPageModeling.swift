@@ -15,6 +15,7 @@ protocol AppPageModeling: AnyObject {
     func startBackup() async
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool)
     func requestStopTransfer()
+    func recordInteraction(name: String, location: String)
 }
 
 extension MobileAppModel: AppPageModeling {}
@@ -31,7 +32,6 @@ protocol PermissionsPageModeling: AppPageModeling {
     func continueBackupFromMediaAccess() async
     func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async
     func recordDialogView(name: String)
-    func recordInteraction(name: String, location: String)
 }
 
 extension MobileAppModel: PermissionsPageModeling {}
@@ -42,7 +42,6 @@ protocol TransferPageModeling: AppPageModeling {
 
     func confirmStopTransfer() async
     func recordDialogView(name: String)
-    func recordInteraction(name: String, location: String)
 }
 
 extension MobileAppModel: TransferPageModeling {}

@@ -93,59 +93,13 @@ public struct AlbumTransporterRootView: View {
         switch model.route {
         case .home:
             let homeViewModel = HomePageViewModel(model: model)
-            HomeView(
-                summary: homeViewModel.summary,
-                onPrimaryAction: {
-                    model.recordInteraction(name: "primary_action_tapped", location: "home")
-                    Task {
-                        await homeViewModel.handlePrimaryAction()
-                    }
-                },
-                onScanDesktop: {
-                    model.recordInteraction(name: "reconnect_tapped", location: "home")
-                    Task {
-                        await homeViewModel.openScanFlow()
-                    }
-                }
-            )
+            HomeView(viewModel: homeViewModel)
         case .scan:
             let pairingViewModel = PairingPageViewModel(model: model)
-            ScanPairingView(
-                status: pairingViewModel.status,
-                scannedQRCodeValue: pairingViewModel.scannedQRCodeBinding,
-                onStartPairing: {
-                    model.recordInteraction(name: "start_pairing_tapped", location: "pairing")
-                    Task {
-                        await pairingViewModel.beginPairing()
-                    }
-                },
-                onBack: {
-                    model.recordInteraction(name: "back_tapped", location: "pairing")
-                    Task {
-                        await pairingViewModel.goBack()
-                    }
-                },
-                onOpenSettings: {
-                    model.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
-                }
-            )
+            ScanPairingView(viewModel: pairingViewModel)
         case .pair:
             let pairingViewModel = PairingPageViewModel(model: model)
-            PairingStatusView(
-                status: pairingViewModel.status,
-                onScanAgain: {
-                    model.recordInteraction(name: "scan_again_tapped", location: "pairing")
-                    Task {
-                        await pairingViewModel.scanAgain()
-                    }
-                },
-                onBack: {
-                    model.recordInteraction(name: "back_tapped", location: "pairing")
-                    Task {
-                        await pairingViewModel.goBack()
-                    }
-                }
-            )
+            PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
             let permissionsViewModel = PermissionsPageViewModel(model: model)
             PermissionsGateView(viewModel: permissionsViewModel)
@@ -154,15 +108,7 @@ public struct AlbumTransporterRootView: View {
             TransferSessionView(viewModel: transferViewModel)
         case .completed:
             let completionViewModel = CompletionPageViewModel(model: model)
-            CompletionStateView(
-                summary: completionViewModel.summary,
-                onReturnHome: {
-                    model.recordInteraction(name: "return_home_tapped", location: "completion")
-                    Task {
-                        await completionViewModel.returnHome()
-                    }
-                }
-            )
+            CompletionStateView(viewModel: completionViewModel)
         }
     }
 

@@ -1,9 +1,7 @@
 import SwiftUI
 
 struct PairingStatusView: View {
-    let status: PairingStatus
-    let onScanAgain: () -> Void
-    let onBack: () -> Void
+    let viewModel: PairingPageViewModel
 
     var body: some View {
         ScrollView {
@@ -24,7 +22,11 @@ struct PairingStatusView: View {
 
                 VStack(spacing: 10) {
                     if status.phase == .pairing {
-                        Button(action: onBack) {
+                        Button {
+                            Task {
+                                await viewModel.backTapped()
+                            }
+                        } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "xmark")
                                 Text("Cancel")
@@ -44,13 +46,34 @@ struct PairingStatusView: View {
                             title: pairingButtonTitle,
                             icon: pairingButtonIcon,
                             style: .primary,
-                            action: onScanAgain
+                            action: {
+                                Task {
+                                    await viewModel.scanAgainTapped()
+                                }
+                            }
                         )
 
                         if status.phase == .failed {
-                            ActionButton(title: "Cancel", style: .cancelSecondary, action: onBack)
+                            ActionButton(
+                                title: "Cancel",
+                                style: .cancelSecondary,
+                                action: {
+                                    Task {
+                                        await viewModel.backTapped()
+                                    }
+                                }
+                            )
                         } else {
-                            ActionButton(title: "Back", icon: "chevron.left", style: .plain, action: onBack)
+                            ActionButton(
+                                title: "Back",
+                                icon: "chevron.left",
+                                style: .plain,
+                                action: {
+                                    Task {
+                                        await viewModel.backTapped()
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -59,6 +82,10 @@ struct PairingStatusView: View {
             .padding(.vertical, 16)
         }
         .compatibleScrollBounceBasedOnSize()
+    }
+
+    private var status: PairingStatus {
+        viewModel.status
     }
 
     @ViewBuilder

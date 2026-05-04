@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct CompletionStateView: View {
-    let summary: CompletionSummary
-    let onReturnHome: () -> Void
+    let viewModel: CompletionPageViewModel
 
     var body: some View {
         completionScrollView {
@@ -29,11 +28,24 @@ struct CompletionStateView: View {
 
                 greenInfoCallout
 
-                ActionButton(title: "OK", icon: nil, style: .primary, action: onReturnHome)
+                ActionButton(
+                    title: "OK",
+                    icon: nil,
+                    style: .primary,
+                    action: {
+                        Task {
+                            await viewModel.returnHomeTapped()
+                        }
+                    }
+                )
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
+    }
+
+    private var summary: CompletionSummary {
+        viewModel.summary
     }
 
     private var sessionSummaryCard: some View {
