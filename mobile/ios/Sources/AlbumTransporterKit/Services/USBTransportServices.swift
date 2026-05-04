@@ -1456,7 +1456,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
 }
 
 actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving, USBTransportForegroundRecovering {
-    private static let preferredTransportRetryCooldownSeconds: TimeInterval = 3
+    private static let preferredTransportRetryCooldownSeconds: TimeInterval = 0.5
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
     private var lastResolvedTransportByDesktopID: [String: TransferTransport] = [:]
