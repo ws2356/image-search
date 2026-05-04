@@ -339,7 +339,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.handleIncomingUniversalLink(URL(string: "https://dl.boldman.net?sid=missing-fields")!)
 
-        XCTAssertEqual(model.route, .scanAndPair)
+        XCTAssertEqual(model.route, .pair)
         XCTAssertEqual(model.pairingStatus.phase, .failed)
         XCTAssertTrue(model.pairingStatus.message.contains("missing the required field"))
     }
@@ -479,7 +479,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
 
         let elapsed = start.duration(to: clock.now)
-        XCTAssertEqual(model.route, .scanAndPair)
+        XCTAssertEqual(model.route, .scan)
         XCTAssertLessThan(elapsed, .milliseconds(250))
     }
 
@@ -564,7 +564,7 @@ final class MobileAppModelTests: XCTestCase {
         )
         XCTAssertEqual(
             failureRecord?.attributes["app.route"],
-            .string(AppRoute.scanAndPair.rawValue)
+            .string(AppRoute.pair.rawValue)
         )
     }
 

@@ -196,9 +196,9 @@ public struct AlbumTransporterRootView: View {
                     }
                 }
             )
-        case .scanAndPair:
+        case .scan:
             let pairingViewModel = PairingPageViewModel(model: model)
-            PairingFlowView(
+            ScanPairingView(
                 status: pairingViewModel.status,
                 scannedQRCodeValue: pairingViewModel.scannedQRCodeBinding,
                 onStartPairing: {
@@ -207,6 +207,20 @@ public struct AlbumTransporterRootView: View {
                         await pairingViewModel.beginPairing()
                     }
                 },
+                onBack: {
+                    model.recordInteraction(name: "back_tapped", location: "pairing")
+                    Task {
+                        await pairingViewModel.goBack()
+                    }
+                },
+                onOpenSettings: {
+                    model.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
+                }
+            )
+        case .pair:
+            let pairingViewModel = PairingPageViewModel(model: model)
+            PairingStatusView(
+                status: pairingViewModel.status,
                 onScanAgain: {
                     model.recordInteraction(name: "scan_again_tapped", location: "pairing")
                     Task {
@@ -218,9 +232,6 @@ public struct AlbumTransporterRootView: View {
                     Task {
                         await pairingViewModel.goBack()
                     }
-                },
-                onOpenSettings: {
-                    model.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
                 }
             )
         case .permissions:

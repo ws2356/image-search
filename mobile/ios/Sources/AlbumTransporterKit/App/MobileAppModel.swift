@@ -80,8 +80,10 @@ final class MobileAppModel: ObservableObject {
         switch route {
         case .home:
             return "AuBackup"
-        case .scanAndPair:
-            return "Scan & Pair"
+        case .scan:
+            return "Scan QR"
+        case .pair:
+            return "Pairing"
         case .permissions:
             return "Permissions"
         case .transfer:
@@ -136,7 +138,7 @@ final class MobileAppModel: ObservableObject {
             transport: nil,
             message: "Point the camera at the desktop QR code shown in the PC app."
         )
-        route = .scanAndPair
+        route = .scan
         recordTelemetry(.scanStarted)
         persistSnapshot()
     }
@@ -178,6 +180,7 @@ final class MobileAppModel: ObservableObject {
     func beginPairing() async {
         beginTelemetrySpan(.pairingFlow)
         transitionBackupFlow(.pairingStarted)
+        route = .pair
         pairingStatus = PairingStatus(
             phase: .pairing,
             backupFlowState: .pendingPairing,

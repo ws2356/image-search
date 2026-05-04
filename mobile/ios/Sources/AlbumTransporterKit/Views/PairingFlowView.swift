@@ -1,48 +1,11 @@
 import SwiftUI
 
-struct PairingFlowView: View {
+struct PairingStatusView: View {
     let status: PairingStatus
-    @Binding var scannedQRCodeValue: String
-    let onStartPairing: () -> Void
     let onScanAgain: () -> Void
     let onBack: () -> Void
-    let onOpenSettings: () -> Void
 
     var body: some View {
-        #if os(iOS)
-        if isLiveScanPhase {
-            if #available(iOS 16.0, *) {
-                LiveQRCodeScannerScreen(
-                    status: status,
-                    scannedQRCodeValue: $scannedQRCodeValue,
-                    onStartPairing: onStartPairing,
-                    onBack: onBack,
-                    onOpenSettings: onOpenSettings
-                )
-                .toolbar(.hidden, for: .navigationBar)
-            } else {
-                LiveQRCodeScannerScreen(
-                    status: status,
-                    scannedQRCodeValue: $scannedQRCodeValue,
-                    onStartPairing: onStartPairing,
-                    onBack: onBack,
-                    onOpenSettings: onOpenSettings
-                )
-                .navigationBarHidden(true)
-            }
-        } else {
-            pairingStateContent
-        }
-        #else
-        pairingStateContent
-        #endif
-    }
-
-    private var isLiveScanPhase: Bool {
-        status.phase == .instructions || status.phase == .scanning
-    }
-
-    private var pairingStateContent: some View {
         ScrollView {
             VStack(spacing: 20) {
                 pairingHero
@@ -74,18 +37,19 @@ struct PairingFlowView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                         }
                         .buttonStyle(.plain)
+                    } else if status.phase == .paired {
+                        EmptyView()
                     } else {
                         ActionButton(
                             title: pairingButtonTitle,
                             icon: pairingButtonIcon,
                             style: .primary,
-                            action: primaryAction
+                            action: onScanAgain
                         )
-                        .disabled(isPrimaryActionDisabled)
 
                         if status.phase == .failed {
                             ActionButton(title: "Cancel", style: .cancelSecondary, action: onBack)
-                        } else if status.phase != .paired {
+                        } else {
                             ActionButton(title: "Back", icon: "chevron.left", style: .plain, action: onBack)
                         }
                     }
@@ -287,38 +251,10 @@ struct PairingFlowView: View {
     }
 
     private var pairingButtonTitle: String {
-        switch status.phase {
-        case .paired: return "Start Backup"
-        case .expired: return "Scan Again"
-        case .failed: return "Scan Again"
-        default: return "Start Pairing"
-        }
+        "Scan Again"
     }
 
     private var pairingButtonIcon: String {
-        switch status.phase {
-        case .paired: return "arrow.up.circle.fill"
-        case .expired: return "qrcode.viewfinder"
-        case .failed: return "qrcode.viewfinder"
-        default: return "link"
-        }
-    }
-
-    private var primaryAction: () -> Void {
-        if status.phase == .expired || status.phase == .failed {
-            return onScanAgain
-        }
-        return onStartPairing
-    }
-
-    private var isPrimaryActionDisabled: Bool {
-        switch status.phase {
-        case .pairing:
-            return true
-        case .paired, .expired, .failed:
-            return false
-        case .instructions, .scanning:
-            return scannedQRCodeValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+        "qrcode.viewfinder"
     }
 }

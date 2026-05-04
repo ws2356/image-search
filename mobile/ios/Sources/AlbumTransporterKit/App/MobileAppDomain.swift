@@ -2,7 +2,8 @@ import Foundation
 
 enum AppRoute: String, Equatable, Sendable {
     case home
-    case scanAndPair
+    case scan
+    case pair
     case permissions
     case transfer
     case completed
