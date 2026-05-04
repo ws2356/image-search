@@ -1,7 +1,10 @@
 import SwiftUI
+#if os(iOS)
+import Photos
+#endif
 
 struct PermissionsGateView: View {
-    let onStartPreflight: () -> Void
+    let viewModel: PermissionsPageViewModel
 
     var body: some View {
         ScrollView {
@@ -45,7 +48,66 @@ struct PermissionsGateView: View {
         }
         .compatibleScrollBounceBasedOnSize()
         .task {
-            onStartPreflight()
+            await viewModel.startPreflight()
+        }
+        .onChange(of: viewModel.isShowingLowBatteryWarning) { isPresented in
+            guard isPresented else { return }
+            viewModel.recordLowBatteryDialogPresented()
+        }
+        .onChange(of: viewModel.isShowingMediaAccessAlert) { isPresented in
+            guard isPresented else { return }
+            viewModel.recordMediaAccessDialogPresented()
+        }
+        .onChange(of: viewModel.isShowingRemoveAfterBackupPrompt) { isPresented in
+            guard isPresented else { return }
+            viewModel.recordRemoveAfterBackupDialogPresented()
+        }
+        .alert("Low battery detected", isPresented: viewModel.isShowingLowBatteryWarningBinding) {
+            Button("Continue Anyway") {
+                Task {
+                    await viewModel.continuePastLowBattery()
+                }
+            }
+            Button("Not Now", role: .cancel) {
+                Task {
+                    await viewModel.cancelFromLowBattery()
+                }
+            }
+        } message: {
+            Text("Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.")
+        }
+        .alert("Full media access recommended", isPresented: viewModel.isShowingMediaAccessAlertBinding) {
+#if os(iOS)
+            Button("Update") {
+                viewModel.updateMediaAccessTapped()
+                PHPhotoLibrary.showLimitedPicker { _ in
+                    Task {
+                        await viewModel.continueAfterMediaAccessUpdate()
+                    }
+                }
+            }
+#endif
+            Button("Not now", role: .cancel) {
+                Task {
+                    await viewModel.continueBackupFromMediaAccessNotNow()
+                }
+            }
+        } message: {
+            Text(viewModel.mediaAccessAlertMessage)
+        }
+        .alert("After backup, remove transferred media?", isPresented: viewModel.isShowingRemoveAfterBackupPromptBinding) {
+            Button("Remove", role: .destructive) {
+                Task {
+                    await viewModel.selectRemoveAfterBackupPreference(true)
+                }
+            }
+            Button("Do not remove", role: .cancel) {
+                Task {
+                    await viewModel.selectRemoveAfterBackupPreference(false)
+                }
+            }
+        } message: {
+            Text("Choose whether successfully transferred photos and videos should be moved to Recently Removed on this device after backup completes.")
         }
     }
 }

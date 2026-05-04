@@ -74,7 +74,7 @@ final class PageViewModelTests: XCTestCase {
 }
 
 @MainActor
-private final class StubPageModel: AppPageModeling {
+private final class StubPageModel: PermissionsPageModeling {
     var homeSummary = HomeSummary.firstLaunch
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
@@ -82,6 +82,10 @@ private final class StubPageModel: AppPageModeling {
     var transferSnapshot = TransferSnapshot.demo
     var completionSummary = CompletionSummary.demo
     var scannedQRCodeValue = ""
+    var isShowingLowBatteryWarning = false
+    var isShowingMediaAccessAlert = false
+    var isShowingRemoveAfterBackupPrompt = false
+    var mediaAccessAlertMessage = "Media access recommended."
 
     var handleHomePrimaryActionCallCount = 0
     var openScanFlowCallCount = 0
@@ -119,4 +123,16 @@ private final class StubPageModel: AppPageModeling {
     func requestStopTransfer() {
         requestStopTransferCallCount += 1
     }
+
+    func continuePastLowBatteryWarning() async {}
+
+    func cancelBackupFromLowBatteryWarning() async {}
+
+    func continueBackupFromMediaAccess() async {}
+
+    func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async {}
+
+    func recordDialogView(name: String) {}
+
+    func recordInteraction(name: String, location: String) {}
 }

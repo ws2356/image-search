@@ -4,7 +4,6 @@ import Factory
 #if os(iOS)
 import UIKit
 #endif
-import Photos
 
 @MainActor
 public struct AlbumTransporterRootView: View {
@@ -31,18 +30,6 @@ public struct AlbumTransporterRootView: View {
                 guard isPresented else { return }
                 model.recordDialogView(name: "stop_confirmation")
             }
-            .onChange(of: model.isShowingLowBatteryWarning) { isPresented in
-                guard isPresented else { return }
-                model.recordDialogView(name: "low_battery_warning")
-            }
-            .onChange(of: model.isShowingMediaAccessAlert) { isPresented in
-                guard isPresented else { return }
-                model.recordDialogView(name: "media_access_alert")
-            }
-            .onChange(of: model.isShowingRemoveAfterBackupPrompt) { isPresented in
-                guard isPresented else { return }
-                model.recordDialogView(name: "remove_after_backup_prompt")
-            }
             .confirmationDialog(
                 "Stop backup?",
                 isPresented: $model.isShowingStopConfirmation,
@@ -59,60 +46,6 @@ public struct AlbumTransporterRootView: View {
                 }
             } message: {
                 Text("The desktop may continue indexing items that already transferred before the stop request.")
-            }
-            .alert("Low battery detected", isPresented: $model.isShowingLowBatteryWarning) {
-                Button("Continue Anyway") {
-                    model.recordInteraction(name: "continue_anyway_tapped", location: "low_battery_warning")
-                    Task {
-                        await model.continuePastLowBatteryWarning()
-                    }
-                }
-                Button("Not Now", role: .cancel) {
-                    model.recordInteraction(name: "not_now_tapped", location: "low_battery_warning")
-                    Task {
-                        await model.cancelBackupFromLowBatteryWarning()
-                    }
-                }
-            } message: {
-                Text("Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.")
-            }
-            .alert("Full media access recommended", isPresented: $model.isShowingMediaAccessAlert) {
-#if os(iOS)
-                Button("Update") {
-                    model.recordInteraction(name: "update_media_access_tapped", location: "media_access_alert")
-                    Task {
-                        PHPhotoLibrary.showLimitedPicker { _ in
-                            Task {
-                                await model.continueBackupFromMediaAccess()
-                            }
-                        }
-                    }
-                }
-#endif
-                Button("Not now", role: .cancel) {
-                    model.recordInteraction(name: "not_now_tapped", location: "media_access_alert")
-                    Task {
-                        await model.continueBackupFromMediaAccess()
-                    }
-                }
-            } message: {
-                Text(model.mediaAccessAlertMessage)
-            }
-            .alert("After backup, remove transferred media?", isPresented: $model.isShowingRemoveAfterBackupPrompt) {
-                Button("Remove", role: .destructive) {
-                    model.recordInteraction(name: "remove_after_backup_selected", location: "remove_after_backup_prompt")
-                    Task {
-                        await model.selectRemoveAfterBackupPreferenceAndContinue(true)
-                    }
-                }
-                Button("Do not remove", role: .cancel) {
-                    model.recordInteraction(name: "keep_originals_selected", location: "remove_after_backup_prompt")
-                    Task {
-                        await model.selectRemoveAfterBackupPreferenceAndContinue(false)
-                    }
-                }
-            } message: {
-                Text("Choose whether successfully transferred photos and videos should be moved to Recently Removed on this device after backup completes.")
             }
             .confirmationDialog(
                 "Start a new backup session?",
@@ -236,14 +169,7 @@ public struct AlbumTransporterRootView: View {
             )
         case .permissions:
             let permissionsViewModel = PermissionsPageViewModel(model: model)
-            PermissionsGateView(
-                onStartPreflight: {
-                    model.recordInteraction(name: "start_backup_tapped", location: "permissions")
-                    Task {
-                        await permissionsViewModel.startBackup()
-                    }
-                }
-            )
+            PermissionsGateView(viewModel: permissionsViewModel)
         case .transfer:
             let transferViewModel = TransferPageViewModel(model: model)
             TransferSessionView(

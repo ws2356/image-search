@@ -18,3 +18,20 @@ protocol AppPageModeling: AnyObject {
 }
 
 extension MobileAppModel: AppPageModeling {}
+
+@MainActor
+protocol PermissionsPageModeling: AppPageModeling {
+    var isShowingLowBatteryWarning: Bool { get set }
+    var isShowingMediaAccessAlert: Bool { get set }
+    var isShowingRemoveAfterBackupPrompt: Bool { get set }
+    var mediaAccessAlertMessage: String { get }
+
+    func continuePastLowBatteryWarning() async
+    func cancelBackupFromLowBatteryWarning() async
+    func continueBackupFromMediaAccess() async
+    func selectRemoveAfterBackupPreferenceAndContinue(_ isEnabled: Bool) async
+    func recordDialogView(name: String)
+    func recordInteraction(name: String, location: String)
+}
+
+extension MobileAppModel: PermissionsPageModeling {}
