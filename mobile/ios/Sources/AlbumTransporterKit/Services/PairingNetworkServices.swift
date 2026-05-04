@@ -12,7 +12,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
     }
 
     func primeInternetAccess() async {
-        guard let warmupURL = URL(string: "https://dl.boldman.net/") else {
+        guard let warmupURL = URL(string: "https://www.baidu.com") else {
             return
         }
 
