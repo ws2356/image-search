@@ -1,11 +1,13 @@
 import SwiftUI
 
 @MainActor
-struct PairingPageViewModel {
+struct PairingPageViewModel: @MainActor ViewModelProtocol {
     private let model: any AppPageModeling
+    private let _onPageResult: (_ result: PageResult, _ target: PageTarget?) -> Void
 
-    init(model: any AppPageModeling) {
+    init(model: any AppPageModeling, onPageResult: @escaping (_ result: PageResult, _ target: PageTarget?) -> Void) {
         self.model = model
+        self._onPageResult = onPageResult
     }
 
     var status: PairingStatus {
@@ -48,5 +50,9 @@ struct PairingPageViewModel {
 
     func openSettingsTapped() {
         model.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
+    }
+    
+    func onPageResult(_ result: PageResult, target: PageTarget?) {
+        self._onPageResult(result, target)
     }
 }

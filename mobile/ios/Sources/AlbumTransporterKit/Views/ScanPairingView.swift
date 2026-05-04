@@ -9,7 +9,7 @@ struct ScanPairingView: View {
             LiveQRCodeScannerScreen(
                 status: viewModel.status,
                 scannedQRCodeValue: viewModel.scannedQRCodeBinding,
-                onStartPairing: {
+                onScanComplete: {
                     Task {
                         await viewModel.beginPairingTapped()
                     }
@@ -26,7 +26,7 @@ struct ScanPairingView: View {
             LiveQRCodeScannerScreen(
                 status: viewModel.status,
                 scannedQRCodeValue: viewModel.scannedQRCodeBinding,
-                onStartPairing: {
+                onScanComplete: {
                     Task {
                         await viewModel.beginPairingTapped()
                     }

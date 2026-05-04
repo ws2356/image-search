@@ -100,10 +100,14 @@ public struct AlbumTransporterRootView: View {
             let homeViewModel = HomePageViewModel(model: model)
             HomeView(viewModel: homeViewModel)
         case .scan:
-            let pairingViewModel = PairingPageViewModel(model: model)
+            let pairingViewModel = PairingPageViewModel(model: model) { result, target in
+                model.handleResultForPage(.scan, result: result, target: target)
+            }
             ScanPairingView(viewModel: pairingViewModel)
         case .pair:
-            let pairingViewModel = PairingPageViewModel(model: model)
+            let pairingViewModel = PairingPageViewModel(model: model) { result, target in
+                model.handleResultForPage(.scan, result: result, target: target)
+            }
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
             PermissionsGateView(viewModel: permissionsViewModel)

@@ -14,7 +14,7 @@ private enum QRCodeScannerAccessState: Equatable {
 struct LiveQRCodeScannerScreen: View {
     let status: PairingStatus
     @Binding var scannedQRCodeValue: String
-    let onStartPairing: () -> Void
+    let onScanComplete: () -> Void
     let onBack: () -> Void
     let onOpenSettings: () -> Void
 
@@ -188,7 +188,7 @@ struct LiveQRCodeScannerScreen: View {
         }
 
         lastSubmittedValue = trimmedValue
-        onStartPairing()
+        onScanComplete()
     }
 
     private func handleScannerError(_ message: String) {

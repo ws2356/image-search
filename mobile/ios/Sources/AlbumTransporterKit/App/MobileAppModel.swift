@@ -67,6 +67,22 @@ final class MobileAppModel: ObservableObject {
         appLifecycleObservationTask?.cancel()
 #endif
     }
+    
+    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) {
+        switch page {
+        case .scan:
+            switch result {
+            case .success:
+                self.route = .pair
+            case .cancel:
+                self.route = .home
+            case .failure:
+                self.route = .error // TODO
+            }
+        default:
+            throw NSError() // Not iplemented
+        }
+    }
 
     var navigationTitle: String {
         switch route {
