@@ -7,6 +7,17 @@ enum AppRoute: String, Equatable, Sendable {
     case permissions
     case transfer
     case completed
+    case error
+}
+
+struct ErrorSummary: Equatable, Sendable, Codable {
+    var title: String
+    var message: String
+
+    static let generic = ErrorSummary(
+        title: "Something went wrong",
+        message: "AuBackup hit an unexpected issue. Try starting a new backup session, or return home."
+    )
 }
 
 enum HomePrimaryAction: Equatable, Sendable, Codable {

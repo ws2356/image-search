@@ -14,6 +14,7 @@ struct ScanPairingView: View {
                         await viewModel.beginPairingTapped()
                     }
                 },
+                onScanFailure: viewModel.scannerFailed,
                 onBack: {
                     Task {
                         await viewModel.backTapped()
@@ -31,6 +32,7 @@ struct ScanPairingView: View {
                         await viewModel.beginPairingTapped()
                     }
                 },
+                onScanFailure: viewModel.scannerFailed,
                 onBack: {
                     Task {
                         await viewModel.backTapped()

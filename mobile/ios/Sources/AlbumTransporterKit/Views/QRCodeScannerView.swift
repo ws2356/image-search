@@ -15,6 +15,7 @@ struct LiveQRCodeScannerScreen: View {
     let status: PairingStatus
     @Binding var scannedQRCodeValue: String
     let onScanComplete: () -> Void
+    let onScanFailure: () -> Void
     let onBack: () -> Void
     let onOpenSettings: () -> Void
 
@@ -193,6 +194,7 @@ struct LiveQRCodeScannerScreen: View {
 
     private func handleScannerError(_ message: String) {
         accessState = .unavailable(message)
+        onScanFailure()
     }
 
     private func prepareCameraAccess() async {

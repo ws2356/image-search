@@ -38,6 +38,30 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(recoveryCallCount, 0)
     }
 
+    func test_error_page_result_success_restarts_scan_and_cancel_returns_home() async {
+        let model = MobileAppModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        await model.handleResultForPage(.scan, result: .failure, target: nil)
+        XCTAssertEqual(model.route, .error)
+
+        await model.handleResultForPage(.error, result: .success, target: nil)
+        XCTAssertEqual(model.route, .scan)
+
+        await model.handleResultForPage(.scan, result: .failure, target: nil)
+        XCTAssertEqual(model.route, .error)
+
+        await model.handleResultForPage(.error, result: .cancel, target: nil)
+        XCTAssertEqual(model.route, .home)
+    }
+
     func test_start_backup_shows_low_battery_alert_when_needed() async {
         let lowBatteryFullAccess = PermissionSummary(
             cameraGranted: true,

@@ -6,6 +6,7 @@ protocol AppPageModeling: AnyObject {
     var removeAfterBackupEnabled: Bool { get }
     var transferSnapshot: TransferSnapshot { get }
     var completionSummary: CompletionSummary { get }
+    var errorSummary: ErrorSummary { get }
     var scannedQRCodeValue: String { get set }
 
     func handleHomePrimaryAction() async

@@ -13,6 +13,7 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var pairingStatus = PairingStatus.idle
     @Published private(set) var transferSnapshot = TransferSnapshot.demo
     @Published private(set) var completionSummary = CompletionSummary.demo
+    @Published private(set) var errorSummary = ErrorSummary.generic
     @Published var scannedQRCodeValue = ""
 
     @Published var isShowingStopConfirmation = false
@@ -68,19 +69,105 @@ final class MobileAppModel: ObservableObject {
 #endif
     }
     
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) {
+    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
         switch page {
+        case .home:
+            switch result {
+            case .success:
+                if target == .secondary {
+                    await openScanFlow()
+                } else {
+                    await handleHomePrimaryAction()
+                }
+            case .cancel:
+                await returnHome()
+            case .failure:
+                presentErrorSummary(
+                    title: "Couldn't continue from Home",
+                    message: "AuBackup couldn't continue from the Home page. Try scanning again, or return home."
+                )
+            }
+
         case .scan:
             switch result {
             case .success:
-                self.route = .pair
+                await beginPairing()
             case .cancel:
-                self.route = .home
+                await returnHome()
             case .failure:
-                self.route = .error // TODO
+                presentErrorSummary(
+                    title: "Scanner failed",
+                    message: "The camera scanner couldn't continue. Restart the backup session or return home."
+                )
             }
-        default:
-            throw NSError() // Not iplemented
+
+        case .pair:
+            switch result {
+            case .success:
+                await openScanFlow()
+            case .cancel:
+                await returnHome()
+            case .failure:
+                presentErrorSummary(
+                    title: "Pairing flow failed",
+                    message: "AuBackup couldn't continue the pairing flow. Restart the backup session or return home."
+                )
+            }
+            
+        case .permissions:
+            switch result {
+            case .success:
+                if target == .removeTransferredMedia {
+                    setRemoveAfterBackupEnabled(true)
+                } else if target == .keepOriginals {
+                    setRemoveAfterBackupEnabled(false)
+                }
+                await startTransfer()
+            case .cancel:
+                let reason = target == .lowBatteryDeclined ? "low_battery_declined" : "permissions_cancelled"
+                await abortPreflightAndReturnHome(reason: reason)
+            case .failure:
+                presentErrorSummary(
+                    title: "Preflight failed",
+                    message: "AuBackup couldn't complete backup preflight. Restart the backup session or return home."
+                )
+            }
+            
+        case .transfer:
+            switch result {
+            case .success:
+                if target == .primary {
+                    requestStopTransfer()
+                }
+            case .cancel:
+                if target == .stopTransferConfirmed {
+                    await confirmStopTransfer()
+                }
+            case .failure:
+                presentErrorSummary(
+                    title: "Transfer failed",
+                    message: "AuBackup couldn't continue this transfer. Restart the backup session or return home."
+                )
+            }
+
+        case .completed:
+            switch result {
+            case .success, .cancel:
+                await returnHome()
+            case .failure:
+                presentErrorSummary(
+                    title: "Completion failed",
+                    message: "AuBackup couldn't finish this completion step. Restart the backup session or return home."
+                )
+            }
+
+        case .error:
+            switch result {
+            case .success:
+                await openScanFlow()
+            case .cancel, .failure:
+                await returnHome()
+            }
         }
     }
 
@@ -98,6 +185,8 @@ final class MobileAppModel: ObservableObject {
             return "Backup in Progress"
         case .completed:
             return "Backup Complete"
+        case .error:
+            return "Backup Error"
         }
     }
 
@@ -136,6 +225,7 @@ final class MobileAppModel: ObservableObject {
     func openScanFlow() async {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
+        errorSummary = .generic
         beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
@@ -528,8 +618,17 @@ final class MobileAppModel: ObservableObject {
         transferStartedAt = nil
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
+        errorSummary = .generic
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
+        persistSnapshot()
+    }
+
+    private func presentErrorSummary(title: String, message: String) {
+        stopTransferProgressPolling()
+        isShowingStopConfirmation = false
+        errorSummary = ErrorSummary(title: title, message: message)
+        route = .error
         persistSnapshot()
     }
 
@@ -621,6 +720,7 @@ final class MobileAppModel: ObservableObject {
         removeAfterBackupEnabled = snapshot.removeAfterBackupEnabled
         pairingStatus = snapshot.pairingStatus
         transferSnapshot = snapshot.transferSnapshot
+        errorSummary = .generic
         backupFlowStateMachine = MobileBackupFlowStateMachine(
             state: inferredBackupFlowState(from: snapshot)
         )

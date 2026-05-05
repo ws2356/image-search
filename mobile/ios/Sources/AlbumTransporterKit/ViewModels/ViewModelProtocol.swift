@@ -5,17 +5,22 @@
 //  Created by Song Wan on 2026/5/5.
 //
 
-enum PageResult {
+enum PageResult: Equatable {
     case success
     case failure
     case cancel
 }
 
-enum PageTarget {
+enum PageTarget: Equatable {
     case primary
     case secondary
+    case lowBatteryDeclined
+    case removeTransferredMedia
+    case keepOriginals
+    case stopTransferConfirmed
 }
 
+@MainActor
 protocol ViewModelProtocol {
     func onPageResult(_ result: PageResult, target: PageTarget?)
 }

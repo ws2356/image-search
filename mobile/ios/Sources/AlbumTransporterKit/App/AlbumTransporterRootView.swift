@@ -18,8 +18,26 @@ public struct AlbumTransporterRootView: View {
     init(container: Container) {
         let model = container.mobileAppModel()
         _model = StateObject(wrappedValue: model)
-        _permissionsViewModel = StateObject(wrappedValue: PermissionsPageViewModel(model: model))
-        _transferViewModel = StateObject(wrappedValue: TransferPageViewModel(model: model))
+        _permissionsViewModel = StateObject(
+            wrappedValue: PermissionsPageViewModel(
+                model: model,
+                onPageResult: { result, target in
+                    Task {
+                        await model.handleResultForPage(.permissions, result: result, target: target)
+                    }
+                }
+            )
+        )
+        _transferViewModel = StateObject(
+            wrappedValue: TransferPageViewModel(
+                model: model,
+                onPageResult: { result, target in
+                    Task {
+                        await model.handleResultForPage(.transfer, result: result, target: target)
+                    }
+                }
+            )
+        )
     }
 
     public var body: some View {
@@ -97,25 +115,40 @@ public struct AlbumTransporterRootView: View {
     private var currentScreen: some View {
         switch model.route {
         case .home:
-            let homeViewModel = HomePageViewModel(model: model)
+            let homeViewModel = HomePageViewModel(model: model, onPageResult: pageResultHandler(for: .home))
             HomeView(viewModel: homeViewModel)
         case .scan:
-            let pairingViewModel = PairingPageViewModel(model: model) { result, target in
-                model.handleResultForPage(.scan, result: result, target: target)
-            }
+            let pairingViewModel = PairingPageViewModel(model: model, onPageResult: pageResultHandler(for: .scan))
             ScanPairingView(viewModel: pairingViewModel)
         case .pair:
-            let pairingViewModel = PairingPageViewModel(model: model) { result, target in
-                model.handleResultForPage(.scan, result: result, target: target)
-            }
+            let pairingViewModel = PairingPageViewModel(model: model, onPageResult: pageResultHandler(for: .pair))
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
             PermissionsGateView(viewModel: permissionsViewModel)
         case .transfer:
             TransferSessionView(viewModel: transferViewModel)
         case .completed:
-            let completionViewModel = CompletionPageViewModel(model: model)
+            let completionViewModel = CompletionPageViewModel(
+                model: model,
+                onPageResult: pageResultHandler(for: .completed)
+            )
             CompletionStateView(viewModel: completionViewModel)
+        case .error:
+            let errorViewModel = ErrorPageViewModel(
+                model: model,
+                onPageResult: pageResultHandler(for: .error)
+            )
+            ErrorStateView(viewModel: errorViewModel)
+        }
+    }
+
+    private func pageResultHandler(
+        for page: AppRoute
+    ) -> (_ result: PageResult, _ target: PageTarget?) -> Void {
+        { result, target in
+            Task {
+                await model.handleResultForPage(page, result: result, target: target)
+            }
         }
     }
 

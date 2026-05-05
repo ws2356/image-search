@@ -76,6 +76,31 @@ final class PageViewModelTests: XCTestCase {
         await viewModel.returnHome()
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
+
+    func test_pairing_page_view_model_forwards_results_when_callback_is_provided() async {
+        let model = StubPageModel()
+        var forwardedResults: [(PageResult, PageTarget?)] = []
+        let viewModel = PairingPageViewModel(model: model) { result, target in
+            forwardedResults.append((result, target))
+        }
+
+        await viewModel.beginPairingTapped()
+        await viewModel.scanAgainTapped()
+        await viewModel.backTapped()
+        viewModel.scannerFailed()
+
+        XCTAssertEqual(model.beginPairingCallCount, 0)
+        XCTAssertEqual(model.openScanFlowCallCount, 0)
+        XCTAssertEqual(model.returnHomeCallCount, 0)
+        XCTAssertEqual(forwardedResults.count, 4)
+        XCTAssertEqual(forwardedResults[0].0, .success)
+        XCTAssertEqual(forwardedResults[0].1, .primary)
+        XCTAssertEqual(forwardedResults[1].0, .success)
+        XCTAssertEqual(forwardedResults[1].1, .secondary)
+        XCTAssertEqual(forwardedResults[2].0, .cancel)
+        XCTAssertNil(forwardedResults[2].1)
+        XCTAssertEqual(forwardedResults[3].0, .failure)
+    }
 }
 
 @MainActor
@@ -86,6 +111,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var removeAfterBackupEnabled = false
     var transferSnapshot = TransferSnapshot.demo
     var completionSummary = CompletionSummary.demo
+    var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var isShowingLowBatteryWarning = false
     var isShowingMediaAccessAlert = false

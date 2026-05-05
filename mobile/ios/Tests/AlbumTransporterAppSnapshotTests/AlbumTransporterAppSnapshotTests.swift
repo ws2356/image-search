@@ -98,6 +98,7 @@ private final class SnapshotAppPageModel: AppPageModeling {
     var removeAfterBackupEnabled = false
     var transferSnapshot = TransferSnapshot.demo
     var completionSummary: CompletionSummary
+    var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
 
     init(homeSummary: HomeSummary, completionSummary: CompletionSummary) {
@@ -123,6 +124,7 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     var removeAfterBackupEnabled = false
     var transferSnapshot: TransferSnapshot
     var completionSummary = CompletionSummary.demo
+    var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var isShowingStopConfirmation = false
 

@@ -1,5 +1,5 @@
 @MainActor
-struct CompletionPageViewModel: ViewModelProtocol {
+struct ErrorPageViewModel: ViewModelProtocol {
     private let model: any AppPageModeling
     private let onPageResultHandler: ((_ result: PageResult, _ target: PageTarget?) -> Void)?
 
@@ -11,21 +11,18 @@ struct CompletionPageViewModel: ViewModelProtocol {
         self.onPageResultHandler = onPageResult
     }
 
-    var summary: CompletionSummary {
-        model.completionSummary
+    var summary: ErrorSummary {
+        model.errorSummary
     }
 
-    func returnHome() async {
-        await model.returnHome()
+    func retryTapped() {
+        model.recordInteraction(name: "retry_tapped", location: "error")
+        onPageResult(.success, target: nil)
     }
 
-    func returnHomeTapped() async {
-        model.recordInteraction(name: "return_home_tapped", location: "completion")
-        if onPageResultHandler != nil {
-            onPageResult(.success, target: nil)
-            return
-        }
-        await model.returnHome()
+    func cancelTapped() {
+        model.recordInteraction(name: "cancel_tapped", location: "error")
+        onPageResult(.cancel, target: nil)
     }
 
     func onPageResult(_ result: PageResult, target: PageTarget?) {
