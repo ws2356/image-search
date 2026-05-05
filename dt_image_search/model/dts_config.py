@@ -21,7 +21,7 @@ def get_debugpy_port() -> int:
     return config.get("debugpy_port", 0)
 
 
-def is_mobile_folder_feature_enabled(default: bool = False) -> bool:
+def is_mobile_folder_feature_enabled(default: bool = True) -> bool:
     config = get_config()
     mobile_folder_config = config.get("mobile_folder")
     if isinstance(mobile_folder_config, dict) and "enabled" in mobile_folder_config:
