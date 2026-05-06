@@ -40,7 +40,7 @@ export APPLE_APP_SPECIFIC_PASSWORD
 
 "$this_dir/distribute_macos.sh" --app-path "$repo_root/pyinstaller-dist/AuSearch.app"
 
-(cd "$parent_repo_root" && "$this_dir/create_github_release.sh" \
+(cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
     --repo "$parent_repo" --tag "$tag" \
     --title "Release $tag" --notes "Bug free code" \
     --dmg-path "$repo_root/pyinstaller-dist/AuSearch.dmg" --target main)
