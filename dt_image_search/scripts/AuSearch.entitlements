@@ -23,5 +23,12 @@
     <key>com.apple.security.network.client</key>
     <true/>
 
+    <!--
+      Required when Hardened Runtime app code triggers Apple Events checks.
+      Without this entitlement, macOS logs a TCC warning and denies prompts.
+    -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+
 </dict>
 </plist>

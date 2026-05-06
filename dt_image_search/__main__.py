@@ -7,6 +7,7 @@ os.environ['MKL_NUM_THREADS'] = '1'
 
 import sys
 import threading
+from importlib.resources import as_file, files
 
 import sys
 import threading
@@ -84,6 +85,14 @@ def _crash_support_log(severity: str, error_type: str = "", message: str = "", w
 
 
 _crash_recovery = CrashRecoveryManager(get_app_data_path(ctx), _crash_support_log)
+
+
+def _load_application_icon() -> QIcon:
+    icon_resource = files("dt_image_search").joinpath("resources", "icon.png")
+    if not icon_resource.is_file():
+        return QIcon()
+    with as_file(icon_resource) as icon_path:
+        return QIcon(str(icon_path))
 
 
 def _activation_server_name(ctx: BMContext) -> str:
@@ -194,13 +203,21 @@ class MainWindow(QMainWindow):
         )
         self._notification_tray_icon: QSystemTrayIcon | None = None
         if QSystemTrayIcon.isSystemTrayAvailable():
-            self._notification_tray_icon = QSystemTrayIcon(self)
-            tray_icon = self.windowIcon()
+            tray_icon = QApplication.windowIcon()
             if tray_icon.isNull():
-                tray_icon = self.style().standardIcon(QStyle.SP_MessageBoxWarning)
-            self._notification_tray_icon.setIcon(tray_icon)
-            self._notification_tray_icon.setToolTip("DTImageSearch")
-            self._notification_tray_icon.show()
+                tray_icon = self.windowIcon()
+            if tray_icon.isNull():
+                tray_icon = _load_application_icon()
+            if not tray_icon.isNull():
+                self._notification_tray_icon = QSystemTrayIcon(self)
+                self._notification_tray_icon.setIcon(tray_icon)
+                self._notification_tray_icon.setToolTip("AuSearch")
+                self._notification_tray_icon.show()
+            else:
+                log(
+                    "warning",
+                    message="MainWindow/__init__: system tray icon unavailable because application icon could not be loaded.",
+                )
 
         self.browse_controller = BrowseController(ctx=self.ctx)
         self.controller = self.browse_controller
@@ -704,6 +721,9 @@ def main():
     initialize_feature_flags()
 
     app = QApplication(sys.argv)
+    app_icon = _load_application_icon()
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
     _publish_app_foreground_state(app)
     app.applicationStateChanged.connect(
         lambda state: _publish_app_foreground_state(app, state)
