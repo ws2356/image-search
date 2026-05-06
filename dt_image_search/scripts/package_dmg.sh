@@ -36,7 +36,8 @@ fi
 
 [[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required" >&2; exit 1; }
 [[ -d "$APP_PATH"   ]] || { echo "Error: .app not found: $APP_PATH" >&2; exit 1; }
-[[ -z "$VOLUME_NAME" ]] && VOLUME_NAME="$(basename "$APP_PATH" .app)"
+APP_BUNDLE_NAME="$(basename "$APP_PATH" .app)"
+[[ -z "$VOLUME_NAME" ]] && VOLUME_NAME="$APP_BUNDLE_NAME"
 
 if [[ "$APP_PATH" != /* ]]; then
     APP_PATH="$(pwd)/$APP_PATH"
@@ -58,10 +59,16 @@ echo "Staging at: $STAGING"
 cp -R "$APP_PATH" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
 
+HDIUTIL_VOLUME_NAME="$VOLUME_NAME"
+if [[ "${HDIUTIL_VOLUME_NAME,,}" == "${APP_BUNDLE_NAME,,}" ]]; then
+    HDIUTIL_VOLUME_NAME="${VOLUME_NAME} Installer"
+    echo "Volume name '$VOLUME_NAME' conflicts with '$APP_BUNDLE_NAME.app' while creating DMG; using '$HDIUTIL_VOLUME_NAME'."
+fi
+
 # ── Create compressed DMG ─────────────────────────────────────────────────────
 echo "Creating DMG: $OUTPUT_DMG"
 hdiutil create \
-    -volname "$VOLUME_NAME" \
+    -volname "$HDIUTIL_VOLUME_NAME" \
     -srcfolder "$STAGING" \
     -ov \
     -format UDZO \

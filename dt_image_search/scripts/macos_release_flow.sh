@@ -30,6 +30,8 @@ if [ -z "$tag" ]; then
     exit 1
 fi
 
+cd "$repo_root"
+
 "$this_dir/build_pyinstaller.sh"
 
 set -a; . "$repo_root/.env"; set +a
