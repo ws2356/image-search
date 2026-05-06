@@ -32,8 +32,7 @@ if build_type not in {"prod", "dev"}:
 revision = os.environ.get("DTIS_REVISION", "").strip()
 app_name = "AuSearch" if build_type == "prod" else f"AuSearch-{build_type}"
 bundle_identifier = "vip.wansong.dtimagesearch" if build_type == "prod" else f"vip.wansong.dtimagesearch.{build_type}"
-build_vars_dir = Path(tempfile.gettempdir()) / f"dtis_build_vars_{build_type}"
-build_vars_dir.mkdir(parents=True, exist_ok=True)
+build_vars_dir = Path(tempfile.mkdtemp(prefix=f"dtis_build_vars_{build_type}"))
 build_vars_path = build_vars_dir / "build_vars"
 build_vars_path.write_text(
     json.dumps({"build_type": build_type, "revision": revision}),

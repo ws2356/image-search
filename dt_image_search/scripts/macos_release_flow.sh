@@ -6,7 +6,7 @@ if [[ "$this_file" != /* ]]; then
     this_file="$(pwd)/$this_file"
 fi
 this_dir="$(dirname "$this_file")"
-repo_root="${this_dir}/../.."
+repo_root="$(cd "${this_dir}/../.." && pwd)"
 parent_repo_root="$(dirname "$repo_root")"
 parent_repo="ws2356/ausearch-release"
 

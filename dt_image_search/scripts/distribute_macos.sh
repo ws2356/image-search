@@ -26,6 +26,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+cd "$SCRIPT_DIR/../.."
+
 APP_PATH=""
 IDENTITY="${DEVELOPER_ID_IDENTITY:-}"
 SKIP_NOTARIZE=false

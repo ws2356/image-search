@@ -2,7 +2,7 @@
 set -euo pipefail
 
 distpath=""
-build_type="${DTIS_BUILD_TYPE:prod}"
+build_type="${DTIS_BUILD_TYPE:-prod}"
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --build-type) build_type="$2"; shift 2;;
@@ -10,6 +10,10 @@ while [[ "$#" -gt 0 ]]; do
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
 done
+
+if [ -n "$distpath" ] && [[ "$distpath" != /* ]]; then
+    distpath="$(pwd)/$distpath"
+fi
 
 this_file=$0
 if [[ "$this_file" != /* ]]; then
@@ -35,7 +39,21 @@ export DTIS_REVISION="$revision"
 if [ -z "$distpath" ]; then
     distpath="$project_root/pyinstaller-dist"
 fi
-pyinstaller "$project_root/dt_image_search/DTImageSearch.spec"  --noconfirm --clean --distpath "$distpath"
 
-bash "$this_dir/prune_macos_bundle.sh" --app-path "${distpath}/AuSearch.app"
+(cd "$project_root" && pyinstaller "dt_image_search/DTImageSearch.spec"  --noconfirm --clean --distpath "$distpath")
+
+app_name="AuSearch"
+if [[ "$build_type" != "prod" ]]; then
+    app_name="AuSearch-${build_type}"
+fi
+app_path="${distpath}/${app_name}.app"
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    if [[ ! -d "$app_path" ]]; then
+        echo "Expected app bundle not found: $app_path"
+        exit 1
+    fi
+    bash "$this_dir/prune_macos_bundle.sh" --app-path "$app_path"
+fi
+
 echo "PyInstaller build completed. Output located at: $distpath"
