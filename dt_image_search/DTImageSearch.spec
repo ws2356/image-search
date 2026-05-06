@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import json
 import os
 import plistlib
 import sys
@@ -28,10 +29,16 @@ datas += heif_datas
 build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
 if build_type not in {"prod", "dev"}:
     raise ValueError(f"Unsupported DTIS_BUILD_TYPE: {build_type!r}. Expected 'prod' or 'dev'.")
+revision = os.environ.get("DTIS_REVISION", "").strip()
 app_name = "AuSearch" if build_type == "prod" else f"AuSearch-{build_type}"
 bundle_identifier = "vip.wansong.dtimagesearch" if build_type == "prod" else f"vip.wansong.dtimagesearch.{build_type}"
-build_vars_path = Path(tempfile.gettempdir()) / f"dtis_build_vars_{build_type}"
-build_vars_path.write_text(f"build_type={build_type}\n", encoding="utf-8")
+build_vars_dir = Path(tempfile.gettempdir()) / f"dtis_build_vars_{build_type}"
+build_vars_dir.mkdir(parents=True, exist_ok=True)
+build_vars_path = build_vars_dir / "build_vars"
+build_vars_path.write_text(
+    json.dumps({"build_type": build_type, "revision": revision}),
+    encoding="utf-8",
+)
 datas += [(str(build_vars_path), "dt_image_search/resources")]
 
 # UPX is disabled on macOS: UPX modifies Mach-O headers in a way that breaks

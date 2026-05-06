@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from functools import lru_cache
 from importlib.resources import files
@@ -29,18 +30,16 @@ def _read_build_type_from_resource() -> str | None:
     except OSError:
         return None
 
-    for raw_line in raw_text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = [part.strip() for part in line.split("=", 1)]
-        if key != "build_type":
-            continue
-        normalized_value = _normalize_build_type(value)
-        if normalized_value is None:
-            return None
-        return normalized_value
-    return None
+    try:
+        build_vars = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(build_vars, dict):
+        return None
+    build_type = build_vars.get("build_type")
+    if not isinstance(build_type, str):
+        return None
+    return _normalize_build_type(build_type)
 
 
 @lru_cache(maxsize=1)

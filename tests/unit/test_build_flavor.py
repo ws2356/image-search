@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -46,7 +47,7 @@ class TestBuildFlavor(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             resource_root = Path(temp_dir) / "resources"
             resource_root.mkdir(parents=True, exist_ok=True)
-            (resource_root / "build_vars").write_text("# comment\nbuild_type=dev\n", encoding="utf-8")
+            (resource_root / "build_vars").write_text(json.dumps({"build_type": "dev"}), encoding="utf-8")
             fake_package_root = _FakePackageRoot(Path(temp_dir))
             with patch.object(build_flavor, "files", return_value=fake_package_root):
                 self.assertEqual(build_flavor._read_build_type_from_resource(), "dev")
@@ -55,7 +56,7 @@ class TestBuildFlavor(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             resource_root = Path(temp_dir) / "resources"
             resource_root.mkdir(parents=True, exist_ok=True)
-            (resource_root / "build_vars").write_text("build_type=qa\n", encoding="utf-8")
+            (resource_root / "build_vars").write_text(json.dumps({"build_type": "qa"}), encoding="utf-8")
             fake_package_root = _FakePackageRoot(Path(temp_dir))
             with patch.object(build_flavor, "files", return_value=fake_package_root):
                 self.assertIsNone(build_flavor._read_build_type_from_resource())

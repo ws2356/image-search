@@ -2,8 +2,10 @@
 set -euo pipefail
 
 distpath=""
+build_type="${DTIS_BUILD_TYPE:prod}"
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
+        --build-type) build_type="$2"; shift 2;;
         --distpath) distpath="$2"; shift 2;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
@@ -16,6 +18,17 @@ fi
 
 this_dir="$(dirname "$this_file")"
 project_root="${this_dir}/../.."
+
+if [ -n "$build_type" ]; then
+    if [[ "$build_type" != "prod" && "$build_type" != "dev" ]]; then
+        echo "Unsupported build type: $build_type. Expected 'prod' or 'dev'."
+        exit 1
+    fi
+    export DTIS_BUILD_TYPE="$build_type"
+fi
+
+revision="$(git -C "$project_root" rev-parse HEAD)"
+export DTIS_REVISION="$revision"
 
 "$this_dir/compile_pyside6_ui.sh"
 

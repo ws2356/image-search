@@ -1,2 +1,4 @@
-build_type=prod
-revision=
+{
+  "build_type": "prod",
+  "revision": ""
+}

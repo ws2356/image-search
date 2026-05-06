@@ -28,7 +28,7 @@ from dt_image_search.model.dt_device_id import get_device_id
 from dt_image_search.model.dt_session_id import session_id
 from dt_image_search.telemetry.otlp_settings import EXPORT_BATCH_SIZE, EXPORT_QUEUE_SIZE, EXPORT_TIMEOUT_SECONDS, LOGS_UPLOAD_ENDPOINT, METRICS_UPLOAD_ENDPOINT, TELEMETRY_UPLOAD_HOST, TRACES_UPLOAD_ENDPOINT
 from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
-from dt_image_search.model.dts_config import get_log_level
+from dt_image_search.model.dts_config import get_log_level, get_revision
 
 
 _telemetry_upload_host = TELEMETRY_UPLOAD_HOST
@@ -37,12 +37,14 @@ _traces_upload_endpoint = TRACES_UPLOAD_ENDPOINT
 _logs_upload_endpoint = LOGS_UPLOAD_ENDPOINT
 _session_id_attribute = "app.session.id"
 _device_id_attribute = "app.device.id"
+_revision_attribute = "app.revision"
 
 _image_search_client = "imagesearch_client"
 
 _resource = Resource.create(attributes={
     "service.name": _image_search_client,
     _device_id_attribute: get_device_id(),
+    _revision_attribute: get_revision(),
     **RESOURCE_ATTRIBUTES,
 })
 _BATCH_SIZE = EXPORT_BATCH_SIZE
