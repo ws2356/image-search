@@ -13,7 +13,7 @@ from torchvision import transforms
 import numpy as np
 import faiss
 import hf_xet
-from dt_image_search.model.dts_db import create_db_conn, get_files_by_clip_indices, get_pending_files_for_folder, count_files_in_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
+from dt_image_search.model.dts_db import create_db_conn, get_folder_by_id, get_files_by_clip_indices, get_pending_files_for_folder, count_files_in_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
@@ -45,6 +45,13 @@ def is_image_file(file_path: str) -> bool:
 
 @with_trace("query_index")
 def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str) -> list:
+    # Check if folder exists
+    with create_db_conn(ctx=ctx) as conn:
+        folder = get_folder_by_id(conn, folder_id)
+        if not folder:
+            return []
+        if not os.path.exists(folder.path):
+            return []
     index_score_pairs = _query_internal(index_path, query_text, TOP_K * 5)  # Fetch more to account for deduplication
     # Dedupe by item[0] which is the file id
     seen_ids = set()

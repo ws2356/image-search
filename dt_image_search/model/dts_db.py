@@ -59,6 +59,13 @@ def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
         conn.set_trace_callback(_sql_logger)  # Set the trace callback for logging SQL statements
     return conn
 
+def get_folder_by_id(conn, folder_id: int) -> Folder:
+    cursor = conn.execute("SELECT id, path, status, added_at FROM folders WHERE id = ?", (folder_id,))
+    row = cursor.fetchone()
+    if row:
+        return Folder(id=row[0], path=row[1], status=row[2], added_at=row[3])
+    return None
+
 def insert_folder(conn, folder_path: str) -> Folder:
     # Replace '\' with '/' for consistency
     folder_path = folder_path.replace('\\', '/')
