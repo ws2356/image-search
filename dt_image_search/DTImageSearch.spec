@@ -9,7 +9,11 @@ from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metada
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
-platform_resource_includes = ["resources/ios_bitten_apple_gray.png"]
+platform_resource_includes = [
+    "resources/ios_bitten_apple_gray.png",
+    "resources/icon.png",
+    "resources/appicon.icns",
+]
 # The Apple mobile device installer payload is only used on Windows. Shipping it
 # in macOS bundles adds tens of megabytes of dead weight to the .app/.dmg.
 if sys.platform == "win32":

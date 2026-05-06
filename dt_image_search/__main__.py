@@ -1,5 +1,6 @@
 import argparse
 import os
+import plistlib
 import time
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
@@ -30,7 +31,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle, QSystemTrayIcon, QMessageBox, QLabel
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from dt_image_search.build_flavor import get_build_type
@@ -93,6 +94,20 @@ def _load_application_icon() -> QIcon:
         return QIcon()
     with as_file(icon_resource) as icon_path:
         return QIcon(str(icon_path))
+
+
+def _load_application_version() -> str:
+    plist_resource = files("dt_image_search").joinpath("resources", "AppInfo.plist")
+    if not plist_resource.is_file():
+        return ""
+    try:
+        plist_data = plistlib.loads(plist_resource.read_bytes())
+    except (OSError, plistlib.InvalidFileException):
+        return ""
+    short_version = plist_data.get("CFBundleShortVersionString")
+    if isinstance(short_version, str):
+        return short_version.strip()
+    return ""
 
 
 def _activation_server_name(ctx: BMContext) -> str:
@@ -186,6 +201,7 @@ class MainWindow(QMainWindow):
         self.ctx = ctx
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self._configure_app_menu()
 
         self._alternativeController = None
         self._mode = _BrowseMode
@@ -202,7 +218,7 @@ class MainWindow(QMainWindow):
             self._show_mobile_transfer_disk_full_notification
         )
         self._notification_tray_icon: QSystemTrayIcon | None = None
-        if QSystemTrayIcon.isSystemTrayAvailable():
+        if sys.platform != "darwin" and QSystemTrayIcon.isSystemTrayAvailable():
             tray_icon = QApplication.windowIcon()
             if tray_icon.isNull():
                 tray_icon = self.windowIcon()
@@ -213,11 +229,6 @@ class MainWindow(QMainWindow):
                 self._notification_tray_icon.setIcon(tray_icon)
                 self._notification_tray_icon.setToolTip("AuSearch")
                 self._notification_tray_icon.show()
-            else:
-                log(
-                    "warning",
-                    message="MainWindow/__init__: system tray icon unavailable because application icon could not be loaded.",
-                )
 
         self.browse_controller = BrowseController(ctx=self.ctx)
         self.controller = self.browse_controller
@@ -347,6 +358,46 @@ class MainWindow(QMainWindow):
                 QSystemTrayIcon.MessageIcon.Warning,
                 15000,
             )
+
+    def _configure_app_menu(self) -> None:
+        if sys.platform != "darwin":
+            return
+
+        menu_bar = self.menuBar()
+        if menu_bar is None:
+            return
+        menu_bar.clear()
+        app_menu = menu_bar.addMenu("AuSearch")
+
+        about_action = QAction("About AuSearch", self)
+        about_action.setMenuRole(QAction.MenuRole.AboutRole)
+        about_action.triggered.connect(self._show_about_dialog)
+        app_menu.addAction(about_action)
+
+        app_menu.addSeparator()
+
+        quit_action = QAction("Quit AuSearch", self)
+        quit_action.setMenuRole(QAction.MenuRole.QuitRole)
+        quit_action.setShortcut("Meta+Q")
+        quit_action.triggered.connect(QApplication.instance().quit)
+        app_menu.addAction(quit_action)
+
+    def _show_about_dialog(self) -> None:
+        version_text = QCoreApplication.applicationVersion() or "Unknown"
+        message_box = QMessageBox(self)
+        message_box.setWindowTitle("About AuSearch")
+        message_box.setTextFormat(Qt.TextFormat.RichText)
+        message_box.setText(
+            "<b>AuSearch</b><br/>"
+            f"Version {version_text}<br/><br/>"
+            "Download the latest version:<br/>"
+            '<a href="https://aurora.boldman.net">https://aurora.boldman.net</a>'
+        )
+        message_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        message_box.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        for label in message_box.findChildren(QLabel):
+            label.setOpenExternalLinks(True)
+        message_box.exec()
 
     @property
     def image_list_view(self):
@@ -724,6 +775,9 @@ def main():
     app_icon = _load_application_icon()
     if not app_icon.isNull():
         app.setWindowIcon(app_icon)
+    app_version = _load_application_version()
+    if app_version:
+        app.setApplicationVersion(app_version)
     _publish_app_foreground_state(app)
     app.applicationStateChanged.connect(
         lambda state: _publish_app_foreground_state(app, state)
