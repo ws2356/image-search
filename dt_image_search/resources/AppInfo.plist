@@ -5,9 +5,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>AuSearch</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.10</string>
+	<string>1.0.11</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.10</string>
+	<string>1.0.11</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>AuSearch uses Apple Events for Finder integration, such as revealing selected files.</string>
 	<key>NSLocalNetworkUsageDescription</key>
