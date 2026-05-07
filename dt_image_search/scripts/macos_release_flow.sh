@@ -17,18 +17,19 @@ if [[ "$parent_repo_url" != "https://github.com/$parent_repo.git" ]]; then
     exit 1
 fi
 
-tag=""
-while [[ "$#" -gt 0 ]]; do
-    case "$1" in
-        --tag) tag="$2"; shift 2;;
-        *) echo "Unknown parameter passed: $1"; exit 1;;
-    esac
-done
-
-if [ -z "$tag" ]; then
-    echo "Error: --tag parameter is required."
+# Get tag from CFBundleVersion in dt_image_search/resources/AppInfo.plist
+app_info_plist="$repo_root/dt_image_search/resources/AppInfo.plist"
+if [[ ! -f "$app_info_plist" ]]; then
+    echo "Error: AppInfo.plist not found at expected path: $app_info_plist"
     exit 1
 fi
+tag="$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$app_info_plist")"
+if [[ -z "$tag" ]]; then
+    echo "Error: CFBundleVersion not found or empty in AppInfo.plist"
+    exit 1
+fi
+
+echo "Using tag: $tag"
 
 cd "$repo_root"
 
@@ -38,7 +39,7 @@ set -a; . "$repo_root/.env"; set +a
 APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
 export APPLE_APP_SPECIFIC_PASSWORD
 
-"$this_dir/distribute_macos.sh" --app-path "$repo_root/pyinstaller-dist/AuSearch.app"
+"$this_dir/create_distributable_dmg.sh" --app-path "$repo_root/pyinstaller-dist/AuSearch.app"
 
 (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
     --repo "$parent_repo" --tag "$tag" \
