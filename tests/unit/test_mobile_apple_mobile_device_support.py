@@ -86,6 +86,28 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
             ),
         )
 
+    def test_probe_detects_driver_inf_names_from_localized_inventory_output(self):
+        manager = AppleMobileDeviceSupportManager(
+            platform="win32",
+            command_runner=self._command_runner(
+                service_stdout="SERVICE_NAME: Apple Mobile Device Service",
+                driver_stdout=(
+                    "发布名称: oem65.inf\n"
+                    "原始名称: usbaapl64.inf\n"
+                    "提供程序名称: Apple\n"
+                    "发布名称: oem66.inf\n"
+                    "原始名称: netaapl64.inf\n"
+                ),
+            ),
+            resource_exists=lambda _name: True,
+        )
+
+        status = manager.probe()
+
+        self.assertTrue(status.usb_driver_installed)
+        self.assertTrue(status.network_driver_installed)
+        self.assertTrue(status.is_ready)
+
     def test_probe_requires_companion_driver_assets_before_install(self):
         available_assets = {
             APPLE_MOBILE_DEVICE_SUPPORT_MSI,
@@ -156,6 +178,11 @@ class TestAppleMobileDeviceSupportManager(unittest.TestCase):
             self.assertIn(str(installer_log_path), decoded_script)
             self.assertIn("Add-Content -LiteralPath $installerLogPath", decoded_script)
             self.assertIn("Apple network pnputil output", decoded_script)
+            self.assertIn("Test-DriverOriginalNameInstalled", decoded_script)
+            self.assertIn(
+                "driver inventory confirms installation; continuing.",
+                decoded_script,
+            )
             self.assertIn("Post-install driver status: usb=", decoded_script)
             self.assertIn("Remove-Item -LiteralPath $stageDir", decoded_script)
             self.assertEqual(

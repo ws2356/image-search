@@ -273,6 +273,14 @@ def _build_elevated_install_command(
             "function Write-InstallLog([string]$message) {",
             "    Add-Content -LiteralPath $installerLogPath -Encoding UTF8 -Value ((Get-Date -Format o) + ' ' + $message)",
             "}",
+            "function Test-DriverOriginalNameInstalled([string]$originalName) {",
+            "    $driverInventory = & pnputil.exe /enum-drivers 2>&1",
+            "    if ($driverInventory) {",
+            "        Write-InstallLog ((\"Driver inventory for \" + $originalName + \":`n\" + ($driverInventory | Out-String)).TrimEnd())",
+            "    }",
+            "    $driverInventoryText = $driverInventory | Out-String",
+            "    return $driverInventoryText -match (\"(?im)(^|[^A-Za-z0-9_.-])\" + [regex]::Escape($originalName) + \"([^A-Za-z0-9_.-]|$)\")",
+            "}",
             "try {",
             "    Write-InstallLog \"Starting Apple Mobile Device Support install.\"",
             "    Write-InstallLog \"Stage directory: $stageDir\"",
@@ -284,15 +292,28 @@ def _build_elevated_install_command(
             "    if ($installer.ExitCode -ne 0) { throw \"Apple Mobile Device Support installer exited with code $($installer.ExitCode).\" }",
             "    $usbDriverOutput = & pnputil.exe /add-driver $usbDriverPath /install 2>&1",
             "    if ($usbDriverOutput) { Write-InstallLog ((\"Apple USB pnputil output:`n\" + ($usbDriverOutput | Out-String)).TrimEnd()) }",
-            "    Write-InstallLog \"Apple USB pnputil exit code: $LASTEXITCODE\"",
-            "    if ($LASTEXITCODE -ne 0) { throw \"Installing Apple USB driver failed with exit code $LASTEXITCODE.\" }",
+            "    $usbDriverExitCode = $LASTEXITCODE",
+            "    Write-InstallLog \"Apple USB pnputil exit code: $usbDriverExitCode\"",
+            "    if ($usbDriverExitCode -ne 0) {",
+            "        $usbDriverInstalled = Test-DriverOriginalNameInstalled -originalName 'usbaapl64.inf'",
+            "        Write-InstallLog \"Apple USB fallback installed check: $usbDriverInstalled\"",
+            "        if (-not $usbDriverInstalled) { throw \"Installing Apple USB driver failed with exit code $usbDriverExitCode.\" }",
+            "        Write-InstallLog \"Apple USB driver install returned non-zero exit code $usbDriverExitCode but driver inventory confirms installation; continuing.\"",
+            "    }",
             "    $networkDriverOutput = & pnputil.exe /add-driver $networkDriverPath /install 2>&1",
             "    if ($networkDriverOutput) { Write-InstallLog ((\"Apple network pnputil output:`n\" + ($networkDriverOutput | Out-String)).TrimEnd()) }",
-            "    Write-InstallLog \"Apple network pnputil exit code: $LASTEXITCODE\"",
-            "    if ($LASTEXITCODE -ne 0) { throw \"Installing Apple network driver failed with exit code $LASTEXITCODE.\" }",
+            "    $networkDriverExitCode = $LASTEXITCODE",
+            "    Write-InstallLog \"Apple network pnputil exit code: $networkDriverExitCode\"",
+            "    if ($networkDriverExitCode -ne 0) {",
+            "        $networkDriverInstalled = Test-DriverOriginalNameInstalled -originalName 'netaapl64.inf'",
+            "        Write-InstallLog \"Apple network fallback installed check: $networkDriverInstalled\"",
+            "        if (-not $networkDriverInstalled) { throw \"Installing Apple network driver failed with exit code $networkDriverExitCode.\" }",
+            "        Write-InstallLog \"Apple network driver install returned non-zero exit code $networkDriverExitCode but driver inventory confirms installation; continuing.\"",
+            "    }",
             "    $postInstallDriverInventory = & pnputil.exe /enum-drivers 2>&1",
             "    if ($postInstallDriverInventory) { Write-InstallLog ((\"Post-install driver inventory excerpt:`n\" + ($postInstallDriverInventory | Out-String)).TrimEnd()) }",
-            "    Write-InstallLog (\"Post-install driver status: usb=\" + ($postInstallDriverInventory -match 'Original Name:\\s*usbaapl64\\.inf\\b') + ' network=' + ($postInstallDriverInventory -match 'Original Name:\\s*netaapl64\\.inf\\b'))",
+            "    $postInstallDriverText = $postInstallDriverInventory | Out-String",
+            "    Write-InstallLog (\"Post-install driver status: usb=\" + ($postInstallDriverText -match '(?im)(^|[^A-Za-z0-9_.-])usbaapl64\\.inf([^A-Za-z0-9_.-]|$)') + ' network=' + ($postInstallDriverText -match '(?im)(^|[^A-Za-z0-9_.-])netaapl64\\.inf([^A-Za-z0-9_.-]|$)'))",
             "    Write-InstallLog 'Apple Mobile Device Support install completed.'",
             "} catch {",
             "    Write-InstallLog ((\"Installer error: \" + $_.Exception.Message).TrimEnd())",
@@ -380,11 +401,14 @@ def _copy_resource_to_dir(file_name: str, destination_dir: Path) -> Path:
 
 
 def _driver_original_name_installed(driver_inventory: str, original_name: str) -> bool:
+    normalized_original_name = original_name.strip()
+    if not normalized_original_name:
+        return False
     return (
         re.search(
-            rf"Original Name:\s*{re.escape(original_name)}\b",
+            rf"(^|[^A-Za-z0-9_.-]){re.escape(normalized_original_name)}([^A-Za-z0-9_.-]|$)",
             driver_inventory,
-            flags=re.IGNORECASE,
+            flags=re.IGNORECASE | re.MULTILINE,
         )
         is not None
     )
