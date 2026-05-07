@@ -735,6 +735,8 @@ class FolderTreeModel(QAbstractItemModel):
         child_path = self._fs_proxy_model.file_path(child_index)
         if not child_path or self._is_mobile_folder_path(child_path):
             return False
+        if Path(self._public_path(child_path)).name.startswith("."):
+            return False
         return self.folder_predicate(Path(self._public_path(child_path)))
 
     def _visible_child_count_before_source_row(self, fs_parent_index: QModelIndex, stop_row: int) -> int:
