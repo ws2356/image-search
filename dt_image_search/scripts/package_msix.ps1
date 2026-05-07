@@ -2,14 +2,13 @@
 
 param(
     [ValidateSet("prod", "dev")]
-    [string]$BuildType = "prod"
+    [string]$BuildType = "prod",
+    [switch]$SkipClean
 )
 
 # Set strict mode and error action
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$appExecutableRoot = if ($BuildType -eq "prod") { "DTImageSearch" } else { "DTImageSearch-$BuildType" }
-$appExecutablePath = "$appExecutableRoot\$appExecutableRoot.exe"
 $msixOutputName = if ($BuildType -eq "prod") { "DTImageSearch.msix" } else { "DTImageSearch-$BuildType.msix" }
 
 # Get script directory and change to repo root (equivalent to bash path resolution)
@@ -20,9 +19,13 @@ Set-Location $repoRoot
 
 Write-Host "Changed to repository root: $(Get-Location)"
 
-Remove-Item -Force -Recurse -ErrorAction Ignore .\DTImageSearchApp
-Remove-Item -Force -Recurse -ErrorAction Ignore .\build
-Remove-Item -Force -Recurse -ErrorAction Ignore "pyinstaller-dist-$BuildType"
+if ($SkipClean) {
+    Write-Host "Skipping cleanup step (-SkipClean)."
+} else {
+    Remove-Item -Force -Recurse -ErrorAction Ignore .\DTImageSearchApp
+    Remove-Item -Force -Recurse -ErrorAction Ignore .\build
+    Remove-Item -Force -Recurse -ErrorAction Ignore "pyinstaller-dist-$BuildType"
+}
 
 & "$scriptDir\build.ps1"
 . "$scriptDir\utils.ps1"
@@ -69,6 +72,37 @@ if (Test-Path "pyinstaller-dist-$BuildType") {
     Write-Error "dist directory not found"
     exit 1
 }
+
+# Detect executable path from packaged payload to keep manifest in sync with PyInstaller output naming.
+$appExecutablePath = $null
+$bundleExecutableDirs = @(
+    Get-ChildItem -Path $appDir -Directory | Where-Object {
+        Test-Path (Join-Path $_.FullName "$($_.Name).exe")
+    }
+)
+if ($bundleExecutableDirs.Count -eq 1) {
+    $appExecutableRoot = $bundleExecutableDirs[0].Name
+    $appExecutablePath = "$appExecutableRoot\$appExecutableRoot.exe"
+} elseif ($bundleExecutableDirs.Count -gt 1) {
+    $candidates = ($bundleExecutableDirs | ForEach-Object { $_.Name }) -join ", "
+    Write-Error "Multiple executable bundle directories found in '$appDir': $candidates"
+    exit 1
+}
+
+if (-not $appExecutablePath) {
+    $rootExecutables = @(Get-ChildItem -Path $appDir -File -Filter "*.exe")
+    if ($rootExecutables.Count -eq 1) {
+        $appExecutablePath = $rootExecutables[0].Name
+    } elseif ($rootExecutables.Count -gt 1) {
+        $candidates = ($rootExecutables | ForEach-Object { $_.Name }) -join ", "
+        Write-Error "Multiple root-level executables found in '$appDir': $candidates"
+        exit 1
+    } else {
+        Write-Error "Could not find packaged executable in '$appDir'."
+        exit 1
+    }
+}
+Write-Host "Detected packaged executable: $appExecutablePath"
 
 # Copy manifest and icon
 $manifestSrc = "dt_image_search\resources\AppxManifest.xml"
