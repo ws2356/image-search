@@ -16,12 +16,16 @@ _FEATURE_FLAGS_TIMEOUT_SECONDS = 10
 _FEATURE_FLAGS_MAX_RETRIES = 3
 _FEATURE_FLAGS_RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0)
 _FEATURE_FLAGS_CACHE_FILENAME = "feature_flags_remote_cache.json"
+_DEFAULT_DESKTOP_ROOT_TRACE_SAMPLE_RATE = 0.1
+# Remote schema key: desktop.telemetry.root_trace_sample_rate
+_DESKTOP_ROOT_TRACE_SAMPLE_RATE_KEY = "root_trace_sample_rate"
 
 
 class _FeatureFlagStore:
     def __init__(self):
         self._lock = threading.RLock()
         self._mobile_folder_enabled: bool | None = None
+        self._desktop_root_trace_sample_rate: float | None = None
         self.refresh_thread = None
 
     def initialize(self) -> None:
@@ -41,6 +45,20 @@ class _FeatureFlagStore:
             self._mobile_folder_enabled = is_mobile_folder_feature_enabled()
             return self._mobile_folder_enabled
 
+    def desktop_root_trace_sample_rate(self) -> float:
+        with self._lock:
+            if self._desktop_root_trace_sample_rate is not None:
+                return self._desktop_root_trace_sample_rate
+
+            cached_payload = _load_cached_feature_flags_payload()
+            cached_sample_rate = _extract_desktop_root_trace_sample_rate(cached_payload) if cached_payload is not None else None
+            if cached_sample_rate is not None:
+                self._desktop_root_trace_sample_rate = cached_sample_rate
+                return self._desktop_root_trace_sample_rate
+
+            self._desktop_root_trace_sample_rate = _DEFAULT_DESKTOP_ROOT_TRACE_SAMPLE_RATE
+            return self._desktop_root_trace_sample_rate
+
 
     def refresh_async(self) -> None:
         with self._lock:
@@ -55,22 +73,29 @@ class _FeatureFlagStore:
         refresh_thread.start()
 
     def _refresh_worker(self) -> None:
-        from dt_image_search.telemetry.telemetry_client import log
         try:
             payload = _fetch_feature_flags_payload()
             _save_cached_feature_flags_payload(payload)
             remote_enabled = _extract_mobile_folder_enabled(payload)
             if remote_enabled is None:
-                log("warning", message="FeatureFlags: remote payload missing mobile_folder.enabled.")
+                _log_feature_flags("warning", "FeatureFlags: remote payload missing mobile_folder.enabled.")
                 return
+            remote_sample_rate = _extract_desktop_root_trace_sample_rate(payload)
             with self._lock:
                 # Only update the in-memory flag if it hasn't been set yet.
                 # This is to ensure consistent reading of the flag within a single app session, even if remote refreshes happen mid-session.
                 if self._mobile_folder_enabled is None:
                     self._mobile_folder_enabled = remote_enabled
-            log("info", message=f"FeatureFlags: remote mobile_folder.enabled={remote_enabled}.")
+                if self._desktop_root_trace_sample_rate is None and remote_sample_rate is not None:
+                    self._desktop_root_trace_sample_rate = remote_sample_rate
+            _log_feature_flags("info", f"FeatureFlags: remote mobile_folder.enabled={remote_enabled}.")
+            if remote_sample_rate is not None:
+                _log_feature_flags(
+                    "info",
+                    f"FeatureFlags: remote desktop.telemetry.root_trace_sample_rate={remote_sample_rate}.",
+                )
         except RuntimeError as exc:
-            log("warning", message=f"FeatureFlags: failed to refresh remote flags: {exc}")
+            _log_feature_flags("warning", f"FeatureFlags: failed to refresh remote flags: {exc}")
 
 
 def _fetch_feature_flags_payload() -> dict:
@@ -140,13 +165,11 @@ def _is_temporary_url_error(error: URLError) -> bool:
 
 
 def _sleep_before_retry(*, retry_attempt: int, reason: str) -> None:
-    from dt_image_search.telemetry.telemetry_client import log
-
     delay_index = min(max(retry_attempt - 1, 0), len(_FEATURE_FLAGS_RETRY_DELAYS_SECONDS) - 1)
     delay_seconds = _FEATURE_FLAGS_RETRY_DELAYS_SECONDS[delay_index]
-    log(
+    _log_feature_flags(
         "warning",
-        message=(
+        (
             "FeatureFlags: temporary request failure "
             f"reason={reason} retry_attempt={retry_attempt}/{_FEATURE_FLAGS_MAX_RETRIES} "
             f"delay_seconds={delay_seconds}"
@@ -163,8 +186,6 @@ def _feature_flags_cache_path() -> Path:
 
 
 def _load_cached_feature_flags_payload() -> dict | None:
-    from dt_image_search.telemetry.telemetry_client import log
-
     cache_path = _feature_flags_cache_path()
     if not cache_path.exists():
         return None
@@ -173,24 +194,22 @@ def _load_cached_feature_flags_payload() -> dict | None:
         with cache_path.open("r", encoding="utf-8") as cache_file:
             payload = json.load(cache_file)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        log("warning", message=f"FeatureFlags: failed to load cached remote flags: {exc}")
+        _log_feature_flags("warning", f"FeatureFlags: failed to load cached remote flags: {exc}")
         return None
 
     if not isinstance(payload, dict):
-        log("warning", message="FeatureFlags: cached remote flags payload must be a JSON object.")
+        _log_feature_flags("warning", "FeatureFlags: cached remote flags payload must be a JSON object.")
         return None
     return payload
 
 
 def _save_cached_feature_flags_payload(payload: dict) -> None:
-    from dt_image_search.telemetry.telemetry_client import log
-
     cache_path = _feature_flags_cache_path()
     try:
         with cache_path.open("w", encoding="utf-8") as cache_file:
             json.dump(payload, cache_file, ensure_ascii=False)
     except (OSError, TypeError, ValueError) as exc:
-        log("warning", message=f"FeatureFlags: failed to save cached remote flags: {exc}")
+        _log_feature_flags("warning", f"FeatureFlags: failed to save cached remote flags: {exc}")
 
 
 def _extract_mobile_folder_enabled(payload: dict) -> bool | None:
@@ -200,6 +219,18 @@ def _extract_mobile_folder_enabled(payload: dict) -> bool | None:
     if "enabled" not in mobile_folder_payload:
         return None
     return _to_bool(mobile_folder_payload.get("enabled"))
+
+
+def _extract_desktop_root_trace_sample_rate(payload: dict) -> float | None:
+    desktop_payload = payload.get("desktop")
+    if not isinstance(desktop_payload, dict):
+        return None
+    telemetry_payload = desktop_payload.get("telemetry")
+    if not isinstance(telemetry_payload, dict):
+        return None
+    if _DESKTOP_ROOT_TRACE_SAMPLE_RATE_KEY not in telemetry_payload:
+        return None
+    return _to_sample_rate(telemetry_payload.get(_DESKTOP_ROOT_TRACE_SAMPLE_RATE_KEY))
 
 
 def _to_bool(value) -> bool:
@@ -216,6 +247,28 @@ def _to_bool(value) -> bool:
     return False
 
 
+def _to_sample_rate(value) -> float | None:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return max(0.0, min(float(value), 1.0))
+    if isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return None
+        return max(0.0, min(parsed, 1.0))
+    return None
+
+
+def _log_feature_flags(severity: str, message: str) -> None:
+    try:
+        from dt_image_search.telemetry.telemetry_client import log
+    except Exception:
+        return
+    log(severity, message=message)
+
+
 _feature_flag_store = _FeatureFlagStore()
 
 
@@ -225,6 +278,10 @@ def initialize_feature_flags() -> None:
 
 def is_mobile_folder_enabled() -> bool:
     return _feature_flag_store.is_mobile_folder_enabled()
+
+
+def get_desktop_root_trace_sample_rate() -> float:
+    return _feature_flag_store.desktop_root_trace_sample_rate()
 
 
 def refresh_feature_flags_async() -> None:

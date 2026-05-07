@@ -14,6 +14,7 @@ from opentelemetry import trace, metrics
 from opentelemetry.propagate import extract
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.sdk.metrics import MeterProvider, Counter, UpDownCounter, Histogram, ObservableCounter, ObservableUpDownCounter, ObservableGauge
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -29,6 +30,7 @@ from dt_image_search.model.dt_session_id import session_id
 from dt_image_search.telemetry.otlp_settings import EXPORT_BATCH_SIZE, EXPORT_QUEUE_SIZE, EXPORT_TIMEOUT_SECONDS, LOGS_UPLOAD_ENDPOINT, METRICS_UPLOAD_ENDPOINT, TELEMETRY_UPLOAD_HOST, TRACES_UPLOAD_ENDPOINT
 from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
 from dt_image_search.model.dts_config import get_log_level, get_revision
+from dt_image_search.model.feature_flags import get_desktop_root_trace_sample_rate
 
 
 _telemetry_upload_host = TELEMETRY_UPLOAD_HOST
@@ -49,6 +51,7 @@ _resource = Resource.create(attributes={
 })
 _BATCH_SIZE = EXPORT_BATCH_SIZE
 _QUEUE_SIZE = EXPORT_QUEUE_SIZE
+_ROOT_SPAN_SAMPLE_RATE = get_desktop_root_trace_sample_rate()
 
 # === METRICS SETUP ===
 temporality = {
@@ -74,7 +77,12 @@ search_counter = _meter.create_counter("search")
 error_counter = _meter.create_counter("errors")
 
 # === TRACING SETUP ===
-trace.set_tracer_provider(TracerProvider(resource=_resource))
+trace.set_tracer_provider(
+    TracerProvider(
+        resource=_resource,
+        sampler=ParentBased(root=TraceIdRatioBased(_ROOT_SPAN_SAMPLE_RATE)),
+    )
+)
 _trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
 if sys.stdout is not None and sys.stderr is not None:

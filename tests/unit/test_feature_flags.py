@@ -118,6 +118,31 @@ class TestFeatureFlags(unittest.TestCase):
         self.assertTrue(feature_flags._extract_mobile_folder_enabled({"mobile_folder": {"enabled": "true"}}))
         self.assertFalse(feature_flags._extract_mobile_folder_enabled({"mobile_folder": {"enabled": "false"}}))
 
+    def test_extract_desktop_root_trace_sample_rate_reads_only_supported_schema(self):
+        payload = {"desktop": {"telemetry": {"root_trace_sample_rate": 0.25}}}
+        self.assertEqual(feature_flags._extract_desktop_root_trace_sample_rate(payload), 0.25)
+        self.assertIsNone(feature_flags._extract_desktop_root_trace_sample_rate({"desktop": {"root_trace_sample_rate": 0.25}}))
+        self.assertIsNone(feature_flags._extract_desktop_root_trace_sample_rate({"desktop_root_trace_sample_rate": 0.25}))
+
+    def test_extract_desktop_root_trace_sample_rate_clamps_values(self):
+        self.assertEqual(
+            feature_flags._extract_desktop_root_trace_sample_rate(
+                {"desktop": {"telemetry": {"root_trace_sample_rate": 1.5}}}
+            ),
+            1.0,
+        )
+        self.assertEqual(
+            feature_flags._extract_desktop_root_trace_sample_rate(
+                {"desktop": {"telemetry": {"root_trace_sample_rate": -0.5}}}
+            ),
+            0.0,
+        )
+
+    def test_desktop_root_trace_sample_rate_defaults_to_ten_percent(self):
+        store = feature_flags._FeatureFlagStore()
+        with patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value=None):
+            self.assertEqual(store.desktop_root_trace_sample_rate(), 0.1)
+
     def test_fetch_feature_flags_retries_temporary_url_errors(self):
         success_response = _FakeResponse(b'{"mobile_folder": {"enabled": true}}')
         with (

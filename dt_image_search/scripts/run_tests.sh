@@ -62,6 +62,7 @@ unit_and_functional_tests=(
   tests/unit/test_mobile_transport_router.py
   tests/unit/test_mobile_usb_tunnel.py
   tests/unit/test_mobile_usb_ws_adapter.py
+  tests/unit/test_feature_flags.py
   tests/unit/test_pil_image_support.py
   tests/unit/test_fs_image_list_model.py
   tests/unit/test_thumbnail_job.py
