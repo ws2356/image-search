@@ -10,6 +10,14 @@ repo_root="$(cd "${this_dir}/../.." && pwd)"
 parent_repo_root="$(dirname "$repo_root")"
 parent_repo="ws2356/ausearch-release"
 
+build_type=prod
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --build-type) build_type="$2"; shift 2;;
+        *) echo "Unknown parameter passed: $1"; exit 1;;
+    esac
+done
+
 # Check parent repository exists
 parent_repo_url="$(cd "$parent_repo_root" && git config --get remote.origin.url)"
 if [[ "$parent_repo_url" != "https://github.com/$parent_repo.git" ]]; then
@@ -39,12 +47,12 @@ set -a; . "$repo_root/.env"; set +a
 APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
 export APPLE_APP_SPECIFIC_PASSWORD
 
-"$this_dir/create_distributable_dmg.sh" --app-path "$repo_root/pyinstaller-dist/AuSearch.app"
+"$this_dir/create_distributable_dmg.sh" --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
 
 (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
     --repo "$parent_repo" --tag "$tag" \
     --title "Release $tag" --notes "Bug free code" \
-    --dmg-path "$repo_root/pyinstaller-dist/AuSearch.dmg" --target main)
+    --dmg-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.dmg" --target main)
 
 (cd "$repo_root/web" && \
     export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/AuSearch.dmg" && \

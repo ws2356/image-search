@@ -37,7 +37,7 @@ export DTIS_REVISION="$revision"
 "$this_dir/compile_pyside6_ui.sh"
 
 if [ -z "$distpath" ]; then
-    distpath="$project_root/pyinstaller-dist"
+    distpath="$project_root/pyinstaller-dist-${build_type}"
 fi
 
 (cd "$project_root" && pyinstaller "dt_image_search/DTImageSearch.spec"  --noconfirm --clean --distpath "$distpath")
