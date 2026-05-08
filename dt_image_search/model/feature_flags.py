@@ -95,7 +95,16 @@ class _FeatureFlagStore:
                     f"FeatureFlags: remote desktop.telemetry.root_trace_sample_rate={remote_sample_rate}.",
                 )
         except RuntimeError as exc:
-            _log_feature_flags("warning", f"FeatureFlags: failed to refresh remote flags: {exc}")
+            _log_feature_flags(
+                "warning",
+                (
+                    "FeatureFlags: failed to refresh remote flags: "
+                    f"{exc}. Continuing with cached remote flags when available; otherwise local defaults."
+                ),
+            )
+        finally:
+            with self._lock:
+                self.refresh_thread = None
 
 
 def _fetch_feature_flags_payload() -> dict:
@@ -122,7 +131,7 @@ def _fetch_feature_flags_payload() -> dict:
             if _is_temporary_url_error(exc) and attempt <= _FEATURE_FLAGS_MAX_RETRIES:
                 _sleep_before_retry(retry_attempt=attempt, reason=f"network_{exc.reason}")
                 continue
-            last_error = RuntimeError(f"Feature flag request failed: {exc.reason}")
+            last_error = RuntimeError(f"Feature flag request failed: {_format_url_error_reason(exc)}")
             break
 
     if last_error is not None:
@@ -148,7 +157,7 @@ def _is_temporary_url_error(error: URLError) -> bool:
     if isinstance(reason, TimeoutError):
         return True
     if isinstance(reason, OSError):
-        if reason.errno in {errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ETIMEDOUT, errno.ECONNRESET}:
+        if reason.errno in {errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ETIMEDOUT, errno.ECONNRESET, errno.ENOENT}:
             return True
     if isinstance(reason, str):
         lowered = reason.lower()
@@ -159,9 +168,20 @@ def _is_temporary_url_error(error: URLError) -> bool:
             "timed out",
             "network is unreachable",
             "no route to host",
+            "no such file or directory",
         )
         return any(marker in lowered for marker in temporary_markers)
     return False
+
+
+def _format_url_error_reason(error: URLError) -> str:
+    reason = error.reason
+    if isinstance(reason, OSError):
+        filename = getattr(reason, "filename", None)
+        if filename:
+            return f"{type(reason).__name__}(errno={reason.errno}, filename={filename}): {reason}"
+        return f"{type(reason).__name__}(errno={reason.errno}): {reason}"
+    return str(reason)
 
 
 def _sleep_before_retry(*, retry_attempt: int, reason: str) -> None:

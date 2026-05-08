@@ -94,6 +94,29 @@ class TestFeatureFlags(unittest.TestCase):
 
         save_payload_mock.assert_called_once_with(payload)
 
+    def test_refresh_worker_logs_fallback_message_when_remote_refresh_fails(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(feature_flags, "_fetch_feature_flags_payload", side_effect=RuntimeError("network unavailable")),
+            patch.object(feature_flags, "_log_feature_flags") as log_mock,
+        ):
+            store._refresh_worker()
+
+        log_mock.assert_called_once()
+        self.assertEqual(log_mock.call_args.args[0], "warning")
+        self.assertIn("Continuing with cached remote flags when available; otherwise local defaults.", log_mock.call_args.args[1])
+
+    def test_refresh_worker_clears_refresh_thread_after_failure(self):
+        store = feature_flags._FeatureFlagStore()
+        store.refresh_thread = object()
+        with (
+            patch.object(feature_flags, "_fetch_feature_flags_payload", side_effect=RuntimeError("request failed")),
+            patch.object(feature_flags, "_log_feature_flags"),
+        ):
+            store._refresh_worker()
+
+        self.assertIsNone(store.refresh_thread)
+
     def test_cached_payload_roundtrip_uses_json_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             cache_path = Path(temp_dir) / "feature_flags_remote_cache.json"
@@ -158,6 +181,22 @@ class TestFeatureFlags(unittest.TestCase):
         self.assertEqual(payload, {"mobile_folder": {"enabled": True}})
         self.assertEqual(urlopen_mock.call_count, 3)
         self.assertEqual(sleep_before_retry_mock.call_count, 2)
+
+    def test_fetch_feature_flags_retries_file_not_found_url_errors(self):
+        success_response = _FakeResponse(b'{"mobile_folder": {"enabled": true}}')
+        with (
+            patch.object(
+                feature_flags,
+                "urlopen",
+                side_effect=[URLError(FileNotFoundError(2, "No such file or directory")), success_response],
+            ) as urlopen_mock,
+            patch.object(feature_flags, "_sleep_before_retry") as sleep_before_retry_mock,
+        ):
+            payload = feature_flags._fetch_feature_flags_payload()
+
+        self.assertEqual(payload, {"mobile_folder": {"enabled": True}})
+        self.assertEqual(urlopen_mock.call_count, 2)
+        self.assertEqual(sleep_before_retry_mock.call_count, 1)
 
     def test_fetch_feature_flags_does_not_retry_non_temporary_url_errors(self):
         with (

@@ -50,6 +50,7 @@ unit_and_functional_tests=(
   tests/unit/test_dts_index.py
   tests/unit/test_browse_controller_mobile_folder.py
   tests/unit/test_dts_db_folder_path_variants.py
+  tests/unit/test_index_worker.py
   tests/unit/test_incremental_index_worker.py
   tests/unit/test_mobile_folder_controller.py
   tests/unit/test_mobile_backup_state_machine.py

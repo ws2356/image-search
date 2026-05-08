@@ -1,4 +1,5 @@
 import datetime
+import errno
 import os
 import threading
 from dt_image_search.model.dts_folder import Folder
@@ -46,21 +47,51 @@ class IndexWorker:
                 folder_id = self.folder.id
                 update_folder_status(conn, folder_id, 0)
                 folder_path = self.folder.path
+                traversal_issue_count = 0
+
+                def _is_non_fatal_traversal_error(error: OSError) -> bool:
+                    return error.errno in {errno.EACCES, errno.EPERM, errno.ENOENT, errno.ENOTDIR}
+
+                def _record_traversal_issue(path: str, error: OSError) -> None:
+                    nonlocal traversal_issue_count
+                    traversal_issue_count += 1
+                    log(
+                        "warning",
+                        message=(
+                            "Indexing skipped inaccessible path: "
+                            f"{path}. error={error}"
+                        ),
+                    )
 
                 def _traverse_dir(folder_path: str):
                     if self._is_stopped:
                         return
                     # traverse folder_path non recursively
-                    for entry in os.scandir(folder_path):
-                        _filepath = entry.path
-                        if entry.is_dir():
-                            _subfolder = get_folder_by_path(conn, normalized_folder_path(_filepath))
-                            if _subfolder:
-                                continue
-                            else:
-                                _traverse_dir(_filepath)
-                        elif entry.is_file() and is_image_file(_filepath):
-                            insert_file(conn, _filepath, folder_id)
+                    try:
+                        with os.scandir(folder_path) as entries:
+                            for entry in entries:
+                                if self._is_stopped:
+                                    return
+                                _filepath = entry.path
+                                try:
+                                    if entry.is_dir(follow_symlinks=False):
+                                        _subfolder = get_folder_by_path(conn, normalized_folder_path(_filepath))
+                                        if _subfolder:
+                                            continue
+                                        else:
+                                            _traverse_dir(_filepath)
+                                    elif entry.is_file(follow_symlinks=False) and is_image_file(_filepath):
+                                        insert_file(conn, _filepath, folder_id)
+                                except OSError as entry_error:
+                                    if _is_non_fatal_traversal_error(entry_error):
+                                        _record_traversal_issue(_filepath, entry_error)
+                                        continue
+                                    raise
+                    except OSError as scan_error:
+                        if _is_non_fatal_traversal_error(scan_error):
+                            _record_traversal_issue(folder_path, scan_error)
+                            return
+                        raise
 
                 _traverse_dir(folder_path=folder_path)
                 if self._is_stopped:
@@ -83,12 +114,23 @@ class IndexWorker:
                     if not progress['batch_result']:
                         all_success = False
                 
-                if all_success:
+                if all_success and traversal_issue_count == 0:
                     log("info", message="Indexing succeeded.")
                     update_folder_status(conn, folder_id, 2)
                     status_bar_messenger.show_status_message.emit(f"Indexing completed: {self.folder.path}")
                 else:
-                    log("error", message="Indexing partially failed.")
+                    log(
+                        "error",
+                        message=(
+                            "Indexing partially failed."
+                            if traversal_issue_count == 0
+                            else (
+                                "Indexing partially failed due to inaccessible paths. "
+                                f"skipped_paths={traversal_issue_count}"
+                            )
+                        ),
+                    )
+                    update_folder_status(conn, folder_id, 3)
                     status_bar_messenger.show_status_message.emit(f"Indexing partially failed: {self.folder.path}")
         finally:
             # Always remove worker from list when done, even if an exception occurred
