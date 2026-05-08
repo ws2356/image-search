@@ -55,6 +55,7 @@ unit_and_functional_tests=(
   tests/unit/test_mobile_folder_controller.py
   tests/unit/test_mobile_backup_state_machine.py
   tests/unit/test_mobile_dialogs.py
+  tests/unit/test_mainwindow_section_expansion.py
   tests/unit/test_mobile_pairing_discovery.py
   tests/unit/test_mobile_pairing_service.py
   tests/unit/test_mobile_pairing_session.py

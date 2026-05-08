@@ -237,15 +237,18 @@ class MainWindow(QMainWindow):
 
         self.ui.browsePageAddFolderButton.clicked.connect(self.on_add_folder_button_click)
         self.ui.browsePageFolderTreeView.setHeaderHidden(True)
-        self.ui.browsePageFolderTreeView.setModel(self.browse_controller.folder_list_model())
+        folder_tree_model = self.browse_controller.folder_list_model()
+        self.ui.browsePageFolderTreeView.setModel(folder_tree_model)
         self.ui.browsePageFolderTreeView.setItemDelegate(FolderTreeItemDelegate(self.ui.browsePageFolderTreeView))
         self.ui.browsePageFolderTreeView.setRootIsDecorated(False)
         self.ui.browsePageFolderTreeView.setIndentation(8)
         self.ui.browsePageFolderTreeView.setExpandsOnDoubleClick(False)
         self.ui.browsePageFolderTreeView.clicked.connect(self._on_folder_tree_item_clicked)
         self.ui.browsePageFolderTreeView.collapsed.connect(self._on_folder_tree_item_collapsed)
-        self.browse_controller.folder_list_model().rowsInserted.connect(lambda *_: self._expand_section_headers())
+        folder_tree_model.rowsInserted.connect(lambda *_: self._expand_section_headers())
+        folder_tree_model.modelReset.connect(self._expand_section_headers)
         self._expand_section_headers()
+        QTimer.singleShot(0, self._expand_section_headers)
         existing_tree_style = self.ui.browsePageFolderTreeView.styleSheet()
         tree_style = (
             "QTreeView { show-decoration-selected: 1; background-color: #FFFFFF; }\n"
