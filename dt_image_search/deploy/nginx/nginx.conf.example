@@ -1,0 +1,102 @@
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+error_log /var/log/nginx/error.log;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+	worker_connections 768;
+	# multi_accept on;
+}
+
+http {
+
+	##
+	# Basic Settings
+	##
+
+	sendfile on;
+	tcp_nopush on;
+	types_hash_max_size 2048;
+	# server_tokens off;
+
+	# server_names_hash_bucket_size 64;
+	# server_name_in_redirect off;
+
+	include /etc/nginx/mime.types;
+	default_type application/octet-stream;
+
+	##
+	# SSL Settings
+	##
+
+	ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3; # Dropping SSLv3, ref: POODLE
+	ssl_prefer_server_ciphers on;
+
+	##
+	# Logging Settings
+	##
+
+	access_log /var/log/nginx/access.log;
+
+	##
+	# Gzip Settings
+	##
+
+	gzip on;
+	gzip_min_length 1024;
+
+	gzip_vary on;
+	gzip_proxied any;
+	gzip_comp_level 5;
+	# gzip_buffers 16 8k;
+	gzip_http_version 1.1;
+	gzip_types text/plain text/css application/javascript text/javascript application/json application/xml image/svg+xml;
+
+	##
+	# Virtual Host Configs
+	##
+
+	limit_req_zone $binary_remote_addr zone=rest_api:80m rate=60r/m;
+	limit_req_zone $binary_remote_addr zone=large_file_download:80m rate=10r/m;
+
+	#limit_req zone=rest_api burst=60 nodelay;
+	#limit_req zone=large_file_download burst=10 nodelay;
+
+	server {
+		listen 443 ssl default_server; # 标记为默认服务器
+		server_name ""; # 匹配所有未知的Host头（或不包含Host头的请求）
+
+		# 替换为你的证书配置...
+		ssl_certificate /root/.acme.sh/tc.boldman.net_ecc/fullchain.cer;
+		ssl_certificate_key     /root/.acme.sh/tc.boldman.net_ecc/tc.boldman.net.key;
+
+		# 遇到任何请求，直接返回444（Nginx特有的无响应关闭连接）或 403 Forbidden
+		return 444;
+	}
+
+	include /etc/nginx/conf.d/*.conf;
+	include /etc/nginx/sites-enabled/*;
+}
+
+
+#mail {
+#	# See sample authentication script at:
+#	# http://wiki.nginx.org/ImapAuthenticateWithApachePhpScript
+#
+#	# auth_http localhost/auth.php;
+#	# pop3_capabilities "TOP" "USER";
+#	# imap_capabilities "IMAP4rev1" "UIDPLUS";
+#
+#	server {
+#		listen     localhost:110;
+#		protocol   pop3;
+#		proxy      on;
+#	}
+#
+#	server {
+#		listen     localhost:143;
+#		protocol   imap;
+#		proxy      on;
+#	}
+#}
