@@ -11,7 +11,7 @@ private enum QRCodeScannerAccessState: Equatable {
     case unavailable(String)
 }
 
-struct LiveQRCodeScannerScreen: View {
+struct LiveQRCodeScannerView: View {
     let status: PairingStatus
     @Binding var scannedQRCodeValue: String
     let onScanComplete: () -> Void

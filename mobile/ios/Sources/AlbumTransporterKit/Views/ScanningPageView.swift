@@ -1,17 +1,17 @@
 import SwiftUI
 
-struct ScanPairingView: View {
+struct ScanningPageView: View {
     let viewModel: PairingPageViewModel
 
     var body: some View {
         #if os(iOS)
         if #available(iOS 16.0, *) {
-            LiveQRCodeScannerScreen(
+            LiveQRCodeScannerView(
                 status: viewModel.status,
                 scannedQRCodeValue: viewModel.scannedQRCodeBinding,
                 onScanComplete: {
                     Task {
-                        await viewModel.beginPairingTapped()
+                        await viewModel.onQRScanned()
                     }
                 },
                 onScanFailure: viewModel.scannerFailed,
@@ -24,12 +24,12 @@ struct ScanPairingView: View {
             )
             .toolbar(.hidden, for: .navigationBar)
         } else {
-            LiveQRCodeScannerScreen(
+            LiveQRCodeScannerView(
                 status: viewModel.status,
                 scannedQRCodeValue: viewModel.scannedQRCodeBinding,
                 onScanComplete: {
                     Task {
-                        await viewModel.beginPairingTapped()
+                        await viewModel.onQRScanned()
                     }
                 },
                 onScanFailure: viewModel.scannerFailed,

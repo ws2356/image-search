@@ -105,7 +105,7 @@ public struct AlbumTransporterRootView: View {
             HomeView(viewModel: homeViewModel)
         case .scan:
             let pairingViewModel = PairingPageViewModel(model: model)
-            ScanPairingView(viewModel: pairingViewModel)
+            ScanningPageView(viewModel: pairingViewModel)
         case .pair:
             let pairingViewModel = PairingPageViewModel(model: model)
             PairingStatusView(viewModel: pairingViewModel)

@@ -19,26 +19,14 @@ struct PairingPageViewModel {
         )
     }
 
-    private func beginPairing() async {
-        await model.handleResultForPage(.pair, result: .success, target: .primary)
-    }
-
-    func beginPairingTapped() async {
+    func onQRScanned() async {
         model.recordInteraction(name: "start_pairing_tapped", location: "pairing")
-        await model.handleResultForPage(.pair, result: .success, target: .primary)
-    }
-
-    private func scanAgain() async {
-        await model.handleResultForPage(.pair, result: .success, target: .secondary)
+        await model.handleResultForPage(.scan, result: .success, target: .primary)
     }
 
     func scanAgainTapped() async {
         model.recordInteraction(name: "scan_again_tapped", location: "pairing")
         await model.handleResultForPage(.pair, result: .success, target: .secondary)
-    }
-
-    private func goBack() async {
-        await model.handleResultForPage(.pair, result: .cancel, target: nil)
     }
 
     func backTapped() async {
