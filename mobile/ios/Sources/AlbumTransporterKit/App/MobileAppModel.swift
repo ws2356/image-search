@@ -122,7 +122,7 @@ final class MobileAppModel: ObservableObject {
                 } else if target == .keepOriginals {
                     setRemoveAfterBackupEnabled(false)
                 }
-                await startTransfer()
+                await triggerTransfer()
             case .cancel:
                 let reason = target == .lowBatteryDeclined ? "low_battery_declined" : "permissions_cancelled"
                 await abortPreflightAndReturnHome(reason: reason)
@@ -218,7 +218,7 @@ final class MobileAppModel: ObservableObject {
             )
             await openScanFlow()
         case .backupPendingItems:
-            await startTransfer()
+            await triggerTransfer()
         }
     }
 
@@ -651,7 +651,7 @@ final class MobileAppModel: ObservableObject {
         await beginPairing()
     }
 
-    private func startTransfer() async {
+    private func triggerTransfer() async {
         transferStartedAt = Date()
         transitionBackupFlow(.transferStarted)
         route = .transfer
