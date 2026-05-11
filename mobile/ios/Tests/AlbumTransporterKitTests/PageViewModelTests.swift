@@ -83,13 +83,16 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var completionSummary = CompletionSummary.demo
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
+    var route = AppRoute.home
     var isShowingLowBatteryWarning = false
     var isShowingMediaAccessAlert = false
     var isShowingRemoveAfterBackupPrompt = false
     var isShowingStopConfirmation = false
     var mediaAccessAlertMessage = "Media access recommended."
+    var transferProgressPollingIntervalNanoseconds: UInt64 = 10_000_000
     let permissionServiceActor = StubPermissionService(summary: .demo)
     var permissionService: PermissionService { permissionServiceActor }
+    var transferServiceForTransferView: TransferService { StubTransferService() }
 
     var handleHomePrimaryActionCallCount = 0
     var openScanFlowCallCount = 0
@@ -132,7 +135,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
             if result == .success, target == .primary {
                 requestStopTransfer()
             } else if result == .cancel, target == .stopTransferConfirmed {
-                await confirmStopTransfer()
+                await confirmStopTransfer(currentSnapshot: transferSnapshot)
             }
         case .completed:
             if result == .success || result == .cancel {
@@ -162,7 +165,13 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         requestStopTransferCallCount += 1
     }
 
-    func confirmStopTransfer() async {}
+    func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
+        transferSnapshot = currentSnapshot
+    }
+
+    func completeTransfer(with snapshot: TransferSnapshot) async {
+        transferSnapshot = snapshot
+    }
 
     func permissionServiceLoadCallCount() async -> Int {
         await permissionServiceActor.loadCallCount()
@@ -205,5 +214,34 @@ private actor StubPermissionService: PermissionService {
 
     func loadCallCount() -> Int {
         loadPermissionSummaryCallCount
+    }
+}
+
+private actor StubTransferService: TransferService {
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        .demo
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        .stoppedByUser
+    }
+
+    func resumeTransfer(
+        from snapshot: TransferSnapshot,
+        progress: @escaping @Sendable (TransferSnapshot) -> Void
+    ) async -> TransferSnapshot {
+        snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        .demo
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
     }
 }

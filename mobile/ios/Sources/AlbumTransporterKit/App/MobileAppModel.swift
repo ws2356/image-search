@@ -20,8 +20,7 @@ final class MobileAppModel: ObservableObject {
     @Published var isShowingIncomingLinkReplacementConfirmation = false
 
     private var hasLoaded = false
-    private var transferProgressPollingTask: Task<Void, Never>?
-    private let transferProgressPollingIntervalNanoseconds: UInt64
+    let transferProgressPollingIntervalNanoseconds: UInt64
     private var transferStartedAt: Date?
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
@@ -62,7 +61,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     deinit {
-        transferProgressPollingTask?.cancel()
 #if canImport(UIKit)
         memoryWarningObservationTask?.cancel()
         appLifecycleObservationTask?.cancel()
@@ -141,7 +139,7 @@ final class MobileAppModel: ObservableObject {
                 }
             case .cancel:
                 if target == .stopTransferConfirmed {
-                    await confirmStopTransfer()
+                    await confirmStopTransfer(currentSnapshot: transferSnapshot)
                 }
             case .failure:
                 presentErrorSummary(
@@ -461,10 +459,10 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(.transferStopRequested)
     }
 
-    func confirmStopTransfer() async {
+    func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
         isShowingStopConfirmation = false
-        stopTransferProgressPolling()
-        _ = await transferService.stopTransfer(current: transferSnapshot)
+        transferSnapshot = currentSnapshot
+        _ = await transferService.stopTransfer(current: currentSnapshot)
         transitionBackupFlow(.transferStopped)
         updateHomeSummaryAfterStoppedTransfer()
         transferStartedAt = nil
@@ -503,7 +501,6 @@ final class MobileAppModel: ObservableObject {
         guard route == .transfer else {
             return
         }
-        stopTransferProgressPolling()
         _ = await transferService.stopTransfer(current: transferSnapshot)
         transitionBackupFlow(.transferStopped)
         updateHomeSummaryAfterStoppedTransfer()
@@ -539,9 +536,12 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    private func completeTransfer() async {
-        stopTransferProgressPolling()
-        transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
+    var transferServiceForTransferView: TransferService {
+        transferService
+    }
+
+    func completeTransfer(with snapshot: TransferSnapshot) async {
+        transferSnapshot = await transferService.completeTransfer(current: snapshot)
         transitionBackupFlow(transferSnapshot.failedCount == 0 ? .transferCompleted : .transferFailed)
         let cleanupResult: TransferAssetCleanupResult
         if removeAfterBackupEnabled {
@@ -614,7 +614,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     func returnHome() async {
-        stopTransferProgressPolling()
         transferStartedAt = nil
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
@@ -625,7 +624,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func presentErrorSummary(title: String, message: String) {
-        stopTransferProgressPolling()
         isShowingStopConfirmation = false
         errorSummary = ErrorSummary(title: title, message: message)
         route = .error
@@ -674,47 +672,6 @@ final class MobileAppModel: ObservableObject {
             ]
         )
         persistSnapshot()
-        startTransferProgressPolling()
-        transferSnapshot = await transferService.startTransfer(progress: { [weak self] snapshot in
-            Task { @MainActor [weak self] in
-                guard let self, self.route == .transfer else {
-                    return
-                }
-                guard snapshot.transferredCount >= self.transferSnapshot.transferredCount else {
-                    return
-                }
-                self.transferSnapshot = snapshot
-            }
-        })
-        stopTransferProgressPolling()
-        guard route == .transfer else {
-            persistSnapshot()
-            return
-        }
-
-        await completeTransfer()
-    }
-
-    private func startTransferProgressPolling() {
-        stopTransferProgressPolling()
-        transferProgressPollingTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else {
-                    return
-                }
-                if let snapshot = await self.transferService.progressSnapshot() {
-                    await MainActor.run {
-                        self.transferSnapshot = snapshot
-                    }
-                }
-                try? await Task.sleep(nanoseconds: self.transferProgressPollingIntervalNanoseconds)
-            }
-        }
-    }
-
-    private func stopTransferProgressPolling() {
-        transferProgressPollingTask?.cancel()
-        transferProgressPollingTask = nil
     }
 
     private func apply(snapshot: LaunchSnapshot) {

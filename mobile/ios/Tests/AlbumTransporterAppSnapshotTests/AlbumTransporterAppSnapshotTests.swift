@@ -123,6 +123,9 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var isShowingStopConfirmation = false
+    var route = AppRoute.transfer
+    var transferProgressPollingIntervalNanoseconds: UInt64 = 10_000_000
+    var transferServiceForTransferView: TransferService { SnapshotTransferService() }
 
     init(snapshot: TransferSnapshot) {
         self.transferSnapshot = snapshot
@@ -131,7 +134,42 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
     func requestStopTransfer() {}
-    func confirmStopTransfer() async {}
+    func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
+        transferSnapshot = currentSnapshot
+    }
+    func persistSnapshot() {}
+    func completeTransfer(with snapshot: TransferSnapshot) async {
+        transferSnapshot = snapshot
+    }
     func recordDialogView(name: String) {}
     func recordInteraction(name: String, location: String) {}
+}
+
+private actor SnapshotTransferService: TransferService {
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        .demo
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        .stoppedByUser
+    }
+
+    func resumeTransfer(
+        from snapshot: TransferSnapshot,
+        progress: @escaping @Sendable (TransferSnapshot) -> Void
+    ) async -> TransferSnapshot {
+        snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        .demo
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
 }

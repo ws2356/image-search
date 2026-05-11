@@ -142,6 +142,8 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.continueBackupFromMediaAccessNotNow()
         XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
+        let transferViewModel = TransferPageViewModel(model: model)
+        await transferViewModel.orchestrateTransfer()
         XCTAssertEqual(model.route, .completed)
     }
 
@@ -225,7 +227,7 @@ final class MobileAppModelTests: XCTestCase {
         }
         try? await Task.sleep(nanoseconds: 30_000_000)
         model.requestStopTransfer()
-        await model.confirmStopTransfer()
+        await model.confirmStopTransfer(currentSnapshot: model.transferSnapshot)
 
         XCTAssertEqual(model.route, .home)
         XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
@@ -283,13 +285,18 @@ final class MobileAppModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 10_000_000)
         XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
+        let transferViewModel = TransferPageViewModel(model: model)
+        let orchestrationTask = Task {
+            await transferViewModel.orchestrateTransfer()
+        }
         try? await Task.sleep(nanoseconds: 30_000_000)
 
         XCTAssertTrue(model.route == .transfer || model.route == .completed)
-        XCTAssertEqual(model.transferSnapshot.totalCount, 5)
-        XCTAssertGreaterThanOrEqual(model.transferSnapshot.transferredCount, 2)
+        XCTAssertEqual(transferViewModel.snapshot.totalCount, 5)
+        XCTAssertGreaterThanOrEqual(transferViewModel.snapshot.transferredCount, 2)
 
         await transferTask.value
+        await orchestrationTask.value
         XCTAssertEqual(model.route, .completed)
         XCTAssertEqual(model.transferSnapshot.transferredCount, 5)
         XCTAssertEqual(model.completionSummary.itemsBackedUp, 5)
@@ -339,12 +346,16 @@ final class MobileAppModelTests: XCTestCase {
         await model.beginPairing()
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
+        let transferViewModel = TransferPageViewModel(model: model)
+        let orchestrationTask = Task {
+            await transferViewModel.orchestrateTransfer()
+        }
         try? await Task.sleep(nanoseconds: 20_000_000)
 
-        XCTAssertEqual(model.transferSnapshot.totalCount, 10)
-        XCTAssertGreaterThanOrEqual(model.transferSnapshot.transferredCount, 4)
+        XCTAssertEqual(transferViewModel.snapshot.totalCount, 10)
+        XCTAssertGreaterThanOrEqual(transferViewModel.snapshot.transferredCount, 4)
 
-        try? await Task.sleep(nanoseconds: 180_000_000)
+        await orchestrationTask.value
         XCTAssertEqual(model.route, .completed)
         XCTAssertEqual(model.transferSnapshot.transferredCount, 10)
     }
@@ -613,6 +624,8 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.startPreflight()
         XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
+        let transferViewModel = TransferPageViewModel(model: model)
+        await transferViewModel.orchestrateTransfer()
 
         let cleanupCallCount = await transferService.cleanupCallCount()
         XCTAssertEqual(cleanupCallCount, 1)
@@ -680,6 +693,8 @@ final class MobileAppModelTests: XCTestCase {
         await model.beginPairing()
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
+        let transferViewModel = TransferPageViewModel(model: model)
+        await transferViewModel.orchestrateTransfer()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         let preflightRecord = await telemetryClient.latestRecord(for: .backupPreflightStarted)
@@ -891,6 +906,7 @@ private actor CleanupTrackingTransferService: TransferService {
 private actor CallbackOnlyTransferService: TransferService {
     private let inFlightSnapshot: TransferSnapshot
     private let finalSnapshot: TransferSnapshot
+    private var currentSnapshotValue: TransferSnapshot?
 
     init(inFlightSnapshot: TransferSnapshot, finalSnapshot: TransferSnapshot) {
         self.inFlightSnapshot = inFlightSnapshot
@@ -898,8 +914,10 @@ private actor CallbackOnlyTransferService: TransferService {
     }
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        currentSnapshotValue = inFlightSnapshot
         progress(inFlightSnapshot)
         try? await Task.sleep(nanoseconds: 120_000_000)
+        currentSnapshotValue = finalSnapshot
         progress(finalSnapshot)
         return finalSnapshot
     }
@@ -918,7 +936,7 @@ private actor CallbackOnlyTransferService: TransferService {
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
-        nil
+        currentSnapshotValue
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

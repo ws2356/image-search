@@ -68,6 +68,9 @@ struct TransferSessionView: View {
             .padding(.vertical, 16)
         }
         .compatibleScrollBounceBasedOnSize()
+        .task {
+            await viewModel.orchestrateTransfer()
+        }
         .onChange(of: viewModel.isShowingStopConfirmation) { isPresented in
             guard isPresented else { return }
             viewModel.recordStopConfirmationPresented()

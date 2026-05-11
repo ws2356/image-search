@@ -34,9 +34,14 @@ extension MobileAppModel: PermissionsPageModeling {}
 @MainActor
 protocol TransferPageModeling: AppPageModeling {
     var isShowingStopConfirmation: Bool { get set }
+    var route: AppRoute { get }
+    var transferProgressPollingIntervalNanoseconds: UInt64 { get }
+    var transferServiceForTransferView: TransferService { get }
 
-    func confirmStopTransfer() async
+    func confirmStopTransfer(currentSnapshot: TransferSnapshot) async
     func recordDialogView(name: String)
+    func persistSnapshot()
+    func completeTransfer(with snapshot: TransferSnapshot) async
 }
 
 extension MobileAppModel: TransferPageModeling {}
