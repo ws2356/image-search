@@ -1,5 +1,3 @@
-import SwiftUI
-
 @MainActor
 struct PairingPageViewModel {
     private let model: any AppPageModeling
@@ -12,14 +10,8 @@ struct PairingPageViewModel {
         model.pairingStatus
     }
 
-    var scannedQRCodeBinding: Binding<String> {
-        Binding(
-            get: { model.scannedQRCodeValue },
-            set: { model.scannedQRCodeValue = $0 }
-        )
-    }
-
-    func onQRScanned() async {
+    func onQRScanned(scannedValue: String) async {
+        model.scannedQRCodeValue = scannedValue
         model.recordInteraction(name: "start_pairing_tapped", location: "pairing")
         await model.handleResultForPage(.scan, result: .success, target: .primary)
     }

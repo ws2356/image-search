@@ -21,17 +21,15 @@ final class PageViewModelTests: XCTestCase {
         let viewModel = PairingPageViewModel(model: model)
 
         XCTAssertEqual(viewModel.status, model.pairingStatus)
-        XCTAssertEqual(viewModel.scannedQRCodeBinding.wrappedValue, "")
+        XCTAssertEqual(model.scannedQRCodeValue, "")
 
-        viewModel.scannedQRCodeBinding.wrappedValue = "qr-value"
-        XCTAssertEqual(model.scannedQRCodeValue, "qr-value")
-
-        await viewModel.beginPairingTapped()
+        await viewModel.onQRScanned(scannedValue: "qr-value")
         await viewModel.scanAgainTapped()
         await viewModel.backTapped()
 
-        XCTAssertEqual(model.beginPairingCallCount, 0)
-        XCTAssertEqual(model.openScanFlowCallCount, 2)
+        XCTAssertEqual(model.scannedQRCodeValue, "qr-value")
+        XCTAssertEqual(model.beginPairingCallCount, 1)
+        XCTAssertEqual(model.openScanFlowCallCount, 1)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 

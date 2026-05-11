@@ -8,10 +8,9 @@ struct ScanningPageView: View {
         if #available(iOS 16.0, *) {
             LiveQRCodeScannerView(
                 status: viewModel.status,
-                scannedQRCodeValue: viewModel.scannedQRCodeBinding,
-                onScanComplete: {
+                onScanComplete: { scannedValue in
                     Task {
-                        await viewModel.onQRScanned()
+                        await viewModel.onQRScanned(scannedValue: scannedValue)
                     }
                 },
                 onScanFailure: viewModel.scannerFailed,
@@ -26,10 +25,9 @@ struct ScanningPageView: View {
         } else {
             LiveQRCodeScannerView(
                 status: viewModel.status,
-                scannedQRCodeValue: viewModel.scannedQRCodeBinding,
-                onScanComplete: {
+                onScanComplete: { scannedValue in
                     Task {
-                        await viewModel.onQRScanned()
+                        await viewModel.onQRScanned(scannedValue: scannedValue)
                     }
                 },
                 onScanFailure: viewModel.scannerFailed,
