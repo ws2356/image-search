@@ -1,4 +1,4 @@
-# Image Search Agent Guidelines
+# Agent Guidelines
 
 Welcome to the `image-search` repository. This document outlines the architectural patterns, coding styles, and commands necessary to operate within this codebase. Please adhere to these guidelines when suggesting or implementing changes.
 
@@ -32,6 +32,16 @@ Welcome to the `image-search` repository. This document outlines the architectur
 - **Communication**: A custom Event Bus (`dts_event_bus.py`) provides a decoupled pub/sub mechanism for component communication (e.g., UI notifying background workers).
 
 ## 4. Code Rules
+- **Core Engineering Principles**:
+    Adhering to these foundational principles prevents technical debt and ensures the codebase remains flexible.
+    
+    | Principle | Definition & Agent Guidance   |
+    | :---- | :---- |
+    | **SOLID** | Five design principles (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion) intended to make software designs more understandable and flexible. |
+    | **DRY (Don't Repeat Yourself)** | Abstract common logic into reusable functions or modules. Avoid copy-pasting code blocks. |
+    | **KISS (Keep It Simple, Stupid)** | Avoid over-engineering. Choose the simplest solution that fully satisfies the requirements. |
+    | **YAGNI (You Ain't Gonna Need It)** | Do not add functionality until it is necessary. Avoid "future-proofing" that complicates the current design. |
+    
 - **Separation of Concerns**: UI code should not contain business logic. Business logic should be in separate controller or worker classes. Each file should have a clear and often singular responsibility.
 - **Use asyncio**: The existing codebase is primarily synchronous, but new code should prefer `asyncio` for any I/O-bound operations (e.g., database access, file I/O) to improve responsiveness and scalability. Use `async def` and `await` as needed.
 - **Concurrency**: Ensure correctness under concurrent conditions. Even for local http/websocket servers, prepare for potential concurrent requests.
@@ -41,6 +51,17 @@ Welcome to the `image-search` repository. This document outlines the architectur
 - **Variables**: `snake_case`.
 - **Private Members**: Prefixed with a single underscore (e.g., `_run_impl`, `_is_stopped`).
 - **Type Hints**: Always use standard Python type hinting for function signatures and class properties.
+- **Documentation and Comments**:
+    Comments should explain *why* something is done, not *what* is being done. The code itself should be clear enough to explain the "what".
+    * **Docstrings:** Provide standard docstrings for public APIs and complex functions.  
+    * **READMEs:** Every major module or repository must have a README explaining setup, usage, and architecture.
+- **Data Lifecycle Management**: Properly categorizing and handling data based on its lifecycle is crucial for performance, memory management, and data integrity.
+
+  | Data Type | Recommended Handling Guidance   |
+  | :---- | :---- |
+  | **Page-Local UI Data** | Keep this data encapsulated within the component or view that uses it. Use local state hooks (e.g., React's useState, SwiftUI's @State). Avoid leaking local UI flags (like isModalOpen) to global state. |
+  | **In-Memory Shared Data** | For data shared across multiple pages but not needing persistence (e.g., data transfer progress, temporary caches), use state management stores or services. Implement clear patterns for synchronization and cleanup when the session or context ends. |
+  | **Persisted Data (DB/File)** | Data that must survive app restarts or browser refreshes should be stored in a database (SQL/NoSQL) or local filesystem. Use abstractions (Repositories/DAOs) to isolate the storage mechanism from business logic. Ensure atomicity and handle migration/versioning of the schema. |
 
 ## 5. Imports and Paths
 - **Imports**: Prefer **absolute imports** starting from the package root (e.g., `from dt_image_search.model.dts_db import ...`).
