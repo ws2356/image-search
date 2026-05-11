@@ -10,7 +10,7 @@ struct HomePageViewModel {
         model.homeSummary
     }
 
-    func handlePrimaryAction() async {
+    private func handlePrimaryAction() async {
         await model.handleResultForPage(.home, result: .success, target: .primary)
     }
 
@@ -19,7 +19,7 @@ struct HomePageViewModel {
         await model.handleResultForPage(.home, result: .success, target: .primary)
     }
 
-    func openScanFlow() async {
+    private func openScanFlow() async {
         await model.handleResultForPage(.home, result: .success, target: .secondary)
     }
 

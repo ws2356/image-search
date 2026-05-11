@@ -19,7 +19,7 @@ struct PairingPageViewModel {
         )
     }
 
-    func beginPairing() async {
+    private func beginPairing() async {
         await model.handleResultForPage(.pair, result: .success, target: .primary)
     }
 
@@ -28,7 +28,7 @@ struct PairingPageViewModel {
         await model.handleResultForPage(.pair, result: .success, target: .primary)
     }
 
-    func scanAgain() async {
+    private func scanAgain() async {
         await model.handleResultForPage(.pair, result: .success, target: .secondary)
     }
 
@@ -37,7 +37,7 @@ struct PairingPageViewModel {
         await model.handleResultForPage(.pair, result: .success, target: .secondary)
     }
 
-    func goBack() async {
+    private func goBack() async {
         await model.handleResultForPage(.pair, result: .cancel, target: nil)
     }
 

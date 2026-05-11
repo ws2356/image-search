@@ -205,7 +205,7 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(.appLaunched)
     }
 
-    func handleHomePrimaryAction() async {
+    private func handleHomePrimaryAction() async {
         switch homeSummary.primaryAction {
         case .scanDesktopQRCode:
             await openScanFlow()
@@ -539,7 +539,7 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    func completeTransfer() async {
+    private func completeTransfer() async {
         stopTransferProgressPolling()
         transferSnapshot = await transferService.completeTransfer(current: transferSnapshot)
         transitionBackupFlow(transferSnapshot.failedCount == 0 ? .transferCompleted : .transferFailed)
@@ -651,7 +651,7 @@ final class MobileAppModel: ObservableObject {
         await beginPairing()
     }
 
-    func startTransfer() async {
+    private func startTransfer() async {
         transferStartedAt = Date()
         transitionBackupFlow(.transferStarted)
         route = .transfer
@@ -907,7 +907,7 @@ final class MobileAppModel: ObservableObject {
         )
     }
 
-    func flushTelemetry() {
+    private func flushTelemetry() {
         let worker = sideEffectWorker
         Task.detached(priority: .utility) {
             await worker.forceFlush()
@@ -1074,7 +1074,7 @@ final class MobileAppModel: ObservableObject {
     }
 }
 
-actor MobileAppSideEffectWorker {
+private actor MobileAppSideEffectWorker {
     private let stateStore: AppStateStore
     private let telemetryClient: TelemetryClient
 

@@ -15,7 +15,7 @@ public struct AlbumTransporterRootView: View {
         self.init(container: .shared)
     }
 
-    init(container: Container) {
+    private init(container: Container) {
         let model = container.mobileAppModel()
         _model = StateObject(wrappedValue: model)
         _permissionsViewModel = StateObject(

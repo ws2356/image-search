@@ -9,8 +9,8 @@ final class PageViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.summary, model.homeSummary)
 
-        await viewModel.handlePrimaryAction()
-        await viewModel.openScanFlow()
+        await viewModel.handlePrimaryActionTapped()
+        await viewModel.openScanFlowTapped()
 
         XCTAssertEqual(model.handleHomePrimaryActionCallCount, 1)
         XCTAssertEqual(model.openScanFlowCallCount, 1)
@@ -26,9 +26,9 @@ final class PageViewModelTests: XCTestCase {
         viewModel.scannedQRCodeBinding.wrappedValue = "qr-value"
         XCTAssertEqual(model.scannedQRCodeValue, "qr-value")
 
-        await viewModel.beginPairing()
-        await viewModel.scanAgain()
-        await viewModel.goBack()
+        await viewModel.beginPairingTapped()
+        await viewModel.scanAgainTapped()
+        await viewModel.backTapped()
 
         XCTAssertEqual(model.beginPairingCallCount, 0)
         XCTAssertEqual(model.openScanFlowCallCount, 2)
