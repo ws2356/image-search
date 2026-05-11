@@ -1,16 +1,11 @@
 import SwiftUI
 
 @MainActor
-struct PairingPageViewModel: ViewModelProtocol {
+struct PairingPageViewModel {
     private let model: any AppPageModeling
-    private let onPageResultHandler: ((_ result: PageResult, _ target: PageTarget?) -> Void)?
 
-    init(
-        model: any AppPageModeling,
-        onPageResult: ((_ result: PageResult, _ target: PageTarget?) -> Void)? = nil
-    ) {
+    init(model: any AppPageModeling) {
         self.model = model
-        self.onPageResultHandler = onPageResult
     }
 
     var status: PairingStatus {
@@ -25,42 +20,30 @@ struct PairingPageViewModel: ViewModelProtocol {
     }
 
     func beginPairing() async {
-        await model.beginPairing()
+        await model.handleResultForPage(.pair, result: .success, target: .primary)
     }
 
     func beginPairingTapped() async {
         model.recordInteraction(name: "start_pairing_tapped", location: "pairing")
-        if onPageResultHandler != nil {
-            onPageResult(.success, target: .primary)
-            return
-        }
-        await model.beginPairing()
+        await model.handleResultForPage(.pair, result: .success, target: .primary)
     }
 
     func scanAgain() async {
-        await model.openScanFlow()
+        await model.handleResultForPage(.pair, result: .success, target: .secondary)
     }
 
     func scanAgainTapped() async {
         model.recordInteraction(name: "scan_again_tapped", location: "pairing")
-        if onPageResultHandler != nil {
-            onPageResult(.success, target: .secondary)
-            return
-        }
-        await model.openScanFlow()
+        await model.handleResultForPage(.pair, result: .success, target: .secondary)
     }
 
     func goBack() async {
-        await model.returnHome()
+        await model.handleResultForPage(.pair, result: .cancel, target: nil)
     }
 
     func backTapped() async {
         model.recordInteraction(name: "back_tapped", location: "pairing")
-        if onPageResultHandler != nil {
-            onPageResult(.cancel, target: nil)
-            return
-        }
-        await model.returnHome()
+        await model.handleResultForPage(.pair, result: .cancel, target: nil)
     }
 
     func openSettingsTapped() {
@@ -69,10 +52,8 @@ struct PairingPageViewModel: ViewModelProtocol {
 
     func scannerFailed() {
         model.recordInteraction(name: "scanner_failed", location: "pairing_scanner")
-        onPageResult(.failure, target: nil)
-    }
-    
-    func onPageResult(_ result: PageResult, target: PageTarget?) {
-        onPageResultHandler?(result, target)
+        Task { [model] in
+            await model.handleResultForPage(.pair, result: .failure, target: nil)
+        }
     }
 }

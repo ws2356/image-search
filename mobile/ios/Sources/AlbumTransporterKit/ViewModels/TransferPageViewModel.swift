@@ -2,17 +2,12 @@ import SwiftUI
 import Combine
 
 @MainActor
-final class TransferPageViewModel: ObservableObject, ViewModelProtocol {
+final class TransferPageViewModel: ObservableObject {
     private let model: any TransferPageModeling
     private var modelChangeCancellable: AnyCancellable?
-    private let onPageResultHandler: ((_ result: PageResult, _ target: PageTarget?) -> Void)?
 
-    init(
-        model: any TransferPageModeling,
-        onPageResult: ((_ result: PageResult, _ target: PageTarget?) -> Void)? = nil
-    ) {
+    init(model: any TransferPageModeling) {
         self.model = model
-        self.onPageResultHandler = onPageResult
         if let observableModel = model as? MobileAppModel {
             modelChangeCancellable = observableModel.objectWillChange.sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -37,11 +32,9 @@ final class TransferPageViewModel: ObservableObject, ViewModelProtocol {
 
     func requestStopTransfer() {
         model.recordInteraction(name: "stop_backup_tapped", location: "transfer")
-        if onPageResultHandler != nil {
-            onPageResult(.success, target: .primary)
-            return
+        Task { [model] in
+            await model.handleResultForPage(.transfer, result: .success, target: .primary)
         }
-        model.requestStopTransfer()
     }
 
     func recordStopConfirmationPresented() {
@@ -50,18 +43,10 @@ final class TransferPageViewModel: ObservableObject, ViewModelProtocol {
 
     func confirmStopTransfer() async {
         model.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
-        if onPageResultHandler != nil {
-            onPageResult(.cancel, target: .stopTransferConfirmed)
-            return
-        }
-        await model.confirmStopTransfer()
+        await model.handleResultForPage(.transfer, result: .cancel, target: .stopTransferConfirmed)
     }
 
     func keepBackingUp() {
         model.recordInteraction(name: "stop_cancelled", location: "stop_confirmation")
-    }
-
-    func onPageResult(_ result: PageResult, target: PageTarget?) {
-        onPageResultHandler?(result, target)
     }
 }

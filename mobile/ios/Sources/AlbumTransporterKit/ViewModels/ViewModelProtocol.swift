@@ -19,8 +19,3 @@ enum PageTarget: Equatable {
     case keepOriginals
     case stopTransferConfirmed
 }
-
-@MainActor
-protocol ViewModelProtocol {
-    func onPageResult(_ result: PageResult, target: PageTarget?)
-}

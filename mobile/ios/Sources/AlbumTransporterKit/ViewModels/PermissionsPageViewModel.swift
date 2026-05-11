@@ -1,9 +1,10 @@
 import SwiftUI
 
+/// Prompt media access update -> Prompt if low battery -> Prompt if remove after backup
+
 @MainActor
-final class PermissionsPageViewModel: ObservableObject, ViewModelProtocol {
+final class PermissionsPageViewModel: ObservableObject {
     private let model: any PermissionsPageModeling
-    private let onPageResultHandler: ((_ result: PageResult, _ target: PageTarget?) -> Void)?
 
     @Published var isShowingLowBatteryWarning = false
     @Published var isShowingMediaAccessAlert = false
@@ -15,12 +16,8 @@ final class PermissionsPageViewModel: ObservableObject, ViewModelProtocol {
     private var isAwaitingRemoveAfterBackupDecision = false
     private var isRunningPermissionsPreflight = false
 
-    init(
-        model: any PermissionsPageModeling,
-        onPageResult: ((_ result: PageResult, _ target: PageTarget?) -> Void)? = nil
-    ) {
+    init(model: any PermissionsPageModeling) {
         self.model = model
-        self.onPageResultHandler = onPageResult
     }
 
     var summary: PermissionSummary {
@@ -62,21 +59,13 @@ final class PermissionsPageViewModel: ObservableObject, ViewModelProtocol {
         await continueBackupPreflight()
     }
 
-    func startBackup() async {
-        await startPreflight()
-    }
-
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
         model.setRemoveAfterBackupEnabled(isEnabled)
     }
 
     func goBack() async {
         resetPromptState()
-        if onPageResultHandler != nil {
-            onPageResult(.cancel, target: nil)
-            return
-        }
-        await model.returnHome()
+        await model.handleResultForPage(.permissions, result: .cancel, target: nil)
     }
 
     func recordLowBatteryDialogPresented() {
@@ -111,11 +100,7 @@ final class PermissionsPageViewModel: ObservableObject, ViewModelProtocol {
         model.recordInteraction(name: "not_now_tapped", location: "low_battery_warning")
         model.recordTelemetry(.lowBatteryCanceled, attributes: [:])
         resetPromptState()
-        if onPageResultHandler != nil {
-            onPageResult(.cancel, target: .lowBatteryDeclined)
-            return
-        }
-        await model.abortPreflightAndReturnHome(reason: "low_battery_declined")
+        await model.handleResultForPage(.permissions, result: .cancel, target: .lowBatteryDeclined)
     }
 
     func updateMediaAccessTapped() {
@@ -148,16 +133,11 @@ final class PermissionsPageViewModel: ObservableObject, ViewModelProtocol {
             ]
         )
         isRunningPermissionsPreflight = false
-        // TODO: agent, no need call onPageResult here because this is not a terminating event for this page
-        if onPageResultHandler != nil {
-            onPageResult(
-                .success,
-                target: shouldRemove ? .removeTransferredMedia : .keepOriginals
-            )
-            return
-        }
-        model.setRemoveAfterBackupEnabled(shouldRemove)
-        await model.startTransfer()
+        await model.handleResultForPage(
+            .permissions,
+            result: .success,
+            target: shouldRemove ? .removeTransferredMedia : .keepOriginals
+        )
     }
 
     private func continueBackupFromMediaAccess() async {
@@ -198,7 +178,4 @@ final class PermissionsPageViewModel: ObservableObject, ViewModelProtocol {
         isShowingRemoveAfterBackupPrompt = false
     }
 
-    func onPageResult(_ result: PageResult, target: PageTarget?) {
-        onPageResultHandler?(result, target)
-    }
 }

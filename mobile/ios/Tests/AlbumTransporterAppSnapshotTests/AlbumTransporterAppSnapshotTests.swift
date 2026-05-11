@@ -106,11 +106,7 @@ private final class SnapshotAppPageModel: AppPageModeling {
         self.completionSummary = completionSummary
     }
 
-    func handleHomePrimaryAction() async {}
-    func openScanFlow() async {}
-    func beginPairing() async {}
-    func returnHome() async {}
-    func startBackup() async {}
+    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
     func requestStopTransfer() {}
     func recordInteraction(name: String, location: String) {}
@@ -132,11 +128,7 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
         self.transferSnapshot = snapshot
     }
 
-    func handleHomePrimaryAction() async {}
-    func openScanFlow() async {}
-    func beginPairing() async {}
-    func returnHome() async {}
-    func startBackup() async {}
+    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
     func requestStopTransfer() {}
     func confirmStopTransfer() async {}

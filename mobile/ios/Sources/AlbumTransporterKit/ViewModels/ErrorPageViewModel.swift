@@ -1,14 +1,9 @@
 @MainActor
-struct ErrorPageViewModel: ViewModelProtocol {
+struct ErrorPageViewModel {
     private let model: any AppPageModeling
-    private let onPageResultHandler: ((_ result: PageResult, _ target: PageTarget?) -> Void)?
 
-    init(
-        model: any AppPageModeling,
-        onPageResult: ((_ result: PageResult, _ target: PageTarget?) -> Void)? = nil
-    ) {
+    init(model: any AppPageModeling) {
         self.model = model
-        self.onPageResultHandler = onPageResult
     }
 
     var summary: ErrorSummary {
@@ -17,15 +12,15 @@ struct ErrorPageViewModel: ViewModelProtocol {
 
     func retryTapped() {
         model.recordInteraction(name: "retry_tapped", location: "error")
-        onPageResult(.success, target: nil)
+        Task { [model] in
+            await model.handleResultForPage(.error, result: .success, target: nil)
+        }
     }
 
     func cancelTapped() {
         model.recordInteraction(name: "cancel_tapped", location: "error")
-        onPageResult(.cancel, target: nil)
-    }
-
-    func onPageResult(_ result: PageResult, target: PageTarget?) {
-        onPageResultHandler?(result, target)
+        Task { [model] in
+            await model.handleResultForPage(.error, result: .cancel, target: nil)
+        }
     }
 }

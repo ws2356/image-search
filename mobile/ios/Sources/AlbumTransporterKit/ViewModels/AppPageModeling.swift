@@ -9,10 +9,7 @@ protocol AppPageModeling: AnyObject {
     var errorSummary: ErrorSummary { get }
     var scannedQRCodeValue: String { get set }
 
-    func handleHomePrimaryAction() async
-    func openScanFlow() async
-    func beginPairing() async
-    func returnHome() async
+    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool)
     func requestStopTransfer()
     func recordInteraction(name: String, location: String)
@@ -29,7 +26,6 @@ protocol PermissionsPageModeling: AppPageModeling {
     func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes)
     func persistSnapshot()
     func abortPreflightAndReturnHome(reason: String) async
-    func startTransfer() async
     func recordDialogView(name: String)
 }
 

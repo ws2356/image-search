@@ -1,14 +1,9 @@
 @MainActor
-struct HomePageViewModel: ViewModelProtocol {
+struct HomePageViewModel {
     private let model: any AppPageModeling
-    private let onPageResultHandler: ((_ result: PageResult, _ target: PageTarget?) -> Void)?
 
-    init(
-        model: any AppPageModeling,
-        onPageResult: ((_ result: PageResult, _ target: PageTarget?) -> Void)? = nil
-    ) {
+    init(model: any AppPageModeling) {
         self.model = model
-        self.onPageResultHandler = onPageResult
     }
 
     var summary: HomeSummary {
@@ -16,32 +11,20 @@ struct HomePageViewModel: ViewModelProtocol {
     }
 
     func handlePrimaryAction() async {
-        await model.handleHomePrimaryAction()
+        await model.handleResultForPage(.home, result: .success, target: .primary)
     }
 
     func handlePrimaryActionTapped() async {
         model.recordInteraction(name: "primary_action_tapped", location: "home")
-        if onPageResultHandler != nil {
-            onPageResult(.success, target: .primary)
-            return
-        }
-        await model.handleHomePrimaryAction()
+        await model.handleResultForPage(.home, result: .success, target: .primary)
     }
 
     func openScanFlow() async {
-        await model.openScanFlow()
+        await model.handleResultForPage(.home, result: .success, target: .secondary)
     }
 
     func openScanFlowTapped() async {
         model.recordInteraction(name: "reconnect_tapped", location: "home")
-        if onPageResultHandler != nil {
-            onPageResult(.success, target: .secondary)
-            return
-        }
-        await model.openScanFlow()
-    }
-
-    func onPageResult(_ result: PageResult, target: PageTarget?) {
-        onPageResultHandler?(result, target)
+        await model.handleResultForPage(.home, result: .success, target: .secondary)
     }
 }

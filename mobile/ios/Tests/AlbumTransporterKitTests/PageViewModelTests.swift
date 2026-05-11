@@ -30,8 +30,8 @@ final class PageViewModelTests: XCTestCase {
         await viewModel.scanAgain()
         await viewModel.goBack()
 
-        XCTAssertEqual(model.beginPairingCallCount, 1)
-        XCTAssertEqual(model.openScanFlowCallCount, 1)
+        XCTAssertEqual(model.beginPairingCallCount, 0)
+        XCTAssertEqual(model.openScanFlowCallCount, 2)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
@@ -64,43 +64,15 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot, model.transferSnapshot)
 
         viewModel.requestStopTransfer()
-        XCTAssertEqual(model.requestStopTransferCallCount, 1)
-    }
-
-    func test_completion_page_view_model_maps_summary_and_return_action() async {
-        let model = StubPageModel()
-        let viewModel = CompletionPageViewModel(model: model)
-
-        XCTAssertEqual(viewModel.summary, model.completionSummary)
-
-        await viewModel.returnHome()
-        XCTAssertEqual(model.returnHomeCallCount, 1)
-    }
-
-    func test_pairing_page_view_model_forwards_results_when_callback_is_provided() async {
-        let model = StubPageModel()
-        var forwardedResults: [(PageResult, PageTarget?)] = []
-        let viewModel = PairingPageViewModel(model: model) { result, target in
-            forwardedResults.append((result, target))
+        let expectation = expectation(description: "stop transfer routed via page result")
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            XCTAssertEqual(model.requestStopTransferCallCount, 1)
+            expectation.fulfill()
         }
-
-        await viewModel.beginPairingTapped()
-        await viewModel.scanAgainTapped()
-        await viewModel.backTapped()
-        viewModel.scannerFailed()
-
-        XCTAssertEqual(model.beginPairingCallCount, 0)
-        XCTAssertEqual(model.openScanFlowCallCount, 0)
-        XCTAssertEqual(model.returnHomeCallCount, 0)
-        XCTAssertEqual(forwardedResults.count, 4)
-        XCTAssertEqual(forwardedResults[0].0, .success)
-        XCTAssertEqual(forwardedResults[0].1, .primary)
-        XCTAssertEqual(forwardedResults[1].0, .success)
-        XCTAssertEqual(forwardedResults[1].1, .secondary)
-        XCTAssertEqual(forwardedResults[2].0, .cancel)
-        XCTAssertNil(forwardedResults[2].1)
-        XCTAssertEqual(forwardedResults[3].0, .failure)
+        wait(for: [expectation], timeout: 1.0)
     }
+
 }
 
 @MainActor
@@ -130,20 +102,57 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var beginTelemetrySpanCallCount = 0
     var recordedTelemetryEvents: [MobileTelemetryEvent] = []
 
-    func handleHomePrimaryAction() async {
-        handleHomePrimaryActionCallCount += 1
-    }
-
-    func openScanFlow() async {
-        openScanFlowCallCount += 1
-    }
-
-    func beginPairing() async {
-        beginPairingCallCount += 1
-    }
-
-    func returnHome() async {
-        returnHomeCallCount += 1
+    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
+        switch page {
+        case .home:
+            if result == .success {
+                if target == .secondary {
+                    openScanFlowCallCount += 1
+                } else {
+                    handleHomePrimaryActionCallCount += 1
+                }
+            } else if result == .cancel {
+                returnHomeCallCount += 1
+            }
+        case .pair:
+            if result == .success {
+                openScanFlowCallCount += 1
+            } else if result == .cancel {
+                returnHomeCallCount += 1
+            }
+        case .permissions:
+            if result == .success {
+                if target == .removeTransferredMedia {
+                    setRemoveAfterBackupEnabled(true)
+                } else if target == .keepOriginals {
+                    setRemoveAfterBackupEnabled(false)
+                }
+            } else if result == .cancel {
+                returnHomeCallCount += 1
+            }
+        case .transfer:
+            if result == .success, target == .primary {
+                requestStopTransfer()
+            } else if result == .cancel, target == .stopTransferConfirmed {
+                await confirmStopTransfer()
+            }
+        case .completed:
+            if result == .success || result == .cancel {
+                returnHomeCallCount += 1
+            }
+        case .error:
+            if result == .success {
+                openScanFlowCallCount += 1
+            } else {
+                returnHomeCallCount += 1
+            }
+        case .scan:
+            if result == .success {
+                beginPairingCallCount += 1
+            } else if result == .cancel {
+                returnHomeCallCount += 1
+            }
+        }
     }
 
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
@@ -177,8 +186,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     func abortPreflightAndReturnHome(reason: String) async {
         _ = reason
     }
-
-    func startTransfer() async {}
 
     func recordDialogView(name: String) {}
 

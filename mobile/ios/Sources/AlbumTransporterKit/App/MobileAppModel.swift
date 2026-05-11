@@ -680,6 +680,9 @@ final class MobileAppModel: ObservableObject {
                 guard let self, self.route == .transfer else {
                     return
                 }
+                guard snapshot.transferredCount >= self.transferSnapshot.transferredCount else {
+                    return
+                }
                 self.transferSnapshot = snapshot
             }
         })

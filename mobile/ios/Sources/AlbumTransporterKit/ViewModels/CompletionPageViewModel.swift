@@ -1,34 +1,17 @@
 @MainActor
-struct CompletionPageViewModel: ViewModelProtocol {
+struct CompletionPageViewModel {
     private let model: any AppPageModeling
-    private let onPageResultHandler: ((_ result: PageResult, _ target: PageTarget?) -> Void)?
 
-    init(
-        model: any AppPageModeling,
-        onPageResult: ((_ result: PageResult, _ target: PageTarget?) -> Void)? = nil
-    ) {
+    init(model: any AppPageModeling) {
         self.model = model
-        self.onPageResultHandler = onPageResult
     }
 
     var summary: CompletionSummary {
         model.completionSummary
     }
 
-    func returnHome() async {
-        await model.returnHome()
-    }
-
     func returnHomeTapped() async {
         model.recordInteraction(name: "return_home_tapped", location: "completion")
-        if onPageResultHandler != nil {
-            onPageResult(.success, target: nil)
-            return
-        }
-        await model.returnHome()
-    }
-
-    func onPageResult(_ result: PageResult, target: PageTarget?) {
-        onPageResultHandler?(result, target)
+        await model.handleResultForPage(.completed, result: .success, target: nil)
     }
 }

@@ -37,11 +37,12 @@ Welcome to the `image-search` repository. This document outlines the architectur
     
     | Principle | Definition & Agent Guidance   |
     | :---- | :---- |
-    | **SOLID** | Five design principles (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion) intended to make software designs more understandable and flexible. |
+    | **SOLID** | Single Responsibility (Every module, class, or function should be responsible for a single part of the functionality); Open/Closed (You should be able to add new features or behaviors without changing the existing source code); Liskov Substitution (Don't "empty out" inherited methods. If a subclass cannot actually perform the action of its parent, the inheritance hierarchy is wrong); Interface Segregation (It is better to have many small, specific interfaces than one large, general-purpose one); Dependency Inversion (Use Dependency Injection). |
     | **DRY (Don't Repeat Yourself)** | Abstract common logic into reusable functions or modules. Avoid copy-pasting code blocks. |
     | **KISS (Keep It Simple, Stupid)** | Avoid over-engineering. Choose the simplest solution that fully satisfies the requirements. |
     | **YAGNI (You Ain't Gonna Need It)** | Do not add functionality until it is necessary. Avoid "future-proofing" that complicates the current design. |
     
+- **One way to do things**: For any given problem, there should ideally be one clear and consistent way to solve it within the codebase. This reduces cognitive load and makes it easier for developers to understand and contribute.
 - **Separation of Concerns**: UI code should not contain business logic. Business logic should be in separate controller or worker classes. Each file should have a clear and often singular responsibility.
 - **Use asyncio**: The existing codebase is primarily synchronous, but new code should prefer `asyncio` for any I/O-bound operations (e.g., database access, file I/O) to improve responsiveness and scalability. Use `async def` and `await` as needed.
 - **Concurrency**: Ensure correctness under concurrent conditions. Even for local http/websocket servers, prepare for potential concurrent requests.
