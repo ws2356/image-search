@@ -119,6 +119,45 @@ final class PageViewModelTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
     }
 
+    func test_transfer_page_view_model_applies_live_progress_callbacks() async {
+        let model = StubPageModel()
+        await model.transferServiceActor.configureProgressSequence(
+            initialSnapshot: TransferSnapshot(
+                transferredCount: 1,
+                totalCount: 5,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: "4 min remaining",
+                statusMessage: "Starting transfer.",
+                guidanceMessage: "Keep the app in the foreground.",
+                isIncompleteLibrary: false
+            ),
+            finalSnapshot: TransferSnapshot(
+                transferredCount: 5,
+                totalCount: 5,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: nil,
+                statusMessage: "Transfer finished.",
+                guidanceMessage: "Waiting for desktop confirmation.",
+                isIncompleteLibrary: false
+            ),
+            callbackDelayNanoseconds: 200_000_000
+        )
+        let viewModel = TransferPageViewModel(model: model)
+
+        let transferTask = Task { @MainActor in
+            await viewModel.orchestrateTransfer()
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(viewModel.snapshot.transferredCount, 1)
+        XCTAssertEqual(viewModel.snapshot.totalCount, 5)
+
+        await transferTask.value
+    }
+
 }
 
 @MainActor
@@ -271,8 +310,16 @@ private actor StubPermissionService: PermissionService {
 private actor StubTransferService: TransferService {
     private var snapshot: TransferSnapshot = .demo
     private var completionState: TransferCompletionState?
+    private var progressSequence: (initial: TransferSnapshot, final: TransferSnapshot, delayNanoseconds: UInt64)?
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        if let progressSequence {
+            snapshot = progressSequence.initial
+            progress(progressSequence.initial)
+            try? await Task.sleep(nanoseconds: progressSequence.delayNanoseconds)
+            snapshot = progressSequence.final
+            return progressSequence.final
+        }
         progress(snapshot)
         return snapshot
     }
@@ -310,6 +357,14 @@ private actor StubTransferService: TransferService {
         if let snapshot = completionState?.snapshot {
             self.snapshot = snapshot
         }
+    }
+
+    func configureProgressSequence(
+        initialSnapshot: TransferSnapshot,
+        finalSnapshot: TransferSnapshot,
+        callbackDelayNanoseconds: UInt64
+    ) {
+        progressSequence = (initialSnapshot, finalSnapshot, callbackDelayNanoseconds)
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

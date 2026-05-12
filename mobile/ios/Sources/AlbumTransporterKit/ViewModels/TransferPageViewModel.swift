@@ -67,7 +67,11 @@ final class TransferPageViewModel: ObservableObject {
         }
         await model.transferServiceForTransferView.stageTransferCompletionState(nil)
         startTransferPolling()
-        let finalSnapshot = await model.transferServiceForTransferView.startTransfer(progress: { _ in })
+        let finalSnapshot = await model.transferServiceForTransferView.startTransfer { [weak self] inFlightSnapshot in
+            Task { @MainActor [weak self] in
+                self?.applySnapshotIfNewer(inFlightSnapshot)
+            }
+        }
         applySnapshotIfNewer(finalSnapshot)
         stopTransferPolling()
         guard model.route == .transfer else {
@@ -124,7 +128,10 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     private func applySnapshotIfNewer(_ newSnapshot: TransferSnapshot) {
-        guard newSnapshot.transferredCount >= snapshot.transferredCount else {
+        guard
+            newSnapshot.totalCount != snapshot.totalCount
+                || newSnapshot.transferredCount >= snapshot.transferredCount
+        else {
             return
         }
         snapshot = newSnapshot
@@ -134,6 +141,6 @@ final class TransferPageViewModel: ObservableObject {
         guard let stagedSnapshot = await model.transferServiceForTransferView.progressSnapshot() else {
             return
         }
-        snapshot = stagedSnapshot
+        applySnapshotIfNewer(stagedSnapshot)
     }
 }
