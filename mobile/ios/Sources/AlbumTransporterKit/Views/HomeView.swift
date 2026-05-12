@@ -151,27 +151,6 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
 
-                if summary.primaryAction.showsSecondaryScanAction {
-                    Button {
-                        Task {
-                            await viewModel.openScanFlowTapped()
-                        }
-                    } label: {
-                        Text("Reconnect")
-                            .font(.system(size: 17, weight: .medium))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .foregroundStyle(Color(hex: 0x007AFF))
-                            .background(Color.white)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color(hex: 0xE5E5EA), lineWidth: 1.5)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-                    .buttonStyle(.plain)
-                }
-
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "cable.connector")
                         .foregroundStyle(Color(hex: 0x3B5FC0))

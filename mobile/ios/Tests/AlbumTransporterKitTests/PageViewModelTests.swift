@@ -10,10 +10,8 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.summary, model.homeSummary)
 
         await viewModel.handlePrimaryActionTapped()
-        await viewModel.openScanFlowTapped()
 
         XCTAssertEqual(model.handleHomePrimaryActionCallCount, 1)
-        XCTAssertEqual(model.openScanFlowCallCount, 1)
     }
 
     func test_pairing_page_view_model_maps_status_binding_and_actions() async {
@@ -105,11 +103,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         switch page {
         case .home:
             if result == .success {
-                if target == .secondary {
-                    openScanFlowCallCount += 1
-                } else {
-                    handleHomePrimaryActionCallCount += 1
-                }
+                handleHomePrimaryActionCallCount += 1
             } else if result == .cancel {
                 returnHomeCallCount += 1
             }

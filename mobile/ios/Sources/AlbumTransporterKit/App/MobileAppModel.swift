@@ -65,11 +65,7 @@ final class MobileAppModel: ObservableObject {
         case .home:
             switch result {
             case .success:
-                if target == .secondary {
-                    await openScanFlow()
-                } else {
-                    await handleHomePrimaryAction()
-                }
+                await handleHomePrimaryAction()
             case .cancel:
                 await returnHome()
             case .failure:

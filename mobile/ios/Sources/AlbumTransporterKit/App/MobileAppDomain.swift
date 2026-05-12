@@ -47,14 +47,6 @@ enum HomePrimaryAction: Equatable, Sendable, Codable {
         }
     }
 
-    var showsSecondaryScanAction: Bool {
-        switch self {
-        case .scanDesktopQRCode, .resumeBackup:
-            return false
-        case .backupPendingItems:
-            return true
-        }
-    }
 }
 
 enum PermissionScope: String, Equatable, Sendable, Codable {
