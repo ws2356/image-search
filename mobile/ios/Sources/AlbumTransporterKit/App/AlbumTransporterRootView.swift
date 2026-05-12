@@ -1,9 +1,7 @@
 import SwiftUI
 import Foundation
 import Factory
-#if os(iOS)
 import UIKit
-#endif
 
 @MainActor
 public struct AlbumTransporterRootView: View {
@@ -83,25 +81,19 @@ public struct AlbumTransporterRootView: View {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .navigationTitle(model.navigationTitle)
-#if os(iOS)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(.visible, for: .navigationBar)
                     .toolbarBackground(navigationBarBackground, for: .navigationBar)
                     .toolbarColorScheme(.light, for: .navigationBar)
-#endif
             }
         } else {
             NavigationView {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .navigationTitle(model.navigationTitle)
-#if os(iOS)
                     .navigationBarTitleDisplayMode(.inline)
-#endif
             }
-#if os(iOS)
             .navigationViewStyle(.stack)
-#endif
         }
     }
 
@@ -112,7 +104,6 @@ public struct AlbumTransporterRootView: View {
             HomeView(viewModel: homeViewModel)
         case .scan:
             let scanningViewModel = ScanningPageViewModel(model: model)
-            let pairingViewModel = PairingPageViewModel(model: model)
             ScanningPageView(viewModel: scanningViewModel)
         case .pair:
             let pairingViewModel = PairingPageViewModel(model: model)

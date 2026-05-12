@@ -6,7 +6,6 @@ let package = Package(
     name: "AlbumTransporterKit",
     platforms: [
         .iOS(.v15),
-        .macOS(.v14),
     ],
     products: [
         .library(

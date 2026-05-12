@@ -1,7 +1,5 @@
 import Foundation
-#if os(iOS)
 import UIKit
-#endif
 
 actor UserDefaultsAppStateStore: AppStateStore {
     private let userDefaults: UserDefaults
@@ -110,11 +108,7 @@ actor UserDefaultsLocalDeviceIdentityStore: LocalDeviceIdentityProviding {
     }
 
     private func currentDeviceName() -> String {
-#if os(iOS)
         UIDevice.current.name
-#else
-        Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-#endif
     }
 }
 

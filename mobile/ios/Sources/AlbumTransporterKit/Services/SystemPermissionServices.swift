@@ -1,9 +1,7 @@
 import Foundation
 import Photos
-#if os(iOS)
 import AVFoundation
 import UIKit
-#endif
 
 struct SystemPermissionService: PermissionService {
     func loadPermissionSummary() async -> PermissionSummary {
@@ -57,23 +55,15 @@ struct SystemPermissionService: PermissionService {
     }
 
     private func currentCameraAuthorization() -> Bool {
-#if os(iOS)
         AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-#else
-        false
-#endif
     }
 
     private func currentBatteryState() -> (lowBatteryWarningNeeded: Bool, isCharging: Bool) {
-#if os(iOS)
         UIDevice.current.isBatteryMonitoringEnabled = true
         let batteryLevel = UIDevice.current.batteryLevel
         let batteryState = UIDevice.current.batteryState
         let isCharging = batteryState == .charging || batteryState == .full
         let lowBattery = batteryLevel >= 0 && batteryLevel < 0.2 && !isCharging
         return (lowBattery, isCharging)
-#else
-        return (false, true)
-#endif
     }
 }

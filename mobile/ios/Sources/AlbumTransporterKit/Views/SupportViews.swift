@@ -219,7 +219,7 @@ extension View {
         of value: Value,
         perform action: @escaping (Value) -> Void
     ) -> some View {
-        if #available(iOS 17.0, macOS 14.0, *) {
+        if #available(iOS 17.0, *) {
             self.onChange(of: value) { _, newValue in
                 action(newValue)
             }

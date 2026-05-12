@@ -401,12 +401,12 @@ private struct SetupStep: Identifiable {
 }
 
 #if DEBUG
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 17.0, *)
 #Preview("First Launch") {
     HomeView(viewModel: HomePageViewModel(model: HomeViewPreviewPageModel(summary: .firstLaunch)))
 }
 
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 17.0, *)
 #Preview("Returning User") {
     HomeView(
         viewModel: HomePageViewModel(

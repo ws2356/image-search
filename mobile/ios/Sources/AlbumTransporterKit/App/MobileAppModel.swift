@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(UIKit)
 import UIKit
-#endif
 import Combine
 
 @MainActor
@@ -27,10 +25,8 @@ final class MobileAppModel: ObservableObject {
     private let transferService: TransferService
     private let sideEffectWorker: MobileAppSideEffectWorker
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
-#if canImport(UIKit)
     private var memoryWarningObservationTask: Task<Void, Never>?
     private var appLifecycleObservationTask: Task<Void, Never>?
-#endif
 
     init(
         stateStore: AppStateStore,
@@ -54,10 +50,8 @@ final class MobileAppModel: ObservableObject {
     }
 
     deinit {
-#if canImport(UIKit)
         memoryWarningObservationTask?.cancel()
         appLifecycleObservationTask?.cancel()
-#endif
     }
     
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
@@ -884,7 +878,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func configureMemoryWarningObservation() {
-#if canImport(UIKit)
         memoryWarningObservationTask?.cancel()
         memoryWarningObservationTask = Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(
@@ -896,11 +889,9 @@ final class MobileAppModel: ObservableObject {
                 await self.handleMemoryWarningNotification()
             }
         }
-#endif
     }
 
     private func configureAppLifecycleObservation() {
-#if canImport(UIKit)
         appLifecycleObservationTask?.cancel()
         appLifecycleObservationTask = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
@@ -946,7 +937,6 @@ final class MobileAppModel: ObservableObject {
                 await group.waitForAll()
             }
         }
-#endif
     }
 
     private func handleMemoryWarningNotification() {

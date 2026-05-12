@@ -7,6 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AB000001AB000001AB000001 /* PageViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013AB000013AB000013 /* PageViewModelTests.swift */; };
+		AB000002AB000002AB000002 /* MobileAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014AB000014AB000014 /* MobileAppModelTests.swift */; };
+		AB000003AB000003AB000003 /* USBTransportServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000015AB000015AB000015 /* USBTransportServicesTests.swift */; };
+		AB000004AB000004AB000004 /* OTLPHTTPSpanExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000016AB000016AB000016 /* OTLPHTTPSpanExporterTests.swift */; };
+		AB000005AB000005AB000005 /* TraceContextPropagationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000017AB000017AB000017 /* TraceContextPropagationTests.swift */; };
+		AB000006AB000006AB000006 /* MobileBackupFlowStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000018AB000018AB000018 /* MobileBackupFlowStateMachineTests.swift */; };
+		AB000007AB000007AB000007 /* OTLPHTTPMetricExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000019AB000019AB000019 /* OTLPHTTPMetricExporterTests.swift */; };
+		AB000008AB000008AB000008 /* PairingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000020AB000020AB000020 /* PairingServiceTests.swift */; };
+		AB000009AB000009AB000009 /* TransferServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000021AB000021AB000021 /* TransferServiceTests.swift */; };
+		AB000010AB000010AB000010 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
+		AB000011AB000011AB000011 /* OpenTelemetryApi in Frameworks */ = {isa = PBXBuildFile; productRef = AB000024AB000024AB000024 /* OpenTelemetryApi */; };
+		AB000012AB000012AB000012 /* OpenTelemetrySdk in Frameworks */ = {isa = PBXBuildFile; productRef = AB000025AB000025AB000025 /* OpenTelemetrySdk */; };
 		159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32A33B28DE705EAD09C21466 /* SnapshotSupport.swift */; };
 		35630B3B9D407F91ADAA5627 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5AC8CE28919C9157AC9030D9 /* Foundation.framework */; };
 		3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D9BBC222F9A6934002FE667 /* PhotosUI.framework */; };
@@ -34,6 +46,15 @@
 		3D9BBC222F9A6934002FE667 /* PhotosUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PhotosUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/PhotosUI.framework; sourceTree = DEVELOPER_DIR; };
 		4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterAppSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests.swift; sourceTree = "<group>"; };
 		5AC8CE28919C9157AC9030D9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		AB000013AB000013AB000013 /* PageViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PageViewModelTests.swift; path = Tests/AlbumTransporterKitTests/PageViewModelTests.swift; sourceTree = "<group>"; };
+		AB000014AB000014AB000014 /* MobileAppModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MobileAppModelTests.swift; path = Tests/AlbumTransporterKitTests/MobileAppModelTests.swift; sourceTree = "<group>"; };
+		AB000015AB000015AB000015 /* USBTransportServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = USBTransportServicesTests.swift; path = Tests/AlbumTransporterKitTests/USBTransportServicesTests.swift; sourceTree = "<group>"; };
+		AB000016AB000016AB000016 /* OTLPHTTPSpanExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OTLPHTTPSpanExporterTests.swift; path = Tests/AlbumTransporterKitTests/OTLPHTTPSpanExporterTests.swift; sourceTree = "<group>"; };
+		AB000017AB000017AB000017 /* TraceContextPropagationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TraceContextPropagationTests.swift; path = Tests/AlbumTransporterKitTests/TraceContextPropagationTests.swift; sourceTree = "<group>"; };
+		AB000018AB000018AB000018 /* MobileBackupFlowStateMachineTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MobileBackupFlowStateMachineTests.swift; path = Tests/AlbumTransporterKitTests/MobileBackupFlowStateMachineTests.swift; sourceTree = "<group>"; };
+		AB000019AB000019AB000019 /* OTLPHTTPMetricExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OTLPHTTPMetricExporterTests.swift; path = Tests/AlbumTransporterKitTests/OTLPHTTPMetricExporterTests.swift; sourceTree = "<group>"; };
+		AB000020AB000020AB000020 /* PairingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PairingServiceTests.swift; path = Tests/AlbumTransporterKitTests/PairingServiceTests.swift; sourceTree = "<group>"; };
+		AB000021AB000021AB000021 /* TransferServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TransferServiceTests.swift; path = Tests/AlbumTransporterKitTests/TransferServiceTests.swift; sourceTree = "<group>"; };
 		79D12E02C504AEC5A27313AF /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
 		963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterApp.swift; path = App/AlbumTransporterApp.swift; sourceTree = "<group>"; };
 		C292EB02D1AB8B391C25D27A /* AlbumTransporterAppSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AlbumTransporterAppSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -56,6 +77,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB000010AB000010AB000010 /* AlbumTransporterKit in Frameworks */,
+				AB000011AB000011AB000011 /* OpenTelemetryApi in Frameworks */,
+				AB000012AB000012AB000012 /* OpenTelemetrySdk in Frameworks */,
 				35630B3B9D407F91ADAA5627 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -63,6 +87,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AB000022AB000022AB000022 /* AlbumTransporterKitTests */ = {
+			isa = PBXGroup;
+			children = (
+				AB000013AB000013AB000013 /* PageViewModelTests.swift */,
+				AB000014AB000014AB000014 /* MobileAppModelTests.swift */,
+				AB000015AB000015AB000015 /* USBTransportServicesTests.swift */,
+				AB000016AB000016AB000016 /* OTLPHTTPSpanExporterTests.swift */,
+				AB000017AB000017AB000017 /* TraceContextPropagationTests.swift */,
+				AB000018AB000018AB000018 /* MobileBackupFlowStateMachineTests.swift */,
+				AB000019AB000019AB000019 /* OTLPHTTPMetricExporterTests.swift */,
+				AB000020AB000020AB000020 /* PairingServiceTests.swift */,
+				AB000021AB000021AB000021 /* TransferServiceTests.swift */,
+			);
+			name = AlbumTransporterKitTests;
+			sourceTree = "<group>";
+		};
 		2087CA0CB9729A2CF131AC4A /* AlbumTransporterAppSnapshotTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -75,6 +115,7 @@
 		632508D53655111E103B7E9A /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				AB000022AB000022AB000022 /* AlbumTransporterKitTests */,
 				2087CA0CB9729A2CF131AC4A /* AlbumTransporterAppSnapshotTests */,
 			);
 			name = Tests;
@@ -144,6 +185,11 @@
 				5D4B3FD269F9C5692EDFC63D /* PBXTargetDependency */,
 			);
 			name = AlbumTransporterAppSnapshotTests;
+			packageProductDependencies = (
+				CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */,
+				AB000024AB000024AB000024 /* OpenTelemetryApi */,
+				AB000025AB000025AB000025 /* OpenTelemetrySdk */,
+			);
 			productName = AlbumTransporterAppSnapshotTests;
 			productReference = C292EB02D1AB8B391C25D27A /* AlbumTransporterAppSnapshotTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -188,6 +234,7 @@
 			mainGroup = B2F2B86624660D3ED940BFE0;
 			packageReferences = (
 				34F85B90D4B6FF60D0920E9A /* XCLocalSwiftPackageReference "." */,
+				AB000023AB000023AB000023 /* XCRemoteSwiftPackageReference "opentelemetry-swift-core" */,
 			);
 			productRefGroup = 86F9AA3367D98B280C0BE44C /* Products */;
 			projectDirPath = "";
@@ -231,6 +278,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB000001AB000001AB000001 /* PageViewModelTests.swift in Sources */,
+				AB000002AB000002AB000002 /* MobileAppModelTests.swift in Sources */,
+				AB000003AB000003AB000003 /* USBTransportServicesTests.swift in Sources */,
+				AB000004AB000004AB000004 /* OTLPHTTPSpanExporterTests.swift in Sources */,
+				AB000005AB000005AB000005 /* TraceContextPropagationTests.swift in Sources */,
+				AB000006AB000006AB000006 /* MobileBackupFlowStateMachineTests.swift in Sources */,
+				AB000007AB000007AB000007 /* OTLPHTTPMetricExporterTests.swift in Sources */,
+				AB000008AB000008AB000008 /* PairingServiceTests.swift in Sources */,
+				AB000009AB000009AB000009 /* TransferServiceTests.swift in Sources */,
 				159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */,
 				975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */,
 			);
@@ -499,7 +555,28 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		AB000023AB000023AB000023 /* XCRemoteSwiftPackageReference "opentelemetry-swift-core" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/open-telemetry/opentelemetry-swift-core.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		AB000024AB000024AB000024 /* OpenTelemetryApi */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AB000023AB000023AB000023 /* XCRemoteSwiftPackageReference "opentelemetry-swift-core" */;
+			productName = OpenTelemetryApi;
+		};
+		AB000025AB000025AB000025 /* OpenTelemetrySdk */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AB000023AB000023AB000023 /* XCRemoteSwiftPackageReference "opentelemetry-swift-core" */;
+			productName = OpenTelemetrySdk;
+		};
 		CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 34F85B90D4B6FF60D0920E9A /* XCLocalSwiftPackageReference "." */;

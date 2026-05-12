@@ -114,7 +114,12 @@ private final class SnapshotAppPageModel: AppPageModeling {
         let snapshot = TransferSnapshot(
             transferredCount: completionSummary.itemsBackedUp ?? 0,
             totalCount: completionSummary.itemsBackedUp ?? 0,
-            failedCount: 0
+            failedCount: 0,
+            transport: .lan,
+            etaDescription: nil,
+            statusMessage: "Completed backup snapshot.",
+            guidanceMessage: "",
+            isIncompleteLibrary: false
         )
         self.transferService = SnapshotTransferService(
             snapshot: snapshot,
@@ -186,7 +191,7 @@ private actor SnapshotTransferService: TransferService {
 
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
         snapshot = current
-        current
+        return current
     }
 
     func progressSnapshot() async -> TransferSnapshot? {

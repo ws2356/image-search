@@ -301,7 +301,7 @@ private extension TransferTransport {
 }
 
 #if DEBUG
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 17.0, *)
 #Preview("USB Transfer") {
     TransferSessionView(
         viewModel: TransferPageViewModel(
@@ -310,7 +310,7 @@ private extension TransferTransport {
     )
 }
 
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 17.0, *)
 #Preview("Wi-Fi Transfer") {
     TransferSessionView(
         viewModel: TransferPageViewModel(

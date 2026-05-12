@@ -1,7 +1,5 @@
 import SwiftUI
-#if os(iOS)
 import Photos
-#endif
 
 struct PermissionsGateView: View {
     @ObservedObject var viewModel: PermissionsPageViewModel
@@ -41,7 +39,6 @@ struct PermissionsGateView: View {
             Text("Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.")
         }
         .alert("Full media access recommended", isPresented: $viewModel.isShowingMediaAccessAlert) {
-#if os(iOS)
             Button("Update") {
                 viewModel.updateMediaAccessTapped()
                 PHPhotoLibrary.showLimitedPicker { _ in
@@ -50,7 +47,6 @@ struct PermissionsGateView: View {
                     }
                 }
             }
-#endif
             Button("Not now", role: .cancel) {
                 Task {
                     await viewModel.continueBackupFromMediaAccessNotNow()
@@ -130,7 +126,7 @@ private struct PermissionsPreflightCard: View {
 }
 
 #if DEBUG
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 17.0, *)
 #Preview("Limited Library Prompt") {
     PermissionsGateView(
         viewModel: PermissionsPageViewModel(
@@ -139,7 +135,7 @@ private struct PermissionsPreflightCard: View {
     )
 }
 
-@available(iOS 17.0, macOS 14.0, *)
+@available(iOS 17.0, *)
 #Preview("Low Battery Prompt") {
     PermissionsGateView(
         viewModel: PermissionsPageViewModel(

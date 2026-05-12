@@ -73,8 +73,7 @@ EOF
     -project "$PROJECT_PATH" \
     -scheme "$SCHEME_NAME" \
     -destination "platform=iOS Simulator,name=$simulator_name" \
-    -only-testing:"$TEST_TARGET" \
-    -derivedDataPath "$DERIVED_DATA_PATH/$(slugify "$alias_name")" \
+    -only-testing:"$TEST_TARGET/AlbumTransporterAppSnapshotTests" \
     -testLanguage "$language_code" \
     -testRegion "$region_code"
 }

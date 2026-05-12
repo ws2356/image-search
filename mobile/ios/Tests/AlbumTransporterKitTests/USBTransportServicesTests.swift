@@ -3,6 +3,7 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class USBTransportServicesTests: XCTestCase {
+#if !os(iOS)
     func test_usb_runtime_accepts_python_desktop_auth_challenge() async throws {
         let runtime = USBWebSocketTransportRuntime()
         let sessionID = "mobile-functional-session-001"
@@ -28,6 +29,7 @@ final class USBTransportServicesTests: XCTestCase {
         )
         XCTAssertEqual(result.terminationStatus, 0, result.outputSummary)
     }
+#endif
 
     func test_build_desktop_usb_auth_digest_matches_sha256_material() {
         let digest = buildDesktopUSBAuthDigest(
@@ -474,6 +476,7 @@ final class USBTransportServicesTests: XCTestCase {
         )
     }
 
+    #if !os(iOS)
     private func runPythonDesktopChallengeScript(
         port: Int,
         sessionID: String,
@@ -559,12 +562,15 @@ stderr:
 """
         )
     }
+    #endif
 }
 
+#if !os(iOS)
 private struct ProcessResult {
     let terminationStatus: Int32
     let outputSummary: String
 }
+#endif
 
 private actor RecordingTransferClient: MobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, USBTransportConnectivityChecking {
     private let startSessionError: Error?

@@ -1,9 +1,7 @@
 import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
-#if os(iOS)
 import UIKit
-#endif
 
 actor OpenTelemetryTelemetryClient: TelemetryClient {
     private static let allowedMetricAttributeKeys: Set<String> = [

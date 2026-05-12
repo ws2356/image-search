@@ -558,21 +558,20 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_open_scan_flow_returns_without_waiting_for_slow_side_effect_io() async {
         let model = MobileAppModel(
-            stateStore: SlowAppStateStore(saveDelay: .milliseconds(600)),
+            stateStore: SlowAppStateStore(saveDelayNanoseconds: 600_000_000),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
             permissionService: StaticPermissionService(summary: .demo),
             transferService: StaticTransferService(),
-            telemetryClient: SlowTelemetryClient(recordDelay: .milliseconds(600))
+            telemetryClient: SlowTelemetryClient(recordDelayNanoseconds: 600_000_000)
         )
-        let clock = ContinuousClock()
-        let start = clock.now
+        let start = Date()
 
         await model.openScanFlow()
 
-        let elapsed = start.duration(to: clock.now)
+        let elapsed = Date().timeIntervalSince(start)
         XCTAssertEqual(model.route, .scan)
-        XCTAssertLessThan(elapsed, .milliseconds(250))
+        XCTAssertLessThan(elapsed, 0.25)
     }
 
     func test_handle_app_did_become_active_does_not_trigger_transfer_recovery_while_idle() async {
@@ -851,7 +850,7 @@ private actor PollingTransferService: TransferService {
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         currentSnapshotValue = inFlightSnapshot
-        try? await Task.sleep(for: .milliseconds(80))
+        try? await Task.sleep(nanoseconds: 80_000_000)
         currentSnapshotValue = finalSnapshot
         return finalSnapshot
     }
@@ -1192,11 +1191,11 @@ private actor DelayedTransferService: TransferService {
 
 private actor SlowAppStateStore: AppStateStore {
     private let snapshot: LaunchSnapshot
-    private let saveDelay: Duration
+    private let saveDelayNanoseconds: UInt64
 
-    init(snapshot: LaunchSnapshot = .firstLaunch, saveDelay: Duration) {
+    init(snapshot: LaunchSnapshot = .firstLaunch, saveDelayNanoseconds: UInt64) {
         self.snapshot = snapshot
-        self.saveDelay = saveDelay
+        self.saveDelayNanoseconds = saveDelayNanoseconds
     }
 
     func loadLaunchSnapshot() async -> LaunchSnapshot {
@@ -1204,20 +1203,20 @@ private actor SlowAppStateStore: AppStateStore {
     }
 
     func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async {
-        try? await Task.sleep(for: saveDelay)
+        try? await Task.sleep(nanoseconds: saveDelayNanoseconds)
     }
 }
 
 private actor SlowTelemetryClient: TelemetryClient {
-    private let recordDelay: Duration
+    private let recordDelayNanoseconds: UInt64
 
-    init(recordDelay: Duration) {
-        self.recordDelay = recordDelay
+    init(recordDelayNanoseconds: UInt64) {
+        self.recordDelayNanoseconds = recordDelayNanoseconds
     }
 
     func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
         _ = attributes
-        try? await Task.sleep(for: recordDelay)
+        try? await Task.sleep(nanoseconds: recordDelayNanoseconds)
     }
 }
 

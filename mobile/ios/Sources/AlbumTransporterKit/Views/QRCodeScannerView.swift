@@ -1,6 +1,4 @@
 import SwiftUI
-
-#if os(iOS)
 import AVFoundation
 import UIKit
 
@@ -435,4 +433,3 @@ private enum ScannerConfigurationError: Error {
     case invalidInput
     case invalidOutput
 }
-#endif
