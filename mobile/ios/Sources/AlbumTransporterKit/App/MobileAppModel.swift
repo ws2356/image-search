@@ -67,12 +67,9 @@ final class MobileAppModel: ObservableObject {
             case .success:
                 await openScanFlow()
             case .cancel:
-                await returnHome()
+                print("Should not be here - home.cancel")
             case .failure:
-                presentErrorSummary(
-                    title: "Couldn't continue from Home",
-                    message: "AuBackup couldn't continue from the Home page. Try scanning again, or return home."
-                )
+                print("Should not be here - home.failure")
             }
 
         case .scan:

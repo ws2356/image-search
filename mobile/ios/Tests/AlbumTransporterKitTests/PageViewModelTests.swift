@@ -50,19 +50,33 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.summary.desktopName, "Desk Mac")
     }
 
-    func test_pairing_page_view_model_maps_status_binding_and_actions() async {
+    func test_scanning_page_view_model_maps_status_binding_and_actions() async {
         let model = StubPageModel()
-        let viewModel = PairingPageViewModel(model: model)
+        let viewModel = ScanningPageViewModel(model: model)
 
         XCTAssertEqual(viewModel.status, model.pairingStatus)
         XCTAssertEqual(model.scannedQRCodeValue, "")
 
         await viewModel.onQRScanned(scannedValue: "qr-value")
-        await viewModel.scanAgainTapped()
         await viewModel.backTapped()
+        viewModel.scannerFailed()
+        await Task.yield()
 
         XCTAssertEqual(model.scannedQRCodeValue, "qr-value")
         XCTAssertEqual(model.beginPairingCallCount, 1)
+        XCTAssertEqual(model.returnHomeCallCount, 1)
+        XCTAssertEqual(model.scanFailureCallCount, 1)
+    }
+
+    func test_pairing_page_view_model_maps_status_binding_and_actions() async {
+        let model = StubPageModel()
+        let viewModel = PairingPageViewModel(model: model)
+
+        XCTAssertEqual(viewModel.status, model.pairingStatus)
+
+        await viewModel.scanAgainTapped()
+        await viewModel.backTapped()
+
         XCTAssertEqual(model.openScanRouteCallCount, 1)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
@@ -131,6 +145,8 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var openScanRouteCallCount = 0
     var beginPairingCallCount = 0
     var returnHomeCallCount = 0
+    var scanFailureCallCount = 0
+    var pairingFailureCallCount = 0
     var setRemoveAfterBackupEnabledCallCount = 0
     var requestStopTransferCallCount = 0
     var beginTelemetrySpanCallCount = 0
@@ -149,6 +165,8 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
                 openScanRouteCallCount += 1
             } else if result == .cancel {
                 returnHomeCallCount += 1
+            } else if result == .failure {
+                pairingFailureCallCount += 1
             }
         case .permissions:
             if result == .success {
@@ -183,6 +201,8 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
                 beginPairingCallCount += 1
             } else if result == .cancel {
                 returnHomeCallCount += 1
+            } else if result == .failure {
+                scanFailureCallCount += 1
             }
         }
     }

@@ -1,10 +1,9 @@
 import SwiftUI
 
 struct ScanningPageView: View {
-    let viewModel: PairingPageViewModel
+    let viewModel: ScanningPageViewModel
 
     var body: some View {
-        #if os(iOS)
         if #available(iOS 16.0, *) {
             LiveQRCodeScannerView(
                 status: viewModel.status,
@@ -40,10 +39,5 @@ struct ScanningPageView: View {
             )
             .navigationBarHidden(true)
         }
-        #else
-        PairingStatusView(
-            viewModel: viewModel
-        )
-        #endif
     }
 }
