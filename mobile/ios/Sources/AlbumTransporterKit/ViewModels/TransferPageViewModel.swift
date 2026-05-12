@@ -66,6 +66,7 @@ final class TransferPageViewModel: ObservableObject {
             applySnapshotIfNewer(stagedSnapshot)
         }
         await model.transferServiceForTransferView.stageTransferCompletionState(nil)
+        let transferStartedAt = Date()
         startTransferPolling()
         let finalSnapshot = await model.transferServiceForTransferView.startTransfer { [weak self] inFlightSnapshot in
             Task { @MainActor [weak self] in
@@ -92,7 +93,7 @@ final class TransferPageViewModel: ObservableObject {
                 snapshot: snapshot,
                 cleanupResult: resolvedCleanupResult,
                 completedAt: Date(),
-                sessionDuration: nil
+                sessionDuration: Date().timeIntervalSince(transferStartedAt)
             )
         )
         await model.transferServiceForTransferView.stageTransferSnapshot(snapshot)

@@ -158,6 +158,41 @@ final class PageViewModelTests: XCTestCase {
         await transferTask.value
     }
 
+    func test_transfer_page_view_model_stages_completion_duration() async {
+        let model = StubPageModel()
+        await model.transferServiceActor.configureProgressSequence(
+            initialSnapshot: TransferSnapshot(
+                transferredCount: 1,
+                totalCount: 3,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: "1 min remaining",
+                statusMessage: "Starting transfer.",
+                guidanceMessage: "Keep the app in the foreground.",
+                isIncompleteLibrary: false
+            ),
+            finalSnapshot: TransferSnapshot(
+                transferredCount: 3,
+                totalCount: 3,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: nil,
+                statusMessage: "Transfer finished.",
+                guidanceMessage: "Waiting for desktop confirmation.",
+                isIncompleteLibrary: false
+            ),
+            callbackDelayNanoseconds: 200_000_000
+        )
+        model.route = .transfer
+        let viewModel = TransferPageViewModel(model: model)
+
+        await viewModel.orchestrateTransfer()
+
+        let completionState = await model.transferServiceActor.transferCompletionState()
+        XCTAssertNotNil(completionState?.sessionDuration)
+        XCTAssertGreaterThan(completionState?.sessionDuration ?? 0, 0)
+    }
+
 }
 
 @MainActor
