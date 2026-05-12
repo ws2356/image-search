@@ -10,7 +10,7 @@
       "request": "launch",
       "module": "dt_image_search.__main__",
       "env": {
-        "DTIS_BUILD_TYPE": "prod"
+        "DTIS_BUILD_TYPE": "dev"
       },
       "justMyCode": false,
       "logToFile": true
