@@ -17,7 +17,6 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
 
         XCTAssertEqual(model.route, .home)
-        XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
     }
 
     func test_load_does_not_trigger_transfer_recovery_while_idle() async {
@@ -107,7 +106,6 @@ final class MobileAppModelTests: XCTestCase {
         await model.beginPairing()
 
         XCTAssertEqual(model.route, .home)
-        XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
     }
 
     func test_start_backup_shows_full_media_access_reminder_before_continuing() async {
@@ -177,7 +175,6 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.cancelFromLowBattery()
 
         XCTAssertEqual(model.route, .home)
-        XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
     }
@@ -230,7 +227,6 @@ final class MobileAppModelTests: XCTestCase {
         await transferViewModel.confirmStopTransfer()
 
         XCTAssertEqual(model.route, .home)
-        XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
         XCTAssertFalse(transferViewModel.isShowingStopConfirmation)
         XCTAssertNotNil(model.homeSummary.lastBackupDescription)
         XCTAssertNotNil(model.homeSummary.previouslyTransferredDescription)

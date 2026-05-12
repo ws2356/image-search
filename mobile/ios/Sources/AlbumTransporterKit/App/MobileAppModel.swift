@@ -65,7 +65,7 @@ final class MobileAppModel: ObservableObject {
         case .home:
             switch result {
             case .success:
-                await handleHomePrimaryAction()
+                await openScanFlow()
             case .cancel:
                 await returnHome()
             case .failure:
@@ -196,23 +196,6 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(.appLaunched)
     }
 
-    private func handleHomePrimaryAction() async {
-        switch homeSummary.primaryAction {
-        case .scanDesktopQRCode:
-            await openScanFlow()
-        case .resumeBackup:
-            recordTelemetry(
-                .resumeTapped,
-                attributes: [
-                    "resume.pending_item_count": .int(homeSummary.pendingItemCount ?? 0)
-                ]
-            )
-            await openScanFlow()
-        case .backupPendingItems:
-            await triggerTransfer()
-        }
-    }
-
     func openScanFlow() async {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
@@ -325,7 +308,6 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
 
         if result.backupFlowState == .pairingStopped {
-            homeSummary.primaryAction = .scanDesktopQRCode
             homeSummary.pendingItemCount = nil
             route = .home
             recordTelemetry(
@@ -697,12 +679,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func inferredBackupFlowState(from snapshot: LaunchSnapshot) -> MobileBackupFlowState {
-        switch snapshot.homeSummary.primaryAction {
-        case .backupPendingItems:
-            return .pairingCompleted
-        case .scanDesktopQRCode, .resumeBackup:
-            break
-        }
         return snapshot.pairingStatus.backupFlowState
     }
 
@@ -829,7 +805,6 @@ final class MobileAppModel: ObservableObject {
     ) -> MobileTelemetryAttributes {
         var attributes: MobileTelemetryAttributes = [
             "app.route": .string(contextState.route.rawValue),
-            "home.primary_action": .string(telemetryPrimaryActionName(contextState.homeSummary.primaryAction)),
             "backup.flow_state": .string(contextState.pairingStatus.backupFlowState.rawValue),
             "pairing.phase": .string(contextState.pairingStatus.phase.rawValue),
             "permission.media_scope": .string(contextState.permissionSummary.mediaScope.rawValue),
@@ -908,17 +883,6 @@ final class MobileAppModel: ObservableObject {
         let worker = sideEffectWorker
         Task.detached(priority: .utility) {
             await worker.forceFlush()
-        }
-    }
-
-    private func telemetryPrimaryActionName(_ action: HomePrimaryAction) -> String {
-        switch action {
-        case .scanDesktopQRCode:
-            return "scan_desktop_qr"
-        case .resumeBackup:
-            return "resume_backup"
-        case .backupPendingItems:
-            return "backup_pending_items"
         }
     }
 
@@ -1027,7 +991,6 @@ final class MobileAppModel: ObservableObject {
             homeSummary.previouslyTransferredDescription = "0 items sent in the most recent session."
         }
 
-        homeSummary.primaryAction = .scanDesktopQRCode
         homeSummary.pendingItemCount = nil
         homeSummary.interruptionWarning = nil
         if let desktopName = pairingStatus.desktopName, !desktopName.isEmpty {

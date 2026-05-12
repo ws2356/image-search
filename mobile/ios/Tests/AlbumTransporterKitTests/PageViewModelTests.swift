@@ -11,7 +11,7 @@ final class PageViewModelTests: XCTestCase {
 
         await viewModel.handlePrimaryActionTapped()
 
-        XCTAssertEqual(model.handleHomePrimaryActionCallCount, 1)
+        XCTAssertEqual(model.homeScanActionCallCount, 1)
     }
 
     func test_pairing_page_view_model_maps_status_binding_and_actions() async {
@@ -27,7 +27,7 @@ final class PageViewModelTests: XCTestCase {
 
         XCTAssertEqual(model.scannedQRCodeValue, "qr-value")
         XCTAssertEqual(model.beginPairingCallCount, 1)
-        XCTAssertEqual(model.openScanFlowCallCount, 1)
+        XCTAssertEqual(model.openScanRouteCallCount, 1)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
@@ -90,8 +90,8 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var transferServiceForPageModels: TransferService { transferServiceActor }
     var transferServiceForTransferView: TransferService { transferServiceActor }
 
-    var handleHomePrimaryActionCallCount = 0
-    var openScanFlowCallCount = 0
+    var homeScanActionCallCount = 0
+    var openScanRouteCallCount = 0
     var beginPairingCallCount = 0
     var returnHomeCallCount = 0
     var setRemoveAfterBackupEnabledCallCount = 0
@@ -103,13 +103,13 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         switch page {
         case .home:
             if result == .success {
-                handleHomePrimaryActionCallCount += 1
+                homeScanActionCallCount += 1
             } else if result == .cancel {
                 returnHomeCallCount += 1
             }
         case .pair:
             if result == .success {
-                openScanFlowCallCount += 1
+                openScanRouteCallCount += 1
             } else if result == .cancel {
                 returnHomeCallCount += 1
             }
@@ -137,7 +137,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
             }
         case .error:
             if result == .success {
-                openScanFlowCallCount += 1
+                openScanRouteCallCount += 1
             } else {
                 returnHomeCallCount += 1
             }

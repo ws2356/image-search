@@ -121,8 +121,8 @@ struct HomeView: View {
                     }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: summary.primaryAction.systemImage)
-                        Text(summary.primaryAction.title)
+                        Image(systemName: "qrcode.viewfinder")
+                        Text("Scan QR Code")
                             .font(.system(size: 17, weight: .semibold))
                     }
                     .frame(maxWidth: .infinity)

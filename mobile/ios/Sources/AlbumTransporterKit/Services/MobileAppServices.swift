@@ -158,7 +158,6 @@ enum MobileTelemetryEvent: String, Sendable {
     case transferStopRequested
     case memoryWarningReceived
     case transferStopped
-    case resumeTapped
     case transferCompleted
 }
 

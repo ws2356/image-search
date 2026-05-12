@@ -20,35 +20,6 @@ struct ErrorSummary: Equatable, Sendable, Codable {
     )
 }
 
-enum HomePrimaryAction: Equatable, Sendable, Codable {
-    case scanDesktopQRCode
-    case resumeBackup
-    case backupPendingItems(Int)
-
-    var title: String {
-        switch self {
-        case .scanDesktopQRCode:
-            return "Scan Desktop QR"
-        case .resumeBackup:
-            return "Scan Desktop QR"
-        case .backupPendingItems(let count):
-            return "Back Up \(count) New Items"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .scanDesktopQRCode:
-            return "qrcode.viewfinder"
-        case .resumeBackup:
-            return "qrcode.viewfinder"
-        case .backupPendingItems:
-            return "arrow.up.circle.fill"
-        }
-    }
-
-}
-
 enum PermissionScope: String, Equatable, Sendable, Codable {
     case full
     case limited
@@ -309,7 +280,6 @@ struct HomeSummary: Equatable, Sendable, Codable {
     var desktopName: String?
     var pendingItemCount: Int?
     var lastBackupDescription: String?
-    var primaryAction: HomePrimaryAction
     var permissionScope: PermissionScope
     var detailMessage: String
     var previouslyTransferredDescription: String? = nil
@@ -319,7 +289,6 @@ struct HomeSummary: Equatable, Sendable, Codable {
         desktopName: nil,
         pendingItemCount: nil,
         lastBackupDescription: nil,
-        primaryAction: .scanDesktopQRCode,
         permissionScope: .full,
         detailMessage: "Back up the full eligible local iPhone library to the desktop app. No account or cloud relay is required, and notification permission is requested only when backup is about to start."
     )
@@ -333,7 +302,6 @@ struct HomeSummary: Equatable, Sendable, Codable {
             desktopName: desktopName,
             pendingItemCount: 0,
             lastBackupDescription: lastBackupDescription,
-            primaryAction: .scanDesktopQRCode,
             permissionScope: permissionScope,
             detailMessage: "Your full eligible library is up to date for the last confirmed session. Scan again when you are ready to pair with the desktop."
         )
