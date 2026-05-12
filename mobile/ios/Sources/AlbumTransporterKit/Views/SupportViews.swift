@@ -17,6 +17,7 @@ struct ActionButton: View {
     let title: String
     var icon: String? = nil
     let style: ActionButtonStyle
+    var height: CGFloat? = nil
     let action: () -> Void
 
     enum ActionButtonStyle {
@@ -33,13 +34,17 @@ struct ActionButton: View {
                     .font(.system(size: style == .plain ? 15 : 17, weight: style == .plain ? .medium : .semibold))
             }
             .frame(maxWidth: style == .plain ? nil : .infinity)
-            .frame(height: style == .plain ? 36 : 52)
+            .frame(height: height ?? defaultHeight)
             .foregroundStyle(foregroundColor)
             .background(backgroundColor)
             .clipShape(RoundedRectangle(cornerRadius: style == .plain ? 8 : 14))
             .overlay(borderOverlay)
         }
         .buttonStyle(.plain)
+    }
+
+    private var defaultHeight: CGFloat {
+        style == .plain ? 36 : 52
     }
 
     private var foregroundColor: Color {
@@ -207,5 +212,17 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+extension Color {
+    init(hex: UInt, opacity: Double = 1.0) {
+        self.init(
+            .sRGB,
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255,
+            opacity: opacity
+        )
     }
 }
