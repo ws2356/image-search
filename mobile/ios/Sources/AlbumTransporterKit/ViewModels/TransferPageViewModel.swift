@@ -14,7 +14,7 @@ final class TransferPageViewModel: ObservableObject {
 
     init(
         model: any TransferPageModeling,
-        pollingIntervalNanoseconds: UInt64 = 10_000_000
+        pollingIntervalNanoseconds: UInt64 = 1_000_000_000
     ) {
         self.model = model
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
@@ -61,6 +61,10 @@ final class TransferPageViewModel: ObservableObject {
             return
         }
         hasStartedTransferOrchestration = true
+        defer {
+            hasStartedTransferOrchestration = false
+            stopTransferPolling()
+        }
 
         if let stagedSnapshot = await model.transferServiceForTransferView.progressSnapshot() {
             applySnapshotIfNewer(stagedSnapshot)
@@ -68,13 +72,8 @@ final class TransferPageViewModel: ObservableObject {
         await model.transferServiceForTransferView.stageTransferCompletionState(nil)
         let transferStartedAt = Date()
         startTransferPolling()
-        let finalSnapshot = await model.transferServiceForTransferView.startTransfer { [weak self] inFlightSnapshot in
-            Task { @MainActor [weak self] in
-                self?.applySnapshotIfNewer(inFlightSnapshot)
-            }
-        }
+        let finalSnapshot = await model.transferServiceForTransferView.startTransfer { _ in }
         applySnapshotIfNewer(finalSnapshot)
-        stopTransferPolling()
         guard model.route == .transfer else {
             model.persistSnapshot()
             return

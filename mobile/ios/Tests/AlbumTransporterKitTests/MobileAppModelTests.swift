@@ -140,7 +140,10 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.continueBackupFromMediaAccessNotNow()
         XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
-        let transferViewModel = TransferPageViewModel(model: model)
+        let transferViewModel = TransferPageViewModel(
+            model: model,
+            pollingIntervalNanoseconds: 10_000_000
+        )
         await transferViewModel.orchestrateTransfer()
         XCTAssertEqual(model.route, .completed)
     }
@@ -222,7 +225,10 @@ final class MobileAppModelTests: XCTestCase {
             await permissionsViewModel.startPreflight()
         }
         try? await Task.sleep(nanoseconds: 30_000_000)
-        let transferViewModel = TransferPageViewModel(model: model)
+        let transferViewModel = TransferPageViewModel(
+            model: model,
+            pollingIntervalNanoseconds: 10_000_000
+        )
         transferViewModel.requestStopTransfer()
         await transferViewModel.confirmStopTransfer()
 

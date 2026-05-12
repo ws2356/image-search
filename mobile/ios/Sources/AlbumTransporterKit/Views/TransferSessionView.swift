@@ -19,11 +19,7 @@ struct TransferSessionView: View {
             guard isPresented else { return }
             viewModel.recordStopConfirmationPresented()
         }
-        .confirmationDialog(
-            "Stop backup?",
-            isPresented: viewModel.isShowingStopConfirmationBinding,
-            titleVisibility: .visible
-        ) {
+        .alert("Stop backup?", isPresented: viewModel.isShowingStopConfirmationBinding) {
             Button("Stop Sending More Items", role: .destructive) {
                 Task {
                     await viewModel.confirmStopTransfer()

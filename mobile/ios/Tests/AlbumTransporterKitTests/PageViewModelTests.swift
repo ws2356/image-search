@@ -105,7 +105,10 @@ final class PageViewModelTests: XCTestCase {
 
     func test_transfer_page_view_model_maps_snapshot_and_stop_action() {
         let model = StubPageModel()
-        let viewModel = TransferPageViewModel(model: model)
+        let viewModel = TransferPageViewModel(
+            model: model,
+            pollingIntervalNanoseconds: 10_000_000
+        )
 
         XCTAssertEqual(viewModel.snapshot, .demo)
 
@@ -191,6 +194,65 @@ final class PageViewModelTests: XCTestCase {
         let completionState = await model.transferServiceActor.transferCompletionState()
         XCTAssertNotNil(completionState?.sessionDuration)
         XCTAssertGreaterThan(completionState?.sessionDuration ?? 0, 0)
+    }
+
+    func test_transfer_page_view_model_allows_second_backup_session() async {
+        let model = StubPageModel()
+        model.route = .transfer
+        let viewModel = TransferPageViewModel(model: model)
+
+        await model.transferServiceActor.configureProgressSequence(
+            initialSnapshot: TransferSnapshot(
+                transferredCount: 1,
+                totalCount: 2,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: "1 min remaining",
+                statusMessage: "Starting transfer.",
+                guidanceMessage: "Keep the app in the foreground.",
+                isIncompleteLibrary: false
+            ),
+            finalSnapshot: TransferSnapshot(
+                transferredCount: 2,
+                totalCount: 2,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: nil,
+                statusMessage: "Transfer finished.",
+                guidanceMessage: "Waiting for desktop confirmation.",
+                isIncompleteLibrary: false
+            ),
+            callbackDelayNanoseconds: 50_000_000
+        )
+        await viewModel.orchestrateTransfer()
+
+        await model.transferServiceActor.configureProgressSequence(
+            initialSnapshot: TransferSnapshot(
+                transferredCount: 1,
+                totalCount: 3,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: "2 min remaining",
+                statusMessage: "Starting transfer.",
+                guidanceMessage: "Keep the app in the foreground.",
+                isIncompleteLibrary: false
+            ),
+            finalSnapshot: TransferSnapshot(
+                transferredCount: 3,
+                totalCount: 3,
+                failedCount: 0,
+                transport: .lan,
+                etaDescription: nil,
+                statusMessage: "Transfer finished.",
+                guidanceMessage: "Waiting for desktop confirmation.",
+                isIncompleteLibrary: false
+            ),
+            callbackDelayNanoseconds: 50_000_000
+        )
+        await viewModel.orchestrateTransfer()
+
+        let startTransferCallCount = await model.transferServiceActor.startTransferCallCount()
+        XCTAssertEqual(startTransferCallCount, 2)
     }
 
 }
@@ -346,8 +408,10 @@ private actor StubTransferService: TransferService {
     private var snapshot: TransferSnapshot = .demo
     private var completionState: TransferCompletionState?
     private var progressSequence: (initial: TransferSnapshot, final: TransferSnapshot, delayNanoseconds: UInt64)?
+    private var startTransferInvocations = 0
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        startTransferInvocations += 1
         if let progressSequence {
             snapshot = progressSequence.initial
             progress(progressSequence.initial)
@@ -404,5 +468,9 @@ private actor StubTransferService: TransferService {
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
         .skipped
+    }
+
+    func startTransferCallCount() -> Int {
+        startTransferInvocations
     }
 }
