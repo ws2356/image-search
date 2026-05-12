@@ -85,7 +85,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var isShowingLowBatteryWarning = false
     var isShowingMediaAccessAlert = false
     var isShowingRemoveAfterBackupPrompt = false
-    var isShowingStopConfirmation = false
     var mediaAccessAlertMessage = "Media access recommended."
     let permissionServiceActor = StubPermissionService(summary: .demo)
     let transferServiceActor = StubTransferService()

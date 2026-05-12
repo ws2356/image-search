@@ -140,7 +140,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     var removeAfterBackupEnabled = false
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
-    var isShowingStopConfirmation = false
     var route = AppRoute.transfer
     var transferServiceForPageModels: TransferService { transferService }
     var transferServiceForTransferView: TransferService { transferService }

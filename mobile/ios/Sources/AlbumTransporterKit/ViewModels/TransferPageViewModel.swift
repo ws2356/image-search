@@ -10,6 +10,7 @@ final class TransferPageViewModel: ObservableObject {
     private var hasStartedTransferOrchestration = false
 
     @Published private(set) var snapshot: TransferSnapshot
+    @Published var isShowingStopConfirmation = false
 
     init(
         model: any TransferPageModeling,
@@ -28,20 +29,17 @@ final class TransferPageViewModel: ObservableObject {
         }
     }
 
-    var isShowingStopConfirmation: Bool {
-        model.isShowingStopConfirmation
-    }
-
     var isShowingStopConfirmationBinding: Binding<Bool> {
         Binding(
-            get: { self.model.isShowingStopConfirmation },
-            set: { self.model.isShowingStopConfirmation = $0 }
+            get: { self.isShowingStopConfirmation },
+            set: { self.isShowingStopConfirmation = $0 }
         )
     }
 
     func requestStopTransfer() {
         model.recordInteraction(name: "stop_backup_tapped", location: "transfer")
         model.requestStopTransfer()
+        isShowingStopConfirmation = true
     }
 
     func recordStopConfirmationPresented() {
@@ -50,6 +48,7 @@ final class TransferPageViewModel: ObservableObject {
 
     func confirmStopTransfer() async {
         model.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
+        isShowingStopConfirmation = false
         let currentSnapshot = await model.transferServiceForTransferView.progressSnapshot() ?? snapshot
         _ = await model.transferServiceForTransferView.stopTransfer(current: currentSnapshot)
         await model.transferServiceForTransferView.stageTransferSnapshot(currentSnapshot)
@@ -98,6 +97,7 @@ final class TransferPageViewModel: ObservableObject {
 
     func keepBackingUp() {
         model.recordInteraction(name: "stop_cancelled", location: "stop_confirmation")
+        isShowingStopConfirmation = false
     }
 
     private func startTransferPolling() {

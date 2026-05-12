@@ -231,7 +231,7 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertEqual(model.route, .home)
         XCTAssertEqual(model.homeSummary.primaryAction, .scanDesktopQRCode)
-        XCTAssertFalse(model.isShowingStopConfirmation)
+        XCTAssertFalse(transferViewModel.isShowingStopConfirmation)
         XCTAssertNotNil(model.homeSummary.lastBackupDescription)
         XCTAssertNotNil(model.homeSummary.previouslyTransferredDescription)
 

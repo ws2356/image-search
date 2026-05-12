@@ -14,11 +14,9 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var errorSummary = ErrorSummary.generic
     @Published var scannedQRCodeValue = ""
 
-    @Published var isShowingStopConfirmation = false
     @Published var isShowingIncomingLinkReplacementConfirmation = false
 
     private var hasLoaded = false
-    private var transferStartedAt: Date?
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
     private let universalLinkHost = "dl.boldman.net"
@@ -455,17 +453,14 @@ final class MobileAppModel: ObservableObject {
     }
 
     func requestStopTransfer() {
-        isShowingStopConfirmation = true
         recordTelemetry(.transferStopRequested)
     }
 
     private func finalizeStoppedTransfer() async {
         let snapshot = await currentTransferSnapshot()
         await transferService.stageTransferCompletionState(nil)
-        isShowingStopConfirmation = false
         transitionBackupFlow(.transferStopped)
         updateHomeSummaryAfterStoppedTransfer(snapshot: snapshot)
-        transferStartedAt = nil
         route = .home
 
         recordTelemetry(
@@ -507,7 +502,6 @@ final class MobileAppModel: ObservableObject {
         await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
         updateHomeSummaryAfterStoppedTransfer(snapshot: snapshot)
-        transferStartedAt = nil
         route = .home
 
         recordTelemetry(
@@ -563,7 +557,6 @@ final class MobileAppModel: ObservableObject {
             permissionScope: permissionSummary.mediaScope,
             lastBackupDescription: "Last backup completed just now."
         )
-        transferStartedAt = nil
         route = .completed
 
         var completionAttributes: MobileTelemetryAttributes = [
@@ -606,7 +599,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     func returnHome() async {
-        transferStartedAt = nil
         await transferService.stageTransferCompletionState(nil)
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
@@ -617,7 +609,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func presentErrorSummary(title: String, message: String) {
-        isShowingStopConfirmation = false
         errorSummary = ErrorSummary(title: title, message: message)
         route = .error
         persistSnapshot()
@@ -643,7 +634,6 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func triggerTransfer() async {
-        transferStartedAt = Date()
         transitionBackupFlow(.transferStarted)
         route = .transfer
         let initialSnapshot = TransferSnapshot(

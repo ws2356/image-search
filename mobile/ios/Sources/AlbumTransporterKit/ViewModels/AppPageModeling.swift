@@ -34,7 +34,6 @@ extension MobileAppModel: PermissionsPageModeling {}
 
 @MainActor
 protocol TransferPageModeling: AppPageModeling {
-    var isShowingStopConfirmation: Bool { get set }
     var route: AppRoute { get }
     var transferServiceForTransferView: TransferService { get }
     func recordDialogView(name: String)
