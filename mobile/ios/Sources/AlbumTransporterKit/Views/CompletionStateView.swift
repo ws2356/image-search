@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CompletionStateView: View {
-    let viewModel: CompletionPageViewModel
+    @ObservedObject var viewModel: CompletionPageViewModel
 
     var body: some View {
         completionScrollView {
@@ -41,6 +41,9 @@ struct CompletionStateView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
+        }
+        .task {
+            await viewModel.reloadSummary()
         }
     }
 

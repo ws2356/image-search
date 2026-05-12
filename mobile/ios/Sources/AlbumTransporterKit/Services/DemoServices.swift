@@ -41,13 +41,19 @@ struct DemoPermissionService: PermissionService {
     }
 }
 
-struct DemoTransferService: TransferService {
-    var initialSnapshot: TransferSnapshot = .demo
+actor DemoTransferService: TransferService {
+    private var currentSnapshot: TransferSnapshot
+    private var completionState: TransferCompletionState?
+
+    init(initialSnapshot: TransferSnapshot = .demo) {
+        self.currentSnapshot = initialSnapshot
+    }
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         try? await Task.sleep(nanoseconds: 150_000_000)
-        progress(initialSnapshot)
-        return initialSnapshot
+        progress(currentSnapshot)
+        completionState = nil
+        return currentSnapshot
     }
 
     func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
@@ -75,11 +81,27 @@ struct DemoTransferService: TransferService {
         completed.etaDescription = nil
         completed.statusMessage = "Desktop confirmed that this session is complete."
         completed.guidanceMessage = "You can return to the home screen and start a fresh session whenever new media appears on the device."
+        currentSnapshot = completed
         return completed
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
-        initialSnapshot
+        currentSnapshot
+    }
+
+    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
+        currentSnapshot = snapshot
+    }
+
+    func transferCompletionState() async -> TransferCompletionState? {
+        completionState
+    }
+
+    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
+        self.completionState = completionState
+        if let snapshot = completionState?.snapshot {
+            currentSnapshot = snapshot
+        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

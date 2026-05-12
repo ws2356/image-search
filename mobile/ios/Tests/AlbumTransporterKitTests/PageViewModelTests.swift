@@ -59,7 +59,7 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel()
         let viewModel = TransferPageViewModel(model: model)
 
-        XCTAssertEqual(viewModel.snapshot, model.transferSnapshot)
+        XCTAssertEqual(viewModel.snapshot, .demo)
 
         viewModel.requestStopTransfer()
         let expectation = expectation(description: "stop transfer routed via page result")
@@ -79,8 +79,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var removeAfterBackupEnabled = false
-    var transferSnapshot = TransferSnapshot.demo
-    var completionSummary = CompletionSummary.demo
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var route = AppRoute.home
@@ -89,10 +87,11 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var isShowingRemoveAfterBackupPrompt = false
     var isShowingStopConfirmation = false
     var mediaAccessAlertMessage = "Media access recommended."
-    var transferProgressPollingIntervalNanoseconds: UInt64 = 10_000_000
     let permissionServiceActor = StubPermissionService(summary: .demo)
+    let transferServiceActor = StubTransferService()
     var permissionService: PermissionService { permissionServiceActor }
-    var transferServiceForTransferView: TransferService { StubTransferService() }
+    var transferServiceForPageModels: TransferService { transferServiceActor }
+    var transferServiceForTransferView: TransferService { transferServiceActor }
 
     var handleHomePrimaryActionCallCount = 0
     var openScanFlowCallCount = 0
@@ -135,7 +134,9 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
             if result == .success, target == .primary {
                 requestStopTransfer()
             } else if result == .cancel, target == .stopTransferConfirmed {
-                await confirmStopTransfer(currentSnapshot: transferSnapshot)
+                if let snapshot = await transferServiceActor.progressSnapshot() {
+                    await confirmStopTransfer(currentSnapshot: snapshot)
+                }
             }
         case .completed:
             if result == .success || result == .cancel {
@@ -166,11 +167,11 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     }
 
     func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
-        transferSnapshot = currentSnapshot
+        await transferServiceActor.stageTransferSnapshot(currentSnapshot)
     }
 
     func completeTransfer(with snapshot: TransferSnapshot) async {
-        transferSnapshot = snapshot
+        await transferServiceActor.stageTransferSnapshot(snapshot)
     }
 
     func permissionServiceLoadCallCount() async -> Int {
@@ -218,8 +219,12 @@ private actor StubPermissionService: PermissionService {
 }
 
 private actor StubTransferService: TransferService {
+    private var snapshot: TransferSnapshot = .demo
+    private var completionState: TransferCompletionState?
+
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        .demo
+        progress(snapshot)
+        return snapshot
     }
 
     func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
@@ -234,11 +239,27 @@ private actor StubTransferService: TransferService {
     }
 
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        current
+        snapshot = current
+        return current
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
-        .demo
+        snapshot
+    }
+
+    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
+        self.snapshot = snapshot
+    }
+
+    func transferCompletionState() async -> TransferCompletionState? {
+        completionState
+    }
+
+    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
+        self.completionState = completionState
+        if let snapshot = completionState?.snapshot {
+            self.snapshot = snapshot
+        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

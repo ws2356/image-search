@@ -11,8 +11,6 @@ final class MobileAppModel: ObservableObject {
     @Published var permissionSummary = PermissionSummary.demo
     @Published private(set) var removeAfterBackupEnabled = false
     @Published private(set) var pairingStatus = PairingStatus.idle
-    @Published private(set) var transferSnapshot = TransferSnapshot.demo
-    @Published private(set) var completionSummary = CompletionSummary.demo
     @Published private(set) var errorSummary = ErrorSummary.generic
     @Published var scannedQRCodeValue = ""
 
@@ -20,7 +18,6 @@ final class MobileAppModel: ObservableObject {
     @Published var isShowingIncomingLinkReplacementConfirmation = false
 
     private var hasLoaded = false
-    let transferProgressPollingIntervalNanoseconds: UInt64
     private var transferStartedAt: Date?
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
@@ -43,8 +40,7 @@ final class MobileAppModel: ObservableObject {
         pairingService: PairingService,
         permissionService: PermissionService,
         transferService: TransferService,
-        telemetryClient: TelemetryClient,
-        transferProgressPollingIntervalNanoseconds: UInt64 = 1_000_000_000
+        telemetryClient: TelemetryClient
     ) {
         self.stateStore = stateStore
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
@@ -55,7 +51,6 @@ final class MobileAppModel: ObservableObject {
             stateStore: stateStore,
             telemetryClient: telemetryClient
         )
-        self.transferProgressPollingIntervalNanoseconds = transferProgressPollingIntervalNanoseconds
         configureMemoryWarningObservation()
         configureAppLifecycleObservation()
     }
@@ -136,16 +131,20 @@ final class MobileAppModel: ObservableObject {
             case .success:
                 if target == .primary {
                     requestStopTransfer()
+                } else if target == .secondary {
+                    await finalizeCompletedTransfer()
                 }
             case .cancel:
-                if target == .stopTransferConfirmed {
-                    await confirmStopTransfer(currentSnapshot: transferSnapshot)
-                }
+                break
             case .failure:
-                presentErrorSummary(
-                    title: "Transfer failed",
-                    message: "AuBackup couldn't continue this transfer. Restart the backup session or return home."
-                )
+                if target == .stopTransferConfirmed {
+                    await finalizeStoppedTransfer()
+                } else {
+                    presentErrorSummary(
+                        title: "Transfer failed",
+                        message: "AuBackup couldn't continue this transfer. Restart the backup session or return home."
+                    )
+                }
             }
 
         case .completed:
@@ -195,7 +194,7 @@ final class MobileAppModel: ObservableObject {
 
         hasLoaded = true
         let snapshot = await stateStore.loadLaunchSnapshot()
-        apply(snapshot: snapshot)
+        await apply(snapshot: snapshot)
         let pairingService = pairingService
         Task.detached(priority: .utility) {
             await pairingService.primeNetworkAccess()
@@ -421,9 +420,10 @@ final class MobileAppModel: ObservableObject {
             isIncompleteLibrary: permissionSummary.mediaScope != .full
         )
         _ = await transferService.stopTransfer(current: interruptionSnapshot)
-        transferSnapshot = interruptionSnapshot
+        await transferService.stageTransferSnapshot(interruptionSnapshot)
+        await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
-        updateHomeSummaryAfterStoppedTransfer()
+        updateHomeSummaryAfterStoppedTransfer(snapshot: interruptionSnapshot)
         route = .home
         recordTelemetry(
             .transferStopped,
@@ -459,12 +459,12 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(.transferStopRequested)
     }
 
-    func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
+    private func finalizeStoppedTransfer() async {
+        let snapshot = await currentTransferSnapshot()
+        await transferService.stageTransferCompletionState(nil)
         isShowingStopConfirmation = false
-        transferSnapshot = currentSnapshot
-        _ = await transferService.stopTransfer(current: currentSnapshot)
         transitionBackupFlow(.transferStopped)
-        updateHomeSummaryAfterStoppedTransfer()
+        updateHomeSummaryAfterStoppedTransfer(snapshot: snapshot)
         transferStartedAt = nil
         route = .home
 
@@ -501,9 +501,12 @@ final class MobileAppModel: ObservableObject {
         guard route == .transfer else {
             return
         }
-        _ = await transferService.stopTransfer(current: transferSnapshot)
+        let snapshot = await currentTransferSnapshot()
+        _ = await transferService.stopTransfer(current: snapshot)
+        await transferService.stageTransferSnapshot(snapshot)
+        await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
-        updateHomeSummaryAfterStoppedTransfer()
+        updateHomeSummaryAfterStoppedTransfer(snapshot: snapshot)
         transferStartedAt = nil
         route = .home
 
@@ -536,36 +539,25 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
+    var transferServiceForPageModels: TransferService {
+        transferService
+    }
+
     var transferServiceForTransferView: TransferService {
         transferService
     }
 
-    func completeTransfer(with snapshot: TransferSnapshot) async {
-        transferSnapshot = await transferService.completeTransfer(current: snapshot)
-        transitionBackupFlow(transferSnapshot.failedCount == 0 ? .transferCompleted : .transferFailed)
-        let cleanupResult: TransferAssetCleanupResult
-        if removeAfterBackupEnabled {
-            cleanupResult = await transferService.moveSuccessfullyTransferredAssetsToRecentlyRemoved()
+    private func finalizeCompletedTransfer() async {
+        let completionState = await transferService.transferCompletionState()
+        let snapshot: TransferSnapshot
+        if let completedSnapshot = completionState?.snapshot {
+            snapshot = completedSnapshot
         } else {
-            cleanupResult = .skipped
+            snapshot = await currentTransferSnapshot()
         }
-        let completedAt = Date()
-        let sessionDuration = transferStartedAt.map { completedAt.timeIntervalSince($0) }
-        let totalTransferredDescription: String = {
-            let total = max(transferSnapshot.totalCount, transferSnapshot.transferredCount)
-            if transferSnapshot.failedCount > 0 {
-                return "\(transferSnapshot.transferredCount)/\(total) (\(transferSnapshot.failedCount) failed)"
-            }
-            return "\(transferSnapshot.transferredCount)/\(total)"
-        }()
-        completionSummary = CompletionSummary(
-            title: "Backup Complete!",
-            message: completionMessage(for: cleanupResult),
-            itemsBackedUp: transferSnapshot.transferredCount,
-            totalTransferredDescription: totalTransferredDescription,
-            durationDescription: formattedDuration(sessionDuration),
-            completedAtDescription: formattedCompletionTimestamp(completedAt)
-        )
+        let cleanupResult = completionState?.cleanupResult ?? .skipped
+        let sessionDuration = completionState?.sessionDuration
+        transitionBackupFlow(snapshot.failedCount == 0 ? .transferCompleted : .transferFailed)
         homeSummary = .completed(
             desktopName: homeSummary.desktopName,
             permissionScope: permissionSummary.mediaScope,
@@ -575,9 +567,9 @@ final class MobileAppModel: ObservableObject {
         route = .completed
 
         var completionAttributes: MobileTelemetryAttributes = [
-            "transfer.transferred_count": .int(transferSnapshot.transferredCount),
-            "transfer.total_count": .int(transferSnapshot.totalCount),
-            "transfer.failed_count": .int(transferSnapshot.failedCount),
+            "transfer.transferred_count": .int(snapshot.transferredCount),
+            "transfer.total_count": .int(snapshot.totalCount),
+            "transfer.failed_count": .int(snapshot.failedCount),
             "transfer.remove_after_backup_enabled": .bool(removeAfterBackupEnabled)
         ]
         if let sessionDuration {
@@ -597,24 +589,25 @@ final class MobileAppModel: ObservableObject {
         incrementTelemetryMetric(.backupSuccesses, attributes: completionAttributes)
         incrementTelemetryMetric(
             .backupCompletedItems,
-            by: transferSnapshot.transferredCount,
+            by: snapshot.transferredCount,
             attributes: completionAttributes
         )
         endTelemetrySpan(
             .transferFlow,
             attributes: completionAttributes,
-            status: transferSnapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
+            status: snapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
         )
         endTelemetrySpan(
             .backupSession,
             attributes: completionAttributes,
-            status: transferSnapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
+            status: snapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
         )
         persistSnapshot()
     }
 
     func returnHome() async {
         transferStartedAt = nil
+        await transferService.stageTransferCompletionState(nil)
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
         errorSummary = .generic
@@ -653,7 +646,7 @@ final class MobileAppModel: ObservableObject {
         transferStartedAt = Date()
         transitionBackupFlow(.transferStarted)
         route = .transfer
-        transferSnapshot = TransferSnapshot(
+        let initialSnapshot = TransferSnapshot(
             transferredCount: 0,
             totalCount: 0,
             failedCount: 0,
@@ -663,6 +656,8 @@ final class MobileAppModel: ObservableObject {
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: permissionSummary.mediaScope != .full
         )
+        await transferService.stageTransferSnapshot(initialSnapshot)
+        await transferService.stageTransferCompletionState(nil)
         endTelemetrySpan(.backupPreflight, status: .ok)
         beginTelemetrySpan(.transferFlow)
         recordTelemetry(
@@ -674,12 +669,13 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    private func apply(snapshot: LaunchSnapshot) {
+    private func apply(snapshot: LaunchSnapshot) async {
         homeSummary = snapshot.homeSummary
         permissionSummary = snapshot.permissionSummary
         removeAfterBackupEnabled = snapshot.removeAfterBackupEnabled
         pairingStatus = snapshot.pairingStatus
-        transferSnapshot = snapshot.transferSnapshot
+        await transferService.stageTransferSnapshot(snapshot.transferSnapshot)
+        await transferService.stageTransferCompletionState(nil)
         errorSummary = .generic
         backupFlowStateMachine = MobileBackupFlowStateMachine(
             state: inferredBackupFlowState(from: snapshot)
@@ -725,15 +721,21 @@ final class MobileAppModel: ObservableObject {
     }
 
     func persistSnapshot() {
-        let snapshot = LaunchSnapshot(
-            homeSummary: homeSummary,
-            permissionSummary: permissionSummary,
-            pairingStatus: pairingStatus,
-            transferSnapshot: transferSnapshot,
-            removeAfterBackupEnabled: removeAfterBackupEnabled
-        )
+        let homeSummary = homeSummary
+        let permissionSummary = permissionSummary
+        let pairingStatus = pairingStatus
+        let removeAfterBackupEnabled = removeAfterBackupEnabled
+        let transferService = transferService
         let worker = sideEffectWorker
         Task.detached(priority: .utility) {
+            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
+            let snapshot = LaunchSnapshot(
+                homeSummary: homeSummary,
+                permissionSummary: permissionSummary,
+                pairingStatus: pairingStatus,
+                transferSnapshot: transferSnapshot,
+                removeAfterBackupEnabled: removeAfterBackupEnabled
+            )
             await worker.persist(snapshot: snapshot)
         }
     }
@@ -742,12 +744,16 @@ final class MobileAppModel: ObservableObject {
         _ event: MobileTelemetryEvent,
         attributes: MobileTelemetryAttributes = [:]
     ) {
+        let contextState = makeTelemetryContextState()
+        let transferService = transferService
         let worker = sideEffectWorker
-        var mergedAttributes = telemetryContextAttributes()
-        for (key, value) in attributes {
-            mergedAttributes[key] = value
-        }
-        Task.detached(priority: .utility) {
+        Task {
+            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
+            let mergedAttributes = mergedTelemetryAttributes(
+                extraAttributes: attributes,
+                contextState: contextState,
+                transferSnapshot: transferSnapshot
+            )
             await worker.record(event: event, attributes: mergedAttributes)
         }
     }
@@ -756,12 +762,16 @@ final class MobileAppModel: ObservableObject {
         _ span: MobileTelemetrySpan,
         attributes: MobileTelemetryAttributes = [:]
     ) {
+        let contextState = makeTelemetryContextState()
+        let transferService = transferService
         let worker = sideEffectWorker
-        var mergedAttributes = telemetryContextAttributes()
-        for (key, value) in attributes {
-            mergedAttributes[key] = value
-        }
-        Task.detached(priority: .utility) {
+        Task {
+            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
+            let mergedAttributes = mergedTelemetryAttributes(
+                extraAttributes: attributes,
+                contextState: contextState,
+                transferSnapshot: transferSnapshot
+            )
             await worker.begin(span: span, attributes: mergedAttributes)
         }
     }
@@ -771,12 +781,16 @@ final class MobileAppModel: ObservableObject {
         attributes: MobileTelemetryAttributes = [:],
         status: MobileTelemetrySpanStatus? = nil
     ) {
+        let contextState = makeTelemetryContextState()
+        let transferService = transferService
         let worker = sideEffectWorker
-        var mergedAttributes = telemetryContextAttributes()
-        for (key, value) in attributes {
-            mergedAttributes[key] = value
-        }
-        Task.detached(priority: .utility) {
+        Task {
+            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
+            let mergedAttributes = mergedTelemetryAttributes(
+                extraAttributes: attributes,
+                contextState: contextState,
+                transferSnapshot: transferSnapshot
+            )
             await worker.end(span: span, attributes: mergedAttributes, status: status)
         }
     }
@@ -786,12 +800,16 @@ final class MobileAppModel: ObservableObject {
         by value: Int = 1,
         attributes: MobileTelemetryAttributes = [:]
     ) {
+        let contextState = makeTelemetryContextState()
+        let transferService = transferService
         let worker = sideEffectWorker
-        var mergedAttributes = telemetryContextAttributes()
-        for (key, value) in attributes {
-            mergedAttributes[key] = value
-        }
-        Task.detached(priority: .utility) {
+        Task {
+            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
+            let mergedAttributes = mergedTelemetryAttributes(
+                extraAttributes: attributes,
+                contextState: contextState,
+                transferSnapshot: transferSnapshot
+            )
             await worker.increment(metric: metric, by: value, attributes: mergedAttributes)
         }
     }
@@ -801,37 +819,73 @@ final class MobileAppModel: ObservableObject {
         incrementTelemetryMetric(.backupAttempts)
     }
 
-    private func telemetryContextAttributes() -> MobileTelemetryAttributes {
+    private struct TelemetryContextState {
+        let route: AppRoute
+        let homeSummary: HomeSummary
+        let pairingStatus: PairingStatus
+        let permissionSummary: PermissionSummary
+        let removeAfterBackupEnabled: Bool
+    }
+
+    private func makeTelemetryContextState() -> TelemetryContextState {
+        TelemetryContextState(
+            route: route,
+            homeSummary: homeSummary,
+            pairingStatus: pairingStatus,
+            permissionSummary: permissionSummary,
+            removeAfterBackupEnabled: removeAfterBackupEnabled
+        )
+    }
+
+    private func telemetryContextAttributes(
+        contextState: TelemetryContextState,
+        transferSnapshot: TransferSnapshot
+    ) -> MobileTelemetryAttributes {
         var attributes: MobileTelemetryAttributes = [
-            "app.route": .string(route.rawValue),
-            "home.primary_action": .string(telemetryPrimaryActionName(homeSummary.primaryAction)),
-            "backup.flow_state": .string(pairingStatus.backupFlowState.rawValue),
-            "pairing.phase": .string(pairingStatus.phase.rawValue),
-            "permission.media_scope": .string(permissionSummary.mediaScope.rawValue),
-            "permission.camera_granted": .bool(permissionSummary.cameraGranted),
-            "permission.notifications_granted": .bool(permissionSummary.notificationsGranted),
-            "permission.low_battery_warning_needed": .bool(permissionSummary.lowBatteryWarningNeeded),
-            "permission.is_charging": .bool(permissionSummary.isCharging),
-            "backup.remove_after_backup_enabled": .bool(removeAfterBackupEnabled),
-            "app.has_paired_desktop": .bool(pairingStatus.desktopName?.isEmpty == false),
+            "app.route": .string(contextState.route.rawValue),
+            "home.primary_action": .string(telemetryPrimaryActionName(contextState.homeSummary.primaryAction)),
+            "backup.flow_state": .string(contextState.pairingStatus.backupFlowState.rawValue),
+            "pairing.phase": .string(contextState.pairingStatus.phase.rawValue),
+            "permission.media_scope": .string(contextState.permissionSummary.mediaScope.rawValue),
+            "permission.camera_granted": .bool(contextState.permissionSummary.cameraGranted),
+            "permission.notifications_granted": .bool(contextState.permissionSummary.notificationsGranted),
+            "permission.low_battery_warning_needed": .bool(contextState.permissionSummary.lowBatteryWarningNeeded),
+            "permission.is_charging": .bool(contextState.permissionSummary.isCharging),
+            "backup.remove_after_backup_enabled": .bool(contextState.removeAfterBackupEnabled),
+            "app.has_paired_desktop": .bool(contextState.pairingStatus.desktopName?.isEmpty == false),
             "transfer.transferred_count": .int(transferSnapshot.transferredCount),
             "transfer.total_count": .int(transferSnapshot.totalCount),
             "transfer.failed_count": .int(transferSnapshot.failedCount)
         ]
-        if let transport = pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
+        if let transport = contextState.pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
             attributes["transfer.transport"] = .string(transport.rawValue)
         }
-        if let sessionID = pairingStatus.sessionID, !sessionID.isEmpty {
+        if let sessionID = contextState.pairingStatus.sessionID, !sessionID.isEmpty {
             attributes["correlation.session_id"] = .string(sessionID)
         }
-        if let pendingItemCount = homeSummary.pendingItemCount {
+        if let pendingItemCount = contextState.homeSummary.pendingItemCount {
             attributes["home.pending_item_count"] = .int(pendingItemCount)
         }
-        if let desktopName = pairingStatus.desktopName, !desktopName.isEmpty {
+        if let desktopName = contextState.pairingStatus.desktopName, !desktopName.isEmpty {
             attributes["pairing.desktop_name_present"] = .bool(true)
             attributes["pairing.desktop_name_length"] = .int(desktopName.count)
         }
         return attributes
+    }
+
+    private func mergedTelemetryAttributes(
+        extraAttributes: MobileTelemetryAttributes,
+        contextState: TelemetryContextState,
+        transferSnapshot: TransferSnapshot
+    ) -> MobileTelemetryAttributes {
+        var mergedAttributes = telemetryContextAttributes(
+            contextState: contextState,
+            transferSnapshot: transferSnapshot
+        )
+        for (key, value) in extraAttributes {
+            mergedAttributes[key] = value
+        }
+        return mergedAttributes
     }
 
     func recordPageView(name: String) {
@@ -973,31 +1027,15 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
-    private func completionMessage(for cleanupResult: TransferAssetCleanupResult) -> String {
-        let baseMessage = "Desktop confirmed \(transferSnapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop."
-        guard removeAfterBackupEnabled else {
-            return baseMessage
-        }
-        switch cleanupResult {
-        case .skipped:
-            return baseMessage
-        case .removed(let removedCount):
-            let itemLabel = removedCount == 1 ? "item" : "items"
-            return "\(baseMessage) Moved \(removedCount) transferred \(itemLabel) to Recently Removed on this device."
-        case .failed(let message):
-            return "\(baseMessage) Backup succeeded, but moving transferred items to Recently Removed failed: \(message)"
-        }
-    }
-
-    private func updateHomeSummaryAfterStoppedTransfer() {
+    private func updateHomeSummaryAfterStoppedTransfer(snapshot: TransferSnapshot) {
         let totalAttempted = max(
-            transferSnapshot.totalCount,
-            transferSnapshot.transferredCount + transferSnapshot.failedCount
+            snapshot.totalCount,
+            snapshot.transferredCount + snapshot.failedCount
         )
 
         if totalAttempted > 0 {
-            homeSummary.lastBackupDescription = "Stopped after \(transferSnapshot.transferredCount) of \(totalAttempted) items."
-            homeSummary.previouslyTransferredDescription = "\(transferSnapshot.transferredCount) items sent in the most recent session."
+            homeSummary.lastBackupDescription = "Stopped after \(snapshot.transferredCount) of \(totalAttempted) items."
+            homeSummary.previouslyTransferredDescription = "\(snapshot.transferredCount) items sent in the most recent session."
         } else {
             homeSummary.lastBackupDescription = "Backup session started, then canceled before any items were sent."
             homeSummary.previouslyTransferredDescription = "0 items sent in the most recent session."
@@ -1012,22 +1050,8 @@ final class MobileAppModel: ObservableObject {
         homeSummary.detailMessage = "Scan again when you are ready to start another backup session."
     }
 
-    private func formattedDuration(_ duration: TimeInterval?) -> String {
-        guard let duration else {
-            return "—"
-        }
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = duration >= 3600 ? [.hour, .minute] : [.minute, .second]
-        formatter.unitsStyle = .abbreviated
-        formatter.zeroFormattingBehavior = [.dropLeading]
-        return formatter.string(from: max(duration, 0)) ?? "—"
-    }
-
-    private func formattedCompletionTimestamp(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+    private func currentTransferSnapshot() async -> TransferSnapshot {
+        await transferService.progressSnapshot() ?? .demo
     }
 }
 

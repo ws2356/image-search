@@ -1,11 +1,12 @@
+import Foundation
+
 @MainActor
 protocol AppPageModeling: AnyObject {
     var homeSummary: HomeSummary { get }
     var pairingStatus: PairingStatus { get }
     var permissionSummary: PermissionSummary { get }
     var removeAfterBackupEnabled: Bool { get }
-    var transferSnapshot: TransferSnapshot { get }
-    var completionSummary: CompletionSummary { get }
+    var transferServiceForPageModels: TransferService { get }
     var errorSummary: ErrorSummary { get }
     var scannedQRCodeValue: String { get set }
 
@@ -35,13 +36,9 @@ extension MobileAppModel: PermissionsPageModeling {}
 protocol TransferPageModeling: AppPageModeling {
     var isShowingStopConfirmation: Bool { get set }
     var route: AppRoute { get }
-    var transferProgressPollingIntervalNanoseconds: UInt64 { get }
     var transferServiceForTransferView: TransferService { get }
-
-    func confirmStopTransfer(currentSnapshot: TransferSnapshot) async
     func recordDialogView(name: String)
     func persistSnapshot()
-    func completeTransfer(with snapshot: TransferSnapshot) async
 }
 
 extension MobileAppModel: TransferPageModeling {}

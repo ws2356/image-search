@@ -44,6 +44,9 @@ protocol TransferService: Sendable {
     func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot
     func progressSnapshot() async -> TransferSnapshot?
+    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async
+    func transferCompletionState() async -> TransferCompletionState?
+    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult
     func handleAppDidBecomeActive() async
     func handleMemoryWarning() async
@@ -57,6 +60,13 @@ enum TransferAssetCleanupResult: Equatable, Sendable {
     case skipped
     case removed(Int)
     case failed(message: String)
+}
+
+struct TransferCompletionState: Equatable, Sendable {
+    let snapshot: TransferSnapshot
+    let cleanupResult: TransferAssetCleanupResult
+    let completedAt: Date
+    let sessionDuration: TimeInterval?
 }
 
 protocol TelemetryClient: Sendable {

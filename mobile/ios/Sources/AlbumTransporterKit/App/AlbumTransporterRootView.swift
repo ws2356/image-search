@@ -10,6 +10,7 @@ public struct AlbumTransporterRootView: View {
     @StateObject private var model: MobileAppModel
     @StateObject private var permissionsViewModel: PermissionsPageViewModel
     @StateObject private var transferViewModel: TransferPageViewModel
+    @StateObject private var completionViewModel: CompletionPageViewModel
 
     public init() {
         self.init(container: .shared)
@@ -23,6 +24,9 @@ public struct AlbumTransporterRootView: View {
         )
         _transferViewModel = StateObject(
             wrappedValue: TransferPageViewModel(model: model)
+        )
+        _completionViewModel = StateObject(
+            wrappedValue: CompletionPageViewModel(model: model)
         )
     }
 
@@ -114,7 +118,6 @@ public struct AlbumTransporterRootView: View {
         case .transfer:
             TransferSessionView(viewModel: transferViewModel)
         case .completed:
-            let completionViewModel = CompletionPageViewModel(model: model)
             CompletionStateView(viewModel: completionViewModel)
         case .error:
             let errorViewModel = ErrorPageViewModel(model: model)

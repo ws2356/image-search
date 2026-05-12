@@ -46,8 +46,15 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
             homeSummary: .firstLaunch,
             completionSummary: .snapshotMarketing
         )
+        let completionViewModel = CompletionPageViewModel(model: completionModel)
+        let loadedExpectation = expectation(description: "completion summary loaded")
+        Task { @MainActor in
+            await completionViewModel.reloadSummary()
+            loadedExpectation.fulfill()
+        }
+        wait(for: [loadedExpectation], timeout: 1.0)
         let viewController = makeHostedPage(title: "Backup Complete") {
-            CompletionStateView(viewModel: CompletionPageViewModel(model: completionModel))
+            CompletionStateView(viewModel: completionViewModel)
         }
         try SnapshotSupport.assertSnapshot(pageName: "backup-completion", viewController: viewController)
     }
@@ -96,14 +103,27 @@ private final class SnapshotAppPageModel: AppPageModeling {
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var removeAfterBackupEnabled = false
-    var transferSnapshot = TransferSnapshot.demo
-    var completionSummary: CompletionSummary
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
+    var transferServiceForPageModels: TransferService { transferService }
+    private let transferService: SnapshotTransferService
 
     init(homeSummary: HomeSummary, completionSummary: CompletionSummary) {
         self.homeSummary = homeSummary
-        self.completionSummary = completionSummary
+        let snapshot = TransferSnapshot(
+            transferredCount: completionSummary.itemsBackedUp ?? 0,
+            totalCount: completionSummary.itemsBackedUp ?? 0,
+            failedCount: 0
+        )
+        self.transferService = SnapshotTransferService(
+            snapshot: snapshot,
+            completionState: TransferCompletionState(
+                snapshot: snapshot,
+                cleanupResult: .skipped,
+                completedAt: Date(),
+                sessionDuration: nil
+            )
+        )
     }
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
@@ -118,36 +138,38 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var removeAfterBackupEnabled = false
-    var transferSnapshot: TransferSnapshot
-    var completionSummary = CompletionSummary.demo
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var isShowingStopConfirmation = false
     var route = AppRoute.transfer
-    var transferProgressPollingIntervalNanoseconds: UInt64 = 10_000_000
-    var transferServiceForTransferView: TransferService { SnapshotTransferService() }
+    var transferServiceForPageModels: TransferService { transferService }
+    var transferServiceForTransferView: TransferService { transferService }
+    private let transferService: SnapshotTransferService
 
     init(snapshot: TransferSnapshot) {
-        self.transferSnapshot = snapshot
+        self.transferService = SnapshotTransferService(snapshot: snapshot, completionState: nil)
     }
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
     func requestStopTransfer() {}
-    func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
-        transferSnapshot = currentSnapshot
-    }
     func persistSnapshot() {}
-    func completeTransfer(with snapshot: TransferSnapshot) async {
-        transferSnapshot = snapshot
-    }
     func recordDialogView(name: String) {}
     func recordInteraction(name: String, location: String) {}
 }
 
 private actor SnapshotTransferService: TransferService {
+    private var snapshot: TransferSnapshot
+    private var completionState: TransferCompletionState?
+
+    init(snapshot: TransferSnapshot = .demo, completionState: TransferCompletionState? = nil) {
+        self.snapshot = snapshot
+        self.completionState = completionState
+    }
+
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        .demo
+        progress(snapshot)
+        return snapshot
     }
 
     func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
@@ -162,11 +184,27 @@ private actor SnapshotTransferService: TransferService {
     }
 
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        snapshot = current
         current
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
-        .demo
+        snapshot
+    }
+
+    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
+        self.snapshot = snapshot
+    }
+
+    func transferCompletionState() async -> TransferCompletionState? {
+        completionState
+    }
+
+    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
+        self.completionState = completionState
+        if let snapshot = completionState?.snapshot {
+            self.snapshot = snapshot
+        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

@@ -2359,6 +2359,7 @@ actor PhotoLibraryTransferService: TransferService {
     private var successfullyTransferredAssetIDs: [String] = []
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
+    private var currentCompletionState: TransferCompletionState?
 
     init(
         assetSource: TransferAssetSource,
@@ -2475,6 +2476,21 @@ actor PhotoLibraryTransferService: TransferService {
         return snapshot
     }
 
+    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
+        currentSnapshot = snapshot
+    }
+
+    func transferCompletionState() async -> TransferCompletionState? {
+        currentCompletionState
+    }
+
+    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
+        currentCompletionState = completionState
+        if let snapshot = completionState?.snapshot {
+            currentSnapshot = snapshot
+        }
+    }
+
     func handleAppDidBecomeActive() async {
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             return
@@ -2546,6 +2562,7 @@ actor PhotoLibraryTransferService: TransferService {
     private func runTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         stopRequested = false
         successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
+        currentCompletionState = nil
 
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             let failedSnapshot = TransferSnapshot(
