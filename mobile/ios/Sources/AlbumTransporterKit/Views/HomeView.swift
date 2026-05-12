@@ -89,24 +89,6 @@ struct HomeView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
 
-            if summary.primaryAction != .scanDesktopQRCode {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color(hex: 0x30D158))
-                        .frame(width: 9, height: 9)
-                    Text("Connected")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0x166534))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(Color(hex: 0xE6F9ED))
-                .clipShape(Capsule())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 6)
-            }
-
             VStack(spacing: 12) {
                 if let warning = summary.interruptionWarning {
                     HStack(alignment: .top, spacing: 10) {
