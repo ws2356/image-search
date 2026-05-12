@@ -213,6 +213,20 @@ extension View {
             self
         }
     }
+
+    @ViewBuilder
+    func compatibleOnChange<Value: Equatable>(
+        of value: Value,
+        perform action: @escaping (Value) -> Void
+    ) -> some View {
+        if #available(iOS 17.0, macOS 14.0, *) {
+            self.onChange(of: value) { _, newValue in
+                action(newValue)
+            }
+        } else {
+            self.onChange(of: value, perform: action)
+        }
+    }
 }
 
 extension Color {

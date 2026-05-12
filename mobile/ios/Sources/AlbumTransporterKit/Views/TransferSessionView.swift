@@ -3,75 +3,19 @@ import SwiftUI
 struct TransferSessionView: View {
     @ObservedObject var viewModel: TransferPageViewModel
 
-    private var progressPercent: Int {
-        Int(viewModel.snapshot.progress * 100)
+    private var snapshot: TransferSnapshot {
+        viewModel.snapshot
     }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                transportBadges
-
-                donutProgress
-
-                statsGrid
-
-                if let eta = viewModel.snapshot.etaDescription {
-                    VStack(spacing: 4) {
-                        Text("Estimated time")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color(hex: 0x6E6E73))
-                        Text(eta)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color(hex: 0x1C1C1E))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
-                }
-
-                guidanceHint
-
-                if viewModel.snapshot.isIncompleteLibrary {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text("Only the subset currently granted by iOS is being transferred.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color(hex: 0x6E6E73))
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(hex: 0xFFF3CD).opacity(0.6))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-
-                VStack(spacing: 10) {
-                    Button(action: viewModel.requestStopTransfer) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "stop.fill")
-                            Text("Stop Backup")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .foregroundStyle(Color(hex: 0xFF453A))
-                        .background(Color(hex: 0xFFF1F0))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            TransferSessionContent(snapshot: snapshot, onStop: viewModel.requestStopTransfer)
         }
         .compatibleScrollBounceBasedOnSize()
         .task {
             await viewModel.orchestrateTransfer()
         }
-        .onChange(of: viewModel.isShowingStopConfirmation) { isPresented in
+        .compatibleOnChange(of: viewModel.isShowingStopConfirmation) { isPresented in
             guard isPresented else { return }
             viewModel.recordStopConfirmationPresented()
         }
@@ -92,16 +36,51 @@ struct TransferSessionView: View {
             Text("The desktop may continue indexing items that already transferred before the stop request.")
         }
     }
+}
 
-    private var transportBadges: some View {
+private struct TransferSessionContent: View {
+    let snapshot: TransferSnapshot
+    let onStop: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            TransferTransportBadges(transports: snapshot.activeTransportsForDisplay)
+            TransferProgressRing(snapshot: snapshot)
+            TransferStatsCard(snapshot: snapshot)
+
+            if let eta = snapshot.etaDescription {
+                TransferEstimatedTimeCard(eta: eta)
+            }
+
+            TransferGuidanceBanner(snapshot: snapshot)
+
+            if snapshot.isIncompleteLibrary {
+                TransferIncompleteLibraryBanner()
+            }
+
+            TransferStopButton(action: onStop)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+}
+
+private struct TransferTransportBadges: View {
+    let transports: [TransferTransport]
+
+    var body: some View {
         HStack(spacing: 6) {
-            ForEach(viewModel.snapshot.activeTransportsForDisplay, id: \.rawValue) { transport in
-                transportBadge(for: transport)
+            ForEach(transports, id: \.rawValue) { transport in
+                TransferTransportBadge(transport: transport)
             }
         }
     }
+}
 
-    private func transportBadge(for transport: TransferTransport) -> some View {
+private struct TransferTransportBadge: View {
+    let transport: TransferTransport
+
+    var body: some View {
         HStack(spacing: 6) {
             Image(systemName: transport.systemImage)
                 .font(.system(size: 13, weight: .semibold))
@@ -110,20 +89,28 @@ struct TransferSessionView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .foregroundStyle(transportColor(for: transport))
-        .background(transportBackground(for: transport))
+        .foregroundStyle(transport.foregroundColor)
+        .background(transport.backgroundColor)
         .clipShape(Capsule())
     }
+}
 
-    private var donutProgress: some View {
-        return ZStack {
+private struct TransferProgressRing: View {
+    let snapshot: TransferSnapshot
+
+    private var progressPercent: Int {
+        Int(snapshot.progress * 100)
+    }
+
+    var body: some View {
+        ZStack {
             Circle()
                 .stroke(Color(hex: 0xE5E5EA), lineWidth: 12)
 
             Circle()
-                .trim(from: 0, to: viewModel.snapshot.progress)
+                .trim(from: 0, to: snapshot.progress)
                 .stroke(
-                    transportColor,
+                    snapshot.transport.accentColor,
                     style: StrokeStyle(lineWidth: 12, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
@@ -132,7 +119,7 @@ struct TransferSessionView: View {
                 Text("\(progressPercent)%")
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(Color(hex: 0x1C1C1E))
-                Text(viewModel.snapshot.transferSpeedText ?? "0.00 MB/s")
+                Text(snapshot.transferSpeedText ?? "0.00 MB/s")
                     .font(.system(size: 13))
                     .foregroundStyle(Color(hex: 0x6E6E73))
             }
@@ -140,26 +127,48 @@ struct TransferSessionView: View {
         .frame(width: 180, height: 180)
         .padding(.vertical, 8)
     }
+}
 
-    private var statsGrid: some View {
+private struct TransferStatsCard: View {
+    let snapshot: TransferSnapshot
+
+    private var remainingCount: Int {
+        max(0, snapshot.totalCount - snapshot.transferredCount)
+    }
+
+    var body: some View {
         HStack(spacing: 0) {
-            statColumn(label: "Sent", value: "\(viewModel.snapshot.transferredCount)", color: Color(hex: 0x30D158))
+            TransferStatColumn(
+                label: "Sent",
+                value: "\(snapshot.transferredCount)",
+                color: Color(hex: 0x30D158)
+            )
             Divider().frame(height: 40)
-            statColumn(
+            TransferStatColumn(
                 label: "Remaining",
-                value: "\(viewModel.snapshot.totalCount - viewModel.snapshot.transferredCount)",
+                value: "\(remainingCount)",
                 color: Color(hex: 0x007AFF)
             )
             Divider().frame(height: 40)
-            statColumn(label: "Failed", value: "\(viewModel.snapshot.failedCount)", color: Color(hex: 0xFF453A))
+            TransferStatColumn(
+                label: "Failed",
+                value: "\(snapshot.failedCount)",
+                color: Color(hex: 0xFF453A)
+            )
         }
         .padding(.vertical, 14)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
     }
+}
 
-    private func statColumn(label: String, value: String, color: Color) -> some View {
+private struct TransferStatColumn: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
         VStack(spacing: 4) {
             Text(value)
                 .font(.system(size: 22, weight: .bold))
@@ -170,31 +179,278 @@ struct TransferSessionView: View {
         }
         .frame(maxWidth: .infinity)
     }
+}
 
-    private var guidanceHint: some View {
+private struct TransferEstimatedTimeCard: View {
+    let eta: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("Estimated time")
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+            Text(eta)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x1C1C1E))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+}
+
+private struct TransferGuidanceBanner: View {
+    let snapshot: TransferSnapshot
+
+    var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: viewModel.snapshot.transport == .usb ? "checkmark.circle.fill" : "bolt.horizontal.fill")
-                .foregroundStyle(viewModel.snapshot.transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x3B5FC0))
-            Text(viewModel.snapshot.guidanceMessage)
+            Image(systemName: snapshot.transport.guidanceSystemImage)
+                .foregroundStyle(snapshot.transport.guidanceAccentColor)
+            Text(snapshot.guidanceMessage)
                 .font(.system(size: 13))
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(viewModel.snapshot.transport == .usb ? Color(hex: 0xE6F9ED) : Color(hex: 0xEEF2FF))
+        .background(snapshot.transport.guidanceBackgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
+}
 
-    private var transportColor: Color {
-        viewModel.snapshot.transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x007AFF)
-    }
-
-    private func transportColor(for transport: TransferTransport) -> Color {
-        transport == .usb ? Color(hex: 0x30D158) : Color(hex: 0x007AFF)
-    }
-
-    private func transportBackground(for transport: TransferTransport) -> Color {
-        transport == .usb ? Color(hex: 0xE6F9ED) : Color(hex: 0xE8F4FD)
+private struct TransferIncompleteLibraryBanner: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Only the subset currently granted by iOS is being transferred.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: 0xFFF3CD).opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
+
+private struct TransferStopButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        ActionButton(
+            title: "Stop Backup",
+            icon: "stop.fill",
+            style: .destructive,
+            action: action
+        )
+    }
+}
+
+private extension TransferTransport {
+    var accentColor: Color {
+        switch self {
+        case .lan:
+            return Color(hex: 0x007AFF)
+        case .usb:
+            return Color(hex: 0x30D158)
+        }
+    }
+
+    var backgroundColor: Color {
+        switch self {
+        case .lan:
+            return Color(hex: 0xE8F4FD)
+        case .usb:
+            return Color(hex: 0xE6F9ED)
+        }
+    }
+
+    var foregroundColor: Color {
+        accentColor
+    }
+
+    var guidanceBackgroundColor: Color {
+        switch self {
+        case .lan:
+            return Color(hex: 0xEEF2FF)
+        case .usb:
+            return Color(hex: 0xE6F9ED)
+        }
+    }
+
+    var guidanceAccentColor: Color {
+        switch self {
+        case .lan:
+            return Color(hex: 0x3B5FC0)
+        case .usb:
+            return Color(hex: 0x30D158)
+        }
+    }
+
+    var guidanceSystemImage: String {
+        switch self {
+        case .lan:
+            return "bolt.horizontal.fill"
+        case .usb:
+            return "checkmark.circle.fill"
+        }
+    }
+}
+
+#if DEBUG
+@available(iOS 17.0, macOS 14.0, *)
+#Preview("USB Transfer") {
+    TransferSessionView(
+        viewModel: TransferPageViewModel(
+            model: TransferSessionPreviewModel(snapshot: .previewUSB)
+        )
+    )
+}
+
+@available(iOS 17.0, macOS 14.0, *)
+#Preview("Wi-Fi Transfer") {
+    TransferSessionView(
+        viewModel: TransferPageViewModel(
+            model: TransferSessionPreviewModel(snapshot: .previewWiFi)
+        )
+    )
+}
+
+private extension TransferSnapshot {
+    static let previewUSB = TransferSnapshot(
+        transferredCount: 248,
+        totalCount: 930,
+        failedCount: 0,
+        transport: .usb,
+        liveTransports: [.usb, .lan],
+        transferSpeedText: "42.80 MB/s",
+        etaDescription: "17 min remaining",
+        statusMessage: "Backing up local photos and videos to the paired desktop.",
+        guidanceMessage: "USB is active for the fastest backup. Keep your iPhone unlocked and connected until the transfer finishes.",
+        isIncompleteLibrary: false
+    )
+
+    static let previewWiFi = TransferSnapshot(
+        transferredCount: 112,
+        totalCount: 930,
+        failedCount: 3,
+        transport: .lan,
+        liveTransports: [.lan],
+        transferSpeedText: "4.80 MB/s",
+        etaDescription: "44 min remaining",
+        statusMessage: "Backing up local photos and videos to the paired desktop.",
+        guidanceMessage: "USB backups are generally faster and more stable than Wi-Fi. Plug in anytime to let the session upgrade automatically when available.",
+        isIncompleteLibrary: true
+    )
+}
+
+@MainActor
+private final class TransferSessionPreviewModel: TransferPageModeling {
+    var homeSummary = HomeSummary.firstLaunch
+    var backupFlowState: MobileBackupFlowState = .transferInProgress
+    var pairingStatus = PairingStatus(
+        phase: .paired,
+        backupFlowState: .transferInProgress,
+        desktopName: "Desk Mac",
+        sessionID: "preview-session",
+        transport: .usb,
+        message: "Connected."
+    )
+    var permissionSummary = PermissionSummary.demo
+    var removeAfterBackupEnabled = false
+    var route: AppRoute = .transfer
+    var errorSummary = ErrorSummary.generic
+    var scannedQRCodeValue = ""
+    var transferServiceForPageModels: TransferService { transferService }
+    var transferServiceForTransferView: TransferService { transferService }
+
+    private let transferService: TransferSessionPreviewTransferService
+
+    init(snapshot: TransferSnapshot) {
+        transferService = TransferSessionPreviewTransferService(snapshot: snapshot)
+        pairingStatus.transport = snapshot.transport
+    }
+
+    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
+        _ = page
+        _ = result
+        _ = target
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
+        removeAfterBackupEnabled = isEnabled
+    }
+
+    func requestStopTransfer() {}
+
+    func recordInteraction(name: String, location: String) {
+        _ = name
+        _ = location
+    }
+
+    func recordDialogView(name: String) {
+        _ = name
+    }
+
+    func persistSnapshot() {}
+}
+
+private actor TransferSessionPreviewTransferService: TransferService {
+    private var snapshot: TransferSnapshot
+
+    init(snapshot: TransferSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+        progress(snapshot)
+        return snapshot
+    }
+
+    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+        snapshot = current
+        return .stoppedByUser
+    }
+
+    func resumeTransfer(
+        from snapshot: TransferSnapshot,
+        progress: @escaping @Sendable (TransferSnapshot) -> Void
+    ) async -> TransferSnapshot {
+        self.snapshot = snapshot
+        progress(snapshot)
+        return snapshot
+    }
+
+    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+        snapshot = current
+        return current
+    }
+
+    func progressSnapshot() async -> TransferSnapshot? {
+        snapshot
+    }
+
+    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
+        self.snapshot = snapshot
+    }
+
+    func transferCompletionState() async -> TransferCompletionState? {
+        nil
+    }
+
+    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
+        if let completionState {
+            snapshot = completionState.snapshot
+        }
+    }
+
+    func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
+        .skipped
+    }
+
+    func handleMemoryWarning() async {}
+}
+#endif
