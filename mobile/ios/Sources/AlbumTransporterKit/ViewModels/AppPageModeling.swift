@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 protocol AppPageModeling: AnyObject {
     var homeSummary: HomeSummary { get }
+    var backupFlowState: MobileBackupFlowState { get }
     var pairingStatus: PairingStatus { get }
     var permissionSummary: PermissionSummary { get }
     var removeAfterBackupEnabled: Bool { get }

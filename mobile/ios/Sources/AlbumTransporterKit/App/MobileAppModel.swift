@@ -399,7 +399,6 @@ final class MobileAppModel: ObservableObject {
         await transferService.stageTransferSnapshot(interruptionSnapshot)
         await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
-        updateHomeSummaryAfterStoppedTransfer(snapshot: interruptionSnapshot)
         route = .home
         recordTelemetry(
             .transferStopped,
@@ -435,10 +434,8 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func finalizeStoppedTransfer() async {
-        let snapshot = await currentTransferSnapshot()
         await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
-        updateHomeSummaryAfterStoppedTransfer(snapshot: snapshot)
         route = .home
 
         recordTelemetry(
@@ -479,7 +476,6 @@ final class MobileAppModel: ObservableObject {
         await transferService.stageTransferSnapshot(snapshot)
         await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
-        updateHomeSummaryAfterStoppedTransfer(snapshot: snapshot)
         route = .home
 
         recordTelemetry(
@@ -513,6 +509,10 @@ final class MobileAppModel: ObservableObject {
 
     var transferServiceForPageModels: TransferService {
         transferService
+    }
+
+    var backupFlowState: MobileBackupFlowState {
+        backupFlowStateMachine.state
     }
 
     var transferServiceForTransferView: TransferService {
@@ -975,28 +975,6 @@ final class MobileAppModel: ObservableObject {
                 await transferService.handleAppDidBecomeActive()
             }
         }
-    }
-
-    private func updateHomeSummaryAfterStoppedTransfer(snapshot: TransferSnapshot) {
-        let totalAttempted = max(
-            snapshot.totalCount,
-            snapshot.transferredCount + snapshot.failedCount
-        )
-
-        if totalAttempted > 0 {
-            homeSummary.lastBackupDescription = "Stopped after \(snapshot.transferredCount) of \(totalAttempted) items."
-            homeSummary.previouslyTransferredDescription = "\(snapshot.transferredCount) items sent in the most recent session."
-        } else {
-            homeSummary.lastBackupDescription = "Backup session started, then canceled before any items were sent."
-            homeSummary.previouslyTransferredDescription = "0 items sent in the most recent session."
-        }
-
-        homeSummary.pendingItemCount = nil
-        homeSummary.interruptionWarning = nil
-        if let desktopName = pairingStatus.desktopName, !desktopName.isEmpty {
-            homeSummary.desktopName = desktopName
-        }
-        homeSummary.detailMessage = "Scan again when you are ready to start another backup session."
     }
 
     private func currentTransferSnapshot() async -> TransferSnapshot {

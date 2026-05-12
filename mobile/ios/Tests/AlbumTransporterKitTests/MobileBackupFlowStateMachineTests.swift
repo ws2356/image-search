@@ -49,10 +49,26 @@ final class MobileBackupFlowStateMachineTests: XCTestCase {
         var completedMachine = MobileBackupFlowStateMachine(state: .transferCompleted)
         completedMachine.transition(.transferStarted)
         XCTAssertEqual(completedMachine.state, .transferInProgress)
+    }
 
+    func test_transfer_failed_is_terminal_except_explicit_reset() {
         var failedMachine = MobileBackupFlowStateMachine(state: .transferFailed)
         failedMachine.transition(.transferStarted)
-        XCTAssertEqual(failedMachine.state, .transferInProgress)
+        XCTAssertEqual(failedMachine.state, .transferFailed)
+        failedMachine.transition(.pairingAccepted)
+        XCTAssertEqual(failedMachine.state, .transferFailed)
+        failedMachine.transition(.transferStopped)
+        XCTAssertEqual(failedMachine.state, .transferFailed)
+    }
+
+    func test_transfer_stopped_event_reaches_stopped_state_from_pairing_or_terminal_transfer_states() {
+        var preflightStoppedMachine = MobileBackupFlowStateMachine(state: .pairingCompleted)
+        preflightStoppedMachine.transition(.transferStopped)
+        XCTAssertEqual(preflightStoppedMachine.state, .transferStopped)
+
+        var completedMachine = MobileBackupFlowStateMachine(state: .transferCompleted)
+        completedMachine.transition(.transferStopped)
+        XCTAssertEqual(completedMachine.state, .transferStopped)
     }
 
     func test_reset_event_returns_pending_pairing() {

@@ -8,6 +8,7 @@ import UIKit
 @MainActor
 public struct AlbumTransporterRootView: View {
     @StateObject private var model: MobileAppModel
+    @StateObject private var homeViewModel: HomePageViewModel
     @StateObject private var permissionsViewModel: PermissionsPageViewModel
     @StateObject private var transferViewModel: TransferPageViewModel
     @StateObject private var completionViewModel: CompletionPageViewModel
@@ -19,6 +20,9 @@ public struct AlbumTransporterRootView: View {
     private init(container: Container) {
         let model = container.mobileAppModel()
         _model = StateObject(wrappedValue: model)
+        _homeViewModel = StateObject(
+            wrappedValue: HomePageViewModel(model: model)
+        )
         _permissionsViewModel = StateObject(
             wrappedValue: PermissionsPageViewModel(model: model)
         )
@@ -105,7 +109,6 @@ public struct AlbumTransporterRootView: View {
     private var currentScreen: some View {
         switch model.route {
         case .home:
-            let homeViewModel = HomePageViewModel(model: model)
             HomeView(viewModel: homeViewModel)
         case .scan:
             let pairingViewModel = PairingPageViewModel(model: model)

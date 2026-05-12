@@ -7,11 +7,47 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel()
         let viewModel = HomePageViewModel(model: model)
 
+        await viewModel.refreshSummary()
         XCTAssertEqual(viewModel.summary, model.homeSummary)
 
         await viewModel.handlePrimaryActionTapped()
 
         XCTAssertEqual(model.homeScanActionCallCount, 1)
+    }
+
+    func test_home_page_view_model_renders_stopped_transfer_summary_on_refresh() async {
+        let model = StubPageModel()
+        model.backupFlowState = .transferStopped
+        model.pairingStatus = PairingStatus(
+            phase: .paired,
+            backupFlowState: .transferStopped,
+            desktopName: "Desk Mac",
+            sessionID: "session-1",
+            transport: .lan,
+            message: "Connected."
+        )
+        await model.transferServiceActor.stageTransferSnapshot(
+            TransferSnapshot(
+                transferredCount: 3,
+                totalCount: 10,
+                failedCount: 1,
+                transport: .lan,
+                etaDescription: nil,
+                statusMessage: "Stopped.",
+                guidanceMessage: "",
+                isIncompleteLibrary: false
+            )
+        )
+        let viewModel = HomePageViewModel(model: model)
+
+        await viewModel.refreshSummary()
+
+        XCTAssertEqual(viewModel.summary.lastBackupDescription, "Stopped after 3 of 10 items.")
+        XCTAssertEqual(
+            viewModel.summary.previouslyTransferredDescription,
+            "3 items sent in the most recent session."
+        )
+        XCTAssertEqual(viewModel.summary.desktopName, "Desk Mac")
     }
 
     func test_pairing_page_view_model_maps_status_binding_and_actions() async {
@@ -74,6 +110,7 @@ final class PageViewModelTests: XCTestCase {
 @MainActor
 private final class StubPageModel: PermissionsPageModeling, TransferPageModeling {
     var homeSummary = HomeSummary.firstLaunch
+    var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var removeAfterBackupEnabled = false

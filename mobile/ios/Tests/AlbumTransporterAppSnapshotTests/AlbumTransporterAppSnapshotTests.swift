@@ -100,6 +100,7 @@ private extension CompletionSummary {
 @MainActor
 private final class SnapshotAppPageModel: AppPageModeling {
     var homeSummary: HomeSummary
+    var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var removeAfterBackupEnabled = false
@@ -135,6 +136,7 @@ private final class SnapshotAppPageModel: AppPageModeling {
 @MainActor
 private final class SnapshotTransferPageModel: TransferPageModeling {
     var homeSummary = HomeSummary.firstLaunch
+    var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var removeAfterBackupEnabled = false

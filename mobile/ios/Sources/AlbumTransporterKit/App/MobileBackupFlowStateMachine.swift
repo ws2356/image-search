@@ -71,6 +71,8 @@ struct MobileBackupFlowStateMachine: Equatable, Sendable {
             return .pairingCompleted
         case (.pairingCompleted, .pairingStopped):
             return .pairingStopped
+        case (.pairingCompleted, .transferStopped):
+            return .transferStopped
         case (.pairingCompleted, .transferStarted):
             return .transferInProgress
         case (.pairingCompleted, .pairingFailed):
@@ -104,18 +106,18 @@ struct MobileBackupFlowStateMachine: Equatable, Sendable {
             return .transferFailed
 
         case (.transferStopped, .transferStarted),
-             (.transferCompleted, .transferStarted),
-             (.transferFailed, .transferStarted):
+             (.transferCompleted, .transferStarted):
             return .transferInProgress
 
+        case (.transferCompleted, .transferStopped):
+            return .transferStopped
+
         case (.transferStopped, .pairingAccepted),
-             (.transferCompleted, .pairingAccepted),
-             (.transferFailed, .pairingAccepted):
+             (.transferCompleted, .pairingAccepted):
             return .pairingCompleted
 
         case (.transferStopped, .pairingStarted),
-             (.transferCompleted, .pairingStarted),
-             (.transferFailed, .pairingStarted):
+             (.transferCompleted, .pairingStarted):
             return .pendingPairing
 
         default:

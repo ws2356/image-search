@@ -228,8 +228,10 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertEqual(model.route, .home)
         XCTAssertFalse(transferViewModel.isShowingStopConfirmation)
-        XCTAssertNotNil(model.homeSummary.lastBackupDescription)
-        XCTAssertNotNil(model.homeSummary.previouslyTransferredDescription)
+        let homeViewModel = HomePageViewModel(model: model)
+        await homeViewModel.refreshSummary()
+        XCTAssertNotNil(homeViewModel.summary.lastBackupDescription)
+        XCTAssertNotNil(homeViewModel.summary.previouslyTransferredDescription)
 
         await transferTask.value
         XCTAssertEqual(model.route, .home)

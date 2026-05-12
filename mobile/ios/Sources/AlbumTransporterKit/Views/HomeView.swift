@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
-    let viewModel: HomePageViewModel
+    @ObservedObject var viewModel: HomePageViewModel
 
     private let setupSteps = [
         SetupStep(
@@ -24,6 +24,9 @@ struct HomeView: View {
             }
         }
         .compatibleScrollBounceBasedOnSize()
+        .task {
+            await viewModel.refreshSummary()
+        }
     }
 
     private var hasSessionHistory: Bool {
