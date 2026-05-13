@@ -52,9 +52,6 @@ final class CompletionPageViewModel: ObservableObject {
         cleanupResult: TransferAssetCleanupResult
     ) -> String {
         let baseMessage = "Desktop confirmed \(snapshot.totalCount) eligible items for this session. Media that already transferred may still be indexing on desktop."
-        guard model.removeAfterBackupEnabled else {
-            return baseMessage
-        }
         switch cleanupResult {
         case .skipped:
             return baseMessage

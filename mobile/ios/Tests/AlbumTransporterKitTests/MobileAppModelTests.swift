@@ -643,7 +643,6 @@ final class MobileAppModelTests: XCTestCase {
         let permissionsViewModel = PermissionsPageViewModel(model: model)
 
         await model.load()
-        model.setRemoveAfterBackupEnabled(true)
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         await model.beginPairing()
@@ -753,9 +752,14 @@ final class MobileAppModelTests: XCTestCase {
             completionRecord?.attributes["transfer.transport"],
             .string(TransferTransport.lan.rawValue)
         )
+        let removePreferenceRecord = await telemetryClient.latestRecord(for: .removeAfterBackupPreferenceSelected)
         XCTAssertEqual(
-            completionRecord?.attributes["backup.remove_after_backup_enabled"],
+            removePreferenceRecord?.attributes["backup.remove_after_backup_enabled"],
             .bool(true)
+        )
+        XCTAssertEqual(
+            removePreferenceRecord?.attributes["correlation.session_id"],
+            .string("pairing-demo-001")
         )
     }
 }
@@ -800,11 +804,24 @@ private struct FailingQRCodePayloadDecoder: QRCodePayloadDecoding {
     }
 }
 
-private struct StaticPermissionService: PermissionService {
+private actor StaticPermissionService: PermissionService {
     let summary: PermissionSummary
+    private var isRemoveAfterBackupEnabled = false
+
+    init(summary: PermissionSummary) {
+        self.summary = summary
+    }
 
     func loadPermissionSummary() async -> PermissionSummary {
         summary
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
     }
 }
 

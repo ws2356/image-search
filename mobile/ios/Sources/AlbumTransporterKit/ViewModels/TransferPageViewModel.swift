@@ -18,7 +18,16 @@ final class TransferPageViewModel: ObservableObject {
     ) {
         self.model = model
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
-        self.snapshot = .demo
+        self.snapshot = TransferSnapshot(
+            transferredCount: 0,
+            totalCount: 0,
+            failedCount: 0,
+            transport: model.pairingStatus.transport ?? .lan,
+            etaMinutes: nil,
+            statusMessage: "Preparing the local media backup with the paired desktop.",
+            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
+            isIncompleteLibrary: model.permissionSummary.mediaScope != .full
+        )
         if let observableModel = model as? MobileAppModel {
             modelChangeCancellable = observableModel.objectWillChange.sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -82,7 +91,7 @@ final class TransferPageViewModel: ObservableObject {
         let completedSnapshot = await model.transferServiceForTransferView.completeTransfer(current: snapshot)
         applySnapshotIfNewer(completedSnapshot)
         let resolvedCleanupResult: TransferAssetCleanupResult
-        if model.removeAfterBackupEnabled {
+        if await model.permissionService.removeAfterBackupEnabled() {
             resolvedCleanupResult = await model.transferServiceForTransferView.moveSuccessfullyTransferredAssetsToRecentlyRemoved()
         } else {
             resolvedCleanupResult = .skipped

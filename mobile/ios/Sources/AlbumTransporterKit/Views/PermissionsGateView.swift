@@ -168,7 +168,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         message: "Connected."
     )
     var permissionSummary: PermissionSummary
-    var removeAfterBackupEnabled = false
     var transferServiceForPageModels: TransferService = PermissionsGatePreviewTransferService()
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
@@ -183,10 +182,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         _ = page
         _ = result
         _ = target
-    }
-
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
-        removeAfterBackupEnabled = isEnabled
     }
 
     func requestStopTransfer() {}
@@ -219,6 +214,7 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
 
 private actor PermissionsGatePreviewPermissionService: PermissionService {
     private let summary: PermissionSummary
+    private var isRemoveAfterBackupEnabled = false
 
     init(summary: PermissionSummary) {
         self.summary = summary
@@ -226,6 +222,14 @@ private actor PermissionsGatePreviewPermissionService: PermissionService {
 
     func loadPermissionSummary() async -> PermissionSummary {
         summary
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
     }
 }
 

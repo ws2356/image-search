@@ -24,10 +24,6 @@ final class PermissionsPageViewModel: ObservableObject {
         model.permissionSummary
     }
 
-    var removeAfterBackupEnabled: Bool {
-        model.removeAfterBackupEnabled
-    }
-
     func startPreflight() async {
         guard !isRunningPermissionsPreflight else {
             return
@@ -57,10 +53,6 @@ final class PermissionsPageViewModel: ObservableObject {
         }
 
         await continueBackupPreflight()
-    }
-
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
-        model.setRemoveAfterBackupEnabled(isEnabled)
     }
 
     func goBack() async {
@@ -122,6 +114,7 @@ final class PermissionsPageViewModel: ObservableObject {
         }
         isAwaitingRemoveAfterBackupDecision = false
         isShowingRemoveAfterBackupPrompt = false
+        await model.permissionService.setRemoveAfterBackupEnabled(shouldRemove)
         model.recordInteraction(
             name: shouldRemove ? "remove_after_backup_selected" : "keep_originals_selected",
             location: "remove_after_backup_prompt"

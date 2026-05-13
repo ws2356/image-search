@@ -103,7 +103,7 @@ private final class SnapshotAppPageModel: AppPageModeling {
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
-    var removeAfterBackupEnabled = false
+    var permissionService: PermissionService = SnapshotPermissionService()
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var transferServiceForPageModels: TransferService { transferService }
@@ -133,7 +133,6 @@ private final class SnapshotAppPageModel: AppPageModeling {
     }
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
     func requestStopTransfer() {}
     func recordInteraction(name: String, location: String) {}
 }
@@ -144,7 +143,7 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
-    var removeAfterBackupEnabled = false
+    var permissionService: PermissionService = SnapshotPermissionService()
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var route = AppRoute.transfer
@@ -157,7 +156,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     }
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {}
     func requestStopTransfer() {}
     func persistSnapshot() {}
     func recordDialogView(name: String) {}
@@ -215,5 +213,21 @@ private actor SnapshotTransferService: TransferService {
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
         .skipped
+    }
+}
+
+private actor SnapshotPermissionService: PermissionService {
+    private var isRemoveAfterBackupEnabled = false
+
+    func loadPermissionSummary() async -> PermissionSummary {
+        .demo
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
     }
 }

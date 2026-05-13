@@ -431,7 +431,6 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
-    var removeAfterBackupEnabled = false
     var transferServiceForPageModels: TransferService = HomeViewPreviewTransferService()
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
@@ -444,10 +443,6 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
         _ = page
         _ = result
         _ = target
-    }
-
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
-        removeAfterBackupEnabled = isEnabled
     }
 
     func requestStopTransfer() {}

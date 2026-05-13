@@ -400,7 +400,7 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
         message: "Connected."
     )
     var permissionSummary = PermissionSummary.demo
-    var removeAfterBackupEnabled = false
+    var permissionService: PermissionService = TransferSessionPreviewPermissionService()
     var route: AppRoute = .transfer
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
@@ -418,10 +418,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
         _ = page
         _ = result
         _ = target
-    }
-
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
-        removeAfterBackupEnabled = isEnabled
     }
 
     func requestStopTransfer() {}
@@ -492,5 +488,21 @@ private actor TransferSessionPreviewTransferService: TransferService {
     }
 
     func handleMemoryWarning() async {}
+}
+
+private actor TransferSessionPreviewPermissionService: PermissionService {
+    private var isRemoveAfterBackupEnabled = false
+
+    func loadPermissionSummary() async -> PermissionSummary {
+        .demo
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
+    }
 }
 #endif

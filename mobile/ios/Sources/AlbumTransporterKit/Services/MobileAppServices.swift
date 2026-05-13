@@ -36,6 +36,8 @@ protocol QRCodePayloadDecoding: Sendable {
 
 protocol PermissionService: Sendable {
     func loadPermissionSummary() async -> PermissionSummary
+    func removeAfterBackupEnabled() async -> Bool
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async
 }
 
 protocol TransferService: Sendable {

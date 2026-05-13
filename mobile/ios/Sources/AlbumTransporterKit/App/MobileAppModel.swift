@@ -7,7 +7,6 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var route: AppRoute = .home
     @Published private(set) var homeSummary = HomeSummary.firstLaunch
     @Published var permissionSummary = PermissionSummary.demo
-    @Published private(set) var removeAfterBackupEnabled = false
     @Published private(set) var pairingStatus = PairingStatus.idle
     @Published private(set) var errorSummary = ErrorSummary.generic
     @Published var scannedQRCodeValue = ""
@@ -95,11 +94,6 @@ final class MobileAppModel: ObservableObject {
         case .permissions:
             switch result {
             case .success:
-                if target == .removeTransferredMedia {
-                    setRemoveAfterBackupEnabled(true)
-                } else if target == .keepOriginals {
-                    setRemoveAfterBackupEnabled(false)
-                }
                 await triggerTransfer()
             case .cancel:
                 let reason = target == .lowBatteryDeclined ? "low_battery_declined" : "permissions_cancelled"
@@ -365,17 +359,10 @@ final class MobileAppModel: ObservableObject {
         persistSnapshot()
     }
 
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
-        guard removeAfterBackupEnabled != isEnabled else {
-            return
-        }
-        removeAfterBackupEnabled = isEnabled
-        persistSnapshot()
-    }
-
     func abortPreflightAndReturnHome(reason: String) async {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
+        await permissionService.setRemoveAfterBackupEnabled(false)
         let interruptionSnapshot = TransferSnapshot(
             transferredCount: 0,
             totalCount: 0,
@@ -528,11 +515,12 @@ final class MobileAppModel: ObservableObject {
         )
         route = .completed
 
+        let isRemoveAfterBackupEnabled = await permissionService.removeAfterBackupEnabled()
         var completionAttributes: MobileTelemetryAttributes = [
             "transfer.transferred_count": .int(snapshot.transferredCount),
             "transfer.total_count": .int(snapshot.totalCount),
             "transfer.failed_count": .int(snapshot.failedCount),
-            "transfer.remove_after_backup_enabled": .bool(removeAfterBackupEnabled)
+            "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
         ]
         if let sessionDuration {
             completionAttributes["transfer.session_duration_seconds"] = .double(sessionDuration)
@@ -571,6 +559,7 @@ final class MobileAppModel: ObservableObject {
         await transferService.stageTransferCompletionState(nil)
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
+        await permissionService.setRemoveAfterBackupEnabled(false)
         errorSummary = .generic
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
@@ -605,6 +594,7 @@ final class MobileAppModel: ObservableObject {
     private func triggerTransfer() async {
         transitionBackupFlow(.transferStarted)
         route = .transfer
+        let isRemoveAfterBackupEnabled = await permissionService.removeAfterBackupEnabled()
         let initialSnapshot = TransferSnapshot(
             transferredCount: 0,
             totalCount: 0,
@@ -622,7 +612,8 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(
             .transferStarted,
             attributes: [
-                "transfer.is_incomplete_library": .bool(permissionSummary.mediaScope != .full)
+                "transfer.is_incomplete_library": .bool(permissionSummary.mediaScope != .full),
+                "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
             ]
         )
         persistSnapshot()
@@ -631,7 +622,7 @@ final class MobileAppModel: ObservableObject {
     private func apply(snapshot: LaunchSnapshot) async {
         homeSummary = snapshot.homeSummary
         permissionSummary = snapshot.permissionSummary
-        removeAfterBackupEnabled = snapshot.removeAfterBackupEnabled
+        await permissionService.setRemoveAfterBackupEnabled(false)
         pairingStatus = snapshot.pairingStatus
         await transferService.stageTransferSnapshot(snapshot.transferSnapshot)
         await transferService.stageTransferCompletionState(nil)
@@ -677,7 +668,6 @@ final class MobileAppModel: ObservableObject {
         let homeSummary = homeSummary
         let permissionSummary = permissionSummary
         let pairingStatus = pairingStatus
-        let removeAfterBackupEnabled = removeAfterBackupEnabled
         let transferService = transferService
         let worker = sideEffectWorker
         Task.detached(priority: .utility) {
@@ -686,8 +676,7 @@ final class MobileAppModel: ObservableObject {
                 homeSummary: homeSummary,
                 permissionSummary: permissionSummary,
                 pairingStatus: pairingStatus,
-                transferSnapshot: transferSnapshot,
-                removeAfterBackupEnabled: removeAfterBackupEnabled
+                transferSnapshot: transferSnapshot
             )
             await worker.persist(snapshot: snapshot)
         }
@@ -777,7 +766,6 @@ final class MobileAppModel: ObservableObject {
         let homeSummary: HomeSummary
         let pairingStatus: PairingStatus
         let permissionSummary: PermissionSummary
-        let removeAfterBackupEnabled: Bool
     }
 
     private func makeTelemetryContextState() -> TelemetryContextState {
@@ -785,8 +773,7 @@ final class MobileAppModel: ObservableObject {
             route: route,
             homeSummary: homeSummary,
             pairingStatus: pairingStatus,
-            permissionSummary: permissionSummary,
-            removeAfterBackupEnabled: removeAfterBackupEnabled
+            permissionSummary: permissionSummary
         )
     }
 
@@ -803,7 +790,6 @@ final class MobileAppModel: ObservableObject {
             "permission.notifications_granted": .bool(contextState.permissionSummary.notificationsGranted),
             "permission.low_battery_warning_needed": .bool(contextState.permissionSummary.lowBatteryWarningNeeded),
             "permission.is_charging": .bool(contextState.permissionSummary.isCharging),
-            "backup.remove_after_backup_enabled": .bool(contextState.removeAfterBackupEnabled),
             "app.has_paired_desktop": .bool(contextState.pairingStatus.desktopName?.isEmpty == false),
             "transfer.transferred_count": .int(transferSnapshot.transferredCount),
             "transfer.total_count": .int(transferSnapshot.totalCount),

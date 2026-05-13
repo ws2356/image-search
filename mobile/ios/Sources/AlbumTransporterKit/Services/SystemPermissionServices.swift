@@ -3,7 +3,9 @@ import Photos
 import AVFoundation
 import UIKit
 
-struct SystemPermissionService: PermissionService {
+actor SystemPermissionService: PermissionService {
+    private var isRemoveAfterBackupEnabled = false
+
     func loadPermissionSummary() async -> PermissionSummary {
         let mediaAuthorization = await currentMediaAuthorization()
         let cameraGranted = currentCameraAuthorization()
@@ -17,6 +19,14 @@ struct SystemPermissionService: PermissionService {
             lowBatteryWarningNeeded: batteryState.lowBatteryWarningNeeded,
             isCharging: batteryState.isCharging
         )
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
     }
 
     private func currentMediaAuthorization() async -> PHAuthorizationStatus {

@@ -86,15 +86,11 @@ final class PageViewModelTests: XCTestCase {
         let viewModel = PermissionsPageViewModel(model: model)
 
         XCTAssertEqual(viewModel.summary, model.permissionSummary)
-        XCTAssertEqual(viewModel.removeAfterBackupEnabled, model.removeAfterBackupEnabled)
 
-        viewModel.setRemoveAfterBackupEnabled(true)
         await viewModel.startPreflight()
         XCTAssertTrue(viewModel.isShowingMediaAccessAlert)
         await viewModel.goBack()
 
-        XCTAssertEqual(model.setRemoveAfterBackupEnabledCallCount, 1)
-        XCTAssertTrue(model.removeAfterBackupEnabled)
         let loadCallCount = await model.permissionServiceLoadCallCount()
         XCTAssertEqual(loadCallCount, 1)
         XCTAssertEqual(model.beginTelemetrySpanCallCount, 1)
@@ -110,7 +106,9 @@ final class PageViewModelTests: XCTestCase {
             pollingIntervalNanoseconds: 10_000_000
         )
 
-        XCTAssertEqual(viewModel.snapshot, .demo)
+        XCTAssertEqual(viewModel.snapshot.transferredCount, 0)
+        XCTAssertEqual(viewModel.snapshot.totalCount, 0)
+        XCTAssertEqual(viewModel.snapshot.transport, .lan)
 
         viewModel.requestStopTransfer()
         let expectation = expectation(description: "stop transfer routed via page result")
@@ -263,7 +261,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
-    var removeAfterBackupEnabled = false
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
     var route = AppRoute.home
@@ -283,7 +280,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var returnHomeCallCount = 0
     var scanFailureCallCount = 0
     var pairingFailureCallCount = 0
-    var setRemoveAfterBackupEnabledCallCount = 0
     var requestStopTransferCallCount = 0
     var beginTelemetrySpanCallCount = 0
     var recordedTelemetryEvents: [MobileTelemetryEvent] = []
@@ -306,11 +302,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
             }
         case .permissions:
             if result == .success {
-                if target == .removeTransferredMedia {
-                    setRemoveAfterBackupEnabled(true)
-                } else if target == .keepOriginals {
-                    setRemoveAfterBackupEnabled(false)
-                }
             } else if result == .cancel {
                 returnHomeCallCount += 1
             }
@@ -343,13 +334,12 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         }
     }
 
-    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) {
-        removeAfterBackupEnabled = isEnabled
-        setRemoveAfterBackupEnabledCallCount += 1
-    }
-
     func requestStopTransfer() {
         requestStopTransferCallCount += 1
+    }
+
+    func shouldRemoveTransferredMediaAfterBackup() -> Bool {
+        false
     }
 
     func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
@@ -389,6 +379,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
 private actor StubPermissionService: PermissionService {
     private var summary: PermissionSummary
     private var loadPermissionSummaryCallCount = 0
+    private var isRemoveAfterBackupEnabled = false
 
     init(summary: PermissionSummary) {
         self.summary = summary
@@ -401,6 +392,14 @@ private actor StubPermissionService: PermissionService {
 
     func loadCallCount() -> Int {
         loadPermissionSummaryCallCount
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
     }
 }
 

@@ -33,11 +33,20 @@ struct DemoPairingService: PairingService {
     }
 }
 
-struct DemoPermissionService: PermissionService {
+actor DemoPermissionService: PermissionService {
     var summary: PermissionSummary = .demo
+    private var isRemoveAfterBackupEnabled = false
 
     func loadPermissionSummary() async -> PermissionSummary {
         summary
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
     }
 }
 
