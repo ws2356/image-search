@@ -118,6 +118,40 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
+    func test_permissions_page_view_model_advances_prompts_in_order() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = PermissionsPageViewModel(model: model, telemetryService: telemetryService)
+
+        await viewModel.startPreflight()
+        XCTAssertTrue(viewModel.isShowingMediaAccessAlert)
+        XCTAssertFalse(viewModel.isShowingLowBatteryWarning)
+        XCTAssertFalse(viewModel.isShowingRemoveAfterBackupPrompt)
+
+        await viewModel.continueAfterMediaAccessUpdate()
+        XCTAssertFalse(viewModel.isShowingMediaAccessAlert)
+        XCTAssertTrue(viewModel.isShowingLowBatteryWarning)
+        XCTAssertFalse(viewModel.isShowingRemoveAfterBackupPrompt)
+
+        await viewModel.continuePastLowBattery()
+        XCTAssertFalse(viewModel.isShowingLowBatteryWarning)
+        XCTAssertTrue(viewModel.isShowingRemoveAfterBackupPrompt)
+    }
+
+    func test_permissions_page_view_model_ignores_repeated_preflight_start_while_prompt_active() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = PermissionsPageViewModel(model: model, telemetryService: telemetryService)
+
+        await viewModel.startPreflight()
+        await viewModel.startPreflight()
+
+        let loadCallCount = await model.permissionServiceLoadCallCount()
+        XCTAssertEqual(loadCallCount, 1)
+        XCTAssertEqual(telemetryService.beginSpanCallCount, 1)
+        XCTAssertTrue(viewModel.isShowingMediaAccessAlert)
+    }
+
     func test_transfer_page_view_model_maps_snapshot_and_stop_action() {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
