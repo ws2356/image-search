@@ -5,6 +5,7 @@ import UIKit
 
 @MainActor
 public struct AlbumTransporterRootView: View {
+    private let container: Container
     @StateObject private var model: MobileAppModel
     @StateObject private var homeViewModel: HomePageViewModel
     @StateObject private var permissionsViewModel: PermissionsPageViewModel
@@ -16,19 +17,33 @@ public struct AlbumTransporterRootView: View {
     }
 
     private init(container: Container) {
+        self.container = container
         let model = container.mobileAppModel()
+        let telemetryService = container.telemetryService()
         _model = StateObject(wrappedValue: model)
         _homeViewModel = StateObject(
-            wrappedValue: HomePageViewModel(model: model)
+            wrappedValue: HomePageViewModel(
+                model: model,
+                telemetryService: telemetryService
+            )
         )
         _permissionsViewModel = StateObject(
-            wrappedValue: PermissionsPageViewModel(model: model)
+            wrappedValue: PermissionsPageViewModel(
+                model: model,
+                telemetryService: telemetryService
+            )
         )
         _transferViewModel = StateObject(
-            wrappedValue: TransferPageViewModel(model: model)
+            wrappedValue: TransferPageViewModel(
+                model: model,
+                telemetryService: telemetryService
+            )
         )
         _completionViewModel = StateObject(
-            wrappedValue: CompletionPageViewModel(model: model)
+            wrappedValue: CompletionPageViewModel(
+                model: model,
+                telemetryService: telemetryService
+            )
         )
     }
 
@@ -103,10 +118,16 @@ public struct AlbumTransporterRootView: View {
         case .home:
             HomeView(viewModel: homeViewModel)
         case .scan:
-            let scanningViewModel = ScanningPageViewModel(model: model)
+            let scanningViewModel = ScanningPageViewModel(
+                model: model,
+                telemetryService: container.telemetryService()
+            )
             ScanningPageView(viewModel: scanningViewModel)
         case .pair:
-            let pairingViewModel = PairingPageViewModel(model: model)
+            let pairingViewModel = PairingPageViewModel(
+                model: model,
+                telemetryService: container.telemetryService()
+            )
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
             PermissionsGateView(viewModel: permissionsViewModel)
@@ -115,7 +136,10 @@ public struct AlbumTransporterRootView: View {
         case .completed:
             CompletionStateView(viewModel: completionViewModel)
         case .error:
-            let errorViewModel = ErrorPageViewModel(model: model)
+            let errorViewModel = ErrorPageViewModel(
+                model: model,
+                telemetryService: container.telemetryService()
+            )
             ErrorStateView(viewModel: errorViewModel)
         }
     }

@@ -128,18 +128,24 @@ private struct PermissionsPreflightCard: View {
 #if DEBUG
 @available(iOS 17.0, *)
 #Preview("Limited Library Prompt") {
+    let model = PermissionsGatePreviewModel(summary: .demo)
+    let telemetryService = PermissionsGatePreviewTelemetryService()
     PermissionsGateView(
         viewModel: PermissionsPageViewModel(
-            model: PermissionsGatePreviewModel(summary: .demo)
+            model: model,
+            telemetryService: telemetryService
         )
     )
 }
 
 @available(iOS 17.0, *)
 #Preview("Low Battery Prompt") {
+    let model = PermissionsGatePreviewModel(summary: .previewLowBattery)
+    let telemetryService = PermissionsGatePreviewTelemetryService()
     PermissionsGateView(
         viewModel: PermissionsPageViewModel(
-            model: PermissionsGatePreviewModel(summary: .previewLowBattery)
+            model: model,
+            telemetryService: telemetryService
         )
     )
 }
@@ -186,29 +192,10 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
 
     func requestStopTransfer() {}
 
-    func recordInteraction(name: String, location: String) {
-        _ = name
-        _ = location
-    }
-
-    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {
-        _ = span
-        _ = attributes
-    }
-
-    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {
-        _ = event
-        _ = attributes
-    }
-
     func persistSnapshot() {}
 
     func abortPreflightAndReturnHome(reason: String) async {
         _ = reason
-    }
-
-    func recordDialogView(name: String) {
-        _ = name
     }
 }
 
@@ -279,4 +266,21 @@ private actor PermissionsGatePreviewTransferService: TransferService {
 
     func handleMemoryWarning() async {}
 }
+
+@MainActor
+private final class PermissionsGatePreviewTelemetryService: TelemetryService {
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {}
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {}
+    func endTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) {}
+    func incrementTelemetryMetric(_ metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) {}
+    func beginBackupSessionTelemetry() {}
+    func recordDialogView(name: String) {}
+    func recordInteraction(name: String, location: String) {}
+    func forceFlush() {}
+}
+
 #endif

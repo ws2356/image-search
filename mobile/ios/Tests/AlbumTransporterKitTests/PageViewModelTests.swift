@@ -4,8 +4,9 @@ import XCTest
 @MainActor
 final class PageViewModelTests: XCTestCase {
     func test_home_page_view_model_maps_summary_and_actions() async {
-        let model = StubPageModel()
-        let viewModel = HomePageViewModel(model: model)
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = HomePageViewModel(model: model, telemetryService: telemetryService)
 
         await viewModel.refreshSummary()
         XCTAssertEqual(viewModel.summary, model.homeSummary)
@@ -16,7 +17,8 @@ final class PageViewModelTests: XCTestCase {
     }
 
     func test_home_page_view_model_renders_stopped_transfer_summary_on_refresh() async {
-        let model = StubPageModel()
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.backupFlowState = .transferStopped
         model.pairingStatus = PairingStatus(
             phase: .paired,
@@ -38,7 +40,7 @@ final class PageViewModelTests: XCTestCase {
                 isIncompleteLibrary: false
             )
         )
-        let viewModel = HomePageViewModel(model: model)
+        let viewModel = HomePageViewModel(model: model, telemetryService: telemetryService)
 
         await viewModel.refreshSummary()
 
@@ -51,8 +53,9 @@ final class PageViewModelTests: XCTestCase {
     }
 
     func test_scanning_page_view_model_maps_status_binding_and_actions() async {
-        let model = StubPageModel()
-        let viewModel = ScanningPageViewModel(model: model)
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = ScanningPageViewModel(model: model, telemetryService: telemetryService)
 
         XCTAssertEqual(viewModel.status, model.pairingStatus)
         XCTAssertEqual(model.scannedQRCodeValue, "")
@@ -69,8 +72,9 @@ final class PageViewModelTests: XCTestCase {
     }
 
     func test_pairing_page_view_model_maps_status_binding_and_actions() async {
-        let model = StubPageModel()
-        let viewModel = PairingPageViewModel(model: model)
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = PairingPageViewModel(model: model, telemetryService: telemetryService)
 
         XCTAssertEqual(viewModel.status, model.pairingStatus)
 
@@ -82,8 +86,9 @@ final class PageViewModelTests: XCTestCase {
     }
 
     func test_permissions_page_view_model_maps_summary_and_actions() async {
-        let model = StubPageModel()
-        let viewModel = PermissionsPageViewModel(model: model)
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = PermissionsPageViewModel(model: model, telemetryService: telemetryService)
 
         XCTAssertEqual(viewModel.summary, model.permissionSummary)
 
@@ -93,16 +98,18 @@ final class PageViewModelTests: XCTestCase {
 
         let loadCallCount = await model.permissionServiceLoadCallCount()
         XCTAssertEqual(loadCallCount, 1)
-        XCTAssertEqual(model.beginTelemetrySpanCallCount, 1)
-        XCTAssertEqual(model.recordedTelemetryEvents.first, .backupPreflightStarted)
+        XCTAssertEqual(telemetryService.beginSpanCallCount, 1)
+        XCTAssertEqual(telemetryService.recordedEvents.first, .backupPreflightStarted)
         XCTAssertFalse(viewModel.isShowingMediaAccessAlert)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
     func test_transfer_page_view_model_maps_snapshot_and_stop_action() {
-        let model = StubPageModel()
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
         let viewModel = TransferPageViewModel(
             model: model,
+            telemetryService: telemetryService,
             pollingIntervalNanoseconds: 10_000_000
         )
 
@@ -121,7 +128,8 @@ final class PageViewModelTests: XCTestCase {
     }
 
     func test_transfer_page_view_model_applies_live_progress_callbacks() async {
-        let model = StubPageModel()
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
         await model.transferServiceActor.configureProgressSequence(
             initialSnapshot: TransferSnapshot(
                 transferredCount: 1,
@@ -145,7 +153,7 @@ final class PageViewModelTests: XCTestCase {
             ),
             callbackDelayNanoseconds: 200_000_000
         )
-        let viewModel = TransferPageViewModel(model: model)
+        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
 
         let transferTask = Task { @MainActor in
             await viewModel.orchestrateTransfer()
@@ -160,7 +168,8 @@ final class PageViewModelTests: XCTestCase {
     }
 
     func test_transfer_page_view_model_stages_completion_duration() async {
-        let model = StubPageModel()
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
         await model.transferServiceActor.configureProgressSequence(
             initialSnapshot: TransferSnapshot(
                 transferredCount: 1,
@@ -185,7 +194,7 @@ final class PageViewModelTests: XCTestCase {
             callbackDelayNanoseconds: 200_000_000
         )
         model.route = .transfer
-        let viewModel = TransferPageViewModel(model: model)
+        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
 
         await viewModel.orchestrateTransfer()
 
@@ -195,9 +204,10 @@ final class PageViewModelTests: XCTestCase {
     }
 
     func test_transfer_page_view_model_allows_second_backup_session() async {
-        let model = StubPageModel()
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .transfer
-        let viewModel = TransferPageViewModel(model: model)
+        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
 
         await model.transferServiceActor.configureProgressSequence(
             initialSnapshot: TransferSnapshot(
@@ -269,6 +279,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var isShowingRemoveAfterBackupPrompt = false
     var mediaAccessAlertMessage = "Media access recommended."
     let permissionServiceActor = StubPermissionService(summary: .demo)
+    let telemetryServiceActor: StubTelemetryService
     let transferServiceActor = StubTransferService()
     var permissionService: PermissionService { permissionServiceActor }
     var transferServiceForPageModels: TransferService { transferServiceActor }
@@ -281,8 +292,10 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var scanFailureCallCount = 0
     var pairingFailureCallCount = 0
     var requestStopTransferCallCount = 0
-    var beginTelemetrySpanCallCount = 0
-    var recordedTelemetryEvents: [MobileTelemetryEvent] = []
+
+    init(telemetryServiceActor: StubTelemetryService = StubTelemetryService()) {
+        self.telemetryServiceActor = telemetryServiceActor
+    }
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
         switch page {
@@ -338,10 +351,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         requestStopTransferCallCount += 1
     }
 
-    func shouldRemoveTransferredMediaAfterBackup() -> Bool {
-        false
-    }
-
     func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
         await transferServiceActor.stageTransferSnapshot(currentSnapshot)
     }
@@ -354,26 +363,12 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         await permissionServiceActor.loadCallCount()
     }
 
-    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {
-        _ = span
-        _ = attributes
-        beginTelemetrySpanCallCount += 1
-    }
-
-    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {
-        _ = attributes
-        recordedTelemetryEvents.append(event)
-    }
-
     func persistSnapshot() {}
 
     func abortPreflightAndReturnHome(reason: String) async {
         _ = reason
     }
 
-    func recordDialogView(name: String) {}
-
-    func recordInteraction(name: String, location: String) {}
 }
 
 private actor StubPermissionService: PermissionService {
@@ -401,6 +396,36 @@ private actor StubPermissionService: PermissionService {
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
         isRemoveAfterBackupEnabled = isEnabled
     }
+}
+
+@MainActor
+private final class StubTelemetryService: TelemetryService {
+    var beginSpanCallCount = 0
+    var recordedEvents: [MobileTelemetryEvent] = []
+
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {
+        _ = attributes
+        recordedEvents.append(event)
+    }
+
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {
+        _ = span
+        _ = attributes
+        beginSpanCallCount += 1
+    }
+
+    func endTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) {}
+
+    func incrementTelemetryMetric(_ metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) {}
+
+    func beginBackupSessionTelemetry() {}
+    func recordDialogView(name: String) {}
+    func recordInteraction(name: String, location: String) {}
+    func forceFlush() {}
 }
 
 private actor StubTransferService: TransferService {

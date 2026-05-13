@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 final class PermissionsPageViewModel: ObservableObject {
     private let model: any PermissionsPageModeling
+    private let telemetryService: TelemetryService
 
     @Published var isShowingLowBatteryWarning = false
     @Published var isShowingMediaAccessAlert = false
@@ -16,8 +17,9 @@ final class PermissionsPageViewModel: ObservableObject {
     private var isAwaitingRemoveAfterBackupDecision = false
     private var isRunningPermissionsPreflight = false
 
-    init(model: any PermissionsPageModeling) {
+    init(model: any PermissionsPageModeling, telemetryService: TelemetryService) {
         self.model = model
+        self.telemetryService = telemetryService
     }
 
     var summary: PermissionSummary {
@@ -33,14 +35,14 @@ final class PermissionsPageViewModel: ObservableObject {
 
         let permissionSummary = await model.permissionService.loadPermissionSummary()
         model.permissionSummary = permissionSummary
-        model.beginTelemetrySpan(.backupPreflight, attributes: [:])
-        model.recordTelemetry(.backupPreflightStarted, attributes: [:])
-        model.recordInteraction(name: "start_backup_tapped", location: "permissions")
+        telemetryService.beginTelemetrySpan(.backupPreflight, attributes: [:])
+        telemetryService.recordTelemetry(.backupPreflightStarted, attributes: [:])
+        telemetryService.recordInteraction(name: "start_backup_tapped", location: "permissions")
 
         guard permissionSummary.mediaScope == .full else {
             isShowingMediaAccessAlert = true
             isAwaitingMediaAccessDecision = true
-            model.recordTelemetry(
+            telemetryService.recordTelemetry(
                 .mediaAccessPromptShown,
                 attributes: [
                     "permission.excluded_category_present": .bool(
@@ -61,15 +63,15 @@ final class PermissionsPageViewModel: ObservableObject {
     }
 
     func recordLowBatteryDialogPresented() {
-        model.recordDialogView(name: "low_battery_warning")
+        telemetryService.recordDialogView(name: "low_battery_warning")
     }
 
     func recordMediaAccessDialogPresented() {
-        model.recordDialogView(name: "media_access_alert")
+        telemetryService.recordDialogView(name: "media_access_alert")
     }
 
     func recordRemoveAfterBackupDialogPresented() {
-        model.recordDialogView(name: "remove_after_backup_prompt")
+        telemetryService.recordDialogView(name: "remove_after_backup_prompt")
     }
 
     func continuePastLowBattery() async {
@@ -78,8 +80,8 @@ final class PermissionsPageViewModel: ObservableObject {
         }
         isAwaitingLowBatteryDecision = false
         isShowingLowBatteryWarning = false
-        model.recordInteraction(name: "continue_anyway_tapped", location: "low_battery_warning")
-        model.recordTelemetry(.lowBatteryContinued, attributes: [:])
+        telemetryService.recordInteraction(name: "continue_anyway_tapped", location: "low_battery_warning")
+        telemetryService.recordTelemetry(.lowBatteryContinued, attributes: [:])
         presentRemoveAfterBackupPrompt()
     }
 
@@ -89,14 +91,14 @@ final class PermissionsPageViewModel: ObservableObject {
         }
         isAwaitingLowBatteryDecision = false
         isShowingLowBatteryWarning = false
-        model.recordInteraction(name: "not_now_tapped", location: "low_battery_warning")
-        model.recordTelemetry(.lowBatteryCanceled, attributes: [:])
+        telemetryService.recordInteraction(name: "not_now_tapped", location: "low_battery_warning")
+        telemetryService.recordTelemetry(.lowBatteryCanceled, attributes: [:])
         resetPromptState()
         await model.handleResultForPage(.permissions, result: .cancel, target: .lowBatteryDeclined)
     }
 
     func updateMediaAccessTapped() {
-        model.recordInteraction(name: "update_media_access_tapped", location: "media_access_alert")
+        telemetryService.recordInteraction(name: "update_media_access_tapped", location: "media_access_alert")
     }
 
     func continueAfterMediaAccessUpdate() async {
@@ -104,7 +106,7 @@ final class PermissionsPageViewModel: ObservableObject {
     }
 
     func continueBackupFromMediaAccessNotNow() async {
-        model.recordInteraction(name: "not_now_tapped", location: "media_access_alert")
+        telemetryService.recordInteraction(name: "not_now_tapped", location: "media_access_alert")
         await continueBackupFromMediaAccess()
     }
 
@@ -115,11 +117,11 @@ final class PermissionsPageViewModel: ObservableObject {
         isAwaitingRemoveAfterBackupDecision = false
         isShowingRemoveAfterBackupPrompt = false
         await model.permissionService.setRemoveAfterBackupEnabled(shouldRemove)
-        model.recordInteraction(
+        telemetryService.recordInteraction(
             name: shouldRemove ? "remove_after_backup_selected" : "keep_originals_selected",
             location: "remove_after_backup_prompt"
         )
-        model.recordTelemetry(
+        telemetryService.recordTelemetry(
             .removeAfterBackupPreferenceSelected,
             attributes: [
                 "backup.remove_after_backup_enabled": .bool(shouldRemove)
@@ -139,7 +141,7 @@ final class PermissionsPageViewModel: ObservableObject {
         }
         isAwaitingMediaAccessDecision = false
         isShowingMediaAccessAlert = false
-        model.recordTelemetry(.mediaAccessContinued, attributes: [:])
+        telemetryService.recordTelemetry(.mediaAccessContinued, attributes: [:])
         await continueBackupPreflight()
     }
 
@@ -147,7 +149,7 @@ final class PermissionsPageViewModel: ObservableObject {
         if model.permissionSummary.lowBatteryWarningNeeded && !model.permissionSummary.isCharging {
             isShowingLowBatteryWarning = true
             isAwaitingLowBatteryDecision = true
-            model.recordTelemetry(.lowBatteryPromptShown, attributes: [:])
+            telemetryService.recordTelemetry(.lowBatteryPromptShown, attributes: [:])
             model.persistSnapshot()
             return
         }
@@ -158,7 +160,7 @@ final class PermissionsPageViewModel: ObservableObject {
     private func presentRemoveAfterBackupPrompt() {
         isShowingRemoveAfterBackupPrompt = true
         isAwaitingRemoveAfterBackupDecision = true
-        model.recordTelemetry(.removeAfterBackupPromptShown, attributes: [:])
+        telemetryService.recordTelemetry(.removeAfterBackupPromptShown, attributes: [:])
         model.persistSnapshot()
     }
 

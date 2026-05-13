@@ -4,15 +4,17 @@ import Combine
 @MainActor
 final class HomePageViewModel: ObservableObject {
     private let model: any AppPageModeling
+    private let telemetryService: TelemetryService
     @Published private(set) var summary: HomeSummary
 
-    init(model: any AppPageModeling) {
+    init(model: any AppPageModeling, telemetryService: TelemetryService) {
         self.model = model
+        self.telemetryService = telemetryService
         self.summary = model.homeSummary
     }
 
     func handlePrimaryActionTapped() async {
-        model.recordInteraction(name: "primary_action_tapped", location: "home")
+        telemetryService.recordInteraction(name: "primary_action_tapped", location: "home")
         await model.handleResultForPage(.home, result: .success, target: nil)
     }
 

@@ -97,6 +97,25 @@ extension Container {
     }
 
     @MainActor
+    var telemetryContextProvider: Factory<TelemetryContextProvider> {
+        self { @MainActor in DefaultTelemetryContextProvider() }
+            .singleton
+    }
+
+    @MainActor
+    var telemetryService: Factory<TelemetryService> {
+        self {
+            @MainActor in
+            DefaultTelemetryService(
+                transferService: self.transferService(),
+                telemetryClient: self.telemetryClient(),
+                contextProvider: self.telemetryContextProvider()
+            )
+        }
+        .singleton
+    }
+
+    @MainActor
     var mobileAppModel: Factory<MobileAppModel> {
         self {
             @MainActor in
@@ -106,7 +125,8 @@ extension Container {
                 pairingService: self.pairingService(),
                 permissionService: self.permissionService(),
                 transferService: self.transferService(),
-                telemetryClient: self.telemetryClient()
+                telemetryService: self.telemetryService(),
+                telemetryContextProvider: self.telemetryContextProvider()
             )
         }
         .singleton

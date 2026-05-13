@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class TransferPageViewModel: ObservableObject {
     private let model: any TransferPageModeling
+    private let telemetryService: TelemetryService
     private let pollingIntervalNanoseconds: UInt64
     private var modelChangeCancellable: AnyCancellable?
     private var transferPollingTask: Task<Void, Never>?
@@ -14,9 +15,11 @@ final class TransferPageViewModel: ObservableObject {
 
     init(
         model: any TransferPageModeling,
+        telemetryService: TelemetryService,
         pollingIntervalNanoseconds: UInt64 = 1_000_000_000
     ) {
         self.model = model
+        self.telemetryService = telemetryService
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
         self.snapshot = TransferSnapshot(
             transferredCount: 0,
@@ -46,17 +49,17 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     func requestStopTransfer() {
-        model.recordInteraction(name: "stop_backup_tapped", location: "transfer")
+        telemetryService.recordInteraction(name: "stop_backup_tapped", location: "transfer")
         model.requestStopTransfer()
         isShowingStopConfirmation = true
     }
 
     func recordStopConfirmationPresented() {
-        model.recordDialogView(name: "stop_confirmation")
+        telemetryService.recordDialogView(name: "stop_confirmation")
     }
 
     func confirmStopTransfer() async {
-        model.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
+        telemetryService.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
         isShowingStopConfirmation = false
         let currentSnapshot = await model.transferServiceForTransferView.progressSnapshot() ?? snapshot
         _ = await model.transferServiceForTransferView.stopTransfer(current: currentSnapshot)
@@ -109,7 +112,7 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     func keepBackingUp() {
-        model.recordInteraction(name: "stop_cancelled", location: "stop_confirmation")
+        telemetryService.recordInteraction(name: "stop_cancelled", location: "stop_confirmation")
         isShowingStopConfirmation = false
     }
 

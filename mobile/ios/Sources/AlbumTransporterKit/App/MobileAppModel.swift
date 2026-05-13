@@ -4,10 +4,18 @@ import Combine
 
 @MainActor
 final class MobileAppModel: ObservableObject {
-    @Published private(set) var route: AppRoute = .home
-    @Published private(set) var homeSummary = HomeSummary.firstLaunch
-    @Published var permissionSummary = PermissionSummary.demo
-    @Published private(set) var pairingStatus = PairingStatus.idle
+    @Published private(set) var route: AppRoute = .home {
+        didSet { pushTelemetryContext() }
+    }
+    @Published private(set) var homeSummary = HomeSummary.firstLaunch {
+        didSet { pushTelemetryContext() }
+    }
+    @Published var permissionSummary = PermissionSummary.demo {
+        didSet { pushTelemetryContext() }
+    }
+    @Published private(set) var pairingStatus = PairingStatus.idle {
+        didSet { pushTelemetryContext() }
+    }
     @Published private(set) var errorSummary = ErrorSummary.generic
     @Published var scannedQRCodeValue = ""
 
@@ -23,6 +31,8 @@ final class MobileAppModel: ObservableObject {
     let permissionService: PermissionService
     private let transferService: TransferService
     private let sideEffectWorker: MobileAppSideEffectWorker
+    private let telemetryContextProvider: TelemetryContextProvider
+    private let telemetryService: TelemetryService
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
     private var memoryWarningObservationTask: Task<Void, Never>?
     private var appLifecycleObservationTask: Task<Void, Never>?
@@ -33,17 +43,20 @@ final class MobileAppModel: ObservableObject {
         pairingService: PairingService,
         permissionService: PermissionService,
         transferService: TransferService,
-        telemetryClient: TelemetryClient
+        telemetryService: TelemetryService,
+        telemetryContextProvider: TelemetryContextProvider
     ) {
         self.stateStore = stateStore
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
         self.pairingService = pairingService
         self.permissionService = permissionService
         self.transferService = transferService
+        self.telemetryContextProvider = telemetryContextProvider
+        self.telemetryService = telemetryService
         self.sideEffectWorker = MobileAppSideEffectWorker(
-            stateStore: stateStore,
-            telemetryClient: telemetryClient
+            stateStore: stateStore
         )
+        pushTelemetryContext()
         configureMemoryWarningObservation()
         configureAppLifecycleObservation()
     }
@@ -686,36 +699,14 @@ final class MobileAppModel: ObservableObject {
         _ event: MobileTelemetryEvent,
         attributes: MobileTelemetryAttributes = [:]
     ) {
-        let contextState = makeTelemetryContextState()
-        let transferService = transferService
-        let worker = sideEffectWorker
-        Task {
-            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
-                extraAttributes: attributes,
-                contextState: contextState,
-                transferSnapshot: transferSnapshot
-            )
-            await worker.record(event: event, attributes: mergedAttributes)
-        }
+        telemetryService.recordTelemetry(event, attributes: attributes)
     }
 
     func beginTelemetrySpan(
         _ span: MobileTelemetrySpan,
         attributes: MobileTelemetryAttributes = [:]
     ) {
-        let contextState = makeTelemetryContextState()
-        let transferService = transferService
-        let worker = sideEffectWorker
-        Task {
-            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
-                extraAttributes: attributes,
-                contextState: contextState,
-                transferSnapshot: transferSnapshot
-            )
-            await worker.begin(span: span, attributes: mergedAttributes)
-        }
+        telemetryService.beginTelemetrySpan(span, attributes: attributes)
     }
 
     private func endTelemetrySpan(
@@ -723,18 +714,7 @@ final class MobileAppModel: ObservableObject {
         attributes: MobileTelemetryAttributes = [:],
         status: MobileTelemetrySpanStatus? = nil
     ) {
-        let contextState = makeTelemetryContextState()
-        let transferService = transferService
-        let worker = sideEffectWorker
-        Task {
-            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
-                extraAttributes: attributes,
-                contextState: contextState,
-                transferSnapshot: transferSnapshot
-            )
-            await worker.end(span: span, attributes: mergedAttributes, status: status)
-        }
+        telemetryService.endTelemetrySpan(span, attributes: attributes, status: status)
     }
 
     private func incrementTelemetryMetric(
@@ -742,34 +722,15 @@ final class MobileAppModel: ObservableObject {
         by value: Int = 1,
         attributes: MobileTelemetryAttributes = [:]
     ) {
-        let contextState = makeTelemetryContextState()
-        let transferService = transferService
-        let worker = sideEffectWorker
-        Task {
-            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
-                extraAttributes: attributes,
-                contextState: contextState,
-                transferSnapshot: transferSnapshot
-            )
-            await worker.increment(metric: metric, by: value, attributes: mergedAttributes)
-        }
+        telemetryService.incrementTelemetryMetric(metric, by: value, attributes: attributes)
     }
 
     private func beginBackupSessionTelemetry() {
-        beginTelemetrySpan(.backupSession)
-        incrementTelemetryMetric(.backupAttempts)
+        telemetryService.beginBackupSessionTelemetry()
     }
 
-    private struct TelemetryContextState {
-        let route: AppRoute
-        let homeSummary: HomeSummary
-        let pairingStatus: PairingStatus
-        let permissionSummary: PermissionSummary
-    }
-
-    private func makeTelemetryContextState() -> TelemetryContextState {
-        TelemetryContextState(
+    private func makeTelemetryContext() -> TelemetryContext {
+        TelemetryContext(
             route: route,
             homeSummary: homeSummary,
             pairingStatus: pairingStatus,
@@ -777,53 +738,8 @@ final class MobileAppModel: ObservableObject {
         )
     }
 
-    private func telemetryContextAttributes(
-        contextState: TelemetryContextState,
-        transferSnapshot: TransferSnapshot
-    ) -> MobileTelemetryAttributes {
-        var attributes: MobileTelemetryAttributes = [
-            "app.route": .string(contextState.route.rawValue),
-            "backup.flow_state": .string(contextState.pairingStatus.backupFlowState.rawValue),
-            "pairing.phase": .string(contextState.pairingStatus.phase.rawValue),
-            "permission.media_scope": .string(contextState.permissionSummary.mediaScope.rawValue),
-            "permission.camera_granted": .bool(contextState.permissionSummary.cameraGranted),
-            "permission.notifications_granted": .bool(contextState.permissionSummary.notificationsGranted),
-            "permission.low_battery_warning_needed": .bool(contextState.permissionSummary.lowBatteryWarningNeeded),
-            "permission.is_charging": .bool(contextState.permissionSummary.isCharging),
-            "app.has_paired_desktop": .bool(contextState.pairingStatus.desktopName?.isEmpty == false),
-            "transfer.transferred_count": .int(transferSnapshot.transferredCount),
-            "transfer.total_count": .int(transferSnapshot.totalCount),
-            "transfer.failed_count": .int(transferSnapshot.failedCount)
-        ]
-        if let transport = contextState.pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
-            attributes["transfer.transport"] = .string(transport.rawValue)
-        }
-        if let sessionID = contextState.pairingStatus.sessionID, !sessionID.isEmpty {
-            attributes["correlation.session_id"] = .string(sessionID)
-        }
-        if let pendingItemCount = contextState.homeSummary.pendingItemCount {
-            attributes["home.pending_item_count"] = .int(pendingItemCount)
-        }
-        if let desktopName = contextState.pairingStatus.desktopName, !desktopName.isEmpty {
-            attributes["pairing.desktop_name_present"] = .bool(true)
-            attributes["pairing.desktop_name_length"] = .int(desktopName.count)
-        }
-        return attributes
-    }
-
-    private func mergedTelemetryAttributes(
-        extraAttributes: MobileTelemetryAttributes,
-        contextState: TelemetryContextState,
-        transferSnapshot: TransferSnapshot
-    ) -> MobileTelemetryAttributes {
-        var mergedAttributes = telemetryContextAttributes(
-            contextState: contextState,
-            transferSnapshot: transferSnapshot
-        )
-        for (key, value) in extraAttributes {
-            mergedAttributes[key] = value
-        }
-        return mergedAttributes
+    private func pushTelemetryContext() {
+        telemetryContextProvider.updateContext(makeTelemetryContext())
     }
 
     func recordPageView(name: String) {
@@ -837,30 +753,15 @@ final class MobileAppModel: ObservableObject {
     }
 
     func recordDialogView(name: String) {
-        recordTelemetry(
-            .dialogViewed,
-            attributes: [
-                "ui.view.kind": .string("dialog"),
-                "ui.view.name": .string(name)
-            ]
-        )
+        telemetryService.recordDialogView(name: name)
     }
 
     func recordInteraction(name: String, location: String) {
-        recordTelemetry(
-            .interactionTriggered,
-            attributes: [
-                "ui.interaction.name": .string(name),
-                "ui.interaction.location": .string(location)
-            ]
-        )
+        telemetryService.recordInteraction(name: name, location: location)
     }
 
     private func flushTelemetry() {
-        let worker = sideEffectWorker
-        Task.detached(priority: .utility) {
-            await worker.forceFlush()
-        }
+        telemetryService.forceFlush()
     }
 
     private func configureMemoryWarningObservation() {
@@ -957,42 +858,12 @@ final class MobileAppModel: ObservableObject {
 
 private actor MobileAppSideEffectWorker {
     private let stateStore: AppStateStore
-    private let telemetryClient: TelemetryClient
 
-    init(stateStore: AppStateStore, telemetryClient: TelemetryClient) {
+    init(stateStore: AppStateStore) {
         self.stateStore = stateStore
-        self.telemetryClient = telemetryClient
     }
 
     func persist(snapshot: LaunchSnapshot) async {
         await stateStore.saveLaunchSnapshot(snapshot)
-    }
-
-    func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
-        await telemetryClient.record(event: event, attributes: attributes)
-    }
-
-    func begin(span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) async {
-        await telemetryClient.begin(span: span, attributes: attributes)
-    }
-
-    func end(
-        span: MobileTelemetrySpan,
-        attributes: MobileTelemetryAttributes,
-        status: MobileTelemetrySpanStatus?
-    ) async {
-        await telemetryClient.end(span: span, attributes: attributes, status: status)
-    }
-
-    func increment(
-        metric: MobileTelemetryMetric,
-        by value: Int,
-        attributes: MobileTelemetryAttributes
-    ) async {
-        await telemetryClient.increment(metric: metric, by: value, attributes: attributes)
-    }
-
-    func forceFlush() async {
-        await telemetryClient.forceFlush()
     }
 }

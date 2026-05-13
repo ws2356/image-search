@@ -341,18 +341,24 @@ private extension TransferTransport {
 #if DEBUG
 @available(iOS 17.0, *)
 #Preview("USB Transfer") {
+    let model = TransferSessionPreviewModel(snapshot: .previewUSB)
+    let telemetryService = TransferSessionPreviewTelemetryService()
     TransferSessionView(
         viewModel: TransferPageViewModel(
-            model: TransferSessionPreviewModel(snapshot: .previewUSB)
+            model: model,
+            telemetryService: telemetryService
         )
     )
 }
 
 @available(iOS 17.0, *)
 #Preview("Wi-Fi Transfer") {
+    let model = TransferSessionPreviewModel(snapshot: .previewWiFi)
+    let telemetryService = TransferSessionPreviewTelemetryService()
     TransferSessionView(
         viewModel: TransferPageViewModel(
-            model: TransferSessionPreviewModel(snapshot: .previewWiFi)
+            model: model,
+            telemetryService: telemetryService
         )
     )
 }
@@ -421,15 +427,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
     }
 
     func requestStopTransfer() {}
-
-    func recordInteraction(name: String, location: String) {
-        _ = name
-        _ = location
-    }
-
-    func recordDialogView(name: String) {
-        _ = name
-    }
 
     func persistSnapshot() {}
 }
@@ -505,4 +502,21 @@ private actor TransferSessionPreviewPermissionService: PermissionService {
         isRemoveAfterBackupEnabled = isEnabled
     }
 }
+
+@MainActor
+private final class TransferSessionPreviewTelemetryService: TelemetryService {
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {}
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {}
+    func endTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) {}
+    func incrementTelemetryMetric(_ metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) {}
+    func beginBackupSessionTelemetry() {}
+    func recordDialogView(name: String) {}
+    func recordInteraction(name: String, location: String) {}
+    func forceFlush() {}
+}
+
 #endif

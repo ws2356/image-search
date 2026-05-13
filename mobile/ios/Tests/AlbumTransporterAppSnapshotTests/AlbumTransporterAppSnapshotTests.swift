@@ -27,16 +27,28 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
             homeSummary: .firstLaunch,
             completionSummary: .demo
         )
+        let telemetryService = SnapshotTelemetryService()
         let viewController = makeHostedPage(title: "AuBackup") {
-            HomeView(viewModel: HomePageViewModel(model: homeModel))
+            HomeView(
+                viewModel: HomePageViewModel(
+                    model: homeModel,
+                    telemetryService: telemetryService
+                )
+            )
         }
         try SnapshotSupport.assertSnapshot(pageName: "home-new-user", viewController: viewController)
     }
 
     func test_transfer_in_progress_page() throws {
         let transferModel = SnapshotTransferPageModel(snapshot: .snapshotMarketing)
+        let telemetryService = SnapshotTelemetryService()
         let viewController = makeHostedPage(title: "Backup in Progress") {
-            TransferSessionView(viewModel: TransferPageViewModel(model: transferModel))
+            TransferSessionView(
+                viewModel: TransferPageViewModel(
+                    model: transferModel,
+                    telemetryService: telemetryService
+                )
+            )
         }
         try SnapshotSupport.assertSnapshot(pageName: "transfer-in-progress", viewController: viewController)
     }
@@ -46,7 +58,11 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
             homeSummary: .firstLaunch,
             completionSummary: .snapshotMarketing
         )
-        let completionViewModel = CompletionPageViewModel(model: completionModel)
+        let telemetryService = SnapshotTelemetryService()
+        let completionViewModel = CompletionPageViewModel(
+            model: completionModel,
+            telemetryService: telemetryService
+        )
         let loadedExpectation = expectation(description: "completion summary loaded")
         Task { @MainActor in
             await completionViewModel.reloadSummary()
@@ -134,7 +150,6 @@ private final class SnapshotAppPageModel: AppPageModeling {
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func requestStopTransfer() {}
-    func recordInteraction(name: String, location: String) {}
 }
 
 @MainActor
@@ -158,8 +173,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func requestStopTransfer() {}
     func persistSnapshot() {}
-    func recordDialogView(name: String) {}
-    func recordInteraction(name: String, location: String) {}
 }
 
 private actor SnapshotTransferService: TransferService {
@@ -230,4 +243,19 @@ private actor SnapshotPermissionService: PermissionService {
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
         isRemoveAfterBackupEnabled = isEnabled
     }
+}
+@MainActor
+private final class SnapshotTelemetryService: TelemetryService {
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {}
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {}
+    func endTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) {}
+    func incrementTelemetryMetric(_ metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) {}
+    func beginBackupSessionTelemetry() {}
+    func recordDialogView(name: String) {}
+    func recordInteraction(name: String, location: String) {}
+    func forceFlush() {}
 }

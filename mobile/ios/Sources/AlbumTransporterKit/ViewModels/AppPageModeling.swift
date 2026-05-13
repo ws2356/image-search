@@ -12,7 +12,6 @@ protocol AppPageModeling: AnyObject {
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async
     func requestStopTransfer()
-    func recordInteraction(name: String, location: String)
 }
 
 extension MobileAppModel: AppPageModeling {}
@@ -21,12 +20,8 @@ extension MobileAppModel: AppPageModeling {}
 protocol PermissionsPageModeling: AppPageModeling {
     var permissionSummary: PermissionSummary { get set }
     var permissionService: PermissionService { get }
-
-    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes)
-    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes)
     func persistSnapshot()
     func abortPreflightAndReturnHome(reason: String) async
-    func recordDialogView(name: String)
 }
 
 extension MobileAppModel: PermissionsPageModeling {}
@@ -36,7 +31,6 @@ protocol TransferPageModeling: AppPageModeling {
     var route: AppRoute { get }
     var permissionService: PermissionService { get }
     var transferServiceForTransferView: TransferService { get }
-    func recordDialogView(name: String)
     func persistSnapshot()
 }
 

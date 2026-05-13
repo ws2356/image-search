@@ -403,24 +403,34 @@ private struct SetupStep: Identifiable {
 #if DEBUG
 @available(iOS 17.0, *)
 #Preview("First Launch") {
-    HomeView(viewModel: HomePageViewModel(model: HomeViewPreviewPageModel(summary: .firstLaunch)))
+    let model = HomeViewPreviewPageModel(summary: .firstLaunch)
+    let telemetryService = HomeViewPreviewTelemetryService()
+    return HomeView(
+        viewModel: HomePageViewModel(
+            model: model,
+            telemetryService: telemetryService
+        )
+    )
 }
 
 @available(iOS 17.0, *)
 #Preview("Returning User") {
-    HomeView(
+    let model = HomeViewPreviewPageModel(
+        summary: HomeSummary(
+            desktopName: "Desk Mac",
+            pendingItemCount: 24,
+            lastBackupDescription: "Today at 2:41 PM",
+            permissionScope: .limited,
+            detailMessage: "Your paired desktop is ready for another backup.",
+            previouslyTransferredDescription: "930 items sent in the most recent session.",
+            interruptionWarning: "The previous session stopped before all newly captured media finished transferring."
+        )
+    )
+    let telemetryService = HomeViewPreviewTelemetryService()
+    return HomeView(
         viewModel: HomePageViewModel(
-            model: HomeViewPreviewPageModel(
-                summary: HomeSummary(
-                    desktopName: "Desk Mac",
-                    pendingItemCount: 24,
-                    lastBackupDescription: "Today at 2:41 PM",
-                    permissionScope: .limited,
-                    detailMessage: "Your paired desktop is ready for another backup.",
-                    previouslyTransferredDescription: "930 items sent in the most recent session.",
-                    interruptionWarning: "The previous session stopped before all newly captured media finished transferring."
-                )
-            )
+            model: model,
+            telemetryService: telemetryService
         )
     )
 }
@@ -446,11 +456,6 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
     }
 
     func requestStopTransfer() {}
-
-    func recordInteraction(name: String, location: String) {
-        _ = name
-        _ = location
-    }
 }
 
 private actor HomeViewPreviewTransferService: TransferService {
@@ -499,4 +504,21 @@ private actor HomeViewPreviewTransferService: TransferService {
 
     func handleMemoryWarning() async {}
 }
+
+@MainActor
+private final class HomeViewPreviewTelemetryService: TelemetryService {
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {}
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {}
+    func endTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) {}
+    func incrementTelemetryMetric(_ metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) {}
+    func beginBackupSessionTelemetry() {}
+    func recordDialogView(name: String) {}
+    func recordInteraction(name: String, location: String) {}
+    func forceFlush() {}
+}
+
 #endif

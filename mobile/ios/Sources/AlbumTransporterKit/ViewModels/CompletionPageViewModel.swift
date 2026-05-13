@@ -4,10 +4,12 @@ import Combine
 @MainActor
 final class CompletionPageViewModel: ObservableObject {
     private let model: any AppPageModeling
+    private let telemetryService: TelemetryService
     @Published private(set) var summary: CompletionSummary = .demo
 
-    init(model: any AppPageModeling) {
+    init(model: any AppPageModeling, telemetryService: TelemetryService) {
         self.model = model
+        self.telemetryService = telemetryService
     }
 
     func reloadSummary() async {
@@ -43,7 +45,7 @@ final class CompletionPageViewModel: ObservableObject {
     }
 
     func returnHomeTapped() async {
-        model.recordInteraction(name: "return_home_tapped", location: "completion")
+        telemetryService.recordInteraction(name: "return_home_tapped", location: "completion")
         await model.handleResultForPage(.completed, result: .success, target: nil)
     }
 

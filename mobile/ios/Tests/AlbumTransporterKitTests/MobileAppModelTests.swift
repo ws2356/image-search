@@ -3,6 +3,33 @@ import XCTest
 
 @MainActor
 final class MobileAppModelTests: XCTestCase {
+    private func makeModel(
+        stateStore: AppStateStore,
+        qrCodePayloadDecoder: QRCodePayloadDecoding,
+        pairingService: PairingService,
+        permissionService: PermissionService,
+        transferService: TransferService,
+        telemetryClient: TelemetryClient,
+        telemetryService: TelemetryService? = nil,
+        telemetryContextProvider: TelemetryContextProvider? = nil
+    ) -> MobileAppModel {
+        let resolvedTelemetryContextProvider = telemetryContextProvider ?? DefaultTelemetryContextProvider()
+        let resolvedTelemetryService = telemetryService ?? DefaultTelemetryService(
+            transferService: transferService,
+            telemetryClient: telemetryClient,
+            contextProvider: resolvedTelemetryContextProvider
+        )
+        return MobileAppModel(
+            stateStore: stateStore,
+            qrCodePayloadDecoder: qrCodePayloadDecoder,
+            pairingService: pairingService,
+            permissionService: permissionService,
+            transferService: transferService,
+            telemetryService: resolvedTelemetryService,
+            telemetryContextProvider: resolvedTelemetryContextProvider
+        )
+    }
+
     func test_transfer_snapshot_decodes_legacy_payload_without_skipped_count() throws {
         let legacyPayload = """
         {
@@ -27,7 +54,7 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_load_routes_to_home_for_first_launch() async {
         let store = InMemoryAppStateStore(snapshot: .firstLaunch)
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: store,
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -43,7 +70,7 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_load_does_not_trigger_transfer_recovery_while_idle() async {
         let transferService = ForegroundRecoveryTrackingTransferService()
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -60,7 +87,7 @@ final class MobileAppModelTests: XCTestCase {
     }
 
     func test_error_page_result_success_restarts_scan_and_cancel_returns_home() async {
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -92,7 +119,7 @@ final class MobileAppModelTests: XCTestCase {
             lowBatteryWarningNeeded: true,
             isCharging: false
         )
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -100,7 +127,10 @@ final class MobileAppModelTests: XCTestCase {
             transferService: StaticTransferService(),
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -113,7 +143,7 @@ final class MobileAppModelTests: XCTestCase {
     }
 
     func test_begin_pairing_returns_home_when_desktop_stops_pairing() async {
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StoppedPairingService(),
@@ -139,7 +169,7 @@ final class MobileAppModelTests: XCTestCase {
             lowBatteryWarningNeeded: false,
             isCharging: true
         )
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -147,7 +177,10 @@ final class MobileAppModelTests: XCTestCase {
             transferService: StaticTransferService(),
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -164,6 +197,7 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         let transferViewModel = TransferPageViewModel(
             model: model,
+            telemetryService: NoopTelemetryService(),
             pollingIntervalNanoseconds: 10_000_000
         )
         await transferViewModel.orchestrateTransfer()
@@ -180,7 +214,7 @@ final class MobileAppModelTests: XCTestCase {
             isCharging: false
         )
         let transferService = StopTrackingTransferService()
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -188,7 +222,10 @@ final class MobileAppModelTests: XCTestCase {
             transferService: transferService,
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -225,7 +262,7 @@ final class MobileAppModelTests: XCTestCase {
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
         )
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -236,7 +273,10 @@ final class MobileAppModelTests: XCTestCase {
             ),
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -249,6 +289,7 @@ final class MobileAppModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 30_000_000)
         let transferViewModel = TransferPageViewModel(
             model: model,
+            telemetryService: NoopTelemetryService(),
             pollingIntervalNanoseconds: 10_000_000
         )
         transferViewModel.requestStopTransfer()
@@ -256,7 +297,10 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertEqual(model.route, .home)
         XCTAssertFalse(transferViewModel.isShowingStopConfirmation)
-        let homeViewModel = HomePageViewModel(model: model)
+        let homeViewModel = HomePageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
         await homeViewModel.refreshSummary()
         XCTAssertNotNil(homeViewModel.summary.lastBackupDescription)
         XCTAssertNotNil(homeViewModel.summary.previouslyTransferredDescription)
@@ -286,7 +330,7 @@ final class MobileAppModelTests: XCTestCase {
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
         )
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -297,7 +341,10 @@ final class MobileAppModelTests: XCTestCase {
             ),
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -310,7 +357,10 @@ final class MobileAppModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 10_000_000)
         XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
-        let transferViewModel = TransferPageViewModel(model: model)
+        let transferViewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
         let orchestrationTask = Task {
             await transferViewModel.orchestrateTransfer()
         }
@@ -325,7 +375,10 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .completed)
         let completedSnapshot = await model.transferServiceForTransferView.progressSnapshot()
         XCTAssertEqual(completedSnapshot?.transferredCount, 5)
-        let completionViewModel = CompletionPageViewModel(model: model)
+        let completionViewModel = CompletionPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
         await completionViewModel.reloadSummary()
         let completionSummary = completionViewModel.summary
         XCTAssertEqual(completionSummary.itemsBackedUp, 5)
@@ -355,7 +408,7 @@ final class MobileAppModelTests: XCTestCase {
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
         )
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -366,7 +419,10 @@ final class MobileAppModelTests: XCTestCase {
             ),
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -374,7 +430,10 @@ final class MobileAppModelTests: XCTestCase {
         await model.beginPairing()
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
-        let transferViewModel = TransferPageViewModel(model: model)
+        let transferViewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
         let orchestrationTask = Task {
             await transferViewModel.orchestrateTransfer()
         }
@@ -429,7 +488,7 @@ final class MobileAppModelTests: XCTestCase {
     }
 
     func test_handle_incoming_universal_link_routes_to_permissions_after_pairing() async {
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -447,7 +506,7 @@ final class MobileAppModelTests: XCTestCase {
     }
 
     func test_handle_incoming_universal_link_with_invalid_payload_shows_pairing_failure() async {
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -490,7 +549,7 @@ final class MobileAppModelTests: XCTestCase {
             finalSnapshot: finalSnapshot,
             transferDurationNanoseconds: 500_000_000
         )
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -498,7 +557,10 @@ final class MobileAppModelTests: XCTestCase {
             transferService: transferService,
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -547,7 +609,7 @@ final class MobileAppModelTests: XCTestCase {
             finalSnapshot: finalSnapshot,
             transferDurationNanoseconds: 500_000_000
         )
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -555,7 +617,10 @@ final class MobileAppModelTests: XCTestCase {
             transferService: transferService,
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -585,7 +650,7 @@ final class MobileAppModelTests: XCTestCase {
     }
 
     func test_open_scan_flow_returns_without_waiting_for_slow_side_effect_io() async {
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: SlowAppStateStore(saveDelayNanoseconds: 600_000_000),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -604,7 +669,7 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_handle_app_did_become_active_does_not_trigger_transfer_recovery_while_idle() async {
         let transferService = ForegroundRecoveryTrackingTransferService()
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -632,7 +697,7 @@ final class MobileAppModelTests: XCTestCase {
             isIncompleteLibrary: false
         )
         let transferService = CleanupTrackingTransferService(completedSnapshot: completedSnapshot)
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
@@ -640,7 +705,10 @@ final class MobileAppModelTests: XCTestCase {
             transferService: transferService,
             telemetryClient: RecordingTelemetryClient()
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -649,12 +717,18 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.startPreflight()
         XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
-        let transferViewModel = TransferPageViewModel(model: model)
+        let transferViewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
         await transferViewModel.orchestrateTransfer()
 
         let cleanupCallCount = await transferService.cleanupCallCount()
         XCTAssertEqual(cleanupCallCount, 1)
-        let completionViewModel = CompletionPageViewModel(model: model)
+        let completionViewModel = CompletionPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
         await completionViewModel.reloadSummary()
         let completionSummary = completionViewModel.summary
         XCTAssertTrue(completionSummary.message.contains("Moved 3 transferred items to Recently Removed"))
@@ -662,7 +736,7 @@ final class MobileAppModelTests: XCTestCase {
 
     func test_begin_pairing_records_invalid_qr_failure_reason() async {
         let telemetryClient = RecordingTelemetryClient()
-        let model = MobileAppModel(
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: FailingQRCodePayloadDecoder(error: .invalidURL),
             pairingService: StaticPairingService(),
@@ -705,15 +779,26 @@ final class MobileAppModelTests: XCTestCase {
         )
         let telemetryClient = RecordingTelemetryClient()
         let transferService = CleanupTrackingTransferService(completedSnapshot: completedSnapshot)
-        let model = MobileAppModel(
+        let telemetryContextProvider = DefaultTelemetryContextProvider()
+        let telemetryService = DefaultTelemetryService(
+            transferService: transferService,
+            telemetryClient: telemetryClient,
+            contextProvider: telemetryContextProvider
+        )
+        let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
             pairingService: StaticPairingService(),
             permissionService: StaticPermissionService(summary: .allClear),
             transferService: transferService,
-            telemetryClient: telemetryClient
+            telemetryClient: telemetryClient,
+            telemetryService: telemetryService,
+            telemetryContextProvider: telemetryContextProvider
         )
-        let permissionsViewModel = PermissionsPageViewModel(model: model)
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: telemetryService
+        )
 
         await model.load()
         await model.openScanFlow()
@@ -721,7 +806,10 @@ final class MobileAppModelTests: XCTestCase {
         await model.beginPairing()
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
-        let transferViewModel = TransferPageViewModel(model: model)
+        let transferViewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService
+        )
         await transferViewModel.orchestrateTransfer()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
@@ -823,6 +911,22 @@ private actor StaticPermissionService: PermissionService {
     func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
         isRemoveAfterBackupEnabled = isEnabled
     }
+}
+
+@MainActor
+private final class NoopTelemetryService: TelemetryService {
+    func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {}
+    func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {}
+    func endTelemetrySpan(
+        _ span: MobileTelemetrySpan,
+        attributes: MobileTelemetryAttributes,
+        status: MobileTelemetrySpanStatus?
+    ) {}
+    func incrementTelemetryMetric(_ metric: MobileTelemetryMetric, by value: Int, attributes: MobileTelemetryAttributes) {}
+    func beginBackupSessionTelemetry() {}
+    func recordDialogView(name: String) {}
+    func recordInteraction(name: String, location: String) {}
+    func forceFlush() {}
 }
 
 private struct StaticTransferService: TransferService {
