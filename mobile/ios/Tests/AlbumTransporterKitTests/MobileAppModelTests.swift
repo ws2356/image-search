@@ -772,6 +772,36 @@ final class MobileAppModelTests: XCTestCase {
         )
     }
 
+    func test_begin_pairing_records_unexpected_pairing_phase_failure_reason() async {
+        let telemetryClient = RecordingTelemetryClient()
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: UnexpectedPhasePairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: StaticTransferService(),
+            telemetryClient: telemetryClient
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(model.route, .pair)
+        XCTAssertEqual(model.pairingStatus.phase, .pairing)
+        let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
+        XCTAssertEqual(
+            failureRecord?.attributes["pairing.failure_reason"],
+            .string("unexpected_pairing_phase")
+        )
+        XCTAssertEqual(
+            failureRecord?.attributes["pairing.result_phase"],
+            .string(PairingPhase.pairing.rawValue)
+        )
+    }
+
     func test_start_backup_records_preflight_and_completion_telemetry_context() async {
         let completedSnapshot = TransferSnapshot(
             transferredCount: 3,
@@ -880,6 +910,19 @@ private struct StoppedPairingService: PairingService {
             sessionID: payload.sessionID,
             transport: nil,
             message: "Desktop canceled this pairing request."
+        )
+    }
+}
+
+private struct UnexpectedPhasePairingService: PairingService {
+    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
+        PairingStatus(
+            phase: .pairing,
+            backupFlowState: .pendingPairing,
+            desktopName: "Studio Mac",
+            sessionID: payload.sessionID,
+            transport: nil,
+            message: "Still pairing."
         )
     }
 }

@@ -275,25 +275,11 @@ final class MobileAppModel: ObservableObject {
                     message: failureMessage
                 )
                 applyPairingStatusStateTransition(pairingStatus)
-                recordTelemetry(
-                    .pairingFailed,
-                    attributes: [
-                        "pairing.failure_reason": .string("invalid_qr_payload"),
+                reportPairingFailure(
+                    reason: "invalid_qr_payload",
+                    pairingAttributes: [
                         "pairing.failure_message": .string(failureMessage)
                     ]
-                )
-                incrementTelemetryMetric(
-                    .backupFailures,
-                    attributes: [
-                        "backup.failure_reason": .string("invalid_qr_payload")
-                    ]
-                )
-                endTelemetrySpan(
-                    .pairingFlow,
-                    attributes: [
-                        "pairing.failure_reason": .string("invalid_qr_payload")
-                    ],
-                    status: .error("invalid_qr_payload")
                 )
             }
             persistSnapshot()
@@ -308,25 +294,7 @@ final class MobileAppModel: ObservableObject {
         if result.backupFlowState == .pairingStopped {
             homeSummary.pendingItemCount = nil
             route = .home
-            recordTelemetry(
-                .pairingFailed,
-                attributes: [
-                    "pairing.failure_reason": .string("desktop_stopped_pairing")
-                ]
-            )
-            incrementTelemetryMetric(
-                .backupFailures,
-                attributes: [
-                    "backup.failure_reason": .string("desktop_stopped_pairing")
-                ]
-            )
-            endTelemetrySpan(
-                .pairingFlow,
-                attributes: [
-                    "pairing.failure_reason": .string("desktop_stopped_pairing")
-                ],
-                status: .error("desktop_stopped_pairing")
-            )
+            reportPairingFailure(reason: "desktop_stopped_pairing")
             endTelemetrySpan(
                 .backupSession,
                 attributes: [
@@ -339,26 +307,11 @@ final class MobileAppModel: ObservableObject {
         }
 
         guard result.phase == .paired else {
-            recordTelemetry(
-                .pairingFailed,
-                attributes: [
-                    "pairing.failure_reason": .string("unexpected_pairing_phase"),
+            reportPairingFailure(
+                reason: "unexpected_pairing_phase",
+                pairingAttributes: [
                     "pairing.result_phase": .string(result.phase.rawValue)
                 ]
-            )
-            incrementTelemetryMetric(
-                .backupFailures,
-                attributes: [
-                    "backup.failure_reason": .string("unexpected_pairing_phase")
-                ]
-            )
-            endTelemetrySpan(
-                .pairingFlow,
-                attributes: [
-                    "pairing.failure_reason": .string("unexpected_pairing_phase"),
-                    "pairing.result_phase": .string(result.phase.rawValue)
-                ],
-                status: .error("unexpected_pairing_phase")
             )
             return
         }
@@ -604,6 +557,27 @@ final class MobileAppModel: ObservableObject {
             ]
         )
         persistSnapshot()
+    }
+
+    private func reportPairingFailure(
+        reason: String,
+        pairingAttributes: MobileTelemetryAttributes = [:]
+    ) {
+        var resolvedPairingAttributes = pairingAttributes
+        resolvedPairingAttributes["pairing.failure_reason"] = .string(reason)
+
+        recordTelemetry(.pairingFailed, attributes: resolvedPairingAttributes)
+        incrementTelemetryMetric(
+            .backupFailures,
+            attributes: [
+                "backup.failure_reason": .string(reason)
+            ]
+        )
+        endTelemetrySpan(
+            .pairingFlow,
+            attributes: resolvedPairingAttributes,
+            status: .error(reason)
+        )
     }
 
     private func apply(snapshot: LaunchSnapshot) async {
