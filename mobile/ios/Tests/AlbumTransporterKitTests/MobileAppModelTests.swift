@@ -740,6 +740,54 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertTrue(completionSummary.message.contains("Moved 3 transferred items to Recently Removed"))
     }
 
+    func test_complete_transfer_with_failures_keeps_completion_route_and_reports_failed_flow() async {
+        let completedSnapshot = TransferSnapshot(
+            transferredCount: 2,
+            totalCount: 3,
+            failedCount: 1,
+            transport: .lan,
+            etaMinutes: nil,
+            statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
+            guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
+            isIncompleteLibrary: false
+        )
+        let telemetryClient = RecordingTelemetryClient()
+        let transferService = CleanupTrackingTransferService(completedSnapshot: completedSnapshot)
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: transferService,
+            telemetryClient: telemetryClient
+        )
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await permissionsViewModel.startPreflight()
+        await permissionsViewModel.selectRemoveAfterBackupPreference(false)
+        let transferViewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
+        await transferViewModel.orchestrateTransfer()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(model.route, .completed)
+        XCTAssertEqual(model.backupFlowState, .transferFailed)
+        let completionRecord = await telemetryClient.latestRecord(for: .transferCompleted)
+        XCTAssertEqual(
+            completionRecord?.attributes["transfer.failed_count"],
+            .int(1)
+        )
+    }
+
     func test_begin_pairing_records_invalid_qr_failure_reason() async {
         let telemetryClient = RecordingTelemetryClient()
         let model = makeModel(

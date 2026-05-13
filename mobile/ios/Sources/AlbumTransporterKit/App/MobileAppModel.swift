@@ -438,15 +438,10 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func finalizeCompletedTransfer() async {
-        let completionState = await transferService.transferCompletionState()
-        let snapshot: TransferSnapshot
-        if let completedSnapshot = completionState?.snapshot {
-            snapshot = completedSnapshot
-        } else {
-            snapshot = await currentTransferSnapshot()
-        }
-        let cleanupResult = completionState?.cleanupResult ?? .skipped
-        let sessionDuration = completionState?.sessionDuration
+        let completionContext = await resolvedTransferCompletionContext()
+        let snapshot = completionContext.snapshot
+        let cleanupResult = completionContext.cleanupResult
+        let sessionDuration = completionContext.sessionDuration
         transitionBackupFlow(snapshot.failedCount == 0 ? .transferCompleted : .transferFailed)
         homeSummary = .completed(
             desktopName: homeSummary.desktopName,
@@ -456,25 +451,13 @@ final class MobileAppModel: ObservableObject {
         route = .completed
 
         let isRemoveAfterBackupEnabled = await permissionService.removeAfterBackupEnabled()
-        var completionAttributes: MobileTelemetryAttributes = [
-            "transfer.transferred_count": .int(snapshot.transferredCount),
-            "transfer.total_count": .int(snapshot.totalCount),
-            "transfer.failed_count": .int(snapshot.failedCount),
-            "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
-        ]
-        if let sessionDuration {
-            completionAttributes["transfer.session_duration_seconds"] = .double(sessionDuration)
-        }
-        switch cleanupResult {
-        case .skipped:
-            completionAttributes["transfer.cleanup_result"] = .string("skipped")
-        case .removed(let removedCount):
-            completionAttributes["transfer.cleanup_result"] = .string("removed")
-            completionAttributes["transfer.cleanup_removed_count"] = .int(removedCount)
-        case .failed(let message):
-            completionAttributes["transfer.cleanup_result"] = .string("failed")
-            completionAttributes["transfer.cleanup_failure_message"] = .string(message)
-        }
+        let completionAttributes = completionTelemetryAttributes(
+            snapshot: snapshot,
+            cleanupResult: cleanupResult,
+            sessionDuration: sessionDuration,
+            isRemoveAfterBackupEnabled: isRemoveAfterBackupEnabled
+        )
+        let completionStatus = transferCompletionSpanStatus(for: snapshot)
         recordTelemetry(.transferCompleted, attributes: completionAttributes)
         incrementTelemetryMetric(.backupSuccesses, attributes: completionAttributes)
         incrementTelemetryMetric(
@@ -485,12 +468,12 @@ final class MobileAppModel: ObservableObject {
         endTelemetrySpan(
             .transferFlow,
             attributes: completionAttributes,
-            status: snapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
+            status: completionStatus
         )
         endTelemetrySpan(
             .backupSession,
             attributes: completionAttributes,
-            status: snapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
+            status: completionStatus
         )
         persistSnapshot()
     }
@@ -578,6 +561,57 @@ final class MobileAppModel: ObservableObject {
             attributes: resolvedPairingAttributes,
             status: .error(reason)
         )
+    }
+
+    private func resolvedTransferCompletionContext() async -> (
+        snapshot: TransferSnapshot,
+        cleanupResult: TransferAssetCleanupResult,
+        sessionDuration: TimeInterval?
+    ) {
+        if let completionState = await transferService.transferCompletionState() {
+            return (
+                snapshot: completionState.snapshot,
+                cleanupResult: completionState.cleanupResult,
+                sessionDuration: completionState.sessionDuration
+            )
+        }
+        return (
+            snapshot: await currentTransferSnapshot(),
+            cleanupResult: .skipped,
+            sessionDuration: nil
+        )
+    }
+
+    private func completionTelemetryAttributes(
+        snapshot: TransferSnapshot,
+        cleanupResult: TransferAssetCleanupResult,
+        sessionDuration: TimeInterval?,
+        isRemoveAfterBackupEnabled: Bool
+    ) -> MobileTelemetryAttributes {
+        var attributes: MobileTelemetryAttributes = [
+            "transfer.transferred_count": .int(snapshot.transferredCount),
+            "transfer.total_count": .int(snapshot.totalCount),
+            "transfer.failed_count": .int(snapshot.failedCount),
+            "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
+        ]
+        if let sessionDuration {
+            attributes["transfer.session_duration_seconds"] = .double(sessionDuration)
+        }
+        switch cleanupResult {
+        case .skipped:
+            attributes["transfer.cleanup_result"] = .string("skipped")
+        case .removed(let removedCount):
+            attributes["transfer.cleanup_result"] = .string("removed")
+            attributes["transfer.cleanup_removed_count"] = .int(removedCount)
+        case .failed(let message):
+            attributes["transfer.cleanup_result"] = .string("failed")
+            attributes["transfer.cleanup_failure_message"] = .string(message)
+        }
+        return attributes
+    }
+
+    private func transferCompletionSpanStatus(for snapshot: TransferSnapshot) -> MobileTelemetrySpanStatus {
+        snapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
     }
 
     private func apply(snapshot: LaunchSnapshot) async {
