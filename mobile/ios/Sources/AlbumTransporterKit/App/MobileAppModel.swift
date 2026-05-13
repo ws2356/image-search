@@ -381,7 +381,7 @@ final class MobileAppModel: ObservableObject {
             totalCount: 0,
             failedCount: 0,
             transport: pairingStatus.transport ?? .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Backup canceled before transfer started.",
             guidanceMessage: "Scan again when you are ready to start another backup session.",
             isIncompleteLibrary: permissionSummary.mediaScope != .full
@@ -610,7 +610,7 @@ final class MobileAppModel: ObservableObject {
             totalCount: 0,
             failedCount: 0,
             transport: pairingStatus.transport ?? .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Preparing the local media backup with the paired desktop.",
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: permissionSummary.mediaScope != .full

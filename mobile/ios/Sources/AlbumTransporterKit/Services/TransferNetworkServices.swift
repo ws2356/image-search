@@ -2356,6 +2356,10 @@ actor PhotoLibraryTransferService: TransferService {
     private let exportConcurrencyLimit: Int
     private let uploadConcurrencyLimit: Int
     private var transferSpeedSamples: [TransferSpeedSample] = []
+    private var transferRunStartedAtUptimeSeconds: TimeInterval?
+    private var totalPreparedTransferBytes = 0
+    private var processedPreparedTransferBytes = 0
+    private var nonSkippedTransferredBytesForSpeed = 0
     private var successfullyTransferredAssetIDs: [String] = []
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
@@ -2472,6 +2476,11 @@ actor PhotoLibraryTransferService: TransferService {
             )
         }
         snapshot.transferSpeedText = currentTransferSpeedText()
+        snapshot.etaMinutes = currentETAMinutes(
+            transferredCount: snapshot.transferredCount,
+            totalCount: snapshot.totalCount,
+            failedCount: snapshot.failedCount
+        )
         currentSnapshot = snapshot
         return snapshot
     }
@@ -2563,6 +2572,9 @@ actor PhotoLibraryTransferService: TransferService {
         stopRequested = false
         successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
         currentCompletionState = nil
+        totalPreparedTransferBytes = 0
+        processedPreparedTransferBytes = 0
+        nonSkippedTransferredBytesForSpeed = 0
 
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             let failedSnapshot = TransferSnapshot(
@@ -2570,7 +2582,7 @@ actor PhotoLibraryTransferService: TransferService {
                 totalCount: 0,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "No paired desktop record is available for transfer.",
                 guidanceMessage: "Pair with the desktop again before starting a backup.",
                 isIncompleteLibrary: false
@@ -2592,7 +2604,7 @@ actor PhotoLibraryTransferService: TransferService {
                     totalCount: 0,
                     failedCount: 0,
                     transport: resolvedTransport,
-                    etaDescription: nil,
+                    etaMinutes: nil,
                     statusMessage: "No eligible local photo or video assets are ready for transfer.",
                     guidanceMessage: "Check photo-library access or capture new media, then retry the backup.",
                     isIncompleteLibrary: false
@@ -2610,7 +2622,8 @@ actor PhotoLibraryTransferService: TransferService {
                     desktop: trustedDesktop,
                     transferredCount: 0,
                     totalCount: totalCount,
-                    failedCount: 0
+                    failedCount: 0,
+                    skippedCount: 0
                 )
                 return await finalizingTransferRun(pausedSnapshot)
             }
@@ -2629,7 +2642,8 @@ actor PhotoLibraryTransferService: TransferService {
                     desktop: trustedDesktop,
                     transferredCount: 0,
                     totalCount: totalCount,
-                    failedCount: 0
+                    failedCount: 0,
+                    skippedCount: 0
                 )
                 return await finalizingTransferRun(pausedSnapshot)
             }
@@ -2640,16 +2654,19 @@ actor PhotoLibraryTransferService: TransferService {
                 totalCount: totalCount
             )
             let transferRunStartSeconds = ProcessInfo.processInfo.systemUptime
+            transferRunStartedAtUptimeSeconds = transferRunStartSeconds
 
             var transferredCount = 0
             var failedCount = 0
+            var skippedCount = 0
             var stageMetrics = TransferStageMetrics()
             let initialTransport = await resolvedTransport(for: trustedDesktop)
             let initialSnapshot = makeProgressSnapshot(
                 transport: initialTransport,
                 transferredCount: transferredCount,
                 totalCount: totalCount,
-                failedCount: failedCount
+                failedCount: failedCount,
+                skippedCount: skippedCount
             )
             let initialSnapshotWithLiveTransports = await applyingLiveTransports(
                 to: initialSnapshot,
@@ -2666,6 +2683,7 @@ actor PhotoLibraryTransferService: TransferService {
                        totalCount: totalCount,
                        transferredCount: &transferredCount,
                        failedCount: &failedCount,
+                       skippedCount: &skippedCount,
                        stageMetrics: &stageMetrics,
                        progress: progress
                    )
@@ -2699,9 +2717,10 @@ actor PhotoLibraryTransferService: TransferService {
                 transferredCount: transferredCount,
                 totalCount: totalCount,
                 failedCount: failedCount,
+                skippedCount: skippedCount,
                 transport: completedTransport,
                 transferSpeedText: currentTransferSpeedText(),
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
                 guidanceMessage: failedCount == 0
                     ? "Backup completes automatically after the desktop confirms this transfer session."
@@ -2733,7 +2752,7 @@ actor PhotoLibraryTransferService: TransferService {
                 totalCount: 0,
                 failedCount: 1,
                 transport: failedTransport,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: error.message,
                 guidanceMessage: "Retry the backup after confirming the paired desktop is reachable on the same local network.",
                 isIncompleteLibrary: false
@@ -2754,7 +2773,7 @@ actor PhotoLibraryTransferService: TransferService {
                 totalCount: 0,
                 failedCount: 1,
                 transport: failedTransport,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: error.localizedDescription,
                 guidanceMessage: "Retry the backup after confirming photo-library access and desktop reachability.",
                 isIncompleteLibrary: false
@@ -2770,6 +2789,10 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func finalizingTransferRun(_ snapshot: TransferSnapshot) async -> TransferSnapshot {
         await assetSource.releaseTransferRunResources()
+        transferRunStartedAtUptimeSeconds = nil
+        totalPreparedTransferBytes = 0
+        processedPreparedTransferBytes = 0
+        nonSkippedTransferredBytesForSpeed = 0
         return snapshot
     }
 
@@ -2802,7 +2825,8 @@ actor PhotoLibraryTransferService: TransferService {
         desktop: TrustedDesktopRecord,
         transferredCount: Int,
         totalCount: Int,
-        failedCount: Int
+        failedCount: Int,
+        skippedCount: Int
     ) async -> TransferSnapshot {
         let currentTransport = await resolvedTransport(for: desktop)
         let pausedSnapshot = makePausedSnapshot(
@@ -2810,6 +2834,7 @@ actor PhotoLibraryTransferService: TransferService {
             transferredCount: transferredCount,
             totalCount: totalCount,
             failedCount: failedCount,
+            skippedCount: skippedCount,
             sessionID: desktop.lastSessionID
         )
         let pausedSnapshotWithLiveTransports = await applyingLiveTransports(
@@ -2826,6 +2851,7 @@ actor PhotoLibraryTransferService: TransferService {
         totalCount: Int,
         transferredCount: inout Int,
         failedCount: inout Int,
+        skippedCount: inout Int,
         stageMetrics: inout TransferStageMetrics,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
     ) async -> TransferSnapshot? {
@@ -2868,6 +2894,7 @@ actor PhotoLibraryTransferService: TransferService {
                         continue
                     }
                     if let preparedAsset = exportResult.preparedAsset {
+                        totalPreparedTransferBytes += max(preparedAsset.exportedAsset.fileSize, 0)
                         bufferedUploads.append(preparedAsset)
                         continue
                     }
@@ -2880,6 +2907,7 @@ actor PhotoLibraryTransferService: TransferService {
                         transferredCount: transferredCount,
                         totalCount: totalCount,
                         failedCount: failedCount,
+                        skippedCount: skippedCount,
                         progress: progress
                     )
                 }
@@ -2940,6 +2968,7 @@ actor PhotoLibraryTransferService: TransferService {
                             totalCount: totalCount,
                             transferredCount: &transferredCount,
                             failedCount: &failedCount,
+                            skippedCount: &skippedCount,
                             stageMetrics: &stageMetrics,
                             progress: progress
                         ) {
@@ -2971,6 +3000,7 @@ actor PhotoLibraryTransferService: TransferService {
                         continue
                     }
                     if let preparedAsset = exportResult.preparedAsset {
+                        totalPreparedTransferBytes += max(preparedAsset.exportedAsset.fileSize, 0)
                         bufferedUploads.append(preparedAsset)
                     } else {
                         failedCount += 1
@@ -2982,6 +3012,7 @@ actor PhotoLibraryTransferService: TransferService {
                             transferredCount: transferredCount,
                             totalCount: totalCount,
                             failedCount: failedCount,
+                            skippedCount: skippedCount,
                             progress: progress
                         )
                     }
@@ -3006,7 +3037,8 @@ actor PhotoLibraryTransferService: TransferService {
                 desktop: desktop,
                 transferredCount: transferredCount,
                 totalCount: totalCount,
-                failedCount: failedCount
+                failedCount: failedCount,
+                skippedCount: skippedCount
             )
         }
 
@@ -3164,6 +3196,7 @@ actor PhotoLibraryTransferService: TransferService {
         totalCount: Int,
         transferredCount: inout Int,
         failedCount: inout Int,
+        skippedCount: inout Int,
         stageMetrics: inout TransferStageMetrics,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
     ) async -> TransferSnapshot? {
@@ -3173,6 +3206,7 @@ actor PhotoLibraryTransferService: TransferService {
         if uploadResult.uploadDurationSeconds > 0 {
             stageMetrics.uploadDurations.append(uploadResult.uploadDurationSeconds)
         }
+        processedPreparedTransferBytes += max(uploadResult.preparedAsset.exportedAsset.fileSize, 0)
         let assetSummary = TransferDebugLogger.assetSummary(for: uploadResult.preparedAsset.exportedAsset.descriptor)
         if uploadResult.terminalFailureCode == .diskFull {
             failedCount += 1
@@ -3185,11 +3219,13 @@ actor PhotoLibraryTransferService: TransferService {
                 transferredCount: transferredCount,
                 totalCount: totalCount,
                 failedCount: failedCount,
+                skippedCount: skippedCount,
                 message: diskFullMessage
             )
         }
         if let existingMatch = uploadResult.existingMatch {
             transferredCount += 1
+            skippedCount += 1
             TransferDebugLogger.debug(
                 "Skipped upload after desktop signature hit \(assetSummary) local_relative_path=\(existingMatch.localRelativePath)"
             )
@@ -3199,12 +3235,14 @@ actor PhotoLibraryTransferService: TransferService {
                 switch response.status {
                 case .stored:
                     transferredCount += 1
+                    nonSkippedTransferredBytesForSpeed += max(uploadResult.preparedAsset.exportedAsset.fileSize, 0)
                     successfullyTransferredAssetIDs.append(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
                     TransferDebugLogger.debug(
                         "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
                     )
                 case .skipped:
                     transferredCount += 1
+                    skippedCount += 1
                     TransferDebugLogger.debug(
                         "Skipped transfer after desktop confirmation \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
                     )
@@ -3229,6 +3267,7 @@ actor PhotoLibraryTransferService: TransferService {
             transferredCount: transferredCount,
             totalCount: totalCount,
             failedCount: failedCount,
+            skippedCount: skippedCount,
             progress: progress
         )
         return nil
@@ -3239,6 +3278,7 @@ actor PhotoLibraryTransferService: TransferService {
         transferredCount: Int,
         totalCount: Int,
         failedCount: Int,
+        skippedCount: Int,
         sessionID: String
     ) -> TransferSnapshot {
         TransferDebugLogger.info(
@@ -3248,9 +3288,10 @@ actor PhotoLibraryTransferService: TransferService {
             transferredCount: transferredCount,
             totalCount: totalCount,
             failedCount: failedCount,
+            skippedCount: skippedCount,
             transport: transport,
             transferSpeedText: currentTransferSpeedText(),
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Backup stopped. In-flight work was canceled to release resources quickly.",
             guidanceMessage: "Start a new backup session to continue sending any remaining accessible items.",
             isIncompleteLibrary: false
@@ -3262,6 +3303,7 @@ actor PhotoLibraryTransferService: TransferService {
         transferredCount: Int,
         totalCount: Int,
         failedCount: Int,
+        skippedCount: Int,
         message: String
     ) async -> TransferSnapshot {
         let transport = await resolvedTransport(for: desktop)
@@ -3269,9 +3311,10 @@ actor PhotoLibraryTransferService: TransferService {
             transferredCount: transferredCount,
             totalCount: totalCount,
             failedCount: failedCount,
+            skippedCount: skippedCount,
             transport: transport,
             transferSpeedText: currentTransferSpeedText(),
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: message,
             guidanceMessage: "Free up disk space on the desktop, then start a new backup session.",
             isIncompleteLibrary: false
@@ -3289,12 +3332,13 @@ actor PhotoLibraryTransferService: TransferService {
         transferredCount: Int,
         totalCount: Int,
         failedCount: Int,
+        skippedCount: Int,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
     ) async {
         let transport = await resolvedTransport(for: desktop)
         let processedCount = min(transferredCount + failedCount, totalCount)
         TransferDebugLogger.debug(
-            "Updated transfer progress processed=\(processedCount) total=\(totalCount) transferred=\(transferredCount) failed=\(failedCount)"
+            "Updated transfer progress processed=\(processedCount) total=\(totalCount) transferred=\(transferredCount) failed=\(failedCount) skipped=\(skippedCount)"
         )
         if processedCount == totalCount || (processedCount > 0 && processedCount.isMultiple(of: 25)) {
             logTransferMemoryUsage(
@@ -3307,7 +3351,8 @@ actor PhotoLibraryTransferService: TransferService {
             transport: transport,
             transferredCount: transferredCount,
             totalCount: totalCount,
-            failedCount: failedCount
+            failedCount: failedCount,
+            skippedCount: skippedCount
         )
         let updatedSnapshotWithLiveTransports = await applyingLiveTransports(
             to: updatedSnapshot,
@@ -3329,6 +3374,11 @@ actor PhotoLibraryTransferService: TransferService {
             return
         }
         snapshot.transferSpeedText = currentTransferSpeedText()
+        snapshot.etaMinutes = currentETAMinutes(
+            transferredCount: snapshot.transferredCount,
+            totalCount: snapshot.totalCount,
+            failedCount: snapshot.failedCount
+        )
         currentSnapshot = snapshot
         progress(snapshot)
     }
@@ -3377,16 +3427,22 @@ actor PhotoLibraryTransferService: TransferService {
         transport: TransferTransport,
         transferredCount: Int,
         totalCount: Int,
-        failedCount: Int
+        failedCount: Int,
+        skippedCount: Int
     ) -> TransferSnapshot {
         let processedCount = min(transferredCount + failedCount, totalCount)
         return TransferSnapshot(
             transferredCount: transferredCount,
             totalCount: totalCount,
             failedCount: failedCount,
+            skippedCount: skippedCount,
             transport: transport,
             transferSpeedText: currentTransferSpeedText(),
-            etaDescription: nil,
+            etaMinutes: currentETAMinutes(
+                transferredCount: transferredCount,
+                totalCount: totalCount,
+                failedCount: failedCount
+            ),
             statusMessage: totalCount == 0
                 ? "Preparing the local media backup with the paired desktop."
                 : "Processed \(processedCount) of \(totalCount) items for the paired desktop.",
@@ -3529,6 +3585,41 @@ actor PhotoLibraryTransferService: TransferService {
         transferSpeedSamples.removeAll(keepingCapacity: false)
     }
 
+    private func currentETAMinutes(
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int
+    ) -> Double? {
+        guard transferRunStartedAtUptimeSeconds != nil else {
+            return nil
+        }
+        guard totalCount > 0 else {
+            return nil
+        }
+        let processedCount = min(max(transferredCount + failedCount, 0), totalCount)
+        guard processedCount > 0 else {
+            return nil
+        }
+        let averageBytesPerProcessedItem = Double(max(processedPreparedTransferBytes, 1)) / Double(processedCount)
+        let estimatedTotalBytes = max(
+            Double(totalPreparedTransferBytes),
+            averageBytesPerProcessedItem * Double(totalCount)
+        )
+        let remainingSizeBytes = max(Int(estimatedTotalBytes.rounded(.up)) - processedPreparedTransferBytes, 0)
+        guard remainingSizeBytes > 0 else {
+            return nil
+        }
+        let averageSpeedBytesPerSecond = currentTransferSpeedBytesPerSecond()
+        guard averageSpeedBytesPerSecond > 0 else {
+            return nil
+        }
+        let remainingSeconds = Double(remainingSizeBytes) / averageSpeedBytesPerSecond
+        guard remainingSeconds.isFinite, remainingSeconds > 0 else {
+            return nil
+        }
+        return remainingSeconds / 60.0
+    }
+
     private func recordTransferredBytes(_ bytes: Int) {
         let normalizedBytes = max(bytes, 0)
         guard normalizedBytes > 0 else {
@@ -3545,15 +3636,31 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     private func currentTransferSpeedText() -> String {
+        let speedMBps = currentTransferSpeedBytesPerSecond() / 1_048_576.0
+        return String(format: "%.2f MB/s", speedMBps)
+    }
+
+    private func currentTransferSpeedBytesPerSecond() -> Double {
         let now = Date()
         pruneTransferSpeedSamples(now: now)
         let totalBytes = transferSpeedSamples.reduce(0) { partial, sample in
             partial + sample.bytes
         }
-        let speedMBps =
-            (Double(totalBytes) / 1_048_576.0)
-            / Self.transferSpeedWindowSeconds
-        return String(format: "%.2f MB/s", speedMBps)
+        let sampledSpeed = Double(totalBytes) / Self.transferSpeedWindowSeconds
+        if sampledSpeed > 0 {
+            return sampledSpeed
+        }
+        guard
+            let transferRunStartedAtUptimeSeconds,
+            nonSkippedTransferredBytesForSpeed > 0
+        else {
+            return 0
+        }
+        let elapsedSeconds = max(ProcessInfo.processInfo.systemUptime - transferRunStartedAtUptimeSeconds, 0)
+        guard elapsedSeconds > 0 else {
+            return 0
+        }
+        return Double(nonSkippedTransferredBytesForSpeed) / elapsedSeconds
     }
 
     private func pruneTransferSpeedSamples(now: Date) {

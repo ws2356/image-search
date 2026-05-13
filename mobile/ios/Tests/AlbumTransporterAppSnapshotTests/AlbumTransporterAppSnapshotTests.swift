@@ -79,7 +79,7 @@ private extension TransferSnapshot {
         transport: .usb,
         liveTransports: [.usb, .lan],
         transferSpeedText: "42.80 MB/s",
-        etaDescription: "17 min remaining",
+        etaMinutes: 17,
         statusMessage: "Backing up local photos and videos to the paired desktop.",
         guidanceMessage: "USB is active for the fastest backup. Keep your iPhone unlocked and connected until the transfer finishes.",
         isIncompleteLibrary: false
@@ -116,7 +116,7 @@ private final class SnapshotAppPageModel: AppPageModeling {
             totalCount: completionSummary.itemsBackedUp ?? 0,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Completed backup snapshot.",
             guidanceMessage: "",
             isIncompleteLibrary: false

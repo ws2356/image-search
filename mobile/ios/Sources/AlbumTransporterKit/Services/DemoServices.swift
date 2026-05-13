@@ -66,7 +66,7 @@ actor DemoTransferService: TransferService {
         var resumed = snapshot
         resumed.transferredCount = min(snapshot.totalCount, snapshot.transferredCount + 126)
         resumed.failedCount = max(snapshot.failedCount - 1, 0)
-        resumed.etaDescription = resumed.transferredCount == resumed.totalCount ? nil : "8 min remaining"
+        resumed.etaMinutes = resumed.transferredCount == resumed.totalCount ? nil : 8
         resumed.statusMessage = "Transfer resumed from the last saved marker."
         resumed.guidanceMessage = "Keep the app in the foreground when possible. iOS may still pause long-running transfers when the app backgrounds."
         progress(resumed)
@@ -78,7 +78,7 @@ actor DemoTransferService: TransferService {
 
         var completed = current
         completed.transferredCount = current.totalCount
-        completed.etaDescription = nil
+        completed.etaMinutes = nil
         completed.statusMessage = "Desktop confirmed that this session is complete."
         completed.guidanceMessage = "You can return to the home screen and start a fresh session whenever new media appears on the device."
         currentSnapshot = completed

@@ -38,15 +38,32 @@ private struct TransferSessionContent: View {
     let snapshot: TransferSnapshot
     let onStop: () -> Void
 
+    private var etaDisplayText: String {
+        guard let etaMinutes = snapshot.etaMinutes else {
+            return "--"
+        }
+        return formattedETADisplayText(etaMinutes: etaMinutes)
+    }
+
+    private func formattedETADisplayText(etaMinutes: Double) -> String {
+        let roundedUpMinutes = max(Int(etaMinutes.rounded(.up)), 1)
+        if roundedUpMinutes < 60 {
+            return "\(roundedUpMinutes) min"
+        }
+        let hours = roundedUpMinutes / 60
+        let minutes = roundedUpMinutes % 60
+        if minutes == 0 {
+            return "\(hours) hr"
+        }
+        return "\(hours) hr \(minutes) min"
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             TransferTransportBadges(transports: snapshot.activeTransportsForDisplay)
             TransferProgressRing(snapshot: snapshot)
             TransferStatsCard(snapshot: snapshot)
-
-            if let eta = snapshot.etaDescription {
-                TransferEstimatedTimeCard(eta: eta)
-            }
+            TransferTransferMetaCard(eta: etaDisplayText, skippedCount: snapshot.skippedCount)
 
             TransferGuidanceBanner(snapshot: snapshot)
 
@@ -129,7 +146,7 @@ private struct TransferStatsCard: View {
     let snapshot: TransferSnapshot
 
     private var remainingCount: Int {
-        max(0, snapshot.totalCount - snapshot.transferredCount)
+        max(0, snapshot.totalCount - snapshot.transferredCount - snapshot.failedCount)
     }
 
     var body: some View {
@@ -177,23 +194,48 @@ private struct TransferStatColumn: View {
     }
 }
 
-private struct TransferEstimatedTimeCard: View {
+private struct TransferTransferMetaCard: View {
     let eta: String
+    let skippedCount: Int
 
     var body: some View {
-        VStack(spacing: 4) {
-            Text("Estimated time")
-                .font(.system(size: 13))
-                .foregroundStyle(Color(hex: 0x6E6E73))
-            Text(eta)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x1C1C1E))
+        HStack(spacing: 0) {
+            TransferMetaColumn(
+                label: "ETA",
+                value: eta,
+                valueColor: Color(hex: 0x007AFF)
+            )
+            Divider().frame(height: 40)
+            TransferMetaColumn(
+                label: "Skipped",
+                value: "\(skippedCount)",
+                valueColor: Color(hex: 0xFF9F0A)
+            )
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+    }
+}
+
+private struct TransferMetaColumn: View {
+    let label: String
+    let value: String
+    let valueColor: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(valueColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -320,10 +362,11 @@ private extension TransferSnapshot {
         transferredCount: 248,
         totalCount: 930,
         failedCount: 0,
+        skippedCount: 21,
         transport: .usb,
         liveTransports: [.usb, .lan],
         transferSpeedText: "42.80 MB/s",
-        etaDescription: "17 min remaining",
+        etaMinutes: 17,
         statusMessage: "Backing up local photos and videos to the paired desktop.",
         guidanceMessage: "USB is active for the fastest backup. Keep your iPhone unlocked and connected until the transfer finishes.",
         isIncompleteLibrary: false
@@ -333,10 +376,11 @@ private extension TransferSnapshot {
         transferredCount: 112,
         totalCount: 930,
         failedCount: 3,
+        skippedCount: 8,
         transport: .lan,
         liveTransports: [.lan],
         transferSpeedText: "4.80 MB/s",
-        etaDescription: "44 min remaining",
+        etaMinutes: 44,
         statusMessage: "Backing up local photos and videos to the paired desktop.",
         guidanceMessage: "USB backups are generally faster and more stable than Wi-Fi. Plug in anytime to let the session upgrade automatically when available.",
         isIncompleteLibrary: true

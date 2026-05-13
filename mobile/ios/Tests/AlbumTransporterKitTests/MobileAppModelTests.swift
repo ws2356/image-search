@@ -3,6 +3,28 @@ import XCTest
 
 @MainActor
 final class MobileAppModelTests: XCTestCase {
+    func test_transfer_snapshot_decodes_legacy_payload_without_skipped_count() throws {
+        let legacyPayload = """
+        {
+          "transferredCount": 12,
+          "totalCount": 30,
+          "failedCount": 1,
+          "transport": "lan",
+          "etaDescription": "17 min remaining",
+          "statusMessage": "Legacy transfer snapshot",
+          "guidanceMessage": "Keep app in foreground.",
+          "isIncompleteLibrary": false
+        }
+        """
+        let decodedSnapshot = try JSONDecoder().decode(
+            TransferSnapshot.self,
+            from: Data(legacyPayload.utf8)
+        )
+
+        XCTAssertEqual(decodedSnapshot.skippedCount, 0)
+        XCTAssertNil(decodedSnapshot.etaMinutes)
+    }
+
     func test_load_routes_to_home_for_first_launch() async {
         let store = InMemoryAppStateStore(snapshot: .firstLaunch)
         let model = MobileAppModel(
@@ -188,7 +210,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Processed 2 of 5 items for the paired desktop.",
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: false
@@ -198,7 +220,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
@@ -249,7 +271,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Processed 2 of 5 items for the paired desktop.",
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: false
@@ -259,7 +281,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
@@ -318,7 +340,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 10,
             failedCount: 0,
             transport: .lan,
-            etaDescription: "3 min remaining",
+            etaMinutes: 3,
             statusMessage: "Sending media to desktop.",
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: false
@@ -328,7 +350,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 10,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
@@ -448,7 +470,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Sending items to desktop.",
             guidanceMessage: "Keep app in foreground.",
             isIncompleteLibrary: false
@@ -458,7 +480,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Completed transfer.",
             guidanceMessage: "Done.",
             isIncompleteLibrary: false
@@ -505,7 +527,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Sending items to desktop.",
             guidanceMessage: "Keep app in foreground.",
             isIncompleteLibrary: false
@@ -515,7 +537,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 5,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Completed transfer.",
             guidanceMessage: "Done.",
             isIncompleteLibrary: false
@@ -604,7 +626,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 3,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false
@@ -677,7 +699,7 @@ final class MobileAppModelTests: XCTestCase {
             totalCount: 3,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
             guidanceMessage: "Backup completes automatically after the desktop confirms this transfer session.",
             isIncompleteLibrary: false

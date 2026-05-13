@@ -93,6 +93,56 @@ final class TransferServiceTests: XCTestCase {
         )
     }
 
+    func test_photo_library_transfer_service_reports_eta_for_inflight_snapshots() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let descriptors = (1 ... 5).map { index in
+            TransferAssetDescriptor(
+                assetID: "ph://asset-\(index)",
+                assetVersion: "v\(index)",
+                filename: "IMG_\(index).JPG",
+                mediaType: "image",
+                createdAt: Date(timeIntervalSince1970: 1_776_123_610 + TimeInterval(index)),
+                updatedAt: Date(timeIntervalSince1970: 1_776_123_610 + TimeInterval(index))
+            )
+        }
+        let assetSource = StaticTransferAssetSource(descriptors: descriptors)
+        let transferClient = RecordingMobileTransferClient(uploadDelayNanoseconds: 300_000_000)
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore,
+            uploadConcurrencyLimit: 1
+        )
+        let progressRecorder = ProgressSnapshotRecorder()
+
+        _ = await service.startTransfer { snapshot in
+            progressRecorder.record(snapshot)
+        }
+
+        let snapshots = progressRecorder.snapshots().filter { snapshot in
+            snapshot.totalCount > 0 && snapshot.transferredCount + snapshot.failedCount < snapshot.totalCount
+        }
+        XCTAssertTrue(
+            snapshots.contains(where: { snapshot in
+                guard let etaMinutes = snapshot.etaMinutes else {
+                    return false
+                }
+                return etaMinutes > 0
+            })
+        )
+    }
+
     func test_photo_library_transfer_service_records_asset_export_and_upload_spans() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -729,6 +779,7 @@ final class TransferServiceTests: XCTestCase {
 
         XCTAssertEqual(snapshot.transferredCount, 2)
         XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(snapshot.skippedCount, 2)
         XCTAssertEqual(uploadedAssetIDs, ["ph://asset-002"])
         XCTAssertEqual(lookupBatchSizes, [1, 1])
     }
@@ -878,7 +929,7 @@ final class TransferServiceTests: XCTestCase {
             totalCount: 10,
             failedCount: 0,
             transport: .lan,
-            etaDescription: nil,
+            etaMinutes: nil,
             statusMessage: "Stopping backup…",
             guidanceMessage: "",
             isIncompleteLibrary: false
@@ -938,7 +989,7 @@ final class TransferServiceTests: XCTestCase {
                 totalCount: 1,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Stopping backup…",
                 guidanceMessage: "",
                 isIncompleteLibrary: false
@@ -997,7 +1048,7 @@ final class TransferServiceTests: XCTestCase {
                 totalCount: 1,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Stopping backup…",
                 guidanceMessage: "",
                 isIncompleteLibrary: false

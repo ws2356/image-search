@@ -32,7 +32,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 10,
                 failedCount: 1,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Stopped.",
                 guidanceMessage: "",
                 isIncompleteLibrary: false
@@ -130,7 +130,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 5,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: "4 min remaining",
+                etaMinutes: 4,
                 statusMessage: "Starting transfer.",
                 guidanceMessage: "Keep the app in the foreground.",
                 isIncompleteLibrary: false
@@ -140,7 +140,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 5,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Transfer finished.",
                 guidanceMessage: "Waiting for desktop confirmation.",
                 isIncompleteLibrary: false
@@ -169,7 +169,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 3,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: "1 min remaining",
+                etaMinutes: 1,
                 statusMessage: "Starting transfer.",
                 guidanceMessage: "Keep the app in the foreground.",
                 isIncompleteLibrary: false
@@ -179,7 +179,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 3,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Transfer finished.",
                 guidanceMessage: "Waiting for desktop confirmation.",
                 isIncompleteLibrary: false
@@ -207,7 +207,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 2,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: "1 min remaining",
+                etaMinutes: 1,
                 statusMessage: "Starting transfer.",
                 guidanceMessage: "Keep the app in the foreground.",
                 isIncompleteLibrary: false
@@ -217,7 +217,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 2,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Transfer finished.",
                 guidanceMessage: "Waiting for desktop confirmation.",
                 isIncompleteLibrary: false
@@ -232,7 +232,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 3,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: "2 min remaining",
+                etaMinutes: 2,
                 statusMessage: "Starting transfer.",
                 guidanceMessage: "Keep the app in the foreground.",
                 isIncompleteLibrary: false
@@ -242,7 +242,7 @@ final class PageViewModelTests: XCTestCase {
                 totalCount: 3,
                 failedCount: 0,
                 transport: .lan,
-                etaDescription: nil,
+                etaMinutes: nil,
                 statusMessage: "Transfer finished.",
                 guidanceMessage: "Waiting for desktop confirmation.",
                 isIncompleteLibrary: false

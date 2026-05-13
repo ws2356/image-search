@@ -339,10 +339,11 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
     var transferredCount: Int
     var totalCount: Int
     var failedCount: Int
+    var skippedCount: Int = 0
     var transport: TransferTransport
     var liveTransports: [TransferTransport]? = nil
     var transferSpeedText: String? = nil
-    var etaDescription: String?
+    var etaMinutes: Double?
     var statusMessage: String
     var guidanceMessage: String
     var isIncompleteLibrary: Bool
@@ -370,13 +371,63 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
         transferredCount: 248,
         totalCount: 930,
         failedCount: 3,
+        skippedCount: 17,
         transport: .lan,
         transferSpeedText: "4.80 MB/s",
-        etaDescription: "17 min remaining",
+        etaMinutes: 17,
         statusMessage: "Backing up local photos and videos to the paired desktop.",
         guidanceMessage: "USB is generally faster and more stable than Wi-Fi. Once desktop support lands, the app should prefer USB when it is available.",
         isIncompleteLibrary: true
     )
+}
+
+extension TransferSnapshot {
+    enum CodingKeys: String, CodingKey {
+        case transferredCount
+        case totalCount
+        case failedCount
+        case skippedCount
+        case transport
+        case liveTransports
+        case transferSpeedText
+        case etaMinutes
+        case statusMessage
+        case guidanceMessage
+        case isIncompleteLibrary
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        transferredCount = try container.decode(Int.self, forKey: .transferredCount)
+        totalCount = try container.decode(Int.self, forKey: .totalCount)
+        failedCount = try container.decode(Int.self, forKey: .failedCount)
+        skippedCount = try container.decodeIfPresent(Int.self, forKey: .skippedCount) ?? 0
+        transport = try container.decode(TransferTransport.self, forKey: .transport)
+        liveTransports = try container.decodeIfPresent([TransferTransport].self, forKey: .liveTransports)
+        transferSpeedText = try container.decodeIfPresent(String.self, forKey: .transferSpeedText)
+
+        etaMinutes = try container.decodeIfPresent(Double.self, forKey: .etaMinutes)
+
+        statusMessage = try container.decode(String.self, forKey: .statusMessage)
+        guidanceMessage = try container.decode(String.self, forKey: .guidanceMessage)
+        isIncompleteLibrary = try container.decode(Bool.self, forKey: .isIncompleteLibrary)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(transferredCount, forKey: .transferredCount)
+        try container.encode(totalCount, forKey: .totalCount)
+        try container.encode(failedCount, forKey: .failedCount)
+        try container.encode(skippedCount, forKey: .skippedCount)
+        try container.encode(transport, forKey: .transport)
+        try container.encodeIfPresent(liveTransports, forKey: .liveTransports)
+        try container.encodeIfPresent(transferSpeedText, forKey: .transferSpeedText)
+        try container.encodeIfPresent(etaMinutes, forKey: .etaMinutes)
+        try container.encode(statusMessage, forKey: .statusMessage)
+        try container.encode(guidanceMessage, forKey: .guidanceMessage)
+        try container.encode(isIncompleteLibrary, forKey: .isIncompleteLibrary)
+    }
+
 }
 
 struct CompletionSummary: Equatable, Sendable, Codable {
