@@ -425,37 +425,7 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func finalizeStoppedTransfer() async {
-        await transferService.stageTransferCompletionState(nil)
-        transitionBackupFlow(.transferStopped)
-        route = .home
-
-        recordTelemetry(
-            .transferStopped,
-            attributes: [
-                "transfer.stop_reason": .string("user_requested")
-            ]
-        )
-        incrementTelemetryMetric(
-            .backupFailures,
-            attributes: [
-                "backup.failure_reason": .string("user_requested")
-            ]
-        )
-        endTelemetrySpan(
-            .transferFlow,
-            attributes: [
-                "transfer.stop_reason": .string("user_requested")
-            ],
-            status: .error("user_requested")
-        )
-        endTelemetrySpan(
-            .backupSession,
-            attributes: [
-                "backup.failure_reason": .string("user_requested")
-            ],
-            status: .error("user_requested")
-        )
-        persistSnapshot()
+        await finalizeStoppedTransfer(reason: "user_requested")
     }
 
     private func stopTransferForIncomingLinkReplacementIfNeeded() async {
@@ -465,6 +435,10 @@ final class MobileAppModel: ObservableObject {
         let snapshot = await currentTransferSnapshot()
         _ = await transferService.stopTransfer(current: snapshot)
         await transferService.stageTransferSnapshot(snapshot)
+        await finalizeStoppedTransfer(reason: "replaced_by_universal_link")
+    }
+
+    private func finalizeStoppedTransfer(reason: String) async {
         await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
         route = .home
@@ -472,28 +446,28 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(
             .transferStopped,
             attributes: [
-                "transfer.stop_reason": .string("replaced_by_universal_link")
+                "transfer.stop_reason": .string(reason)
             ]
         )
         incrementTelemetryMetric(
             .backupFailures,
             attributes: [
-                "backup.failure_reason": .string("replaced_by_universal_link")
+                "backup.failure_reason": .string(reason)
             ]
         )
         endTelemetrySpan(
             .transferFlow,
             attributes: [
-                "transfer.stop_reason": .string("replaced_by_universal_link")
+                "transfer.stop_reason": .string(reason)
             ],
-            status: .error("replaced_by_universal_link")
+            status: .error(reason)
         )
         endTelemetrySpan(
             .backupSession,
             attributes: [
-                "backup.failure_reason": .string("replaced_by_universal_link")
+                "backup.failure_reason": .string(reason)
             ],
-            status: .error("replaced_by_universal_link")
+            status: .error(reason)
         )
         persistSnapshot()
     }

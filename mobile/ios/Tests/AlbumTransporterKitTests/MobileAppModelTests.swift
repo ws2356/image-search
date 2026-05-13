@@ -584,6 +584,7 @@ final class MobileAppModelTests: XCTestCase {
     }
 
     func test_confirm_incoming_universal_link_replacement_stops_transfer_and_starts_new_pairing() async {
+        let telemetryClient = RecordingTelemetryClient()
         let inFlightSnapshot = TransferSnapshot(
             transferredCount: 1,
             totalCount: 5,
@@ -615,7 +616,7 @@ final class MobileAppModelTests: XCTestCase {
             pairingService: StaticPairingService(),
             permissionService: StaticPermissionService(summary: .allClear),
             transferService: transferService,
-            telemetryClient: RecordingTelemetryClient()
+            telemetryClient: telemetryClient
         )
         let permissionsViewModel = PermissionsPageViewModel(
             model: model,
@@ -645,6 +646,11 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.scannedQRCodeValue, replacementLink)
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
+        let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
+        XCTAssertEqual(
+            stopRecord?.attributes["transfer.stop_reason"],
+            .string("replaced_by_universal_link")
+        )
 
         await transferTask.value
     }
