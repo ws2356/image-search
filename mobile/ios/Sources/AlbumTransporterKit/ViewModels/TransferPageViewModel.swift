@@ -1,14 +1,16 @@
 import SwiftUI
-import Combine
 
 @MainActor
 final class TransferPageViewModel: ObservableObject {
     private let model: any TransferPageModeling
     private let telemetryService: TelemetryService
     private let pollingIntervalNanoseconds: UInt64
-    private var modelChangeCancellable: AnyCancellable?
     private var transferPollingTask: Task<Void, Never>?
     private var hasStartedTransferOrchestration = false
+
+    private var transferService: TransferService {
+        model.transferServiceForTransferView
+    }
 
     @Published private(set) var snapshot: TransferSnapshot
     @Published var isShowingStopConfirmation = false
@@ -31,11 +33,6 @@ final class TransferPageViewModel: ObservableObject {
             guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
             isIncompleteLibrary: model.permissionSummary.mediaScope != .full
         )
-        if let observableModel = model as? MobileAppModel {
-            modelChangeCancellable = observableModel.objectWillChange.sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-        }
         Task { [weak self] in
             await self?.loadStagedSnapshot()
         }
@@ -61,9 +58,9 @@ final class TransferPageViewModel: ObservableObject {
     func confirmStopTransfer() async {
         telemetryService.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
         isShowingStopConfirmation = false
-        let currentSnapshot = await model.transferServiceForTransferView.progressSnapshot() ?? snapshot
-        _ = await model.transferServiceForTransferView.stopTransfer(current: currentSnapshot)
-        await model.transferServiceForTransferView.stageTransferSnapshot(currentSnapshot)
+        let currentSnapshot = await transferService.progressSnapshot() ?? snapshot
+        _ = await transferService.stopTransfer(current: currentSnapshot)
+        await transferService.stageTransferSnapshot(currentSnapshot)
         snapshot = currentSnapshot
         await model.handleResultForPage(.transfer, result: .failure, target: .stopTransferConfirmed)
     }
@@ -78,28 +75,21 @@ final class TransferPageViewModel: ObservableObject {
             stopTransferPolling()
         }
 
-        if let stagedSnapshot = await model.transferServiceForTransferView.progressSnapshot() {
-            applySnapshotIfNewer(stagedSnapshot)
-        }
-        await model.transferServiceForTransferView.stageTransferCompletionState(nil)
+        await loadCurrentSnapshot()
+        await transferService.stageTransferCompletionState(nil)
         let transferStartedAt = Date()
         startTransferPolling()
-        let finalSnapshot = await model.transferServiceForTransferView.startTransfer { _ in }
+        let finalSnapshot = await transferService.startTransfer { _ in }
         applySnapshotIfNewer(finalSnapshot)
         guard model.route == .transfer else {
             model.persistSnapshot()
             return
         }
 
-        let completedSnapshot = await model.transferServiceForTransferView.completeTransfer(current: snapshot)
+        let completedSnapshot = await transferService.completeTransfer(current: snapshot)
         applySnapshotIfNewer(completedSnapshot)
-        let resolvedCleanupResult: TransferAssetCleanupResult
-        if await model.permissionService.removeAfterBackupEnabled() {
-            resolvedCleanupResult = await model.transferServiceForTransferView.moveSuccessfullyTransferredAssetsToRecentlyRemoved()
-        } else {
-            resolvedCleanupResult = .skipped
-        }
-        await model.transferServiceForTransferView.stageTransferCompletionState(
+        let resolvedCleanupResult = await resolveCleanupResult()
+        await transferService.stageTransferCompletionState(
             TransferCompletionState(
                 snapshot: snapshot,
                 cleanupResult: resolvedCleanupResult,
@@ -107,7 +97,7 @@ final class TransferPageViewModel: ObservableObject {
                 sessionDuration: Date().timeIntervalSince(transferStartedAt)
             )
         )
-        await model.transferServiceForTransferView.stageTransferSnapshot(snapshot)
+        await transferService.stageTransferSnapshot(snapshot)
         await model.handleResultForPage(.transfer, result: .success, target: .secondary)
     }
 
@@ -124,7 +114,7 @@ final class TransferPageViewModel: ObservableObject {
                 guard let self else {
                     return
                 }
-                if let inFlightSnapshot = await model.transferServiceForTransferView.progressSnapshot() {
+                if let inFlightSnapshot = await transferService.progressSnapshot() {
                     await MainActor.run {
                         self.applySnapshotIfNewer(inFlightSnapshot)
                     }
@@ -139,6 +129,20 @@ final class TransferPageViewModel: ObservableObject {
         transferPollingTask = nil
     }
 
+    private func loadCurrentSnapshot() async {
+        guard let stagedSnapshot = await transferService.progressSnapshot() else {
+            return
+        }
+        applySnapshotIfNewer(stagedSnapshot)
+    }
+
+    private func resolveCleanupResult() async -> TransferAssetCleanupResult {
+        guard await model.permissionService.removeAfterBackupEnabled() else {
+            return .skipped
+        }
+        return await transferService.moveSuccessfullyTransferredAssetsToRecentlyRemoved()
+    }
+
     private func applySnapshotIfNewer(_ newSnapshot: TransferSnapshot) {
         guard
             newSnapshot.totalCount != snapshot.totalCount
@@ -150,9 +154,6 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     private func loadStagedSnapshot() async {
-        guard let stagedSnapshot = await model.transferServiceForTransferView.progressSnapshot() else {
-            return
-        }
-        applySnapshotIfNewer(stagedSnapshot)
+        await loadCurrentSnapshot()
     }
 }

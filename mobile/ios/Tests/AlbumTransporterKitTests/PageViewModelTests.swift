@@ -311,6 +311,48 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(startTransferCallCount, 2)
     }
 
+    func test_transfer_page_view_model_skips_completion_when_route_changes_mid_transfer() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        model.route = .transfer
+        await model.transferServiceActor.configureProgressSequence(
+            initialSnapshot: TransferSnapshot(
+                transferredCount: 1,
+                totalCount: 3,
+                failedCount: 0,
+                transport: .lan,
+                etaMinutes: 1,
+                statusMessage: "Starting transfer.",
+                guidanceMessage: "Keep the app in the foreground.",
+                isIncompleteLibrary: false
+            ),
+            finalSnapshot: TransferSnapshot(
+                transferredCount: 3,
+                totalCount: 3,
+                failedCount: 0,
+                transport: .lan,
+                etaMinutes: nil,
+                statusMessage: "Transfer finished.",
+                guidanceMessage: "Waiting for desktop confirmation.",
+                isIncompleteLibrary: false
+            ),
+            callbackDelayNanoseconds: 200_000_000
+        )
+        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
+
+        let transferTask = Task { @MainActor in
+            await viewModel.orchestrateTransfer()
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        model.route = .home
+
+        await transferTask.value
+
+        let completionState = await model.transferServiceActor.transferCompletionState()
+        XCTAssertNil(completionState)
+    }
+
 }
 
 @MainActor
