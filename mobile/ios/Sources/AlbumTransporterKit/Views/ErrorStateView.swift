@@ -28,14 +28,22 @@ struct ErrorStateView: View {
                     title: "Try Again",
                     icon: "arrow.clockwise",
                     style: .primary,
-                    action: viewModel.retryTapped
+                    action: {
+                        Task {
+                            await viewModel.retryTapped()
+                        }
+                    }
                 )
 
                 ActionButton(
                     title: "Back to Home",
                     icon: "house",
                     style: .secondary,
-                    action: viewModel.cancelTapped
+                    action: {
+                        Task {
+                            await viewModel.cancelTapped()
+                        }
+                    }
                 )
             }
             .padding(.horizontal, 20)

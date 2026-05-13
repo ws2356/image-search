@@ -12,13 +12,21 @@ struct ScanningPageView: View {
                         await viewModel.onQRScanned(scannedValue: scannedValue)
                     }
                 },
-                onScanFailure: viewModel.scannerFailed,
+                onScanFailure: {
+                    Task {
+                        await viewModel.scannerFailed()
+                    }
+                },
                 onBack: {
                     Task {
                         await viewModel.backTapped()
                     }
                 },
-                onOpenSettings: viewModel.openSettingsTapped
+                onOpenSettings: {
+                    Task {
+                        await viewModel.openSettingsTapped()
+                    }
+                }
             )
             .toolbar(.hidden, for: .navigationBar)
         } else {
@@ -29,13 +37,21 @@ struct ScanningPageView: View {
                         await viewModel.onQRScanned(scannedValue: scannedValue)
                     }
                 },
-                onScanFailure: viewModel.scannerFailed,
+                onScanFailure: {
+                    Task {
+                        await viewModel.scannerFailed()
+                    }
+                },
                 onBack: {
                     Task {
                         await viewModel.backTapped()
                     }
                 },
-                onOpenSettings: viewModel.openSettingsTapped
+                onOpenSettings: {
+                    Task {
+                        await viewModel.openSettingsTapped()
+                    }
+                }
             )
             .navigationBarHidden(true)
         }

@@ -62,13 +62,27 @@ final class PageViewModelTests: XCTestCase {
 
         await viewModel.onQRScanned(scannedValue: "qr-value")
         await viewModel.backTapped()
-        viewModel.scannerFailed()
-        await Task.yield()
+        await viewModel.openSettingsTapped()
+        await viewModel.scannerFailed()
 
         XCTAssertEqual(model.scannedQRCodeValue, "qr-value")
         XCTAssertEqual(model.beginPairingCallCount, 1)
-        XCTAssertEqual(model.returnHomeCallCount, 1)
+        XCTAssertEqual(model.returnHomeCallCount, 2)
         XCTAssertEqual(model.scanFailureCallCount, 1)
+    }
+
+    func test_error_page_view_model_maps_summary_and_actions() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = ErrorPageViewModel(model: model, telemetryService: telemetryService)
+
+        XCTAssertEqual(viewModel.summary, model.errorSummary)
+
+        await viewModel.retryTapped()
+        await viewModel.cancelTapped()
+
+        XCTAssertEqual(model.openScanRouteCallCount, 1)
+        XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
     func test_pairing_page_view_model_maps_status_binding_and_actions() async {

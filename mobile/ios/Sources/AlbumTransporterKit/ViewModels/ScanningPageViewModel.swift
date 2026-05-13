@@ -25,17 +25,13 @@ struct ScanningPageViewModel {
         await model.handleResultForPage(.scan, result: .cancel, target: nil)
     }
 
-    func openSettingsTapped() {
+    func openSettingsTapped() async {
         telemetryService.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
-        Task { [model] in
-            await model.handleResultForPage(.scan, result: .cancel, target: nil)
-        }
+        await model.handleResultForPage(.scan, result: .cancel, target: nil)
     }
 
-    func scannerFailed() {
+    func scannerFailed() async {
         telemetryService.recordInteraction(name: "scanner_failed", location: "pairing_scanner")
-        Task { [model] in
-            await model.handleResultForPage(.scan, result: .failure, target: nil)
-        }
+        await model.handleResultForPage(.scan, result: .failure, target: nil)
     }
 }
