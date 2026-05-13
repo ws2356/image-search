@@ -2360,7 +2360,7 @@ actor PhotoLibraryTransferService: TransferService {
     private var totalPreparedTransferBytes = 0
     private var processedPreparedTransferBytes = 0
     private var nonSkippedTransferredBytesForSpeed = 0
-    private var successfullyTransferredAssetIDs: [String] = []
+    private var successfullyTransferredAssetIDs: Set<String> = []
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
     private var currentCompletionState: TransferCompletionState?
@@ -2519,17 +2519,14 @@ actor PhotoLibraryTransferService: TransferService {
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
-        var seenAssetIDs: Set<String> = []
-        let candidateAssetIDs = successfullyTransferredAssetIDs.filter { assetID in
-            seenAssetIDs.insert(assetID).inserted
-        }
+        let candidateAssetIDs = Array(successfullyTransferredAssetIDs)
         guard !candidateAssetIDs.isEmpty else {
             return .skipped
         }
 
         let fetchedAssets = PHAsset.fetchAssets(withLocalIdentifiers: candidateAssetIDs, options: nil)
         guard fetchedAssets.count > 0 else {
-            successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
+            successfullyTransferredAssetIDs.removeAll()
             return .skipped
         }
 
@@ -2554,7 +2551,7 @@ actor PhotoLibraryTransferService: TransferService {
                 }
             }
             let removedCount = fetchedAssets.count
-            successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
+            successfullyTransferredAssetIDs.removeAll()
             TransferDebugLogger.info(
                 "Moved transferred assets to Recently Removed removed_count=\(removedCount)"
             )
@@ -2570,7 +2567,7 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func runTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         stopRequested = false
-        successfullyTransferredAssetIDs.removeAll(keepingCapacity: false)
+        successfullyTransferredAssetIDs.removeAll()
         currentCompletionState = nil
         totalPreparedTransferBytes = 0
         processedPreparedTransferBytes = 0
@@ -3226,6 +3223,7 @@ actor PhotoLibraryTransferService: TransferService {
         if let existingMatch = uploadResult.existingMatch {
             transferredCount += 1
             skippedCount += 1
+            successfullyTransferredAssetIDs.insert(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
             TransferDebugLogger.debug(
                 "Skipped upload after desktop signature hit \(assetSummary) local_relative_path=\(existingMatch.localRelativePath)"
             )
@@ -3236,13 +3234,14 @@ actor PhotoLibraryTransferService: TransferService {
                 case .stored:
                     transferredCount += 1
                     nonSkippedTransferredBytesForSpeed += max(uploadResult.preparedAsset.exportedAsset.fileSize, 0)
-                    successfullyTransferredAssetIDs.append(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
+                    successfullyTransferredAssetIDs.insert(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
                     TransferDebugLogger.debug(
                         "Transferred asset \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
                     )
                 case .skipped:
                     transferredCount += 1
                     skippedCount += 1
+                    successfullyTransferredAssetIDs.insert(uploadResult.preparedAsset.exportedAsset.descriptor.assetID)
                     TransferDebugLogger.debug(
                         "Skipped transfer after desktop confirmation \(assetSummary) response=\(TransferDebugLogger.responseSummary(response))"
                     )
