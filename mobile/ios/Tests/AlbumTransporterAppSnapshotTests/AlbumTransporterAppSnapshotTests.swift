@@ -42,12 +42,19 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
     func test_transfer_in_progress_page() throws {
         let transferModel = SnapshotTransferPageModel(snapshot: .snapshotMarketing)
         let telemetryService = SnapshotTelemetryService()
+        let transferViewModel = TransferPageViewModel(
+            model: transferModel,
+            telemetryService: telemetryService
+        )
+        let loadedExpectation = expectation(description: "transfer snapshot loaded")
+        Task { @MainActor in
+            await transferViewModel.orchestrateTransfer()
+            loadedExpectation.fulfill()
+        }
+        wait(for: [loadedExpectation], timeout: 1.0)
         let viewController = makeHostedPage(title: "Backup in Progress") {
             TransferSessionView(
-                viewModel: TransferPageViewModel(
-                    model: transferModel,
-                    telemetryService: telemetryService
-                )
+                viewModel: transferViewModel
             )
         }
         try SnapshotSupport.assertSnapshot(pageName: "transfer-in-progress", viewController: viewController)
@@ -143,7 +150,7 @@ private final class SnapshotAppPageModel: AppPageModeling {
                 snapshot: snapshot,
                 cleanupResult: .skipped,
                 completedAt: Date(),
-                sessionDuration: nil
+                sessionDuration: 24 * 60
             )
         )
     }

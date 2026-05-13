@@ -61,13 +61,13 @@ enum SnapshotSupport {
     static var snapshotLanguage: String {
         if let language = runtimeConfig?.language?.trimmingCharacters(in: .whitespacesAndNewlines),
            !language.isEmpty {
-            return language
+            return normalizedSnapshotLanguage(language)
         }
         if let language = ProcessInfo.processInfo.environment["SNAPSHOT_LANGUAGE"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !language.isEmpty {
-            return language
+            return normalizedSnapshotLanguage(language)
         }
-        return Locale.preferredLanguages.first ?? "en-US"
+        return normalizedSnapshotLanguage(Locale.preferredLanguages.first ?? "en-US")
     }
 
     static var snapshotDeviceDisplayName: String {
@@ -100,6 +100,20 @@ enum SnapshotSupport {
         }
         let collapsed = String(scalars).replacingOccurrences(of: "--+", with: "-", options: .regularExpression)
         return collapsed.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+    }
+
+    private static func normalizedSnapshotLanguage(_ rawLanguage: String) -> String {
+        let normalized = rawLanguage
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+        guard !normalized.isEmpty else {
+            return "en-US"
+        }
+        if normalized.contains("-") {
+            return normalized
+        }
+        let region = Locale.current.regionCode ?? "US"
+        return "\(normalized)-\(region)"
     }
 
     static func loadLaunchScreenViewController() throws -> UIViewController {
