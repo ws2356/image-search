@@ -329,45 +329,24 @@ final class MobileAppModel: ObservableObject {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
         await permissionService.setRemoveAfterBackupEnabled(false)
-        let interruptionSnapshot = TransferSnapshot(
-            transferredCount: 0,
-            totalCount: 0,
-            failedCount: 0,
-            transport: pairingStatus.transport ?? .lan,
-            etaMinutes: nil,
-            statusMessage: "Backup canceled before transfer started.",
-            guidanceMessage: "Scan again when you are ready to start another backup session.",
-            isIncompleteLibrary: permissionSummary.mediaScope != .full
-        )
+        let interruptionSnapshot = preflightInterruptionSnapshot()
         _ = await transferService.stopTransfer(current: interruptionSnapshot)
         await transferService.stageTransferSnapshot(interruptionSnapshot)
         await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
         route = .home
-        recordTelemetry(
-            .transferStopped,
-            attributes: [
-                "transfer.stop_reason": .string(reason)
-            ]
-        )
-        incrementTelemetryMetric(
-            .backupFailures,
-            attributes: [
-                "backup.failure_reason": .string(reason)
-            ]
-        )
+        let stopAttributes = transferStopTelemetryAttributes(reason: reason)
+        let backupFailureAttributes = backupFailureTelemetryAttributes(reason: reason)
+        recordTelemetry(.transferStopped, attributes: stopAttributes)
+        incrementTelemetryMetric(.backupFailures, attributes: backupFailureAttributes)
         endTelemetrySpan(
             .backupPreflight,
-            attributes: [
-                "backup.failure_reason": .string(reason)
-            ],
+            attributes: backupFailureAttributes,
             status: .error(reason)
         )
         endTelemetrySpan(
             .backupSession,
-            attributes: [
-                "backup.failure_reason": .string(reason)
-            ],
+            attributes: backupFailureAttributes,
             status: .error(reason)
         )
         persistSnapshot()
@@ -396,30 +375,18 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.transferStopped)
         route = .home
 
-        recordTelemetry(
-            .transferStopped,
-            attributes: [
-                "transfer.stop_reason": .string(reason)
-            ]
-        )
-        incrementTelemetryMetric(
-            .backupFailures,
-            attributes: [
-                "backup.failure_reason": .string(reason)
-            ]
-        )
+        let stopAttributes = transferStopTelemetryAttributes(reason: reason)
+        let backupFailureAttributes = backupFailureTelemetryAttributes(reason: reason)
+        recordTelemetry(.transferStopped, attributes: stopAttributes)
+        incrementTelemetryMetric(.backupFailures, attributes: backupFailureAttributes)
         endTelemetrySpan(
             .transferFlow,
-            attributes: [
-                "transfer.stop_reason": .string(reason)
-            ],
+            attributes: stopAttributes,
             status: .error(reason)
         )
         endTelemetrySpan(
             .backupSession,
-            attributes: [
-                "backup.failure_reason": .string(reason)
-            ],
+            attributes: backupFailureAttributes,
             status: .error(reason)
         )
         persistSnapshot()
@@ -563,12 +530,37 @@ final class MobileAppModel: ObservableObject {
         )
     }
 
+    private func preflightInterruptionSnapshot() -> TransferSnapshot {
+        TransferSnapshot(
+            transferredCount: 0,
+            totalCount: 0,
+            failedCount: 0,
+            transport: pairingStatus.transport ?? .lan,
+            etaMinutes: nil,
+            statusMessage: "Backup canceled before transfer started.",
+            guidanceMessage: "Scan again when you are ready to start another backup session.",
+            isIncompleteLibrary: permissionSummary.mediaScope != .full
+        )
+    }
+
     private func transferStartTelemetryAttributes(
         isRemoveAfterBackupEnabled: Bool
     ) -> MobileTelemetryAttributes {
         [
             "transfer.is_incomplete_library": .bool(permissionSummary.mediaScope != .full),
             "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
+        ]
+    }
+
+    private func transferStopTelemetryAttributes(reason: String) -> MobileTelemetryAttributes {
+        [
+            "transfer.stop_reason": .string(reason)
+        ]
+    }
+
+    private func backupFailureTelemetryAttributes(reason: String) -> MobileTelemetryAttributes {
+        [
+            "backup.failure_reason": .string(reason)
         ]
     }
 

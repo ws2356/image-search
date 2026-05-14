@@ -259,6 +259,7 @@ final class MobileAppModelTests: XCTestCase {
             lowBatteryWarningNeeded: true,
             isCharging: false
         )
+        let telemetryClient = RecordingTelemetryClient()
         let transferService = StopTrackingTransferService()
         let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
@@ -266,7 +267,7 @@ final class MobileAppModelTests: XCTestCase {
             pairingService: StaticPairingService(),
             permissionService: StaticPermissionService(summary: lowBatteryFullAccess),
             transferService: transferService,
-            telemetryClient: RecordingTelemetryClient()
+            telemetryClient: telemetryClient
         )
         let permissionsViewModel = PermissionsPageViewModel(
             model: model,
@@ -283,8 +284,22 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.cancelFromLowBattery()
 
         XCTAssertEqual(model.route, .home)
+        XCTAssertEqual(model.backupFlowState, .transferStopped)
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
+        let stagedSnapshot = await transferService.progressSnapshot()
+        XCTAssertEqual(stagedSnapshot?.transferredCount, 0)
+        XCTAssertEqual(stagedSnapshot?.totalCount, 0)
+        XCTAssertEqual(stagedSnapshot?.transport, .lan)
+        XCTAssertEqual(
+            stagedSnapshot?.statusMessage,
+            "Backup canceled before transfer started."
+        )
+        let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
+        XCTAssertEqual(
+            stopRecord?.attributes["transfer.stop_reason"],
+            .string("low_battery_declined")
+        )
     }
 
     func test_stop_transfer_returns_home_without_interrupted_page() async {
