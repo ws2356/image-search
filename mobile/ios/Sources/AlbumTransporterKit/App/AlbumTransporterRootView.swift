@@ -8,6 +8,7 @@ public struct AlbumTransporterRootView: View {
     private let container: Container
     @StateObject private var model: MobileAppModel
     @StateObject private var homeViewModel: HomePageViewModel
+    @StateObject private var pairingViewModel: PairingPageViewModel
     @StateObject private var permissionsViewModel: PermissionsPageViewModel
     @StateObject private var transferViewModel: TransferPageViewModel
     @StateObject private var completionViewModel: CompletionPageViewModel
@@ -23,6 +24,12 @@ public struct AlbumTransporterRootView: View {
         _model = StateObject(wrappedValue: model)
         _homeViewModel = StateObject(
             wrappedValue: HomePageViewModel(
+                model: model,
+                telemetryService: telemetryService
+            )
+        )
+        _pairingViewModel = StateObject(
+            wrappedValue: PairingPageViewModel(
                 model: model,
                 telemetryService: telemetryService
             )
@@ -124,10 +131,6 @@ public struct AlbumTransporterRootView: View {
             )
             ScanningPageView(viewModel: scanningViewModel)
         case .pair:
-            let pairingViewModel = PairingPageViewModel(
-                model: model,
-                telemetryService: container.telemetryService()
-            )
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
             PermissionsGateView(viewModel: permissionsViewModel)

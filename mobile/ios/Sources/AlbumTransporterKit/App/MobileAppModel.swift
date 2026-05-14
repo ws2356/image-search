@@ -81,7 +81,7 @@ final class MobileAppModel: ObservableObject {
         case .scan:
             switch result {
             case .success:
-                await beginPairing()
+                await showPairingProgress()
             case .cancel:
                 await returnHome()
             case .failure:
@@ -248,6 +248,10 @@ final class MobileAppModel: ObservableObject {
     }
 
     func beginPairing() async {
+        await showPairingProgress()
+    }
+
+    func showPairingProgress() async {
         beginTelemetrySpan(.pairingFlow)
         transitionBackupFlow(.pairingStarted)
         route = .pair
@@ -260,33 +264,29 @@ final class MobileAppModel: ObservableObject {
             message: "Validating the QR payload and establishing a secure local session with the desktop."
         )
         recordTelemetry(.pairingStarted)
+        persistSnapshot()
+    }
 
-        let payloadResult = qrCodePayloadDecoder.decode(scannedValue: scannedQRCodeValue)
+    func handleInvalidPairingPayload(message: String) {
+        pairingStatus = PairingStatus(
+            phase: .failed,
+            backupFlowState: .pendingPairing,
+            desktopName: homeSummary.desktopName,
+            sessionID: nil,
+            transport: nil,
+            message: message
+        )
+        applyPairingStatusStateTransition(pairingStatus)
+        reportPairingFailure(
+            reason: "invalid_qr_payload",
+            pairingAttributes: [
+                "pairing.failure_message": .string(message)
+            ]
+        )
+        persistSnapshot()
+    }
 
-        guard case .success(let payload) = payloadResult else {
-            if case .failure(let error) = payloadResult {
-                let failureMessage = error.message
-                pairingStatus = PairingStatus(
-                    phase: .failed,
-                    backupFlowState: .pendingPairing,
-                    desktopName: homeSummary.desktopName,
-                    sessionID: nil,
-                    transport: nil,
-                    message: failureMessage
-                )
-                applyPairingStatusStateTransition(pairingStatus)
-                reportPairingFailure(
-                    reason: "invalid_qr_payload",
-                    pairingAttributes: [
-                        "pairing.failure_message": .string(failureMessage)
-                    ]
-                )
-            }
-            persistSnapshot()
-            return
-        }
-
-        let result = await pairingService.startPairing(using: payload)
+    func handlePairingAttemptCompleted(_ result: PairingStatus) async {
         pairingStatus = result
         applyPairingStatusStateTransition(result)
         persistSnapshot()
@@ -394,6 +394,14 @@ final class MobileAppModel: ObservableObject {
 
     var transferServiceForPageModels: TransferService {
         transferService
+    }
+
+    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding {
+        qrCodePayloadDecoder
+    }
+
+    var pairingServiceForPairingPage: PairingService {
+        pairingService
     }
 
     var backupFlowState: MobileBackupFlowState {

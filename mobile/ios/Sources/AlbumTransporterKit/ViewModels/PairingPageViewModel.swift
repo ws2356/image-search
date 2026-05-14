@@ -1,15 +1,47 @@
-@MainActor
-struct PairingPageViewModel {
-    private let model: any AppPageModeling
-    private let telemetryService: TelemetryService
+import SwiftUI
 
-    init(model: any AppPageModeling, telemetryService: TelemetryService) {
+@MainActor
+final class PairingPageViewModel: ObservableObject {
+    private let model: any PairingPageModeling
+    private let telemetryService: TelemetryService
+    private var hasStartedPairingAttempt = false
+
+    init(model: any PairingPageModeling, telemetryService: TelemetryService) {
         self.model = model
         self.telemetryService = telemetryService
     }
 
     var status: PairingStatus {
         model.pairingStatus
+    }
+
+    func orchestratePairing() async {
+        guard model.route == .pair, model.pairingStatus.phase == .pairing else {
+            return
+        }
+        guard !hasStartedPairingAttempt else {
+            return
+        }
+        hasStartedPairingAttempt = true
+        defer { hasStartedPairingAttempt = false }
+
+        let payloadResult = model.qrCodePayloadDecoderForPairingPage.decode(
+            scannedValue: model.scannedQRCodeValue
+        )
+
+        guard case .success(let payload) = payloadResult else {
+            if case .failure(let error) = payloadResult {
+                model.handleInvalidPairingPayload(message: error.message)
+            }
+            return
+        }
+
+        let result = await model.pairingServiceForPairingPage.startPairing(using: payload)
+        guard model.route == .pair else {
+            model.persistSnapshot()
+            return
+        }
+        await model.handlePairingAttemptCompleted(result)
     }
 
     func scanAgainTapped() async {

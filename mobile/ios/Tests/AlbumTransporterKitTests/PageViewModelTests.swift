@@ -99,6 +99,49 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
+    func test_pairing_page_view_model_orchestrates_pairing_result() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        model.route = .pair
+        model.pairingStatus = PairingStatus(
+            phase: .pairing,
+            desktopName: nil,
+            sessionID: nil,
+            transport: nil,
+            message: "Pairing in progress."
+        )
+        let viewModel = PairingPageViewModel(model: model, telemetryService: telemetryService)
+
+        await viewModel.orchestratePairing()
+
+        let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
+        XCTAssertEqual(startPairingCallCount, 1)
+        XCTAssertEqual(model.handlePairingAttemptCompletedCallCount, 1)
+        XCTAssertEqual(model.lastHandledPairingResult?.phase, .paired)
+    }
+
+    func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        model.route = .pair
+        model.pairingStatus = PairingStatus(
+            phase: .failed,
+            desktopName: nil,
+            sessionID: nil,
+            transport: nil,
+            message: "Pairing failed."
+        )
+        let viewModel = PairingPageViewModel(model: model, telemetryService: telemetryService)
+
+        await viewModel.orchestratePairing()
+
+        let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
+        XCTAssertEqual(startPairingCallCount, 0)
+        XCTAssertEqual(model.handlePairingAttemptCompletedCallCount, 0)
+    }
+
     func test_permissions_page_view_model_maps_summary_and_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
@@ -356,7 +399,7 @@ final class PageViewModelTests: XCTestCase {
 }
 
 @MainActor
-private final class StubPageModel: PermissionsPageModeling, TransferPageModeling {
+private final class StubPageModel: PermissionsPageModeling, TransferPageModeling, PairingPageModeling {
     var homeSummary = HomeSummary.firstLaunch
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
@@ -371,9 +414,12 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     let permissionServiceActor = StubPermissionService(summary: .demo)
     let telemetryServiceActor: StubTelemetryService
     let transferServiceActor = StubTransferService()
+    let pairingServiceActor = StubPairingService()
     var permissionService: PermissionService { permissionServiceActor }
     var transferServiceForPageModels: TransferService { transferServiceActor }
     var transferServiceForTransferView: TransferService { transferServiceActor }
+    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding { StubQRCodePayloadDecoder() }
+    var pairingServiceForPairingPage: PairingService { pairingServiceActor }
 
     var homeScanActionCallCount = 0
     var openScanRouteCallCount = 0
@@ -382,6 +428,8 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var scanFailureCallCount = 0
     var pairingFailureCallCount = 0
     var requestStopTransferCallCount = 0
+    var handlePairingAttemptCompletedCallCount = 0
+    var lastHandledPairingResult: PairingStatus?
 
     init(telemetryServiceActor: StubTelemetryService = StubTelemetryService()) {
         self.telemetryServiceActor = telemetryServiceActor
@@ -457,6 +505,23 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
 
     func abortPreflightAndReturnHome(reason: String) async {
         _ = reason
+    }
+
+    func handleInvalidPairingPayload(message: String) {
+        pairingStatus = PairingStatus(
+            phase: .failed,
+            backupFlowState: .pendingPairing,
+            desktopName: homeSummary.desktopName,
+            sessionID: nil,
+            transport: nil,
+            message: message
+        )
+    }
+
+    func handlePairingAttemptCompleted(_ result: PairingStatus) async {
+        handlePairingAttemptCompletedCallCount += 1
+        lastHandledPairingResult = result
+        pairingStatus = result
     }
 
 }
@@ -586,5 +651,31 @@ private actor StubTransferService: TransferService {
 
     func startTransferCallCount() -> Int {
         startTransferInvocations
+    }
+}
+
+private actor StubPairingService: PairingService {
+    private var startPairingInvocations = 0
+
+    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
+        startPairingInvocations += 1
+        return PairingStatus(
+            phase: .paired,
+            backupFlowState: .pairingCompleted,
+            desktopName: "Studio Mac",
+            sessionID: payload.sessionID,
+            transport: .lan,
+            message: "Pairing succeeded."
+        )
+    }
+
+    func startPairingCallCount() -> Int {
+        startPairingInvocations
+    }
+}
+
+private struct StubQRCodePayloadDecoder: QRCodePayloadDecoding {
+    func decode(scannedValue: String) -> Result<PairingQRCodePayload, QRCodePayloadDecoderError> {
+        .success(.demo)
     }
 }

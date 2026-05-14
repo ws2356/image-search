@@ -30,6 +30,25 @@ final class MobileAppModelTests: XCTestCase {
         )
     }
 
+    private func startPairing(
+        model: MobileAppModel,
+        telemetryService: TelemetryService = NoopTelemetryService()
+    ) async {
+        await model.showPairingProgress()
+        await orchestrateVisiblePairPage(model: model, telemetryService: telemetryService)
+    }
+
+    private func orchestrateVisiblePairPage(
+        model: MobileAppModel,
+        telemetryService: TelemetryService = NoopTelemetryService()
+    ) async {
+        let pairingViewModel = PairingPageViewModel(
+            model: model,
+            telemetryService: telemetryService
+        )
+        await pairingViewModel.orchestratePairing()
+    }
+
     func test_transfer_snapshot_decodes_legacy_payload_without_skipped_count() throws {
         let legacyPayload = """
         {
@@ -135,7 +154,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
 
         XCTAssertEqual(model.route, .permissions)
@@ -155,7 +174,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
 
         XCTAssertEqual(model.route, .home)
     }
@@ -185,7 +204,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
 
         XCTAssertEqual(model.route, .permissions)
@@ -223,7 +242,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -277,7 +296,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
         XCTAssertTrue(permissionsViewModel.isShowingLowBatteryWarning)
 
@@ -342,7 +361,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
 
         let transferTask = Task {
             await permissionsViewModel.startPreflight()
@@ -410,7 +429,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
 
         let transferTask = Task {
             await permissionsViewModel.startPreflight()
@@ -488,7 +507,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         let transferViewModel = TransferPageViewModel(
@@ -560,6 +579,7 @@ final class MobileAppModelTests: XCTestCase {
 
         await model.load()
         await model.handleIncomingUniversalLink(URL(string: PairingQRCodePayload.demoScanValue)!)
+        await orchestrateVisiblePairPage(model: model)
 
         XCTAssertEqual(model.route, .permissions)
         XCTAssertEqual(model.pairingStatus.phase, .paired)
@@ -578,6 +598,7 @@ final class MobileAppModelTests: XCTestCase {
 
         await model.load()
         await model.handleIncomingUniversalLink(URL(string: "https://dl.boldman.net?sid=missing-fields")!)
+        await orchestrateVisiblePairPage(model: model)
 
         XCTAssertEqual(model.route, .pair)
         XCTAssertEqual(model.pairingStatus.phase, .failed)
@@ -626,7 +647,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
         let transferTask = Task {
             await permissionsViewModel.selectRemoveAfterBackupPreference(false)
@@ -687,7 +708,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
         let transferTask = Task {
             await permissionsViewModel.selectRemoveAfterBackupPreference(false)
@@ -700,6 +721,7 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertTrue(model.isShowingIncomingLinkReplacementConfirmation)
 
         await model.confirmIncomingUniversalLinkReplacement()
+        await orchestrateVisiblePairPage(model: model)
 
         XCTAssertFalse(model.isShowingIncomingLinkReplacementConfirmation)
         XCTAssertEqual(model.route, .permissions)
@@ -780,7 +802,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
         XCTAssertTrue(permissionsViewModel.isShowingRemoveAfterBackupPrompt)
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
@@ -830,7 +852,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         let transferViewModel = TransferPageViewModel(
@@ -863,7 +885,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = "not-a-valid-payload"
-        await model.beginPairing()
+        await startPairing(model: model)
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
@@ -895,7 +917,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model)
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(model.route, .pair)
@@ -948,7 +970,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         await model.openScanFlow()
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        await model.beginPairing()
+        await startPairing(model: model, telemetryService: telemetryService)
         await permissionsViewModel.startPreflight()
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
         let transferViewModel = TransferPageViewModel(

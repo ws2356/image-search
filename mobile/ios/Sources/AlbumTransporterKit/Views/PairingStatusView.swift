@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PairingStatusView: View {
-    let viewModel: PairingPageViewModel
+    @ObservedObject var viewModel: PairingPageViewModel
 
     var body: some View {
         ScrollView {
@@ -82,6 +82,9 @@ struct PairingStatusView: View {
             .padding(.vertical, 16)
         }
         .compatibleScrollBounceBasedOnSize()
+        .task {
+            await viewModel.orchestratePairing()
+        }
     }
 
     private var status: PairingStatus {
