@@ -269,7 +269,7 @@ final class MobileAppModelTests: XCTestCase {
         )
     }
 
-    func test_low_battery_not_now_returns_home_and_reports_stopped_transfer() async {
+    func test_low_battery_not_now_returns_home_without_stopping_transfer_service() async {
         let lowBatteryFullAccess = PermissionSummary(
             cameraGranted: true,
             notificationsGranted: false,
@@ -305,7 +305,7 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .home)
         XCTAssertEqual(model.backupFlowState, .transferStopped)
         let stopCallCount = await transferService.stopCallCount()
-        XCTAssertEqual(stopCallCount, 1)
+        XCTAssertEqual(stopCallCount, 0)
         let stagedSnapshot = await transferService.progressSnapshot()
         XCTAssertEqual(stagedSnapshot?.transferredCount, 0)
         XCTAssertEqual(stagedSnapshot?.totalCount, 0)

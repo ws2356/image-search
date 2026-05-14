@@ -330,7 +330,6 @@ final class MobileAppModel: ObservableObject {
         isShowingIncomingLinkReplacementConfirmation = false
         await permissionService.setRemoveAfterBackupEnabled(false)
         let interruptionSnapshot = preflightInterruptionSnapshot()
-        _ = await transferService.stopTransfer(current: interruptionSnapshot)
         await transferService.stageTransferSnapshot(interruptionSnapshot)
         await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
