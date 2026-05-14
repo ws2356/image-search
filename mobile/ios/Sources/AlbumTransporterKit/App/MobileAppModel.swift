@@ -518,27 +518,14 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.transferStarted)
         route = .transfer
         let isRemoveAfterBackupEnabled = await permissionService.removeAfterBackupEnabled()
-        let initialSnapshot = TransferSnapshot(
-            transferredCount: 0,
-            totalCount: 0,
-            failedCount: 0,
-            transport: pairingStatus.transport ?? .lan,
-            etaMinutes: nil,
-            statusMessage: "Preparing the local media backup with the paired desktop.",
-            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
-            isIncompleteLibrary: permissionSummary.mediaScope != .full
-        )
+        let initialSnapshot = initialTransferSnapshot()
         await transferService.stageTransferSnapshot(initialSnapshot)
         await transferService.stageTransferCompletionState(nil)
         endTelemetrySpan(.backupPreflight, status: .ok)
         beginTelemetrySpan(.transferFlow)
-        recordTelemetry(
-            .transferStarted,
-            attributes: [
-                "transfer.is_incomplete_library": .bool(permissionSummary.mediaScope != .full),
-                "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
-            ]
-        )
+        recordTelemetry(.transferStarted, attributes: transferStartTelemetryAttributes(
+            isRemoveAfterBackupEnabled: isRemoveAfterBackupEnabled
+        ))
         persistSnapshot()
     }
 
@@ -561,6 +548,28 @@ final class MobileAppModel: ObservableObject {
             attributes: resolvedPairingAttributes,
             status: .error(reason)
         )
+    }
+
+    private func initialTransferSnapshot() -> TransferSnapshot {
+        TransferSnapshot(
+            transferredCount: 0,
+            totalCount: 0,
+            failedCount: 0,
+            transport: pairingStatus.transport ?? .lan,
+            etaMinutes: nil,
+            statusMessage: "Preparing the local media backup with the paired desktop.",
+            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
+            isIncompleteLibrary: permissionSummary.mediaScope != .full
+        )
+    }
+
+    private func transferStartTelemetryAttributes(
+        isRemoveAfterBackupEnabled: Bool
+    ) -> MobileTelemetryAttributes {
+        [
+            "transfer.is_incomplete_library": .bool(permissionSummary.mediaScope != .full),
+            "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
+        ]
     }
 
     private func resolvedTransferCompletionContext() async -> (

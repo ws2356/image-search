@@ -204,6 +204,52 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .completed)
     }
 
+    func test_start_backup_stages_initial_transfer_snapshot_before_orchestration_runs() async {
+        let telemetryClient = RecordingTelemetryClient()
+        let transferService = StopTrackingTransferService()
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: transferService,
+            telemetryClient: telemetryClient
+        )
+        let permissionsViewModel = PermissionsPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
+        await model.beginPairing()
+        await permissionsViewModel.startPreflight()
+        await permissionsViewModel.selectRemoveAfterBackupPreference(false)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(model.route, .transfer)
+        XCTAssertEqual(model.backupFlowState, .transferInProgress)
+        let stagedSnapshot = await transferService.progressSnapshot()
+        XCTAssertEqual(stagedSnapshot?.transferredCount, 0)
+        XCTAssertEqual(stagedSnapshot?.totalCount, 0)
+        XCTAssertEqual(stagedSnapshot?.transport, .lan)
+        XCTAssertEqual(
+            stagedSnapshot?.statusMessage,
+            "Preparing the local media backup with the paired desktop."
+        )
+
+        let transferStartedRecord = await telemetryClient.latestRecord(for: .transferStarted)
+        XCTAssertEqual(
+            transferStartedRecord?.attributes["transfer.is_incomplete_library"],
+            .bool(false)
+        )
+        XCTAssertEqual(
+            transferStartedRecord?.attributes["transfer.remove_after_backup_enabled"],
+            .bool(false)
+        )
+    }
+
     func test_low_battery_not_now_returns_home_and_reports_stopped_transfer() async {
         let lowBatteryFullAccess = PermissionSummary(
             cameraGranted: true,
