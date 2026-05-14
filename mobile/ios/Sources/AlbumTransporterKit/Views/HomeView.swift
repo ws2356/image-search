@@ -249,20 +249,6 @@ private struct HomeStatsCard: View {
                     title: "Last backup",
                     subtitle: lastBackup
                 )
-                if let pending = summary.pendingItemCount, pending > 0 {
-                    Divider().padding(.leading, 50)
-                }
-            }
-
-            if let pending = summary.pendingItemCount, pending > 0 {
-                HomeStatsRow(
-                    iconColor: Color(hex: 0x007AFF),
-                    iconBackground: Color(hex: 0xEEF4FF),
-                    iconName: "photo.on.rectangle",
-                    title: "\(pending) new items detected",
-                    subtitle: nil,
-                    titleBold: true
-                )
             }
         }
         .background(Color.white)
