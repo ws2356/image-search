@@ -19,10 +19,7 @@ extension MobileAppModel: AppPageModeling {}
 
 @MainActor
 protocol PermissionsPageModeling: AppPageModeling {
-    // TODO: what's this?
-    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding { get }
-    // TODO: just name it `pairingService`
-    var pairingServiceForPairingPage: PairingService { get }
+    var pairingService: PairingService { get }
     func abortPreflightAndReturnHome(reason: String) async
 }
 
@@ -30,8 +27,7 @@ extension MobileAppModel: PermissionsPageModeling {}
 
 @MainActor
 protocol PairingPageModeling: AppPageModeling {
-    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding { get }
-    var pairingServiceForPairingPage: PairingService { get }
+    var pairingService: PairingService { get }
     func handleInvalidPairingPayload(message: String)
     func handlePairingAttemptCompleted(_ result: PairingStatus) async
 }

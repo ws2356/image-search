@@ -302,7 +302,8 @@ final class MobileAppModelTests: XCTestCase {
     ) async {
         let pairingViewModel = PairingPageViewModel(
             model: model,
-            telemetryService: telemetryService
+            telemetryService: telemetryService,
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder()
         )
         await pairingViewModel.orchestratePairing()
     }

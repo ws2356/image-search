@@ -4,11 +4,17 @@ import SwiftUI
 final class PairingPageViewModel: ObservableObject {
     private let model: any PairingPageModeling
     private let telemetryService: TelemetryService
+    private let qrCodePayloadDecoder: QRCodePayloadDecoding
     private var hasStartedPairingAttempt = false
 
-    init(model: any PairingPageModeling, telemetryService: TelemetryService) {
+    init(
+        model: any PairingPageModeling,
+        telemetryService: TelemetryService,
+        qrCodePayloadDecoder: QRCodePayloadDecoding
+    ) {
         self.model = model
         self.telemetryService = telemetryService
+        self.qrCodePayloadDecoder = qrCodePayloadDecoder
     }
 
     var status: PairingStatus {
@@ -25,7 +31,7 @@ final class PairingPageViewModel: ObservableObject {
         hasStartedPairingAttempt = true
         defer { hasStartedPairingAttempt = false }
 
-        let payloadResult = model.qrCodePayloadDecoderForPairingPage.decode(
+        let payloadResult = qrCodePayloadDecoder.decode(
             scannedValue: model.scannedQRCodeValue
         )
 
@@ -36,7 +42,7 @@ final class PairingPageViewModel: ObservableObject {
             return
         }
 
-        let result = await model.pairingServiceForPairingPage.startPairing(using: payload)
+        let result = await model.pairingService.startPairing(using: payload)
         guard model.route == .pair else {
             return
         }

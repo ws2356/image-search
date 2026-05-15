@@ -21,7 +21,7 @@ final class MobileAppModel: ObservableObject {
     private let universalLinkHost = "dl.boldman.net"
     let backupSessionProvider: BackupSessionProviding
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
-    private let pairingService: PairingService
+    let pairingService: PairingService
     let permissionService: PermissionService
     private let transferService: TransferService
     private let telemetryContextProvider: TelemetryContextProvider
@@ -412,14 +412,6 @@ final class MobileAppModel: ObservableObject {
 
     var transferServiceForPageModels: TransferService {
         transferService
-    }
-
-    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding {
-        qrCodePayloadDecoder
-    }
-
-    var pairingServiceForPairingPage: PairingService {
-        pairingService
     }
 
     var backupFlowState: MobileBackupFlowState {
@@ -818,7 +810,7 @@ final class MobileAppModel: ObservableObject {
         await transferService.progressSnapshot() ?? .empty(transport: pairingStatus.transport ?? .lan)
     }
 
-    # TODO: move this operation to pairing service or transfer service
+    // TODO: move this operation to pairing service or transfer service
     private func persistBackupSession(
         status: BackupSessionStatus,
         snapshot: TransferSnapshot? = nil

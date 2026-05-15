@@ -177,8 +177,7 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         transport: .lan,
         message: "Connected."
     )
-    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding = URLQueryQRCodePayloadDecoder()
-    var pairingServiceForPairingPage: PairingService = DemoPairingService()
+    var pairingService: PairingService = DemoPairingService()
     var transferServiceForPageModels: TransferService = PermissionsGatePreviewTransferService()
     var errorSummary = ErrorSummary.generic
     var route: AppRoute = .permissions

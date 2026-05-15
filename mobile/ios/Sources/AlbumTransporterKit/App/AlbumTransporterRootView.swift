@@ -31,7 +31,8 @@ public struct AlbumTransporterRootView: View {
         _pairingViewModel = StateObject(
             wrappedValue: PairingPageViewModel(
                 model: model,
-                telemetryService: telemetryService
+                telemetryService: telemetryService,
+                qrCodePayloadDecoder: container.qrCodePayloadDecoder()
             )
         )
         _permissionsViewModel = StateObject(

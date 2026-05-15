@@ -96,7 +96,11 @@ final class PageViewModelTests: XCTestCase {
     func test_pairing_page_view_model_maps_status_binding_and_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
-        let viewModel = PairingPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = PairingPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder()
+        )
 
         XCTAssertEqual(viewModel.status, model.pairingStatus)
 
@@ -119,7 +123,11 @@ final class PageViewModelTests: XCTestCase {
             transport: nil,
             message: "Pairing in progress."
         )
-        let viewModel = PairingPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = PairingPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder()
+        )
 
         await viewModel.orchestratePairing()
 
@@ -141,7 +149,11 @@ final class PageViewModelTests: XCTestCase {
             transport: nil,
             message: "Pairing failed."
         )
-        let viewModel = PairingPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = PairingPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder()
+        )
 
         await viewModel.orchestratePairing()
 
@@ -436,7 +448,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var transferServiceForPageModels: TransferService { transferServiceActor }
     var transferServiceForTransferView: TransferService { transferServiceActor }
     var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding { StubQRCodePayloadDecoder() }
-    var pairingServiceForPairingPage: PairingService { pairingServiceActor }
+    var pairingService: PairingService { pairingServiceActor }
 
     var homeScanActionCallCount = 0
     var openScanRouteCallCount = 0
