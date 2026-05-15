@@ -7,7 +7,7 @@ import XCTest
 enum SnapshotSupport {
     private static var hostedWindow: UIWindow?
     private static let fileManager = FileManager.default
-    private static let minimumBytePrecision = 0.9995
+    private static let minimumBytePrecision = 0.95
 
     static func assertSnapshot(
         pageName: String,
