@@ -152,10 +152,7 @@ private struct PermissionsPreflightCard: View {
 
 private extension PermissionSummary {
     static let previewLowBattery = PermissionSummary(
-        cameraGranted: true,
-        notificationsGranted: false,
         mediaScope: .full,
-        excludedCategoryDescription: nil,
         lowBatteryWarningNeeded: true,
         isCharging: false
     )
@@ -163,7 +160,14 @@ private extension PermissionSummary {
 
 @MainActor
 private final class PermissionsGatePreviewModel: PermissionsPageModeling {
-    var homeSummary = HomeSummary.firstLaunch
+    let backupSessionProvider: BackupSessionProviding = PreviewBackupSessionProvider(
+        session: BackupSession(
+            sessionID: "preview-session",
+            desktopName: "Desk Mac",
+            status: .paired,
+            updatedAt: Date()
+        )
+    )
     var backupFlowState: MobileBackupFlowState = .pairingCompleted
     var pairingStatus = PairingStatus(
         phase: .paired,
@@ -173,14 +177,15 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         transport: .lan,
         message: "Connected."
     )
-    var permissionSummary: PermissionSummary
+    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding = URLQueryQRCodePayloadDecoder()
+    var pairingServiceForPairingPage: PairingService = DemoPairingService()
     var transferServiceForPageModels: TransferService = PermissionsGatePreviewTransferService()
     var errorSummary = ErrorSummary.generic
+    var route: AppRoute = .permissions
     var scannedQRCodeValue = ""
     var permissionService: PermissionService
 
     init(summary: PermissionSummary) {
-        permissionSummary = summary
         permissionService = PermissionsGatePreviewPermissionService(summary: summary)
     }
 
@@ -191,8 +196,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
     }
 
     func requestStopTransfer() {}
-
-    func persistSnapshot() {}
 
     func abortPreflightAndReturnHome(reason: String) async {
         _ = reason

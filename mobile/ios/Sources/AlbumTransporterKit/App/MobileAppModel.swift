@@ -7,12 +7,6 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var route: AppRoute = .home {
         didSet { pushTelemetryContext() }
     }
-    @Published private(set) var homeSummary = HomeSummary.firstLaunch {
-        didSet { pushTelemetryContext() }
-    }
-    @Published var permissionSummary = PermissionSummary.demo {
-        didSet { pushTelemetryContext() }
-    }
     @Published private(set) var pairingStatus = PairingStatus.idle {
         didSet { pushTelemetryContext() }
     }
@@ -25,20 +19,20 @@ final class MobileAppModel: ObservableObject {
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
     private let universalLinkHost = "dl.boldman.net"
-    private let stateStore: AppStateStore
+    let backupSessionProvider: BackupSessionProviding
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
     private let pairingService: PairingService
     let permissionService: PermissionService
     private let transferService: TransferService
-    private let sideEffectWorker: MobileAppSideEffectWorker
     private let telemetryContextProvider: TelemetryContextProvider
     private let telemetryService: TelemetryService
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
     private var memoryWarningObservationTask: Task<Void, Never>?
     private var appLifecycleObservationTask: Task<Void, Never>?
+    private var backupSessionObserver: AnyCancellable?
 
     init(
-        stateStore: AppStateStore,
+        backupSessionProvider: BackupSessionProviding,
         qrCodePayloadDecoder: QRCodePayloadDecoding,
         pairingService: PairingService,
         permissionService: PermissionService,
@@ -46,16 +40,17 @@ final class MobileAppModel: ObservableObject {
         telemetryService: TelemetryService,
         telemetryContextProvider: TelemetryContextProvider
     ) {
-        self.stateStore = stateStore
+        self.backupSessionProvider = backupSessionProvider
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
         self.pairingService = pairingService
         self.permissionService = permissionService
         self.transferService = transferService
         self.telemetryContextProvider = telemetryContextProvider
         self.telemetryService = telemetryService
-        self.sideEffectWorker = MobileAppSideEffectWorker(
-            stateStore: stateStore
-        )
+        self.backupSessionObserver = backupSessionProvider.backupSessionPublisher
+            .sink { [weak self] _ in
+                self?.pushTelemetryContext()
+            }
         pushTelemetryContext()
         configureMemoryWarningObservation()
         configureAppLifecycleObservation()
@@ -73,9 +68,9 @@ final class MobileAppModel: ObservableObject {
             case .success:
                 await openScanFlow()
             case .cancel:
-                print("Should not be here - home.cancel")
+                break
             case .failure:
-                print("Should not be here - home.failure")
+                break
             }
 
         case .scan:
@@ -185,8 +180,21 @@ final class MobileAppModel: ObservableObject {
         }
 
         hasLoaded = true
-        let snapshot = await stateStore.loadLaunchSnapshot()
-        await apply(snapshot: snapshot)
+        await backupSessionProvider.load()
+        await permissionService.setRemoveAfterBackupEnabled(false)
+        let persistedBackupSession = backupSessionProvider.backupSession
+        if let persistedBackupSession {
+            pairingStatus = pairingStatus(for: persistedBackupSession)
+        // TODO: state machine should be set to init on initialization?
+            backupFlowStateMachine = MobileBackupFlowStateMachine(
+                state: backupFlowState(for: persistedBackupSession.status)
+            )
+        } else {
+            pairingStatus = .idle
+            backupFlowStateMachine = MobileBackupFlowStateMachine()
+        }
+        route = .home
+        await transferService.stageTransferCompletionState(nil)
         let pairingService = pairingService
         Task.detached(priority: .utility) {
             await pairingService.primeNetworkAccess()
@@ -203,14 +211,13 @@ final class MobileAppModel: ObservableObject {
         pairingStatus = PairingStatus(
             phase: .scanning,
             backupFlowState: .pendingPairing,
-            desktopName: homeSummary.desktopName,
+            desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
             transport: nil,
             message: "Point the camera at the desktop QR code shown in the PC app."
         )
         route = .scan
         recordTelemetry(.scanStarted)
-        persistSnapshot()
     }
 
     func handleIncomingUniversalLink(_ url: URL) async {
@@ -258,20 +265,19 @@ final class MobileAppModel: ObservableObject {
         pairingStatus = PairingStatus(
             phase: .pairing,
             backupFlowState: .pendingPairing,
-            desktopName: homeSummary.desktopName,
+            desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
             transport: nil,
             message: "Validating the QR payload and establishing a secure local session with the desktop."
         )
         recordTelemetry(.pairingStarted)
-        persistSnapshot()
     }
 
     func handleInvalidPairingPayload(message: String) {
         pairingStatus = PairingStatus(
             phase: .failed,
             backupFlowState: .pendingPairing,
-            desktopName: homeSummary.desktopName,
+            desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
             transport: nil,
             message: message
@@ -283,16 +289,13 @@ final class MobileAppModel: ObservableObject {
                 "pairing.failure_message": .string(message)
             ]
         )
-        persistSnapshot()
     }
 
     func handlePairingAttemptCompleted(_ result: PairingStatus) async {
         pairingStatus = result
         applyPairingStatusStateTransition(result)
-        persistSnapshot()
 
         if result.backupFlowState == .pairingStopped {
-            homeSummary.pendingItemCount = nil
             route = .home
             reportPairingFailure(reason: "desktop_stopped_pairing")
             endTelemetrySpan(
@@ -302,7 +305,15 @@ final class MobileAppModel: ObservableObject {
                 ],
                 status: .error("desktop_stopped_pairing")
             )
-            persistSnapshot()
+            // TODO: consider moving this to pairing service?
+            await backupSessionProvider.saveBackupSession(
+                BackupSession(
+                    sessionID: result.sessionID,
+                    desktopName: result.desktopName ?? backupSessionProvider.backupSession?.desktopName,
+                    status: .failed,
+                    updatedAt: Date()
+                )
+            )
             return
         }
 
@@ -316,13 +327,18 @@ final class MobileAppModel: ObservableObject {
             return
         }
 
-        homeSummary.desktopName = result.desktopName
-        permissionSummary = await permissionService.loadPermissionSummary()
+        await backupSessionProvider.saveBackupSession(
+            BackupSession(
+                sessionID: result.sessionID,
+                desktopName: result.desktopName,
+                status: .paired,
+                updatedAt: Date()
+            )
+        )
         route = .permissions
 
         recordTelemetry(.pairingSucceeded)
         endTelemetrySpan(.pairingFlow, status: .ok)
-        persistSnapshot()
     }
 
     func abortPreflightAndReturnHome(reason: String) async {
@@ -348,7 +364,10 @@ final class MobileAppModel: ObservableObject {
             attributes: backupFailureAttributes,
             status: .error(reason)
         )
-        persistSnapshot()
+        await persistBackupSession(
+            status: .stopped,
+            snapshot: interruptionSnapshot
+        )
     }
 
     func requestStopTransfer() {
@@ -388,7 +407,7 @@ final class MobileAppModel: ObservableObject {
             attributes: backupFailureAttributes,
             status: .error(reason)
         )
-        persistSnapshot()
+        await persistBackupSession(status: .stopped, snapshot: await currentTransferSnapshot())
     }
 
     var transferServiceForPageModels: TransferService {
@@ -417,11 +436,6 @@ final class MobileAppModel: ObservableObject {
         let cleanupResult = completionContext.cleanupResult
         let sessionDuration = completionContext.sessionDuration
         transitionBackupFlow(snapshot.failedCount == 0 ? .transferCompleted : .transferFailed)
-        homeSummary = .completed(
-            desktopName: homeSummary.desktopName,
-            permissionScope: permissionSummary.mediaScope,
-            lastBackupDescription: "Last backup completed just now."
-        )
         route = .completed
 
         let isRemoveAfterBackupEnabled = await permissionService.removeAfterBackupEnabled()
@@ -449,7 +463,10 @@ final class MobileAppModel: ObservableObject {
             attributes: completionAttributes,
             status: completionStatus
         )
-        persistSnapshot()
+        await persistBackupSession(
+            status: snapshot.failedCount == 0 ? .completed : .failed,
+            snapshot: snapshot
+        )
     }
 
     func returnHome() async {
@@ -460,13 +477,11 @@ final class MobileAppModel: ObservableObject {
         errorSummary = .generic
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
-        persistSnapshot()
     }
 
     private func presentErrorSummary(title: String, message: String) {
         errorSummary = ErrorSummary(title: title, message: message)
         route = .error
-        persistSnapshot()
     }
 
     private func isSupportedUniversalLink(_ url: URL) -> Bool {
@@ -500,7 +515,6 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(.transferStarted, attributes: transferStartTelemetryAttributes(
             isRemoveAfterBackupEnabled: isRemoveAfterBackupEnabled
         ))
-        persistSnapshot()
     }
 
     private func reportPairingFailure(
@@ -531,9 +545,7 @@ final class MobileAppModel: ObservableObject {
             failedCount: 0,
             transport: pairingStatus.transport ?? .lan,
             etaMinutes: nil,
-            statusMessage: "Preparing the local media backup with the paired desktop.",
-            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
-            isIncompleteLibrary: permissionSummary.mediaScope != .full
+            phase: .preparing
         )
     }
 
@@ -544,9 +556,7 @@ final class MobileAppModel: ObservableObject {
             failedCount: 0,
             transport: pairingStatus.transport ?? .lan,
             etaMinutes: nil,
-            statusMessage: "Backup canceled before transfer started.",
-            guidanceMessage: "Scan again when you are ready to start another backup session.",
-            isIncompleteLibrary: permissionSummary.mediaScope != .full
+            phase: .stopped
         )
     }
 
@@ -554,7 +564,6 @@ final class MobileAppModel: ObservableObject {
         isRemoveAfterBackupEnabled: Bool
     ) -> MobileTelemetryAttributes {
         [
-            "transfer.is_incomplete_library": .bool(permissionSummary.mediaScope != .full),
             "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
         ]
     }
@@ -622,20 +631,6 @@ final class MobileAppModel: ObservableObject {
         snapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
     }
 
-    private func apply(snapshot: LaunchSnapshot) async {
-        homeSummary = snapshot.homeSummary
-        permissionSummary = snapshot.permissionSummary
-        await permissionService.setRemoveAfterBackupEnabled(false)
-        pairingStatus = snapshot.pairingStatus
-        await transferService.stageTransferSnapshot(snapshot.transferSnapshot)
-        await transferService.stageTransferCompletionState(nil)
-        errorSummary = .generic
-        backupFlowStateMachine = MobileBackupFlowStateMachine(
-            state: inferredBackupFlowState(from: snapshot)
-        )
-        route = .home
-    }
-
     private func applyPairingStatusStateTransition(_ status: PairingStatus) {
         switch status.backupFlowState {
         case .pendingPairing:
@@ -661,28 +656,6 @@ final class MobileAppModel: ObservableObject {
 
     private func transitionBackupFlow(_ event: MobileBackupFlowEvent) {
         backupFlowStateMachine.transition(event)
-    }
-
-    private func inferredBackupFlowState(from snapshot: LaunchSnapshot) -> MobileBackupFlowState {
-        return snapshot.pairingStatus.backupFlowState
-    }
-
-    func persistSnapshot() {
-        let homeSummary = homeSummary
-        let permissionSummary = permissionSummary
-        let pairingStatus = pairingStatus
-        let transferService = transferService
-        let worker = sideEffectWorker
-        Task.detached(priority: .utility) {
-            let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let snapshot = LaunchSnapshot(
-                homeSummary: homeSummary,
-                permissionSummary: permissionSummary,
-                pairingStatus: pairingStatus,
-                transferSnapshot: transferSnapshot
-            )
-            await worker.persist(snapshot: snapshot)
-        }
     }
 
     func recordTelemetry(
@@ -722,9 +695,9 @@ final class MobileAppModel: ObservableObject {
     private func makeTelemetryContext() -> TelemetryContext {
         TelemetryContext(
             route: route,
-            homeSummary: homeSummary,
+            backupFlowState: backupFlowStateMachine.state,
             pairingStatus: pairingStatus,
-            permissionSummary: permissionSummary
+            backupSession: backupSessionProvider.backupSession
         )
     }
 
@@ -842,18 +815,49 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func currentTransferSnapshot() async -> TransferSnapshot {
-        await transferService.progressSnapshot() ?? .demo
-    }
-}
-
-private actor MobileAppSideEffectWorker {
-    private let stateStore: AppStateStore
-
-    init(stateStore: AppStateStore) {
-        self.stateStore = stateStore
+        await transferService.progressSnapshot() ?? .empty(transport: pairingStatus.transport ?? .lan)
     }
 
-    func persist(snapshot: LaunchSnapshot) async {
-        await stateStore.saveLaunchSnapshot(snapshot)
+    # TODO: move this operation to pairing service or transfer service
+    private func persistBackupSession(
+        status: BackupSessionStatus,
+        snapshot: TransferSnapshot? = nil
+    ) async {
+        let currentSession = backupSessionProvider.backupSession
+        await backupSessionProvider.saveBackupSession(
+            BackupSession(
+                sessionID: pairingStatus.sessionID ?? currentSession?.sessionID,
+                desktopName: pairingStatus.desktopName ?? currentSession?.desktopName,
+                status: status,
+                transferredCount: snapshot?.transferredCount,
+                totalCount: snapshot?.totalCount,
+                failedCount: snapshot?.failedCount,
+                updatedAt: Date()
+            )
+        )
+    }
+
+    private func pairingStatus(for session: BackupSession) -> PairingStatus {
+        PairingStatus(
+            phase: .paired,
+            backupFlowState: backupFlowState(for: session.status),
+            desktopName: session.desktopName,
+            sessionID: session.sessionID,
+            transport: nil,
+            message: "Scan the desktop QR code to begin secure local pairing."
+        )
+    }
+
+    private func backupFlowState(for status: BackupSessionStatus) -> MobileBackupFlowState {
+        switch status {
+        case .paired:
+            return .pairingCompleted
+        case .stopped:
+            return .transferStopped
+        case .completed:
+            return .transferCompleted
+        case .failed:
+            return .transferFailed
+        }
     }
 }

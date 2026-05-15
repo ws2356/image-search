@@ -1,11 +1,27 @@
 import Foundation
 import Combine
 
+struct CompletionViewState: Equatable {
+    var title: String
+    var message: String
+    var itemsBackedUp: Int?
+    var durationDescription: String?
+    var completedAtDescription: String?
+
+    static let demo = CompletionViewState(
+        title: "Backup Complete!",
+        message: "Desktop confirmed this mobile backup session is complete. Already transferred items may still be finishing desktop indexing.",
+        itemsBackedUp: nil,
+        durationDescription: nil,
+        completedAtDescription: nil
+    )
+}
+
 @MainActor
 final class CompletionPageViewModel: ObservableObject {
     private let model: any AppPageModeling
     private let telemetryService: TelemetryService
-    @Published private(set) var summary: CompletionSummary = .demo
+    @Published private(set) var summary: CompletionViewState = .demo
 
     init(model: any AppPageModeling, telemetryService: TelemetryService) {
         self.model = model
@@ -21,24 +37,16 @@ final class CompletionPageViewModel: ObservableObject {
         } else if let progressSnapshot = await transferService.progressSnapshot() {
             snapshot = progressSnapshot
         } else {
-            snapshot = .demo
+            snapshot = .empty()
         }
-        let total = max(snapshot.totalCount, snapshot.transferredCount)
-        let totalTransferredDescription: String = {
-            if snapshot.failedCount > 0 {
-                return "\(snapshot.transferredCount)/\(total) (\(snapshot.failedCount) failed)"
-            }
-            return "\(snapshot.transferredCount)/\(total)"
-        }()
 
-        summary = CompletionSummary(
+        summary = CompletionViewState(
             title: "Backup Complete!",
             message: completionMessage(
                 for: snapshot,
                 cleanupResult: completionState?.cleanupResult ?? .skipped
             ),
             itemsBackedUp: snapshot.transferredCount,
-            totalTransferredDescription: totalTransferredDescription,
             durationDescription: formattedDuration(completionState?.sessionDuration),
             completedAtDescription: formattedCompletionTimestamp(completionState?.completedAt ?? Date())
         )

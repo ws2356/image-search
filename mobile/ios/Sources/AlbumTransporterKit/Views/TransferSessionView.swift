@@ -9,7 +9,11 @@ struct TransferSessionView: View {
 
     var body: some View {
         ScrollView {
-            TransferSessionContent(snapshot: snapshot, onStop: viewModel.requestStopTransfer)
+            TransferSessionContent(
+                snapshot: snapshot,
+                isIncompleteLibrary: viewModel.isIncompleteLibrary,
+                onStop: viewModel.requestStopTransfer
+            )
         }
         .compatibleScrollBounceBasedOnSize()
         .task {
@@ -36,6 +40,7 @@ struct TransferSessionView: View {
 
 private struct TransferSessionContent: View {
     let snapshot: TransferSnapshot
+    let isIncompleteLibrary: Bool
     let onStop: () -> Void
 
     private var etaDisplayText: String {
@@ -67,7 +72,7 @@ private struct TransferSessionContent: View {
 
             TransferGuidanceBanner(snapshot: snapshot)
 
-            if snapshot.isIncompleteLibrary {
+            if isIncompleteLibrary {
                 TransferIncompleteLibraryBanner()
             }
 
@@ -242,11 +247,37 @@ private struct TransferMetaColumn: View {
 private struct TransferGuidanceBanner: View {
     let snapshot: TransferSnapshot
 
+    private var message: String {
+        if let failureMessage = snapshot.failureMessage, snapshot.phase == .failed {
+            return failureMessage
+        }
+        switch snapshot.phase {
+        case .preparing:
+            return "Keep the app in the foreground while the phone prepares the backup session."
+        case .transferring:
+            if snapshot.failedCount > 0 {
+                return "Some items have failed so far. Let the current run finish, then inspect the MobileTransfer device logs for per-item errors."
+            }
+            switch snapshot.transport {
+            case .usb:
+                return "USB is active for the fastest backup. Keep your iPhone unlocked and connected until the transfer finishes."
+            case .lan:
+                return "Keep the app in the foreground while the phone sends items to the desktop. Plug in USB anytime to let the session upgrade automatically when available."
+            }
+        case .stopped:
+            return "Start a new backup session to continue sending any remaining accessible items."
+        case .completed:
+            return "You can return home and start another backup whenever new media appears on the device."
+        case .failed:
+            return "Retry the backup after confirming the paired desktop is reachable and ready."
+        }
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: snapshot.transport.guidanceSystemImage)
                 .foregroundStyle(snapshot.transport.guidanceAccentColor)
-            Text(snapshot.guidanceMessage)
+            Text(message)
                 .font(.system(size: 13))
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .fixedSize(horizontal: false, vertical: true)
@@ -341,7 +372,10 @@ private extension TransferTransport {
 #if DEBUG
 @available(iOS 17.0, *)
 #Preview("USB Transfer") {
-    let model = TransferSessionPreviewModel(snapshot: .previewUSB)
+    let model = TransferSessionPreviewModel(
+        snapshot: .previewUSB,
+        permissionSummary: .allClear
+    )
     let telemetryService = TransferSessionPreviewTelemetryService()
     TransferSessionView(
         viewModel: TransferPageViewModel(
@@ -353,7 +387,14 @@ private extension TransferTransport {
 
 @available(iOS 17.0, *)
 #Preview("Wi-Fi Transfer") {
-    let model = TransferSessionPreviewModel(snapshot: .previewWiFi)
+    let model = TransferSessionPreviewModel(
+        snapshot: .previewWiFi,
+        permissionSummary: PermissionSummary(
+            mediaScope: .limited,
+            lowBatteryWarningNeeded: false,
+            isCharging: true
+        )
+    )
     let telemetryService = TransferSessionPreviewTelemetryService()
     TransferSessionView(
         viewModel: TransferPageViewModel(
@@ -371,11 +412,9 @@ private extension TransferSnapshot {
         skippedCount: 21,
         transport: .usb,
         liveTransports: [.usb, .lan],
-        transferSpeedText: "42.80 MB/s",
+        transferSpeedBytesPerSecond: 42.8 * 1_048_576.0,
         etaMinutes: 17,
-        statusMessage: "Backing up local photos and videos to the paired desktop.",
-        guidanceMessage: "USB is active for the fastest backup. Keep your iPhone unlocked and connected until the transfer finishes.",
-        isIncompleteLibrary: false
+        phase: .transferring
     )
 
     static let previewWiFi = TransferSnapshot(
@@ -385,17 +424,15 @@ private extension TransferSnapshot {
         skippedCount: 8,
         transport: .lan,
         liveTransports: [.lan],
-        transferSpeedText: "4.80 MB/s",
+        transferSpeedBytesPerSecond: 4.8 * 1_048_576.0,
         etaMinutes: 44,
-        statusMessage: "Backing up local photos and videos to the paired desktop.",
-        guidanceMessage: "USB backups are generally faster and more stable than Wi-Fi. Plug in anytime to let the session upgrade automatically when available.",
-        isIncompleteLibrary: true
+        phase: .transferring
     )
 }
 
 @MainActor
 private final class TransferSessionPreviewModel: TransferPageModeling {
-    var homeSummary = HomeSummary.firstLaunch
+    let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState = .transferInProgress
     var pairingStatus = PairingStatus(
         phase: .paired,
@@ -405,8 +442,7 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
         transport: .usb,
         message: "Connected."
     )
-    var permissionSummary = PermissionSummary.demo
-    var permissionService: PermissionService = TransferSessionPreviewPermissionService()
+    var permissionService: PermissionService
     var route: AppRoute = .transfer
     var errorSummary = ErrorSummary.generic
     var scannedQRCodeValue = ""
@@ -415,7 +451,16 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
 
     private let transferService: TransferSessionPreviewTransferService
 
-    init(snapshot: TransferSnapshot) {
+    init(snapshot: TransferSnapshot, permissionSummary: PermissionSummary) {
+        backupSessionProvider = PreviewBackupSessionProvider(
+            session: BackupSession(
+                sessionID: "preview-session",
+                desktopName: "Desk Mac",
+                status: .paired,
+                updatedAt: Date()
+            )
+        )
+        permissionService = TransferSessionPreviewPermissionService(summary: permissionSummary)
         transferService = TransferSessionPreviewTransferService(snapshot: snapshot)
         pairingStatus.transport = snapshot.transport
     }
@@ -427,8 +472,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
     }
 
     func requestStopTransfer() {}
-
-    func persistSnapshot() {}
 }
 
 private actor TransferSessionPreviewTransferService: TransferService {
@@ -488,10 +531,15 @@ private actor TransferSessionPreviewTransferService: TransferService {
 }
 
 private actor TransferSessionPreviewPermissionService: PermissionService {
+    private let summary: PermissionSummary
     private var isRemoveAfterBackupEnabled = false
 
+    init(summary: PermissionSummary) {
+        self.summary = summary
+    }
+
     func loadPermissionSummary() async -> PermissionSummary {
-        .demo
+        summary
     }
 
     func removeAfterBackupEnabled() async -> Bool {

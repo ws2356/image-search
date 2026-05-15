@@ -38,7 +38,6 @@ final class PairingPageViewModel: ObservableObject {
 
         let result = await model.pairingServiceForPairingPage.startPairing(using: payload)
         guard model.route == .pair else {
-            model.persistSnapshot()
             return
         }
         await model.handlePairingAttemptCompleted(result)

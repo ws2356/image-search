@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 @MainActor
 final class TransferPageViewModel: ObservableObject {
@@ -7,12 +8,15 @@ final class TransferPageViewModel: ObservableObject {
     private let pollingIntervalNanoseconds: UInt64
     private var transferPollingTask: Task<Void, Never>?
     private var hasStartedTransferOrchestration = false
+    private let snapshotSubject = CurrentValueSubject<TransferSnapshot, Never>(.empty())
+    private var snapshotUpdateCancellable: AnyCancellable?
 
     private var transferService: TransferService {
         model.transferServiceForTransferView
     }
 
     @Published private(set) var snapshot: TransferSnapshot
+    @Published private(set) var isIncompleteLibrary = false
     @Published var isShowingStopConfirmation = false
 
     init(
@@ -23,16 +27,15 @@ final class TransferPageViewModel: ObservableObject {
         self.model = model
         self.telemetryService = telemetryService
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
-        self.snapshot = TransferSnapshot(
-            transferredCount: 0,
-            totalCount: 0,
-            failedCount: 0,
-            transport: model.pairingStatus.transport ?? .lan,
-            etaMinutes: nil,
-            statusMessage: "Preparing the local media backup with the paired desktop.",
-            guidanceMessage: "Keep the app in the foreground while the phone sends items to the desktop.",
-            isIncompleteLibrary: model.permissionSummary.mediaScope != .full
-        )
+        self.snapshot = .empty(transport: model.pairingStatus.transport ?? .lan)
+        self.snapshotSubject.send(self.snapshot)
+        self.snapshotUpdateCancellable = snapshotSubject
+            .removeDuplicates()
+            .throttle(for: .milliseconds(250), scheduler: RunLoop.main, latest: true)
+            .sink { [weak self] snapshot in
+                self?.snapshot = snapshot
+            }
+        // TODO: do not invoke it here. Instead trigger it from a view lifecycle
         Task { [weak self] in
             await self?.loadStagedSnapshot()
         }
@@ -79,10 +82,13 @@ final class TransferPageViewModel: ObservableObject {
         await transferService.stageTransferCompletionState(nil)
         let transferStartedAt = Date()
         startTransferPolling()
-        let finalSnapshot = await transferService.startTransfer { _ in }
+        let finalSnapshot = await transferService.startTransfer { [weak self] snapshot in
+            Task { @MainActor in
+                self?.applySnapshotIfNewer(snapshot)
+            }
+        }
         applySnapshotIfNewer(finalSnapshot)
         guard model.route == .transfer else {
-            model.persistSnapshot()
             return
         }
 
@@ -131,8 +137,10 @@ final class TransferPageViewModel: ObservableObject {
 
     private func loadCurrentSnapshot() async {
         guard let stagedSnapshot = await transferService.progressSnapshot() else {
+            isIncompleteLibrary = await model.permissionService.loadPermissionSummary().mediaScope != .full
             return
         }
+        isIncompleteLibrary = await model.permissionService.loadPermissionSummary().mediaScope != .full
         applySnapshotIfNewer(stagedSnapshot)
     }
 
@@ -150,7 +158,7 @@ final class TransferPageViewModel: ObservableObject {
         else {
             return
         }
-        snapshot = newSnapshot
+        snapshotSubject.send(newSnapshot)
     }
 
     private func loadStagedSnapshot() async {

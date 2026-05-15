@@ -28,6 +28,14 @@ final class PageViewModelTests: XCTestCase {
             transport: .lan,
             message: "Connected."
         )
+        await model.backupSessionProvider.saveBackupSession(
+            BackupSession(
+                sessionID: "session-1",
+                desktopName: "Desk Mac",
+                status: .stopped,
+                updatedAt: Date()
+            )
+        )
         await model.transferServiceActor.stageTransferSnapshot(
             TransferSnapshot(
                 transferredCount: 3,
@@ -46,7 +54,7 @@ final class PageViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.summary.lastBackupDescription, "Stopped after 3 of 10 items.")
         XCTAssertEqual(
-            viewModel.summary.previouslyTransferredDescription,
+            viewModel.summary.previousTransferDescription,
             "3 items sent in the most recent session."
         )
         XCTAssertEqual(viewModel.summary.desktopName, "Desk Mac")
@@ -400,7 +408,16 @@ final class PageViewModelTests: XCTestCase {
 
 @MainActor
 private final class StubPageModel: PermissionsPageModeling, TransferPageModeling, PairingPageModeling {
-    var homeSummary = HomeSummary.firstLaunch
+    let backupSessionProvider: BackupSessionProviding = AppStateStoreBackedBackupSessionProvider(
+        store: InMemoryAppStateStore()
+    )
+    var homeSummary = HomeViewState(
+        desktopName: nil,
+        lastBackupDescription: nil,
+        previousTransferDescription: nil,
+        permissionScope: .limited,
+        interruptionWarning: nil
+    )
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo

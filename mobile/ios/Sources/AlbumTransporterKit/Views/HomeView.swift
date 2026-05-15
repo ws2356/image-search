@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct HomeView: View {
     @ObservedObject var viewModel: HomePageViewModel
@@ -40,10 +41,9 @@ struct HomeView: View {
 
     private var hasSessionHistory: Bool {
         summary.lastBackupDescription != nil
-            || ((summary.pendingItemCount ?? 0) > 0)
     }
 
-    private var summary: HomeSummary {
+    private var summary: HomeViewState {
         viewModel.summary
     }
 
@@ -55,7 +55,7 @@ struct HomeView: View {
 }
 
 private struct FirstTimeHomeContent: View {
-    let summary: HomeSummary
+    let summary: HomeViewState
     let setupSteps: [SetupStep]
     let onScan: () -> Void
 
@@ -78,12 +78,11 @@ private struct FirstTimeHomeContent: View {
 }
 
 private struct ReturningHomeContent: View {
-    let summary: HomeSummary
+    let summary: HomeViewState
     let onScan: () -> Void
 
     private var hasStatsCardContent: Bool {
         summary.lastBackupDescription != nil
-            || ((summary.pendingItemCount ?? 0) > 0)
     }
 
     var body: some View {
@@ -237,7 +236,7 @@ private struct HomeSetupStepDetail: View {
 }
 
 private struct HomeStatsCard: View {
-    let summary: HomeSummary
+    let summary: HomeViewState
 
     var body: some View {
         VStack(spacing: 0) {
@@ -248,6 +247,16 @@ private struct HomeStatsCard: View {
                     iconName: "clock",
                     title: "Last backup",
                     subtitle: lastBackup
+                )
+            }
+            if let previousTransferDescription = summary.previousTransferDescription {
+                Divider().padding(.leading, 62)
+                HomeStatsRow(
+                    iconColor: Color(hex: 0x30D158),
+                    iconBackground: Color(hex: 0xE6F9ED),
+                    iconName: "arrow.up.circle",
+                    title: "Most recent transfer",
+                    subtitle: previousTransferDescription
                 )
             }
         }
@@ -387,11 +396,40 @@ private struct SetupStep: Identifiable {
 }
 
 #if DEBUG
+@MainActor
+final class PreviewBackupSessionProvider: BackupSessionProviding {
+    private let subject: CurrentValueSubject<BackupSession?, Never>
+
+    init(session: BackupSession?) {
+        subject = CurrentValueSubject(session)
+    }
+
+    var backupSession: BackupSession? {
+        subject.value
+    }
+
+    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        subject.eraseToAnyPublisher()
+    }
+
+    func load() async {}
+
+    func saveBackupSession(_ session: BackupSession?) async {
+        subject.send(session)
+    }
+}
+
 @available(iOS 17.0, *)
 #Preview("First Launch") {
-    let model = HomeViewPreviewPageModel(summary: .firstLaunch)
+    let model = HomeViewPreviewPageModel(
+        backupSession: nil,
+        permissionSummary: .allClear,
+        transferSnapshot: nil,
+        backupFlowState: .pendingPairing,
+        pairingStatus: .idle
+    )
     let telemetryService = HomeViewPreviewTelemetryService()
-    return HomeView(
+    HomeView(
         viewModel: HomePageViewModel(
             model: model,
             telemetryService: telemetryService
@@ -401,19 +439,45 @@ private struct SetupStep: Identifiable {
 
 @available(iOS 17.0, *)
 #Preview("Returning User") {
+    let snapshot = TransferSnapshot(
+        transferredCount: 906,
+        totalCount: 930,
+        failedCount: 3,
+        skippedCount: 21,
+        transport: .usb,
+        liveTransports: [.usb, .lan],
+        transferSpeedBytesPerSecond: 42.8 * 1_048_576.0,
+        etaMinutes: nil,
+        phase: .stopped
+    )
     let model = HomeViewPreviewPageModel(
-        summary: HomeSummary(
+        backupSession: BackupSession(
+            sessionID: "preview-session",
             desktopName: "Desk Mac",
-            pendingItemCount: 24,
-            lastBackupDescription: "Today at 2:41 PM",
-            permissionScope: .limited,
-            detailMessage: "Your paired desktop is ready for another backup.",
-            previouslyTransferredDescription: "930 items sent in the most recent session.",
-            interruptionWarning: "The previous session stopped before all newly captured media finished transferring."
+            status: .stopped,
+            transferredCount: snapshot.transferredCount,
+            totalCount: snapshot.totalCount,
+            failedCount: snapshot.failedCount,
+            updatedAt: Date()
+        ),
+        permissionSummary: PermissionSummary(
+            mediaScope: .limited,
+            lowBatteryWarningNeeded: false,
+            isCharging: true
+        ),
+        transferSnapshot: snapshot,
+        backupFlowState: .transferStopped,
+        pairingStatus: PairingStatus(
+            phase: .paired,
+            backupFlowState: .transferStopped,
+            desktopName: "Desk Mac",
+            sessionID: "preview-session",
+            transport: .usb,
+            message: "Connected."
         )
     )
     let telemetryService = HomeViewPreviewTelemetryService()
-    return HomeView(
+    HomeView(
         viewModel: HomePageViewModel(
             model: model,
             telemetryService: telemetryService
@@ -423,16 +487,27 @@ private struct SetupStep: Identifiable {
 
 @MainActor
 private final class HomeViewPreviewPageModel: AppPageModeling {
-    var homeSummary: HomeSummary
+    let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
-    var permissionSummary = PermissionSummary.demo
-    var transferServiceForPageModels: TransferService = HomeViewPreviewTransferService()
+    var permissionService: PermissionService
+    var transferServiceForPageModels: TransferService
     var errorSummary = ErrorSummary.generic
+    var route: AppRoute = .home
     var scannedQRCodeValue = ""
 
-    init(summary: HomeSummary) {
-        homeSummary = summary
+    init(
+        backupSession: BackupSession?,
+        permissionSummary: PermissionSummary,
+        transferSnapshot: TransferSnapshot?,
+        backupFlowState: MobileBackupFlowState,
+        pairingStatus: PairingStatus
+    ) {
+        backupSessionProvider = PreviewBackupSessionProvider(session: backupSession)
+        permissionService = HomeViewPreviewPermissionService(summary: permissionSummary)
+        transferServiceForPageModels = HomeViewPreviewTransferService(snapshot: transferSnapshot)
+        self.backupFlowState = backupFlowState
+        self.pairingStatus = pairingStatus
     }
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
@@ -444,11 +519,39 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
     func requestStopTransfer() {}
 }
 
+private actor HomeViewPreviewPermissionService: PermissionService {
+    private let summary: PermissionSummary
+    private var isRemoveAfterBackupEnabled = false
+
+    init(summary: PermissionSummary) {
+        self.summary = summary
+    }
+
+    func loadPermissionSummary() async -> PermissionSummary {
+        summary
+    }
+
+    func removeAfterBackupEnabled() async -> Bool {
+        isRemoveAfterBackupEnabled
+    }
+
+    func setRemoveAfterBackupEnabled(_ isEnabled: Bool) async {
+        isRemoveAfterBackupEnabled = isEnabled
+    }
+}
+
 private actor HomeViewPreviewTransferService: TransferService {
+    private var snapshot: TransferSnapshot?
+
+    init(snapshot: TransferSnapshot? = nil) {
+        self.snapshot = snapshot
+    }
+
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        let snapshot = TransferSnapshot.demo
-        progress(snapshot)
-        return snapshot
+        let currentSnapshot = snapshot ?? .demo
+        progress(currentSnapshot)
+        snapshot = currentSnapshot
+        return currentSnapshot
     }
 
     func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
@@ -460,20 +563,22 @@ private actor HomeViewPreviewTransferService: TransferService {
         from snapshot: TransferSnapshot,
         progress: @escaping @Sendable (TransferSnapshot) -> Void
     ) async -> TransferSnapshot {
+        self.snapshot = snapshot
         progress(snapshot)
         return snapshot
     }
 
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        current
+        snapshot = current
+        return current
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
-        .demo
+        snapshot
     }
 
     func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        _ = snapshot
+        self.snapshot = snapshot
     }
 
     func transferCompletionState() async -> TransferCompletionState? {

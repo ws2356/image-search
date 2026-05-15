@@ -1,8 +1,18 @@
 import Foundation
+import Combine
 
-protocol AppStateStore: Sendable {
-    func loadLaunchSnapshot() async -> LaunchSnapshot
-    func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async
+protocol BackupSessionStore: Sendable {
+    func loadBackupSession() async -> BackupSession?
+    func saveBackupSession(_ session: BackupSession?) async
+}
+
+@MainActor
+protocol BackupSessionProviding: AnyObject {
+    var backupSession: BackupSession? { get }
+    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> { get }
+
+    func load() async
+    func saveBackupSession(_ session: BackupSession?) async
 }
 
 protocol PairingService: Sendable {

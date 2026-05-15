@@ -1,8 +1,14 @@
 import Factory
 
 extension Container {
-    var appStateStore: Factory<AppStateStore> {
-        self { UserDefaultsAppStateStore() }
+    var backupSessionStore: Factory<BackupSessionStore> {
+        self { UserDefaultsBackupSessionStore() }
+            .singleton
+    }
+
+    @MainActor
+    var backupSessionProvider: Factory<BackupSessionProviding> {
+        self { @MainActor in DefaultBackupSessionProvider(store: self.backupSessionStore()) }
             .singleton
     }
 
@@ -120,7 +126,7 @@ extension Container {
         self {
             @MainActor in
             MobileAppModel(
-                stateStore: self.appStateStore(),
+                backupSessionProvider: self.backupSessionProvider(),
                 qrCodePayloadDecoder: self.qrCodePayloadDecoder(),
                 pairingService: self.pairingService(),
                 permissionService: self.permissionService(),

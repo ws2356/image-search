@@ -1,37 +1,78 @@
 import Foundation
 import UIKit
+import Combine
 
-actor UserDefaultsAppStateStore: AppStateStore {
+actor UserDefaultsBackupSessionStore: BackupSessionStore {
     private let userDefaults: UserDefaults
-    private let snapshotKey: String
+    private let backupSessionKey: String
 
     init(
         userDefaults: UserDefaults = .standard,
-        snapshotKey: String = "albumtransporter.launch-snapshot"
+        backupSessionKey: String = "albumtransporter.backup-session"
     ) {
         self.userDefaults = userDefaults
-        self.snapshotKey = snapshotKey
+        self.backupSessionKey = backupSessionKey
     }
 
-    func loadLaunchSnapshot() async -> LaunchSnapshot {
-        guard let data = userDefaults.data(forKey: snapshotKey) else {
-            return .firstLaunch
+    func loadBackupSession() async -> BackupSession? {
+        guard let data = userDefaults.data(forKey: backupSessionKey) else {
+            return nil
         }
 
         do {
-            return try JSONDecoder.pairingDecoder.decode(LaunchSnapshot.self, from: data)
+            return try JSONDecoder.pairingDecoder.decode(BackupSession.self, from: data)
         } catch {
-            assertionFailure("Failed to decode launch snapshot: \(error)")
-            return .firstLaunch
+            return nil
         }
     }
 
-    func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async {
+    func saveBackupSession(_ session: BackupSession?) async {
+        guard let session else {
+            userDefaults.removeObject(forKey: backupSessionKey)
+            return
+        }
+
         do {
-            let encodedSnapshot = try JSONEncoder.pairingEncoder.encode(snapshot)
-            userDefaults.set(encodedSnapshot, forKey: snapshotKey)
+            let encodedSession = try JSONEncoder.pairingEncoder.encode(session)
+            userDefaults.set(encodedSession, forKey: backupSessionKey)
         } catch {
-            assertionFailure("Failed to encode launch snapshot: \(error)")
+            assertionFailure("Failed to encode backup session: \(error)")
+        }
+    }
+}
+
+@MainActor
+final class DefaultBackupSessionProvider: BackupSessionProviding {
+    @Published private var currentBackupSession: BackupSession?
+
+    private let store: BackupSessionStore
+    private var hasLoaded = false
+
+    init(store: BackupSessionStore) {
+        self.store = store
+    }
+
+    var backupSession: BackupSession? {
+        currentBackupSession
+    }
+
+    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        $currentBackupSession.eraseToAnyPublisher()
+    }
+
+    func load() async {
+        guard !hasLoaded else {
+            return
+        }
+        hasLoaded = true
+        currentBackupSession = await store.loadBackupSession()
+    }
+
+    func saveBackupSession(_ session: BackupSession?) async {
+        currentBackupSession = session
+        let store = store
+        Task.detached(priority: .utility) {
+            await store.saveBackupSession(session)
         }
     }
 }

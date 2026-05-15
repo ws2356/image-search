@@ -1,18 +1,18 @@
 import Foundation
 
-actor InMemoryAppStateStore: AppStateStore {
-    private var snapshot: LaunchSnapshot
+actor InMemoryBackupSessionStore: BackupSessionStore {
+    private var session: BackupSession?
 
-    init(snapshot: LaunchSnapshot = .firstLaunch) {
-        self.snapshot = snapshot
+    init(session: BackupSession? = nil) {
+        self.session = session
     }
 
-    func loadLaunchSnapshot() async -> LaunchSnapshot {
-        snapshot
+    func loadBackupSession() async -> BackupSession? {
+        session
     }
 
-    func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async {
-        self.snapshot = snapshot
+    func saveBackupSession(_ session: BackupSession?) async {
+        self.session = session
     }
 }
 
@@ -76,8 +76,7 @@ actor DemoTransferService: TransferService {
         resumed.transferredCount = min(snapshot.totalCount, snapshot.transferredCount + 126)
         resumed.failedCount = max(snapshot.failedCount - 1, 0)
         resumed.etaMinutes = resumed.transferredCount == resumed.totalCount ? nil : 8
-        resumed.statusMessage = "Transfer resumed from the last saved marker."
-        resumed.guidanceMessage = "Keep the app in the foreground when possible. iOS may still pause long-running transfers when the app backgrounds."
+        resumed.phase = .transferring
         progress(resumed)
         return resumed
     }
@@ -88,8 +87,7 @@ actor DemoTransferService: TransferService {
         var completed = current
         completed.transferredCount = current.totalCount
         completed.etaMinutes = nil
-        completed.statusMessage = "Desktop confirmed that this session is complete."
-        completed.guidanceMessage = "You can return to the home screen and start a fresh session whenever new media appears on the device."
+        completed.phase = .completed
         currentSnapshot = completed
         return completed
     }

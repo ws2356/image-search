@@ -34,15 +34,15 @@ protocol TelemetryContextProvider {
 
 struct TelemetryContext {
     let route: AppRoute
-    let homeSummary: HomeSummary
+    let backupFlowState: MobileBackupFlowState
     let pairingStatus: PairingStatus
-    let permissionSummary: PermissionSummary
+    let backupSession: BackupSession?
 
     static let empty = TelemetryContext(
         route: .home,
-        homeSummary: .firstLaunch,
+        backupFlowState: .pendingPairing,
         pairingStatus: .idle,
-        permissionSummary: .demo
+        backupSession: nil
     )
 }
 
@@ -187,14 +187,12 @@ final class DefaultTelemetryService: TelemetryService {
     ) -> MobileTelemetryAttributes {
         var attributes: MobileTelemetryAttributes = [
             "app.route": .string(context.route.rawValue),
-            "backup.flow_state": .string(context.pairingStatus.backupFlowState.rawValue),
+            "backup.flow_state": .string(context.backupFlowState.rawValue),
             "pairing.phase": .string(context.pairingStatus.phase.rawValue),
-            "permission.media_scope": .string(context.permissionSummary.mediaScope.rawValue),
-            "permission.camera_granted": .bool(context.permissionSummary.cameraGranted),
-            "permission.notifications_granted": .bool(context.permissionSummary.notificationsGranted),
-            "permission.low_battery_warning_needed": .bool(context.permissionSummary.lowBatteryWarningNeeded),
-            "permission.is_charging": .bool(context.permissionSummary.isCharging),
-            "app.has_paired_desktop": .bool(context.pairingStatus.desktopName?.isEmpty == false),
+            "app.has_paired_desktop": .bool(
+                context.pairingStatus.desktopName?.isEmpty == false
+                    || context.backupSession?.desktopName?.isEmpty == false
+            ),
             "transfer.transferred_count": .int(transferSnapshot.transferredCount),
             "transfer.total_count": .int(transferSnapshot.totalCount),
             "transfer.failed_count": .int(transferSnapshot.failedCount)
@@ -202,13 +200,18 @@ final class DefaultTelemetryService: TelemetryService {
         if let transport = context.pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
             attributes["transfer.transport"] = .string(transport.rawValue)
         }
-        if let sessionID = context.pairingStatus.sessionID, !sessionID.isEmpty {
+        if let sessionID = context.pairingStatus.sessionID ?? context.backupSession?.sessionID,
+           !sessionID.isEmpty {
             attributes["correlation.session_id"] = .string(sessionID)
         }
-        if let pendingItemCount = context.homeSummary.pendingItemCount {
-            attributes["home.pending_item_count"] = .int(pendingItemCount)
+        if let backupSession = context.backupSession {
+            attributes["backup.session_status"] = .string(backupSession.status.rawValue)
         }
+        // TODO: DO NOT guess where to read desktopName. Use whichever that is the source of truth
         if let desktopName = context.pairingStatus.desktopName, !desktopName.isEmpty {
+            attributes["pairing.desktop_name_present"] = .bool(true)
+            attributes["pairing.desktop_name_length"] = .int(desktopName.count)
+        } else if let desktopName = context.backupSession?.desktopName, !desktopName.isEmpty {
             attributes["pairing.desktop_name_present"] = .bool(true)
             attributes["pairing.desktop_name_length"] = .int(desktopName.count)
         }

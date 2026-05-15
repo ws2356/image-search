@@ -2,12 +2,13 @@ import Foundation
 
 @MainActor
 protocol AppPageModeling: AnyObject {
-    var homeSummary: HomeSummary { get }
+    var backupSessionProvider: BackupSessionProviding { get }
     var backupFlowState: MobileBackupFlowState { get }
     var pairingStatus: PairingStatus { get }
-    var permissionSummary: PermissionSummary { get }
+    var permissionService: PermissionService { get }
     var transferServiceForPageModels: TransferService { get }
     var errorSummary: ErrorSummary { get }
+    var route: AppRoute { get }
     var scannedQRCodeValue: String { get set }
 
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async
@@ -18,9 +19,10 @@ extension MobileAppModel: AppPageModeling {}
 
 @MainActor
 protocol PermissionsPageModeling: AppPageModeling {
-    var permissionSummary: PermissionSummary { get set }
-    var permissionService: PermissionService { get }
-    func persistSnapshot()
+    // TODO: what's this?
+    var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding { get }
+    // TODO: just name it `pairingService`
+    var pairingServiceForPairingPage: PairingService { get }
     func abortPreflightAndReturnHome(reason: String) async
 }
 
@@ -28,10 +30,8 @@ extension MobileAppModel: PermissionsPageModeling {}
 
 @MainActor
 protocol PairingPageModeling: AppPageModeling {
-    var route: AppRoute { get }
     var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding { get }
     var pairingServiceForPairingPage: PairingService { get }
-    func persistSnapshot()
     func handleInvalidPairingPayload(message: String)
     func handlePairingAttemptCompleted(_ result: PairingStatus) async
 }
@@ -40,10 +40,7 @@ extension MobileAppModel: PairingPageModeling {}
 
 @MainActor
 protocol TransferPageModeling: AppPageModeling {
-    var route: AppRoute { get }
-    var permissionService: PermissionService { get }
     var transferServiceForTransferView: TransferService { get }
-    func persistSnapshot()
 }
 
 extension MobileAppModel: TransferPageModeling {}

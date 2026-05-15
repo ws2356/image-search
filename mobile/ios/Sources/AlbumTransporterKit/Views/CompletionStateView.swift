@@ -47,7 +47,7 @@ struct CompletionStateView: View {
         }
     }
 
-    private var summary: CompletionSummary {
+    private var summary: CompletionViewState {
         viewModel.summary
     }
 

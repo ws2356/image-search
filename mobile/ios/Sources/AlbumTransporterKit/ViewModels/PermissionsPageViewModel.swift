@@ -14,6 +14,7 @@ final class PermissionsPageViewModel: ObservableObject {
     private let model: any PermissionsPageModeling
     private let telemetryService: TelemetryService
 
+    @Published private(set) var summary: PermissionSummary = .demo
     @Published var isShowingLowBatteryWarning = false
     @Published var isShowingMediaAccessAlert = false
     @Published var isShowingRemoveAfterBackupPrompt = false
@@ -27,10 +28,6 @@ final class PermissionsPageViewModel: ObservableObject {
         self.telemetryService = telemetryService
     }
 
-    var summary: PermissionSummary {
-        model.permissionSummary
-    }
-
     func startPreflight() async {
         guard !isRunningPermissionsPreflight else {
             return
@@ -39,23 +36,20 @@ final class PermissionsPageViewModel: ObservableObject {
         resetPromptState()
 
         let permissionSummary = await model.permissionService.loadPermissionSummary()
-        model.permissionSummary = permissionSummary
+        summary = permissionSummary
         telemetryService.beginTelemetrySpan(.backupPreflight, attributes: [:])
-        telemetryService.recordTelemetry(.backupPreflightStarted, attributes: [:])
+        telemetryService.recordTelemetry(
+            .backupPreflightStarted,
+            attributes: [
+                "permission.media_scope": .string(permissionSummary.mediaScope.rawValue)
+            ]
+        )
         telemetryService.recordInteraction(name: "start_backup_tapped", location: "permissions")
 
         guard permissionSummary.mediaScope == .full else {
             preflightPhase = .promptingMediaAccess
             isShowingMediaAccessAlert = true
-            telemetryService.recordTelemetry(
-                .mediaAccessPromptShown,
-                attributes: [
-                    "permission.excluded_category_present": .bool(
-                        permissionSummary.excludedCategoryDescription != nil
-                    )
-                ]
-            )
-            model.persistSnapshot()
+            telemetryService.recordTelemetry(.mediaAccessPromptShown, attributes: [:])
             return
         }
 
@@ -147,15 +141,15 @@ final class PermissionsPageViewModel: ObservableObject {
         preflightPhase = .idle
         isShowingMediaAccessAlert = false
         telemetryService.recordTelemetry(.mediaAccessContinued, attributes: [:])
+        summary = await model.permissionService.loadPermissionSummary()
         await continueBackupPreflight()
     }
 
     private func continueBackupPreflight() async {
-        if model.permissionSummary.lowBatteryWarningNeeded && !model.permissionSummary.isCharging {
+        if summary.lowBatteryWarningNeeded && !summary.isCharging {
             preflightPhase = .promptingLowBattery
             isShowingLowBatteryWarning = true
             telemetryService.recordTelemetry(.lowBatteryPromptShown, attributes: [:])
-            model.persistSnapshot()
             return
         }
 
@@ -166,7 +160,6 @@ final class PermissionsPageViewModel: ObservableObject {
         preflightPhase = .promptingRemoveAfterBackup
         isShowingRemoveAfterBackupPrompt = true
         telemetryService.recordTelemetry(.removeAfterBackupPromptShown, attributes: [:])
-        model.persistSnapshot()
     }
 
     private func resetPromptState() {

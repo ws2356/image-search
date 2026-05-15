@@ -1,6 +1,5 @@
 import Foundation
 import Photos
-import AVFoundation
 import UIKit
 
 actor SystemPermissionService: PermissionService {
@@ -8,14 +7,10 @@ actor SystemPermissionService: PermissionService {
 
     func loadPermissionSummary() async -> PermissionSummary {
         let mediaAuthorization = await currentMediaAuthorization()
-        let cameraGranted = currentCameraAuthorization()
         let batteryState = currentBatteryState()
 
         return PermissionSummary(
-            cameraGranted: cameraGranted,
-            notificationsGranted: false,
             mediaScope: permissionScope(for: mediaAuthorization),
-            excludedCategoryDescription: excludedCategoryDescription(for: mediaAuthorization),
             lowBatteryWarningNeeded: batteryState.lowBatteryWarningNeeded,
             isCharging: batteryState.isCharging
         )
@@ -51,21 +46,6 @@ actor SystemPermissionService: PermissionService {
         default:
             return .denied
         }
-    }
-
-    private func excludedCategoryDescription(for authorizationStatus: PHAuthorizationStatus) -> String? {
-        switch authorizationStatus {
-        case .limited:
-            return "Only the subset currently granted by iOS will be included in this backup."
-        case .authorized:
-            return nil
-        default:
-            return "Media access is required before AuBackup can send local photos and videos to the paired desktop."
-        }
-    }
-
-    private func currentCameraAuthorization() -> Bool {
-        AVCaptureDevice.authorizationStatus(for: .video) == .authorized
     }
 
     private func currentBatteryState() -> (lowBatteryWarningNeeded: Bool, isCharging: Bool) {

@@ -2407,7 +2407,10 @@ actor PhotoLibraryTransferService: TransferService {
     func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             var failedSnapshot = current
-            failedSnapshot.statusMessage = "Backup finished on the phone, but the paired desktop record is no longer available."
+            failedSnapshot.failedCount = max(failedSnapshot.failedCount, 1)
+            failedSnapshot.phase = .failed
+            failedSnapshot.etaMinutes = nil
+            failedSnapshot.failureMessage = "Backup finished on the phone, but the paired desktop record is no longer available."
             currentSnapshot = failedSnapshot
             return failedSnapshot
         }
@@ -2422,8 +2425,9 @@ actor PhotoLibraryTransferService: TransferService {
             let resolvedTransport = await resolvedTransport(for: trustedDesktop)
             var completedSnapshot = current
             completedSnapshot.transport = resolvedTransport
-            completedSnapshot.statusMessage = "Desktop confirmed that this transfer session is complete."
-            completedSnapshot.guidanceMessage = "You can return home and start another backup whenever new media appears on the device."
+            completedSnapshot.phase = .completed
+            completedSnapshot.etaMinutes = nil
+            completedSnapshot.failureMessage = nil
             completedSnapshot = await applyingLiveTransports(
                 to: completedSnapshot,
                 desktop: trustedDesktop
@@ -2437,7 +2441,10 @@ actor PhotoLibraryTransferService: TransferService {
             let resolvedTransport = await resolvedTransport(for: trustedDesktop)
             var failedSnapshot = current
             failedSnapshot.transport = resolvedTransport
-            failedSnapshot.statusMessage = error.message
+            failedSnapshot.failedCount = max(failedSnapshot.failedCount, 1)
+            failedSnapshot.phase = .failed
+            failedSnapshot.etaMinutes = nil
+            failedSnapshot.failureMessage = error.message
             failedSnapshot = await applyingLiveTransports(
                 to: failedSnapshot,
                 desktop: trustedDesktop
@@ -2451,7 +2458,10 @@ actor PhotoLibraryTransferService: TransferService {
             let resolvedTransport = await resolvedTransport(for: trustedDesktop)
             var failedSnapshot = current
             failedSnapshot.transport = resolvedTransport
-            failedSnapshot.statusMessage = error.localizedDescription
+            failedSnapshot.failedCount = max(failedSnapshot.failedCount, 1)
+            failedSnapshot.phase = .failed
+            failedSnapshot.etaMinutes = nil
+            failedSnapshot.failureMessage = error.localizedDescription
             failedSnapshot = await applyingLiveTransports(
                 to: failedSnapshot,
                 desktop: trustedDesktop
@@ -2475,12 +2485,14 @@ actor PhotoLibraryTransferService: TransferService {
                 desktop: trustedDesktop
             )
         }
-        snapshot.transferSpeedText = currentTransferSpeedText()
-        snapshot.etaMinutes = currentETAMinutes(
-            transferredCount: snapshot.transferredCount,
-            totalCount: snapshot.totalCount,
-            failedCount: snapshot.failedCount
-        )
+        snapshot.transferSpeedBytesPerSecond = currentTransferSpeedBytesPerSecondOrNil()
+        snapshot.etaMinutes = snapshot.phase == .preparing || snapshot.phase == .transferring
+            ? currentETAMinutes(
+                transferredCount: snapshot.transferredCount,
+                totalCount: snapshot.totalCount,
+                failedCount: snapshot.failedCount
+            )
+            : nil
         currentSnapshot = snapshot
         return snapshot
     }
@@ -2577,12 +2589,11 @@ actor PhotoLibraryTransferService: TransferService {
             let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
-                failedCount: 0,
+                failedCount: 1,
                 transport: .lan,
                 etaMinutes: nil,
-                statusMessage: "No paired desktop record is available for transfer.",
-                guidanceMessage: "Pair with the desktop again before starting a backup.",
-                isIncompleteLibrary: false
+                phase: .failed,
+                failureMessage: "No paired desktop record is available for transfer."
             )
             currentSnapshot = failedSnapshot
             return await finalizingTransferRun(failedSnapshot)
@@ -2602,9 +2613,7 @@ actor PhotoLibraryTransferService: TransferService {
                     failedCount: 0,
                     transport: resolvedTransport,
                     etaMinutes: nil,
-                    statusMessage: "No eligible local photo or video assets are ready for transfer.",
-                    guidanceMessage: "Check photo-library access or capture new media, then retry the backup.",
-                    isIncompleteLibrary: false
+                    phase: .completed
                 )
                 let snapshotWithLiveTransports = await applyingLiveTransports(
                     to: emptySnapshot,
@@ -2716,13 +2725,9 @@ actor PhotoLibraryTransferService: TransferService {
                 failedCount: failedCount,
                 skippedCount: skippedCount,
                 transport: completedTransport,
-                transferSpeedText: currentTransferSpeedText(),
+                transferSpeedBytesPerSecond: currentTransferSpeedBytesPerSecondOrNil(),
                 etaMinutes: nil,
-                statusMessage: "Phone finished sending the current batch of media to the paired desktop.",
-                guidanceMessage: failedCount == 0
-                    ? "Backup completes automatically after the desktop confirms this transfer session."
-                    : "Some items could not be transferred. Start another backup session to retry remaining items, then inspect the MobileTransfer device logs for per-item errors.",
-                isIncompleteLibrary: false
+                phase: .transferring
             )
             let completedSnapshotWithLiveTransports = await applyingLiveTransports(
                 to: completedSnapshot,
@@ -2750,9 +2755,8 @@ actor PhotoLibraryTransferService: TransferService {
                 failedCount: 1,
                 transport: failedTransport,
                 etaMinutes: nil,
-                statusMessage: error.message,
-                guidanceMessage: "Retry the backup after confirming the paired desktop is reachable on the same local network.",
-                isIncompleteLibrary: false
+                phase: .failed,
+                failureMessage: error.message
             )
             let failedSnapshotWithLiveTransports = await applyingLiveTransports(
                 to: failedSnapshot,
@@ -2771,9 +2775,8 @@ actor PhotoLibraryTransferService: TransferService {
                 failedCount: 1,
                 transport: failedTransport,
                 etaMinutes: nil,
-                statusMessage: error.localizedDescription,
-                guidanceMessage: "Retry the backup after confirming photo-library access and desktop reachability.",
-                isIncompleteLibrary: false
+                phase: .failed,
+                failureMessage: error.localizedDescription
             )
             let failedSnapshotWithLiveTransports = await applyingLiveTransports(
                 to: failedSnapshot,
@@ -3289,11 +3292,9 @@ actor PhotoLibraryTransferService: TransferService {
             failedCount: failedCount,
             skippedCount: skippedCount,
             transport: transport,
-            transferSpeedText: currentTransferSpeedText(),
+            transferSpeedBytesPerSecond: currentTransferSpeedBytesPerSecondOrNil(),
             etaMinutes: nil,
-            statusMessage: "Backup stopped. In-flight work was canceled to release resources quickly.",
-            guidanceMessage: "Start a new backup session to continue sending any remaining accessible items.",
-            isIncompleteLibrary: false
+            phase: .stopped
         )
     }
 
@@ -3312,11 +3313,10 @@ actor PhotoLibraryTransferService: TransferService {
             failedCount: failedCount,
             skippedCount: skippedCount,
             transport: transport,
-            transferSpeedText: currentTransferSpeedText(),
+            transferSpeedBytesPerSecond: currentTransferSpeedBytesPerSecondOrNil(),
             etaMinutes: nil,
-            statusMessage: message,
-            guidanceMessage: "Free up disk space on the desktop, then start a new backup session.",
-            isIncompleteLibrary: false
+            phase: .failed,
+            failureMessage: message
         )
         let failedSnapshotWithLiveTransports = await applyingLiveTransports(
             to: failedSnapshot,
@@ -3372,12 +3372,14 @@ actor PhotoLibraryTransferService: TransferService {
         guard var snapshot = currentSnapshot else {
             return
         }
-        snapshot.transferSpeedText = currentTransferSpeedText()
-        snapshot.etaMinutes = currentETAMinutes(
-            transferredCount: snapshot.transferredCount,
-            totalCount: snapshot.totalCount,
-            failedCount: snapshot.failedCount
-        )
+        snapshot.transferSpeedBytesPerSecond = currentTransferSpeedBytesPerSecondOrNil()
+        snapshot.etaMinutes = snapshot.phase == .preparing || snapshot.phase == .transferring
+            ? currentETAMinutes(
+                transferredCount: snapshot.transferredCount,
+                totalCount: snapshot.totalCount,
+                failedCount: snapshot.failedCount
+            )
+            : nil
         currentSnapshot = snapshot
         progress(snapshot)
     }
@@ -3430,25 +3432,20 @@ actor PhotoLibraryTransferService: TransferService {
         skippedCount: Int
     ) -> TransferSnapshot {
         let processedCount = min(transferredCount + failedCount, totalCount)
+        let phase: TransferPhase = processedCount == 0 ? .preparing : .transferring
         return TransferSnapshot(
             transferredCount: transferredCount,
             totalCount: totalCount,
             failedCount: failedCount,
             skippedCount: skippedCount,
             transport: transport,
-            transferSpeedText: currentTransferSpeedText(),
+            transferSpeedBytesPerSecond: currentTransferSpeedBytesPerSecondOrNil(),
             etaMinutes: currentETAMinutes(
                 transferredCount: transferredCount,
                 totalCount: totalCount,
                 failedCount: failedCount
             ),
-            statusMessage: totalCount == 0
-                ? "Preparing the local media backup with the paired desktop."
-                : "Processed \(processedCount) of \(totalCount) items for the paired desktop.",
-            guidanceMessage: failedCount == 0
-                ? "Keep the app in the foreground while the phone sends items to the desktop."
-                : "Some items have failed so far. Let the current run finish, then inspect the MobileTransfer device logs for per-item errors.",
-            isIncompleteLibrary: false
+            phase: phase
         )
     }
 
@@ -3634,9 +3631,9 @@ actor PhotoLibraryTransferService: TransferService {
         pruneTransferSpeedSamples(now: now)
     }
 
-    private func currentTransferSpeedText() -> String {
-        let speedMBps = currentTransferSpeedBytesPerSecond() / 1_048_576.0
-        return String(format: "%.2f MB/s", speedMBps)
+    private func currentTransferSpeedBytesPerSecondOrNil() -> Double? {
+        let speed = currentTransferSpeedBytesPerSecond()
+        return speed > 0 ? speed : nil
     }
 
     private func currentTransferSpeedBytesPerSecond() -> Double {

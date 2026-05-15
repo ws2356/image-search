@@ -23,8 +23,6 @@ struct ErrorSummary: Equatable, Sendable, Codable {
 enum PermissionScope: String, Equatable, Sendable, Codable {
     case full
     case limited
-    case photosOnly
-    case videosOnly
     case denied
 
     var title: String {
@@ -33,10 +31,6 @@ enum PermissionScope: String, Equatable, Sendable, Codable {
             return "Full Library Access"
         case .limited:
             return "Limited Library Access"
-        case .photosOnly:
-            return "Photos Only"
-        case .videosOnly:
-            return "Videos Only"
         case .denied:
             return "Media Access Denied"
         }
@@ -48,10 +42,6 @@ enum PermissionScope: String, Equatable, Sendable, Codable {
             return "The app can include all eligible local photos and videos."
         case .limited:
             return "Only selected photos and videos are included. Grant full access to include your entire eligible library in this backup."
-        case .photosOnly:
-            return "Videos are excluded until video access is granted."
-        case .videosOnly:
-            return "Photos are excluded until photo access is granted."
         case .denied:
             return "Backup cannot begin until media library access is granted."
         }
@@ -145,6 +135,62 @@ struct PairingStatus: Equatable, Sendable, Codable {
         transport: nil,
         message: "Scan the desktop QR code to begin secure local pairing."
     )
+}
+
+enum BackupSessionStatus: String, Equatable, Sendable, Codable {
+    case paired
+    case stopped
+    case completed
+    case failed
+}
+
+struct BackupSession: Equatable, Sendable, Codable {
+    var sessionID: String?
+    var desktopName: String?
+    var status: BackupSessionStatus
+    var transferredCount: Int?
+    var totalCount: Int?
+    var failedCount: Int?
+    var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID
+        case desktopName
+        case status
+        case transferredCount
+        case totalCount
+        case failedCount
+        case updatedAt
+    }
+
+    init(
+        sessionID: String?,
+        desktopName: String?,
+        status: BackupSessionStatus,
+        transferredCount: Int? = nil,
+        totalCount: Int? = nil,
+        failedCount: Int? = nil,
+        updatedAt: Date
+    ) {
+        self.sessionID = sessionID
+        self.desktopName = desktopName
+        self.status = status
+        self.transferredCount = transferredCount
+        self.totalCount = totalCount
+        self.failedCount = failedCount
+        self.updatedAt = updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
+        desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName)
+        status = try container.decode(BackupSessionStatus.self, forKey: .status)
+        transferredCount = try container.decodeIfPresent(Int.self, forKey: .transferredCount)
+        totalCount = try container.decodeIfPresent(Int.self, forKey: .totalCount)
+        failedCount = try container.decodeIfPresent(Int.self, forKey: .failedCount)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    }
 }
 
 struct PairingQRCodePayload: Codable, Equatable, Sendable {
@@ -278,61 +324,42 @@ enum InterruptionReason: String, Equatable, Sendable, Codable {
 
 struct HomeSummary: Equatable, Sendable, Codable {
     var desktopName: String?
-    var pendingItemCount: Int?
     var lastBackupDescription: String?
     var permissionScope: PermissionScope
-    var detailMessage: String
-    var previouslyTransferredDescription: String? = nil
     var interruptionWarning: String? = nil
 
     static let firstLaunch = HomeSummary(
         desktopName: nil,
-        pendingItemCount: nil,
         lastBackupDescription: nil,
         permissionScope: .full,
-        detailMessage: "Back up the full eligible local iPhone library to the desktop app. No account or cloud relay is required, and notification permission is requested only when backup is about to start."
+        interruptionWarning: nil
     )
-
-    static func completed(
-        desktopName: String?,
-        permissionScope: PermissionScope,
-        lastBackupDescription: String
-    ) -> HomeSummary {
-        HomeSummary(
-            desktopName: desktopName,
-            pendingItemCount: 0,
-            lastBackupDescription: lastBackupDescription,
-            permissionScope: permissionScope,
-            detailMessage: "Your full eligible library is up to date for the last confirmed session. Scan again when you are ready to pair with the desktop."
-        )
-    }
 }
 
 struct PermissionSummary: Equatable, Sendable, Codable {
-    var cameraGranted: Bool
-    var notificationsGranted: Bool
     var mediaScope: PermissionScope
-    var excludedCategoryDescription: String?
     var lowBatteryWarningNeeded: Bool
     var isCharging: Bool
 
     static let demo = PermissionSummary(
-        cameraGranted: true,
-        notificationsGranted: false,
         mediaScope: .limited,
-        excludedCategoryDescription: "Only the subset currently granted by iOS will be included in this backup.",
         lowBatteryWarningNeeded: true,
         isCharging: false
     )
 
     static let allClear = PermissionSummary(
-        cameraGranted: true,
-        notificationsGranted: true,
         mediaScope: .full,
-        excludedCategoryDescription: nil,
         lowBatteryWarningNeeded: false,
         isCharging: true
     )
+}
+
+enum TransferPhase: String, Equatable, Sendable, Codable {
+    case preparing
+    case transferring
+    case stopped
+    case completed
+    case failed
 }
 
 struct TransferSnapshot: Equatable, Sendable, Codable {
@@ -342,11 +369,10 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
     var skippedCount: Int = 0
     var transport: TransferTransport
     var liveTransports: [TransferTransport]? = nil
-    var transferSpeedText: String? = nil
+    var transferSpeedBytesPerSecond: Double? = nil
     var etaMinutes: Double?
-    var statusMessage: String
-    var guidanceMessage: String
-    var isIncompleteLibrary: Bool
+    var phase: TransferPhase
+    var failureMessage: String? = nil
 
     var activeTransportsForDisplay: [TransferTransport] {
         let candidates = (liveTransports?.isEmpty == false) ? (liveTransports ?? []) : [transport]
@@ -367,17 +393,37 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
         return Double(transferredCount) / Double(totalCount)
     }
 
+    var transferSpeedText: String? {
+        guard let transferSpeedBytesPerSecond else {
+            return nil
+        }
+        return String(format: "%.2f MB/s", transferSpeedBytesPerSecond / 1_048_576.0)
+    }
+
+    static func empty(
+        transport: TransferTransport = .lan,
+        phase: TransferPhase = .preparing
+    ) -> TransferSnapshot {
+        TransferSnapshot(
+            transferredCount: 0,
+            totalCount: 0,
+            failedCount: 0,
+            transport: transport,
+            etaMinutes: nil,
+            phase: phase
+        )
+    }
+
     static let demo = TransferSnapshot(
         transferredCount: 248,
         totalCount: 930,
         failedCount: 3,
         skippedCount: 17,
         transport: .lan,
-        transferSpeedText: "4.80 MB/s",
+        transferSpeedBytesPerSecond: 4.8 * 1_048_576.0,
         etaMinutes: 17,
-        statusMessage: "Backing up local photos and videos to the paired desktop.",
-        guidanceMessage: "USB is generally faster and more stable than Wi-Fi. Once desktop support lands, the app should prefer USB when it is available.",
-        isIncompleteLibrary: true
+        phase: .transferring,
+        failureMessage: nil
     )
 }
 
@@ -389,11 +435,13 @@ extension TransferSnapshot {
         case skippedCount
         case transport
         case liveTransports
-        case transferSpeedText
+        case transferSpeedBytesPerSecond
+        case legacyTransferSpeedText
         case etaMinutes
-        case statusMessage
-        case guidanceMessage
-        case isIncompleteLibrary
+        case phase
+        case failureMessage
+        case legacyStatusMessage = "statusMessage"
+        case legacyGuidanceMessage = "guidanceMessage"
     }
 
     init(from decoder: Decoder) throws {
@@ -404,13 +452,40 @@ extension TransferSnapshot {
         skippedCount = try container.decodeIfPresent(Int.self, forKey: .skippedCount) ?? 0
         transport = try container.decode(TransferTransport.self, forKey: .transport)
         liveTransports = try container.decodeIfPresent([TransferTransport].self, forKey: .liveTransports)
-        transferSpeedText = try container.decodeIfPresent(String.self, forKey: .transferSpeedText)
-
+        transferSpeedBytesPerSecond = try container.decodeIfPresent(Double.self, forKey: .transferSpeedBytesPerSecond)
         etaMinutes = try container.decodeIfPresent(Double.self, forKey: .etaMinutes)
 
-        statusMessage = try container.decode(String.self, forKey: .statusMessage)
-        guidanceMessage = try container.decode(String.self, forKey: .guidanceMessage)
-        isIncompleteLibrary = try container.decode(Bool.self, forKey: .isIncompleteLibrary)
+        if let decodedPhase = try container.decodeIfPresent(TransferPhase.self, forKey: .phase) {
+            phase = decodedPhase
+        } else {
+            let legacyStatusMessage = try container.decodeIfPresent(String.self, forKey: .legacyStatusMessage) ?? ""
+            let normalizedLegacyStatusMessage = legacyStatusMessage.lowercased()
+            if normalizedLegacyStatusMessage.contains("stopped") {
+                phase = .stopped
+            } else if normalizedLegacyStatusMessage.contains("complete") || normalizedLegacyStatusMessage.contains("finished") {
+                phase = .completed
+            } else if failedCount > 0 && totalCount == 0 {
+                phase = .failed
+            } else if totalCount == 0 && transferredCount == 0 {
+                phase = .preparing
+            } else {
+                phase = .transferring
+            }
+        }
+
+        failureMessage = try container.decodeIfPresent(String.self, forKey: .failureMessage)
+        if failureMessage == nil {
+            let legacyStatusMessage = try container.decodeIfPresent(String.self, forKey: .legacyStatusMessage)
+            if phase == .failed, let legacyStatusMessage, !legacyStatusMessage.isEmpty {
+                failureMessage = legacyStatusMessage
+            }
+        }
+
+        if transferSpeedBytesPerSecond == nil,
+           let legacyTransferSpeedText = try container.decodeIfPresent(String.self, forKey: .legacyTransferSpeedText) {
+            transferSpeedBytesPerSecond = Self.transferSpeedBytesPerSecond(from: legacyTransferSpeedText)
+        }
+        _ = try container.decodeIfPresent(String.self, forKey: .legacyGuidanceMessage)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -421,67 +496,33 @@ extension TransferSnapshot {
         try container.encode(skippedCount, forKey: .skippedCount)
         try container.encode(transport, forKey: .transport)
         try container.encodeIfPresent(liveTransports, forKey: .liveTransports)
-        try container.encodeIfPresent(transferSpeedText, forKey: .transferSpeedText)
+        try container.encodeIfPresent(transferSpeedBytesPerSecond, forKey: .transferSpeedBytesPerSecond)
         try container.encodeIfPresent(etaMinutes, forKey: .etaMinutes)
-        try container.encode(statusMessage, forKey: .statusMessage)
-        try container.encode(guidanceMessage, forKey: .guidanceMessage)
-        try container.encode(isIncompleteLibrary, forKey: .isIncompleteLibrary)
+        try container.encode(phase, forKey: .phase)
+        try container.encodeIfPresent(failureMessage, forKey: .failureMessage)
     }
 
+    private static func transferSpeedBytesPerSecond(from legacyText: String) -> Double? {
+        let normalizedText = legacyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let megabytesPerSecondText = normalizedText
+            .replacingOccurrences(of: "MB/s", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let megabytesPerSecond = Double(megabytesPerSecondText) else {
+            return nil
+        }
+        return megabytesPerSecond * 1_048_576.0
+    }
 }
 
 struct CompletionSummary: Equatable, Sendable, Codable {
     var title: String
     var message: String
     var itemsBackedUp: Int? = nil
-    var totalTransferredDescription: String? = nil
     var durationDescription: String? = nil
-    var completedAtDescription: String? = nil
 
     static let demo = CompletionSummary(
         title: "Backup Complete!",
         message: "Desktop confirmed this mobile backup session is complete. Already transferred items may still be finishing desktop indexing."
-    )
-}
-
-struct LaunchSnapshot: Equatable, Sendable, Codable {
-    var homeSummary: HomeSummary
-    var permissionSummary: PermissionSummary
-    var pairingStatus: PairingStatus
-    var transferSnapshot: TransferSnapshot
-
-    init(
-        homeSummary: HomeSummary,
-        permissionSummary: PermissionSummary,
-        pairingStatus: PairingStatus,
-        transferSnapshot: TransferSnapshot
-    ) {
-        self.homeSummary = homeSummary
-        self.permissionSummary = permissionSummary
-        self.pairingStatus = pairingStatus
-        self.transferSnapshot = transferSnapshot
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case homeSummary
-        case permissionSummary
-        case pairingStatus
-        case transferSnapshot
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        homeSummary = try container.decode(HomeSummary.self, forKey: .homeSummary)
-        permissionSummary = try container.decode(PermissionSummary.self, forKey: .permissionSummary)
-        pairingStatus = try container.decode(PairingStatus.self, forKey: .pairingStatus)
-        transferSnapshot = try container.decode(TransferSnapshot.self, forKey: .transferSnapshot)
-    }
-
-    static let firstLaunch = LaunchSnapshot(
-        homeSummary: .firstLaunch,
-        permissionSummary: .demo,
-        pairingStatus: .idle,
-        transferSnapshot: .demo
     )
 }
 

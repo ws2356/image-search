@@ -1,5 +1,262 @@
 import XCTest
+import Combine
 @testable import AlbumTransporterKit
+
+struct LaunchSnapshot: Sendable {
+    var backupSession: BackupSession?
+
+    static let firstLaunch = LaunchSnapshot(backupSession: nil)
+}
+
+protocol AppStateStore: Sendable {
+    func loadLaunchSnapshot() async -> LaunchSnapshot
+    func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async
+}
+
+actor InMemoryAppStateStore: AppStateStore {
+    private var snapshot: LaunchSnapshot
+
+    init(snapshot: LaunchSnapshot = .firstLaunch) {
+        self.snapshot = snapshot
+    }
+
+    func loadLaunchSnapshot() async -> LaunchSnapshot {
+        snapshot
+    }
+
+    func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async {
+        self.snapshot = snapshot
+    }
+}
+
+@MainActor
+final class AppStateStoreBackedBackupSessionProvider: BackupSessionProviding {
+    @Published private var currentBackupSession: BackupSession?
+
+    private let store: AppStateStore
+    private var hasLoaded = false
+
+    init(store: AppStateStore) {
+        self.store = store
+    }
+
+    var backupSession: BackupSession? {
+        currentBackupSession
+    }
+
+    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        $currentBackupSession.eraseToAnyPublisher()
+    }
+
+    func load() async {
+        guard !hasLoaded else {
+            return
+        }
+        hasLoaded = true
+        currentBackupSession = await store.loadLaunchSnapshot().backupSession
+    }
+
+    func saveBackupSession(_ session: BackupSession?) async {
+        currentBackupSession = session
+        let store = store
+        Task.detached(priority: .utility) {
+            await store.saveLaunchSnapshot(LaunchSnapshot(backupSession: session))
+        }
+    }
+}
+
+extension PermissionSummary {
+    init(
+        cameraGranted: Bool,
+        notificationsGranted: Bool,
+        mediaScope: PermissionScope,
+        excludedCategoryDescription: String?,
+        lowBatteryWarningNeeded: Bool,
+        isCharging: Bool
+    ) {
+        _ = cameraGranted
+        _ = notificationsGranted
+        _ = excludedCategoryDescription
+        self.init(
+            mediaScope: mediaScope,
+            lowBatteryWarningNeeded: lowBatteryWarningNeeded,
+            isCharging: isCharging
+        )
+    }
+}
+
+extension TransferSnapshot {
+    init(
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int,
+        skippedCount: Int = 0,
+        transport: TransferTransport,
+        liveTransports: [TransferTransport]? = nil,
+        transferSpeedText: String? = nil,
+        etaMinutes: Double?,
+        statusMessage: String,
+        guidanceMessage: String,
+        isIncompleteLibrary: Bool
+    ) {
+        _ = guidanceMessage
+        _ = isIncompleteLibrary
+        self.init(
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount,
+            skippedCount: skippedCount,
+            transport: transport,
+            liveTransports: liveTransports,
+            transferSpeedBytesPerSecond: Self.legacyTransferSpeedBytesPerSecond(from: transferSpeedText),
+            etaMinutes: etaMinutes,
+            phase: Self.legacyPhase(
+                statusMessage: statusMessage,
+                transferredCount: transferredCount,
+                totalCount: totalCount,
+                failedCount: failedCount
+            ),
+            failureMessage: Self.legacyFailureMessage(
+                statusMessage: statusMessage,
+                transferredCount: transferredCount,
+                totalCount: totalCount,
+                failedCount: failedCount
+            )
+        )
+    }
+
+    var statusMessage: String {
+        switch phase {
+        case .preparing:
+            return "Preparing the local media backup with the paired desktop."
+        case .transferring:
+            let processedCount = min(transferredCount + failedCount, totalCount)
+            if totalCount > 0, processedCount >= totalCount {
+                return "Phone finished sending the current batch of media to the paired desktop."
+            }
+            return "Processed \(processedCount) of \(totalCount) items for the paired desktop."
+        case .stopped:
+            return totalCount == 0
+                ? "Backup canceled before transfer started."
+                : "Backup stopped. In-flight work was canceled to release resources quickly."
+        case .completed:
+            return "Desktop confirmed that this transfer session is complete."
+        case .failed:
+            return failureMessage ?? "Transfer failed."
+        }
+    }
+
+    var guidanceMessage: String {
+        switch phase {
+        case .preparing:
+            return "Keep the app in the foreground while the phone prepares the backup session."
+        case .transferring:
+            let processedCount = min(transferredCount + failedCount, totalCount)
+            if totalCount > 0, processedCount >= totalCount {
+                return failedCount == 0
+                    ? "Backup completes automatically after the desktop confirms this transfer session."
+                    : "Some items could not be transferred. Start another backup session to retry remaining items, then inspect the MobileTransfer device logs for per-item errors."
+            }
+            if failedCount > 0 {
+                return "Some items have failed so far. Let the current run finish, then inspect the MobileTransfer device logs for per-item errors."
+            }
+            return "Keep the app in the foreground while the phone sends items to the desktop."
+        case .stopped:
+            return "Start a new backup session to continue sending any remaining accessible items."
+        case .completed:
+            return "You can return home and start another backup whenever new media appears on the device."
+        case .failed:
+            let normalizedMessage = failureMessage?.lowercased() ?? ""
+            if normalizedMessage.contains("storage is full") || normalizedMessage.contains("disk space") {
+                return "Free up disk space on the desktop, then start a new backup session."
+            }
+            if normalizedMessage.contains("no paired desktop") {
+                return "Pair with the desktop again before starting a backup."
+            }
+            return "Retry the backup after confirming the paired desktop is reachable and ready."
+        }
+    }
+
+    var isIncompleteLibrary: Bool {
+        false
+    }
+
+    private static func legacyPhase(
+        statusMessage: String,
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int
+    ) -> TransferPhase {
+        let normalizedMessage = statusMessage.lowercased()
+        if normalizedMessage.contains("desktop confirmed") {
+            return .completed
+        }
+        if normalizedMessage.contains("finished sending") {
+            return .transferring
+        }
+        if normalizedMessage.contains("stopped") || normalizedMessage.contains("canceled") {
+            return .stopped
+        }
+        if normalizedMessage.contains("storage is full")
+            || normalizedMessage.contains("no paired desktop")
+            || normalizedMessage.contains("failed")
+            || (failedCount > 0 && totalCount == 0)
+        {
+            return .failed
+        }
+        if normalizedMessage.contains("prepar") || (totalCount == 0 && transferredCount == 0) {
+            return .preparing
+        }
+        return .transferring
+    }
+
+    private static func legacyFailureMessage(
+        statusMessage: String,
+        transferredCount: Int,
+        totalCount: Int,
+        failedCount: Int
+    ) -> String? {
+        switch legacyPhase(
+            statusMessage: statusMessage,
+            transferredCount: transferredCount,
+            totalCount: totalCount,
+            failedCount: failedCount
+        ) {
+        case .failed:
+            return statusMessage
+        default:
+            return nil
+        }
+    }
+
+    private static func legacyTransferSpeedBytesPerSecond(from text: String?) -> Double? {
+        guard let text else {
+            return nil
+        }
+        let normalizedText = text
+            .replacingOccurrences(of: "MB/s", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let megabytesPerSecond = Double(normalizedText) else {
+            return nil
+        }
+        return megabytesPerSecond * 1_048_576.0
+    }
+}
+
+extension HomeViewState {
+    var previouslyTransferredDescription: String? {
+        previousTransferDescription
+    }
+}
+
+extension CompletionViewState {
+    var totalTransferredDescription: String? {
+        guard let itemsBackedUp else {
+            return nil
+        }
+        return "\(itemsBackedUp)/\(itemsBackedUp)"
+    }
+}
 
 @MainActor
 final class MobileAppModelTests: XCTestCase {
@@ -19,8 +276,9 @@ final class MobileAppModelTests: XCTestCase {
             telemetryClient: telemetryClient,
             contextProvider: resolvedTelemetryContextProvider
         )
+        let backupSessionProvider = AppStateStoreBackedBackupSessionProvider(store: stateStore)
         return MobileAppModel(
-            stateStore: stateStore,
+            backupSessionProvider: backupSessionProvider,
             qrCodePayloadDecoder: qrCodePayloadDecoder,
             pairingService: pairingService,
             permissionService: permissionService,
