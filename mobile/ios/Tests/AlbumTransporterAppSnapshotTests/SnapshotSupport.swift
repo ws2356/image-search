@@ -59,15 +59,7 @@ enum SnapshotSupport {
     }
 
     static var snapshotLanguage: String {
-        if let language = runtimeConfig?.language?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !language.isEmpty {
-            return normalizedSnapshotLanguage(language)
-        }
-        if let language = ProcessInfo.processInfo.environment["SNAPSHOT_LANGUAGE"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !language.isEmpty {
-            return normalizedSnapshotLanguage(language)
-        }
-        return normalizedSnapshotLanguage(Locale.preferredLanguages.first ?? "en-US")
+        return "en-US"
     }
 
     static var snapshotDeviceDisplayName: String {
