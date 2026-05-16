@@ -185,7 +185,6 @@ final class MobileAppModel: ObservableObject {
         let persistedBackupSession = backupSessionProvider.backupSession
         if let persistedBackupSession {
             pairingStatus = pairingStatus(for: persistedBackupSession)
-        // TODO: state machine should be set to init on initialization?
             backupFlowStateMachine = MobileBackupFlowStateMachine(
                 state: backupFlowState(for: persistedBackupSession.status)
             )

@@ -189,10 +189,7 @@ final class DefaultTelemetryService: TelemetryService {
             "app.route": .string(context.route.rawValue),
             "backup.flow_state": .string(context.backupFlowState.rawValue),
             "pairing.phase": .string(context.pairingStatus.phase.rawValue),
-            "app.has_paired_desktop": .bool(
-                context.pairingStatus.desktopName?.isEmpty == false
-                    || context.backupSession?.desktopName?.isEmpty == false
-            ),
+            "app.has_paired_desktop": .bool(context.pairingStatus.desktopName?.isEmpty == false),
             "transfer.transferred_count": .int(transferSnapshot.transferredCount),
             "transfer.total_count": .int(transferSnapshot.totalCount),
             "transfer.failed_count": .int(transferSnapshot.failedCount)
@@ -207,11 +204,7 @@ final class DefaultTelemetryService: TelemetryService {
         if let backupSession = context.backupSession {
             attributes["backup.session_status"] = .string(backupSession.status.rawValue)
         }
-        // TODO: DO NOT guess where to read desktopName. Use whichever that is the source of truth
         if let desktopName = context.pairingStatus.desktopName, !desktopName.isEmpty {
-            attributes["pairing.desktop_name_present"] = .bool(true)
-            attributes["pairing.desktop_name_length"] = .int(desktopName.count)
-        } else if let desktopName = context.backupSession?.desktopName, !desktopName.isEmpty {
             attributes["pairing.desktop_name_present"] = .bool(true)
             attributes["pairing.desktop_name_length"] = .int(desktopName.count)
         }

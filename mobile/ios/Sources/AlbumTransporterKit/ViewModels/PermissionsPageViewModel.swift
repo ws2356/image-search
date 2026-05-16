@@ -104,6 +104,11 @@ final class PermissionsPageViewModel: ObservableObject {
         await continueBackupFromMediaAccess()
     }
 
+    func requestMediaAccessAndContinue() async {
+        _ = await model.permissionService.requestMediaAccess()
+        await continueBackupFromMediaAccess()
+    }
+
     func continueBackupFromMediaAccessNotNow() async {
         telemetryService.recordInteraction(name: "not_now_tapped", location: "media_access_alert")
         await continueBackupFromMediaAccess()

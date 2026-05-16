@@ -181,6 +181,13 @@ extension TransferSnapshot {
         false
     }
 
+    var transferSpeedText: String? {
+        String(
+            format: "%.2f MB/s",
+            (transferSpeedBytesPerSecond ?? 0) / 1_048_576.0
+        )
+    }
+
     private static func legacyPhase(
         statusMessage: String,
         transferredCount: Int,

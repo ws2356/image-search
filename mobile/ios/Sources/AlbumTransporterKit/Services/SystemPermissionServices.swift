@@ -6,7 +6,7 @@ actor SystemPermissionService: PermissionService {
     private var isRemoveAfterBackupEnabled = false
 
     func loadPermissionSummary() async -> PermissionSummary {
-        let mediaAuthorization = await currentMediaAuthorization()
+        let mediaAuthorization = currentMediaAuthorization()
         let batteryState = currentBatteryState()
 
         return PermissionSummary(
@@ -24,17 +24,17 @@ actor SystemPermissionService: PermissionService {
         isRemoveAfterBackupEnabled = isEnabled
     }
 
-    private func currentMediaAuthorization() async -> PHAuthorizationStatus {
-        let currentStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        guard currentStatus == .notDetermined else {
-            return currentStatus
-        }
-
-        return await withCheckedContinuation { continuation in
+    func requestMediaAccess() async -> PermissionScope {
+        let status = await withCheckedContinuation { continuation in
             PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
                 continuation.resume(returning: status)
             }
         }
+        return permissionScope(for: status)
+    }
+
+    private func currentMediaAuthorization() -> PHAuthorizationStatus {
+        PHPhotoLibrary.authorizationStatus(for: .readWrite)
     }
 
     private func permissionScope(for authorizationStatus: PHAuthorizationStatus) -> PermissionScope {

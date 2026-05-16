@@ -393,13 +393,6 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
         return Double(transferredCount) / Double(totalCount)
     }
 
-    var transferSpeedText: String? {
-        String(
-            format: "%.2f MB/s",
-            (transferSpeedBytesPerSecond ?? 0) / 1_048_576.0
-        )
-    }
-
     static func empty(
         transport: TransferTransport = .lan,
         phase: TransferPhase = .preparing

@@ -41,9 +41,15 @@ struct PermissionsGateView: View {
         .alert("Full media access recommended", isPresented: $viewModel.isShowingMediaAccessAlert) {
             Button("Update") {
                 viewModel.updateMediaAccessTapped()
-                PHPhotoLibrary.showLimitedPicker { _ in
+                if viewModel.summary.mediaScope == .limited {
+                    PHPhotoLibrary.showLimitedPicker { _ in
+                        Task {
+                            await viewModel.continueAfterMediaAccessUpdate()
+                        }
+                    }
+                } else {
                     Task {
-                        await viewModel.continueAfterMediaAccessUpdate()
+                        await viewModel.requestMediaAccessAndContinue()
                     }
                 }
             }
