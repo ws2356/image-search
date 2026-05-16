@@ -35,6 +35,7 @@ final class PairingPageViewModel: ObservableObject {
             scannedValue: model.scannedQRCodeValue
         )
 
+        // TODO: pass a pairing error struct to be consumed by error page
         guard case .success(let payload) = payloadResult else {
             if case .failure(let error) = payloadResult {
                 model.handleInvalidPairingPayload(message: error.message)
@@ -42,6 +43,7 @@ final class PairingPageViewModel: ObservableObject {
             return
         }
 
+        // TODO: do not propogate message, just consume it within the pairing page
         let result = await model.pairingService.startPairing(using: payload)
         guard model.route == .pair else {
             return
