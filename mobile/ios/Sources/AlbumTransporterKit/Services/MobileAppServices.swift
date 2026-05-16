@@ -15,6 +15,29 @@ protocol BackupSessionProviding: AnyObject {
     func saveBackupSession(_ session: BackupSession?) async
 }
 
+@MainActor
+extension BackupSessionProviding {
+    func saveBackupSession(
+        status: BackupSessionStatus,
+        sessionID: String? = nil,
+        desktopName: String? = nil,
+        snapshot: TransferSnapshot? = nil
+    ) async {
+        let currentSession = backupSession
+        await saveBackupSession(
+            BackupSession(
+                sessionID: sessionID ?? currentSession?.sessionID,
+                desktopName: desktopName ?? currentSession?.desktopName,
+                status: status,
+                transferredCount: snapshot?.transferredCount,
+                totalCount: snapshot?.totalCount,
+                failedCount: snapshot?.failedCount,
+                updatedAt: Date()
+            )
+        )
+    }
+}
+
 protocol PairingService: Sendable {
     func primeNetworkAccess() async
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus

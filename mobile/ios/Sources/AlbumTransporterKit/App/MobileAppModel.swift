@@ -305,14 +305,10 @@ final class MobileAppModel: ObservableObject {
                 ],
                 status: .error("desktop_stopped_pairing")
             )
-            // TODO: consider moving this to pairing service?
             await backupSessionProvider.saveBackupSession(
-                BackupSession(
-                    sessionID: result.sessionID,
-                    desktopName: result.desktopName ?? backupSessionProvider.backupSession?.desktopName,
-                    status: .failed,
-                    updatedAt: Date()
-                )
+                status: .failed,
+                sessionID: result.sessionID,
+                desktopName: result.desktopName
             )
             return
         }
@@ -328,12 +324,9 @@ final class MobileAppModel: ObservableObject {
         }
 
         await backupSessionProvider.saveBackupSession(
-            BackupSession(
-                sessionID: result.sessionID,
-                desktopName: result.desktopName,
-                status: .paired,
-                updatedAt: Date()
-            )
+            status: .paired,
+            sessionID: result.sessionID,
+            desktopName: result.desktopName
         )
         route = .permissions
 
@@ -364,8 +357,10 @@ final class MobileAppModel: ObservableObject {
             attributes: backupFailureAttributes,
             status: .error(reason)
         )
-        await persistBackupSession(
+        await backupSessionProvider.saveBackupSession(
             status: .stopped,
+            sessionID: pairingStatus.sessionID,
+            desktopName: pairingStatus.desktopName,
             snapshot: interruptionSnapshot
         )
     }
@@ -407,7 +402,12 @@ final class MobileAppModel: ObservableObject {
             attributes: backupFailureAttributes,
             status: .error(reason)
         )
-        await persistBackupSession(status: .stopped, snapshot: await currentTransferSnapshot())
+        await backupSessionProvider.saveBackupSession(
+            status: .stopped,
+            sessionID: pairingStatus.sessionID,
+            desktopName: pairingStatus.desktopName,
+            snapshot: await currentTransferSnapshot()
+        )
     }
 
     var transferServiceForPageModels: TransferService {
@@ -455,8 +455,10 @@ final class MobileAppModel: ObservableObject {
             attributes: completionAttributes,
             status: completionStatus
         )
-        await persistBackupSession(
+        await backupSessionProvider.saveBackupSession(
             status: snapshot.failedCount == 0 ? .completed : .failed,
+            sessionID: pairingStatus.sessionID,
+            desktopName: pairingStatus.desktopName,
             snapshot: snapshot
         )
     }
@@ -812,25 +814,6 @@ final class MobileAppModel: ObservableObject {
 
     private func currentTransferSnapshot() async -> TransferSnapshot {
         await transferService.progressSnapshot() ?? .empty(transport: pairingStatus.transport ?? .lan)
-    }
-
-    // TODO: move this operation to pairing service or transfer service
-    private func persistBackupSession(
-        status: BackupSessionStatus,
-        snapshot: TransferSnapshot? = nil
-    ) async {
-        let currentSession = backupSessionProvider.backupSession
-        await backupSessionProvider.saveBackupSession(
-            BackupSession(
-                sessionID: pairingStatus.sessionID ?? currentSession?.sessionID,
-                desktopName: pairingStatus.desktopName ?? currentSession?.desktopName,
-                status: status,
-                transferredCount: snapshot?.transferredCount,
-                totalCount: snapshot?.totalCount,
-                failedCount: snapshot?.failedCount,
-                updatedAt: Date()
-            )
-        )
     }
 
     private func pairingStatus(for session: BackupSession) -> PairingStatus {
