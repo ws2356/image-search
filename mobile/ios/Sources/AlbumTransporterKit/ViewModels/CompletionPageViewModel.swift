@@ -29,7 +29,7 @@ final class CompletionPageViewModel: ObservableObject {
     }
 
     func reloadSummary() async {
-        let transferService = model.transferServiceForPageModels
+        let transferService = model.transferService
         let completionState = await transferService.transferCompletionState()
         let snapshot: TransferSnapshot
         if let completedSnapshot = completionState?.snapshot {

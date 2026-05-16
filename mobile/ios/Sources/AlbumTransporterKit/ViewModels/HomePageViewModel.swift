@@ -37,7 +37,7 @@ final class HomePageViewModel: ObservableObject {
     func refreshSummary() async {
         let permissionSummary = await model.permissionService.loadPermissionSummary()
         let backupSession = model.backupSessionProvider.backupSession
-        let transferSnapshot = await model.transferServiceForPageModels.progressSnapshot()
+        let transferSnapshot = await model.transferService.progressSnapshot()
         summary = Self.renderSummary(
             backupSession: backupSession,
             transferSnapshot: transferSnapshot,

@@ -6,13 +6,9 @@ protocol AppPageModeling: AnyObject {
     var backupFlowState: MobileBackupFlowState { get }
     var pairingStatus: PairingStatus { get }
     var permissionService: PermissionService { get }
-    var transferServiceForPageModels: TransferService { get }
+    var transferService: TransferService { get }
     var errorSummary: ErrorSummary { get }
     var route: AppRoute { get }
-    var scannedQRCodeValue: String { get set }
-
-    // Legacy method (for backward compatibility during migration)
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async
     
     // New page-specific result handlers
     func onHomeCompleted(with result: HomePageResult) async
@@ -46,8 +42,6 @@ protocol PairingPageModeling: AppPageModeling {
 extension MobileAppModel: PairingPageModeling {}
 
 @MainActor
-protocol TransferPageModeling: AppPageModeling {
-    var transferServiceForTransferView: TransferService { get }
-}
+protocol TransferPageModeling: AppPageModeling {}
 
 extension MobileAppModel: TransferPageModeling {}

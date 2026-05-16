@@ -9,7 +9,7 @@ final class TransferPageViewModel: ObservableObject {
     private var hasStartedTransferOrchestration = false
 
     private var transferService: TransferService {
-        model.transferServiceForTransferView
+        model.transferService
     }
 
     @Published private(set) var snapshot: TransferSnapshot

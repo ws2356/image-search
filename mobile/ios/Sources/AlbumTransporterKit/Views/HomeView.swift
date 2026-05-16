@@ -488,10 +488,9 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var pairingStatus = PairingStatus.idle
     var permissionService: PermissionService
-    var transferServiceForPageModels: TransferService
+    var transferService: TransferService
     var errorSummary = ErrorSummary.generic
     var route: AppRoute = .home
-    var scannedQRCodeValue = ""
 
     init(
         backupSession: BackupSession?,
@@ -502,15 +501,9 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
     ) {
         backupSessionProvider = PreviewBackupSessionProvider(session: backupSession)
         permissionService = HomeViewPreviewPermissionService(summary: permissionSummary)
-        transferServiceForPageModels = HomeViewPreviewTransferService(snapshot: transferSnapshot)
+        transferService = HomeViewPreviewTransferService(snapshot: transferSnapshot)
         self.backupFlowState = backupFlowState
         self.pairingStatus = pairingStatus
-    }
-
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
-        _ = page
-        _ = result
-        _ = target
     }
 
     func requestStopTransfer() {}

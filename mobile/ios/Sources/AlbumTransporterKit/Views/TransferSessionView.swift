@@ -454,11 +454,8 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
     var permissionService: PermissionService
     var route: AppRoute = .transfer
     var errorSummary = ErrorSummary.generic
-    var scannedQRCodeValue = ""
-    var transferServiceForPageModels: TransferService { transferService }
-    var transferServiceForTransferView: TransferService { transferService }
 
-    private let transferService: TransferSessionPreviewTransferService
+    let transferService: TransferService
 
     init(snapshot: TransferSnapshot, permissionSummary: PermissionSummary) {
         backupSessionProvider = PreviewBackupSessionProvider(
@@ -472,12 +469,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
         permissionService = TransferSessionPreviewPermissionService(summary: permissionSummary)
         transferService = TransferSessionPreviewTransferService(snapshot: snapshot)
         pairingStatus.transport = snapshot.transport
-    }
-
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
-        _ = page
-        _ = result
-        _ = target
     }
 
     func requestStopTransfer() {}

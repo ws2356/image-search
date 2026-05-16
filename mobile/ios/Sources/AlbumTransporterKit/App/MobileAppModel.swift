@@ -11,7 +11,6 @@ final class MobileAppModel: ObservableObject {
         didSet { pushTelemetryContext() }
     }
     @Published private(set) var errorSummary = ErrorSummary.generic
-    @Published var scannedQRCodeValue = ""
 
     @Published var isShowingIncomingLinkReplacementConfirmation = false
 
@@ -23,7 +22,7 @@ final class MobileAppModel: ObservableObject {
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
     let pairingService: PairingService
     let permissionService: PermissionService
-    private let transferService: TransferService
+    let transferService: TransferService
     private let telemetryContextProvider: TelemetryContextProvider
     private let telemetryService: TelemetryService
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
@@ -61,100 +60,6 @@ final class MobileAppModel: ObservableObject {
         appLifecycleObservationTask?.cancel()
     }
     
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
-        switch page {
-        case .home:
-            switch result {
-            case .success:
-                await openScanFlow()
-            case .cancel:
-                break
-            case .failure:
-                break
-            }
-
-        case .scan:
-            switch result {
-            case .success:
-                await showPairingPage()
-            case .cancel:
-                await returnHome()
-            case .failure:
-                presentErrorSummary(
-                    title: "Scanner failed",
-                    message: "The camera scanner couldn't continue. Restart the backup session or return home."
-                )
-            }
-
-        case .pair:
-            switch result {
-            case .success:
-                await openScanFlow()
-            case .cancel:
-                await returnHome()
-            case .failure:
-                presentErrorSummary(
-                    title: "Pairing flow failed",
-                    message: "AuBackup couldn't continue the pairing flow. Restart the backup session or return home."
-                )
-            }
-            
-        case .permissions:
-            switch result {
-            case .success:
-                await triggerTransfer()
-            case .cancel:
-                let reason = target == .lowBatteryDeclined ? "low_battery_declined" : "permissions_cancelled"
-                await abortPreflightAndReturnHome(reason: reason)
-            case .failure:
-                presentErrorSummary(
-                    title: "Preflight failed",
-                    message: "AuBackup couldn't complete backup preflight. Restart the backup session or return home."
-                )
-            }
-            
-        case .transfer:
-            switch result {
-            case .success:
-                if target == .primary {
-                    requestStopTransfer()
-                } else if target == .secondary {
-                    await finalizeCompletedTransfer()
-                }
-            case .cancel:
-                break
-            case .failure:
-                if target == .stopTransferConfirmed {
-                    await finalizeStoppedTransfer()
-                } else {
-                    presentErrorSummary(
-                        title: "Transfer failed",
-                        message: "AuBackup couldn't continue this transfer. Restart the backup session or return home."
-                    )
-                }
-            }
-
-        case .completed:
-            switch result {
-            case .success, .cancel:
-                await returnHome()
-            case .failure:
-                presentErrorSummary(
-                    title: "Completion failed",
-                    message: "AuBackup couldn't finish this completion step. Restart the backup session or return home."
-                )
-            }
-
-        case .error:
-            switch result {
-            case .success:
-                await openScanFlow()
-            case .cancel, .failure:
-                await returnHome()
-            }
-        }
-    }
-
     func onHomeCompleted(with result: HomePageResult) async {
         switch result.result {
         case .success:
@@ -167,8 +72,7 @@ final class MobileAppModel: ObservableObject {
     func onScanningCompleted(with result: ScanningPageResult) async {
         switch result.result {
         case .success(let qrString):
-            scannedQRCodeValue = qrString
-            await showPairingPage()
+            await showPairingPage(qrString: qrString)
         case .failure(.scannerFailed):
             presentErrorSummary(
                 title: "Scanner failed",
@@ -368,14 +272,10 @@ final class MobileAppModel: ObservableObject {
         isShowingIncomingLinkReplacementConfirmation = false
     }
 
-    func beginPairing() async {
-        await showPairingPage()
-    }
-
-    func showPairingPage() async {
+    func showPairingPage(qrString: String) async {
         beginTelemetrySpan(.pairingFlow)
         transitionBackupFlow(.pairingStarted)
-        route = .pair(qrString: scannedQRCodeValue)
+        route = .pair(qrString: qrString)
         pairingStatus = PairingStatus(
             phase: .pairing,
             backupFlowState: .pendingPairing,
@@ -522,16 +422,8 @@ final class MobileAppModel: ObservableObject {
         )
     }
 
-    var transferServiceForPageModels: TransferService {
-        transferService
-    }
-
     var backupFlowState: MobileBackupFlowState {
         backupFlowStateMachine.state
-    }
-
-    var transferServiceForTransferView: TransferService {
-        transferService
     }
 
     private func finalizeCompletedTransfer() async {
@@ -604,8 +496,7 @@ final class MobileAppModel: ObservableObject {
         defer { isProcessingIncomingUniversalLink = false }
 
         await openScanFlow()
-        scannedQRCodeValue = payload
-        await beginPairing()
+        await showPairingPage(qrString: payload)
     }
 
     private func triggerTransfer() async {

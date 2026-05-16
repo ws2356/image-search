@@ -66,14 +66,12 @@ final class PageViewModelTests: XCTestCase {
         let viewModel = ScanningPageViewModel(model: model, telemetryService: telemetryService)
 
         XCTAssertEqual(viewModel.status, model.pairingStatus)
-        XCTAssertEqual(model.scannedQRCodeValue, "")
-
         await viewModel.onQRScanned(scannedValue: "qr-value")
         await viewModel.backTapped()
         await viewModel.openSettingsTapped()
         await viewModel.scannerFailed()
 
-        XCTAssertEqual(model.scannedQRCodeValue, "qr-value")
+        XCTAssertEqual(model.route, .pair(qrString: "qr-value"))
         XCTAssertEqual(model.beginPairingCallCount, 1)
         XCTAssertEqual(model.returnHomeCallCount, 2)
         XCTAssertEqual(model.scanFailureCallCount, 1)
@@ -114,7 +112,6 @@ final class PageViewModelTests: XCTestCase {
     func test_pairing_page_view_model_orchestrates_pairing_result() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
-        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
             phase: .pairing,
@@ -140,7 +137,6 @@ final class PageViewModelTests: XCTestCase {
     func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
-        model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
             phase: .failed,
@@ -434,7 +430,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var errorSummary = ErrorSummary.generic
-    var scannedQRCodeValue = ""
     var route = AppRoute.home
     var isShowingLowBatteryWarning = false
     var isShowingMediaAccessAlert = false
@@ -445,8 +440,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     let transferServiceActor = StubTransferService()
     let pairingServiceActor = StubPairingService()
     var permissionService: PermissionService { permissionServiceActor }
-    var transferServiceForPageModels: TransferService { transferServiceActor }
-    var transferServiceForTransferView: TransferService { transferServiceActor }
+    var transferService: TransferService { transferServiceActor }
     var qrCodePayloadDecoderForPairingPage: QRCodePayloadDecoding { StubQRCodePayloadDecoder() }
     var pairingService: PairingService { pairingServiceActor }
 
@@ -462,56 +456,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
 
     init(telemetryServiceActor: StubTelemetryService = StubTelemetryService()) {
         self.telemetryServiceActor = telemetryServiceActor
-    }
-
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
-        switch page {
-        case .home:
-            if result == .success {
-                homeScanActionCallCount += 1
-            } else if result == .cancel {
-                returnHomeCallCount += 1
-            }
-        case .pair:
-            if result == .success {
-                openScanRouteCallCount += 1
-            } else if result == .cancel {
-                returnHomeCallCount += 1
-            } else if result == .failure {
-                pairingFailureCallCount += 1
-            }
-        case .permissions:
-            if result == .success {
-            } else if result == .cancel {
-                returnHomeCallCount += 1
-            }
-        case .transfer:
-            if result == .success, target == .primary {
-                requestStopTransfer()
-            } else if result == .cancel, target == .stopTransferConfirmed {
-                if let snapshot = await transferServiceActor.progressSnapshot() {
-                    await confirmStopTransfer(currentSnapshot: snapshot)
-                }
-            }
-        case .completed:
-            if result == .success || result == .cancel {
-                returnHomeCallCount += 1
-            }
-        case .error:
-            if result == .success {
-                openScanRouteCallCount += 1
-            } else {
-                returnHomeCallCount += 1
-            }
-        case .scan:
-            if result == .success {
-                beginPairingCallCount += 1
-            } else if result == .cancel {
-                returnHomeCallCount += 1
-            } else if result == .failure {
-                scanFailureCallCount += 1
-            }
-        }
     }
 
     func requestStopTransfer() {
@@ -548,7 +492,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     func onScanningCompleted(with result: ScanningPageResult) async {
         switch result.result {
         case .success(let qrValue):
-            scannedQRCodeValue = qrValue
+            route = .pair(qrString: qrValue)
             beginPairingCallCount += 1
         case .failure(let error):
             switch error {

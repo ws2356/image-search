@@ -184,20 +184,13 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         message: "Connected."
     )
     var pairingService: PairingService = DemoPairingService()
-    var transferServiceForPageModels: TransferService = PermissionsGatePreviewTransferService()
+    var transferService: TransferService = PermissionsGatePreviewTransferService()
     var errorSummary = ErrorSummary.generic
     var route: AppRoute = .permissions
-    var scannedQRCodeValue = ""
     var permissionService: PermissionService
 
     init(summary: PermissionSummary) {
         permissionService = PermissionsGatePreviewPermissionService(summary: summary)
-    }
-
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {
-        _ = page
-        _ = result
-        _ = target
     }
 
     func requestStopTransfer() {}

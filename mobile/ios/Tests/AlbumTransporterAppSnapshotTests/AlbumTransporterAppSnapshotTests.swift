@@ -175,9 +175,7 @@ private final class SnapshotAppPageModel: AppPageModeling {
     var permissionService: PermissionService
     var errorSummary = ErrorSummary.generic
     var route: AppRoute
-    var scannedQRCodeValue = ""
-    var transferServiceForPageModels: TransferService { transferService }
-    private let transferService: SnapshotTransferService
+    let transferService: TransferService
 
     init(
         backupSession: BackupSession?,
@@ -199,7 +197,6 @@ private final class SnapshotAppPageModel: AppPageModeling {
         )
     }
 
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func requestStopTransfer() {}
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
@@ -217,11 +214,8 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     var pairingStatus: PairingStatus
     var permissionService: PermissionService
     var errorSummary = ErrorSummary.generic
-    var scannedQRCodeValue = ""
     var route = AppRoute.transfer
-    var transferServiceForPageModels: TransferService { transferService }
-    var transferServiceForTransferView: TransferService { transferService }
-    private let transferService: SnapshotTransferService
+    let transferService: TransferService
 
     init(snapshot: TransferSnapshot) {
         backupSessionProvider = SnapshotBackupSessionProvider(
@@ -244,7 +238,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
         self.transferService = SnapshotTransferService(snapshot: snapshot, completionState: nil)
     }
 
-    func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async {}
     func requestStopTransfer() {}
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}

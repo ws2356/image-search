@@ -22,9 +22,7 @@ final class PairingPageViewModel: ObservableObject {
     }
 
     func orchestratePairing() async {
-        if case .pair = model.route, model.pairingStatus.phase == .pairing {
-            // continue
-        } else {
+        guard case .pair(let qrString) = model.route, model.pairingStatus.phase == .pairing else {
             return
         }
         guard !hasStartedPairingAttempt else {
@@ -33,9 +31,7 @@ final class PairingPageViewModel: ObservableObject {
         hasStartedPairingAttempt = true
         defer { hasStartedPairingAttempt = false }
 
-        let payloadResult = qrCodePayloadDecoder.decode(
-            scannedValue: model.scannedQRCodeValue
-        )
+        let payloadResult = qrCodePayloadDecoder.decode(scannedValue: qrString)
 
         // TODO: pass a pairing error struct to be consumed by error page
         guard case .success(let payload) = payloadResult else {

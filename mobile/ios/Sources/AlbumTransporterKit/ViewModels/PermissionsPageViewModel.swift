@@ -134,11 +134,8 @@ final class PermissionsPageViewModel: ObservableObject {
             ]
         )
         isRunningPermissionsPreflight = false
-        await model.handleResultForPage(
-            .permissions,
-            result: .success,
-            target: shouldRemove ? .removeTransferredMedia : .keepOriginals
-        )
+        let result = PermissionsPageResult(result: .success(()))
+        await model.onPermissionsCompleted(with: result)
     }
 
     private func continueBackupFromMediaAccess() async {
