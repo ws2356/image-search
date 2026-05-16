@@ -11,7 +11,18 @@ protocol AppPageModeling: AnyObject {
     var route: AppRoute { get }
     var scannedQRCodeValue: String { get set }
 
+    // Legacy method (for backward compatibility during migration)
     func handleResultForPage(_ page: AppRoute, result: PageResult, target: PageTarget?) async
+    
+    // New page-specific result handlers
+    func onHomeCompleted(with result: HomePageResult) async
+    func onScanningCompleted(with result: ScanningPageResult) async
+    func onPairingCompleted(with result: PairingPageResult) async
+    func onPermissionsCompleted(with result: PermissionsPageResult) async
+    func onTransferCompleted(with result: TransferPageResult) async
+    func onCompletionCompleted(with result: CompletionPageResult) async
+    func onErrorCompleted(with result: ErrorPageResult) async
+    
     func requestStopTransfer()
 }
 

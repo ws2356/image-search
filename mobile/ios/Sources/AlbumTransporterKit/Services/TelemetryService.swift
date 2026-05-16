@@ -186,7 +186,7 @@ final class DefaultTelemetryService: TelemetryService {
         transferSnapshot: TransferSnapshot
     ) -> MobileTelemetryAttributes {
         var attributes: MobileTelemetryAttributes = [
-            "app.route": .string(context.route.rawValue),
+            "app.route": .string(routeName(context.route)),
             "backup.flow_state": .string(context.backupFlowState.rawValue),
             "pairing.phase": .string(context.pairingStatus.phase.rawValue),
             "app.has_paired_desktop": .bool(context.pairingStatus.desktopName?.isEmpty == false),
@@ -224,5 +224,24 @@ final class DefaultTelemetryService: TelemetryService {
             merged[key] = value
         }
         return merged
+    }
+
+    private func routeName(_ route: AppRoute) -> String {
+        switch route {
+        case .home:
+            return "home"
+        case .scan:
+            return "scan"
+        case .pair:
+            return "pair"
+        case .permissions:
+            return "permissions"
+        case .transfer:
+            return "transfer"
+        case .completed:
+            return "completed"
+        case .error:
+            return "error"
+        }
     }
 }

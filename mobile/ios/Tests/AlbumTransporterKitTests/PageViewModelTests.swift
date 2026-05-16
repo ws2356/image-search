@@ -115,7 +115,7 @@ final class PageViewModelTests: XCTestCase {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        model.route = .pair
+        model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
             phase: .pairing,
             desktopName: nil,
@@ -141,7 +141,7 @@ final class PageViewModelTests: XCTestCase {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.scannedQRCodeValue = PairingQRCodePayload.demoScanValue
-        model.route = .pair
+        model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
             phase: .failed,
             desktopName: nil,
@@ -534,6 +534,70 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
 
     func abortPreflightAndReturnHome(reason: String) async {
         _ = reason
+    }
+
+    func onHomeCompleted(with result: HomePageResult) async {
+        switch result.result {
+        case .success:
+            homeScanActionCallCount += 1
+        case .failure:
+            returnHomeCallCount += 1
+        }
+    }
+
+    func onScanningCompleted(with result: ScanningPageResult) async {
+        switch result.result {
+        case .success(let qrValue):
+            scannedQRCodeValue = qrValue
+            beginPairingCallCount += 1
+        case .failure(let error):
+            switch error {
+            case .scannerFailed:
+                scanFailureCallCount += 1
+            case .unknown:
+                returnHomeCallCount += 1
+            }
+        }
+    }
+
+    func onPairingCompleted(with result: PairingPageResult) async {
+        switch result.result {
+        case .success:
+            openScanRouteCallCount += 1
+        case .failure:
+            returnHomeCallCount += 1
+        }
+    }
+
+    func onPermissionsCompleted(with result: PermissionsPageResult) async {
+        switch result.result {
+        case .success:
+            break
+        case .failure:
+            returnHomeCallCount += 1
+        }
+    }
+
+    func onTransferCompleted(with result: TransferPageResult) async {
+        switch result.result {
+        case .success:
+            requestStopTransfer()
+        case .failure:
+            returnHomeCallCount += 1
+        }
+    }
+
+    func onCompletionCompleted(with result: CompletionPageResult) async {
+        returnHomeCallCount += 1
+    }
+
+    func onErrorCompleted(with result: ErrorPageResult) async {
+        switch result.result {
+        case .success:
+            openScanRouteCallCount += 1
+        case .failure:
+            returnHomeCallCount += 1
+        }
     }
 
     func handleInvalidPairingPayload(message: String) {

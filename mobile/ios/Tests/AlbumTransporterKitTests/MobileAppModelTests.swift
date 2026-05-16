@@ -382,16 +382,20 @@ final class MobileAppModelTests: XCTestCase {
         )
 
         await model.load()
-        await model.handleResultForPage(.scan, result: .failure, target: nil)
+        let scanFailureResult = ScanningPageResult(result: .failure(.scannerFailed))
+        await model.onScanningCompleted(with: scanFailureResult)
         XCTAssertEqual(model.route, .error)
 
-        await model.handleResultForPage(.error, result: .success, target: nil)
+        let errorRetryResult = ErrorPageResult(result: .success(()))
+        await model.onErrorCompleted(with: errorRetryResult)
         XCTAssertEqual(model.route, .scan)
 
-        await model.handleResultForPage(.scan, result: .failure, target: nil)
+        let scanFailureResult2 = ScanningPageResult(result: .failure(.scannerFailed))
+        await model.onScanningCompleted(with: scanFailureResult2)
         XCTAssertEqual(model.route, .error)
 
-        await model.handleResultForPage(.error, result: .cancel, target: nil)
+        let errorCancelResult = ErrorPageResult(result: .failure(.unknown))
+        await model.onErrorCompleted(with: errorCancelResult)
         XCTAssertEqual(model.route, .home)
     }
 
@@ -866,9 +870,12 @@ final class MobileAppModelTests: XCTestCase {
         await model.handleIncomingUniversalLink(URL(string: "https://dl.boldman.net?sid=missing-fields")!)
         await orchestrateVisiblePairPage(model: model)
 
-        XCTAssertEqual(model.route, .pair)
-        XCTAssertEqual(model.pairingStatus.phase, .failed)
-        XCTAssertTrue(model.pairingStatus.message.contains("missing the required field"))
+        if case .pair = model.route {
+            XCTAssertEqual(model.pairingStatus.phase, .failed)
+            XCTAssertTrue(model.pairingStatus.message.contains("missing the required field"))
+        } else {
+            XCTFail("Expected route to be .pair but got \(model.route)")
+        }
     }
 
     func test_handle_incoming_universal_link_prompts_before_replacing_active_transfer() async {
@@ -1165,7 +1172,7 @@ final class MobileAppModelTests: XCTestCase {
         )
         XCTAssertEqual(
             failureRecord?.attributes["app.route"],
-            .string(AppRoute.pair.rawValue)
+            .string("pair")
         )
     }
 
@@ -1186,8 +1193,11 @@ final class MobileAppModelTests: XCTestCase {
         await startPairing(model: model)
         try? await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertEqual(model.route, .pair)
-        XCTAssertEqual(model.pairingStatus.phase, .pairing)
+        if case .pair = model.route {
+            XCTAssertEqual(model.pairingStatus.phase, .pairing)
+        } else {
+            XCTFail("Expected route to be .pair but got \(model.route)")
+        }
         let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
         XCTAssertEqual(
             failureRecord?.attributes["pairing.failure_reason"],
@@ -1253,7 +1263,7 @@ final class MobileAppModelTests: XCTestCase {
         )
         XCTAssertEqual(
             preflightRecord?.attributes["app.route"],
-            .string(AppRoute.permissions.rawValue)
+            .string("permissions")
         )
 
         let completionRecord = await telemetryClient.latestRecord(for: .transferCompleted)

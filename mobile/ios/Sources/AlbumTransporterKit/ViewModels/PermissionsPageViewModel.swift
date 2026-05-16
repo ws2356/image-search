@@ -58,7 +58,8 @@ final class PermissionsPageViewModel: ObservableObject {
 
     func goBack() async {
         resetPromptState()
-        await model.handleResultForPage(.permissions, result: .cancel, target: nil)
+        let result = PermissionsPageResult(result: .failure(.permissionsCancelled))
+        await model.onPermissionsCompleted(with: result)
     }
 
     func recordLowBatteryDialogPresented() {
@@ -93,7 +94,8 @@ final class PermissionsPageViewModel: ObservableObject {
         telemetryService.recordInteraction(name: "not_now_tapped", location: "low_battery_warning")
         telemetryService.recordTelemetry(.lowBatteryCanceled, attributes: [:])
         resetPromptState()
-        await model.handleResultForPage(.permissions, result: .cancel, target: .lowBatteryDeclined)
+        let result = PermissionsPageResult(result: .failure(.lowBatteryDeclined))
+        await model.onPermissionsCompleted(with: result)
     }
 
     func updateMediaAccessTapped() {

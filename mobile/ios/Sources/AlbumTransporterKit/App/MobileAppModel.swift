@@ -155,6 +155,102 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
+    func onHomeCompleted(with result: HomePageResult) async {
+        switch result.result {
+        case .success:
+            await openScanFlow()
+        case .failure:
+            break
+        }
+    }
+
+    func onScanningCompleted(with result: ScanningPageResult) async {
+        switch result.result {
+        case .success(let qrString):
+            scannedQRCodeValue = qrString
+            await showPairingPage()
+        case .failure(.scannerFailed):
+            presentErrorSummary(
+                title: "Scanner failed",
+                message: "The camera scanner couldn't continue. Restart the backup session or return home."
+            )
+        case .failure:
+            presentErrorSummary(
+                title: "Scanner error",
+                message: "An unexpected error occurred. Restart the backup session or return home."
+            )
+        }
+    }
+
+    func onPairingCompleted(with result: PairingPageResult) async {
+        switch result.result {
+        case .success:
+            await openScanFlow()
+        case .failure(.cancelled):
+            await returnHome()
+        case .failure(.pairingFailed), .failure(.unknown):
+            presentErrorSummary(
+                title: "Pairing flow failed",
+                message: "AuBackup couldn't continue the pairing flow. Restart the backup session or return home."
+            )
+        }
+    }
+
+    func onPermissionsCompleted(with result: PermissionsPageResult) async {
+        switch result.result {
+        case .success:
+            await triggerTransfer()
+        case .failure(.lowBatteryDeclined):
+            await abortPreflightAndReturnHome(reason: "low_battery_declined")
+        case .failure(.permissionsCancelled):
+            await abortPreflightAndReturnHome(reason: "permissions_cancelled")
+        case .failure(.preflightFailed), .failure(.unknown):
+            presentErrorSummary(
+                title: "Preflight failed",
+                message: "AuBackup couldn't complete backup preflight. Restart the backup session or return home."
+            )
+        }
+    }
+
+    func onTransferCompleted(with result: TransferPageResult) async {
+        switch result.result {
+        case .success:
+            if result.target == .primary {
+                requestStopTransfer()
+            } else if result.target == .secondary {
+                await finalizeCompletedTransfer()
+            }
+        case .failure(.stopConfirmed):
+            await finalizeStoppedTransfer()
+        case .failure(.transferFailed), .failure(.unknown):
+            presentErrorSummary(
+                title: "Transfer failed",
+                message: "AuBackup couldn't continue this transfer. Restart the backup session or return home."
+            )
+        }
+    }
+
+    func onCompletionCompleted(with result: CompletionPageResult) async {
+        switch result.result {
+        case .success:
+            await returnHome()
+        case .failure:
+            presentErrorSummary(
+                title: "Completion failed",
+                message: "AuBackup couldn't finish this completion step. Restart the backup session or return home."
+            )
+        }
+    }
+
+    func onErrorCompleted(with result: ErrorPageResult) async {
+        switch result.result {
+        case .success:
+            await openScanFlow()
+        case .failure:
+            await returnHome()
+        }
+    }
+
     var navigationTitle: String {
         switch route {
         case .home:
@@ -171,6 +267,25 @@ final class MobileAppModel: ObservableObject {
             return "Backup Complete"
         case .error:
             return "Backup Error"
+        }
+    }
+
+    var routeName: String {
+        switch route {
+        case .home:
+            return "home"
+        case .scan:
+            return "scan"
+        case .pair:
+            return "pair"
+        case .permissions:
+            return "permissions"
+        case .transfer:
+            return "transfer"
+        case .completed:
+            return "completed"
+        case .error:
+            return "error"
         }
     }
 
@@ -260,7 +375,7 @@ final class MobileAppModel: ObservableObject {
     func showPairingPage() async {
         beginTelemetrySpan(.pairingFlow)
         transitionBackupFlow(.pairingStarted)
-        route = .pair
+        route = .pair(qrString: scannedQRCodeValue)
         pairingStatus = PairingStatus(
             phase: .pairing,
             backupFlowState: .pendingPairing,

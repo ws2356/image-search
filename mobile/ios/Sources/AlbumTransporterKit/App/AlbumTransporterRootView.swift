@@ -62,7 +62,7 @@ public struct AlbumTransporterRootView: View {
                 await model.load()
             }
             .task(id: model.route) {
-                model.recordPageView(name: model.route.rawValue)
+                model.recordPageView(name: model.routeName)
             }
             .confirmationDialog(
                 "Start a new backup session?",

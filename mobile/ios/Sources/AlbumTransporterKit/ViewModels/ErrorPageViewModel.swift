@@ -14,11 +14,13 @@ struct ErrorPageViewModel {
 
     func retryTapped() async {
         telemetryService.recordInteraction(name: "retry_tapped", location: "error")
-        await model.handleResultForPage(.error, result: .success, target: nil)
+        let result = ErrorPageResult(result: .success(()))
+        await model.onErrorCompleted(with: result)
     }
 
     func cancelTapped() async {
         telemetryService.recordInteraction(name: "cancel_tapped", location: "error")
-        await model.handleResultForPage(.error, result: .cancel, target: nil)
+        let result = ErrorPageResult(result: .failure(.unknown))
+        await model.onErrorCompleted(with: result)
     }
 }

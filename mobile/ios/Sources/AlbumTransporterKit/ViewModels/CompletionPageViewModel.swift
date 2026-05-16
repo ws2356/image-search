@@ -54,7 +54,8 @@ final class CompletionPageViewModel: ObservableObject {
 
     func returnHomeTapped() async {
         telemetryService.recordInteraction(name: "return_home_tapped", location: "completion")
-        await model.handleResultForPage(.completed, result: .success, target: nil)
+        let result = CompletionPageResult(result: .success(()))
+        await model.onCompletionCompleted(with: result)
     }
 
     private func completionMessage(

@@ -514,6 +514,14 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
     }
 
     func requestStopTransfer() {}
+
+    func onHomeCompleted(with result: HomePageResult) async {}
+    func onScanningCompleted(with result: ScanningPageResult) async {}
+    func onPairingCompleted(with result: PairingPageResult) async {}
+    func onPermissionsCompleted(with result: PermissionsPageResult) async {}
+    func onTransferCompleted(with result: TransferPageResult) async {}
+    func onCompletionCompleted(with result: CompletionPageResult) async {}
+    func onErrorCompleted(with result: ErrorPageResult) async {}
 }
 
 private actor HomeViewPreviewPermissionService: PermissionService {

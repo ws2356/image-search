@@ -15,23 +15,26 @@ struct ScanningPageViewModel {
     }
 
     func onQRScanned(scannedValue: String) async {
-        model.scannedQRCodeValue = scannedValue
         telemetryService.recordInteraction(name: "start_pairing_tapped", location: "pairing")
-        await model.handleResultForPage(.scan, result: .success, target: .primary)
+        let result = ScanningPageResult(result: .success(scannedValue))
+        await model.onScanningCompleted(with: result)
     }
 
     func backTapped() async {
         telemetryService.recordInteraction(name: "back_tapped", location: "pairing")
-        await model.handleResultForPage(.scan, result: .cancel, target: nil)
+        let result = ScanningPageResult(result: .failure(.unknown))
+        await model.onScanningCompleted(with: result)
     }
 
     func openSettingsTapped() async {
         telemetryService.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
-        await model.handleResultForPage(.scan, result: .cancel, target: nil)
+        let result = ScanningPageResult(result: .failure(.unknown))
+        await model.onScanningCompleted(with: result)
     }
 
     func scannerFailed() async {
         telemetryService.recordInteraction(name: "scanner_failed", location: "pairing_scanner")
-        await model.handleResultForPage(.scan, result: .failure, target: nil)
+        let result = ScanningPageResult(result: .failure(.scannerFailed))
+        await model.onScanningCompleted(with: result)
     }
 }

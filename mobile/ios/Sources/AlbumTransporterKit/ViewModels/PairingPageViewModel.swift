@@ -22,7 +22,9 @@ final class PairingPageViewModel: ObservableObject {
     }
 
     func orchestratePairing() async {
-        guard model.route == .pair, model.pairingStatus.phase == .pairing else {
+        if case .pair = model.route, model.pairingStatus.phase == .pairing {
+            // continue
+        } else {
             return
         }
         guard !hasStartedPairingAttempt else {
@@ -45,19 +47,20 @@ final class PairingPageViewModel: ObservableObject {
 
         // TODO: do not propogate message, just consume it within the pairing page
         let result = await model.pairingService.startPairing(using: payload)
-        guard model.route == .pair else {
-            return
+        if case .pair = model.route {
+            await model.handlePairingAttemptCompleted(result)
         }
-        await model.handlePairingAttemptCompleted(result)
     }
 
     func scanAgainTapped() async {
         telemetryService.recordInteraction(name: "scan_again_tapped", location: "pairing")
-        await model.handleResultForPage(.pair, result: .success, target: .secondary)
+        let result = PairingPageResult(result: .success(()))
+        await model.onPairingCompleted(with: result)
     }
 
     func backTapped() async {
         telemetryService.recordInteraction(name: "back_tapped", location: "pairing")
-        await model.handleResultForPage(.pair, result: .cancel, target: nil)
+        let result = PairingPageResult(result: .failure(.cancelled))
+        await model.onPairingCompleted(with: result)
     }
 }

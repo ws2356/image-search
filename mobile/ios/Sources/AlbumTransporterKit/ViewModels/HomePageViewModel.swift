@@ -30,7 +30,8 @@ final class HomePageViewModel: ObservableObject {
 
     func handlePrimaryActionTapped() async {
         telemetryService.recordInteraction(name: "primary_action_tapped", location: "home")
-        await model.handleResultForPage(.home, result: .success, target: nil)
+        let result = HomePageResult(result: .success(()))
+        await model.onHomeCompleted(with: result)
     }
 
     func refreshSummary() async {

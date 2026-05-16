@@ -55,7 +55,8 @@ final class TransferPageViewModel: ObservableObject {
         _ = await transferService.stopTransfer(current: currentSnapshot)
         await transferService.stageTransferSnapshot(currentSnapshot)
         snapshot = currentSnapshot
-        await model.handleResultForPage(.transfer, result: .failure, target: .stopTransferConfirmed)
+        let result = TransferPageResult(result: .failure(.stopConfirmed), target: .stopTransferConfirmed)
+        await model.onTransferCompleted(with: result)
     }
 
     func orchestrateTransfer() async {
@@ -90,7 +91,8 @@ final class TransferPageViewModel: ObservableObject {
             )
         )
         await transferService.stageTransferSnapshot(snapshot)
-        await model.handleResultForPage(.transfer, result: .success, target: .secondary)
+        let result = TransferPageResult(result: .success(()), target: .secondary)
+        await model.onTransferCompleted(with: result)
     }
 
     func keepBackingUp() {
