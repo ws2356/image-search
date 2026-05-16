@@ -20,8 +20,7 @@ extension BackupSessionProviding {
     func saveBackupSession(
         status: BackupSessionStatus,
         sessionID: String? = nil,
-        desktopName: String? = nil,
-        snapshot: TransferSnapshot? = nil
+        desktopName: String? = nil
     ) async {
         let currentSession = backupSession
         await saveBackupSession(
@@ -29,9 +28,6 @@ extension BackupSessionProviding {
                 sessionID: sessionID ?? currentSession?.sessionID,
                 desktopName: desktopName ?? currentSession?.desktopName,
                 status: status,
-                transferredCount: snapshot?.transferredCount,
-                totalCount: snapshot?.totalCount,
-                failedCount: snapshot?.failedCount,
                 updatedAt: Date()
             )
         )

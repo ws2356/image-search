@@ -455,9 +455,6 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
             sessionID: "preview-session",
             desktopName: "Desk Mac",
             status: .stopped,
-            transferredCount: snapshot.transferredCount,
-            totalCount: snapshot.totalCount,
-            failedCount: snapshot.failedCount,
             updatedAt: Date()
         ),
         permissionSummary: PermissionSummary(

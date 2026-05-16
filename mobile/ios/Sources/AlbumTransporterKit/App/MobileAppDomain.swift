@@ -148,18 +148,12 @@ struct BackupSession: Equatable, Sendable, Codable {
     var sessionID: String?
     var desktopName: String?
     var status: BackupSessionStatus
-    var transferredCount: Int?
-    var totalCount: Int?
-    var failedCount: Int?
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
         case sessionID
         case desktopName
         case status
-        case transferredCount
-        case totalCount
-        case failedCount
         case updatedAt
     }
 
@@ -167,17 +161,11 @@ struct BackupSession: Equatable, Sendable, Codable {
         sessionID: String?,
         desktopName: String?,
         status: BackupSessionStatus,
-        transferredCount: Int? = nil,
-        totalCount: Int? = nil,
-        failedCount: Int? = nil,
         updatedAt: Date
     ) {
         self.sessionID = sessionID
         self.desktopName = desktopName
         self.status = status
-        self.transferredCount = transferredCount
-        self.totalCount = totalCount
-        self.failedCount = failedCount
         self.updatedAt = updatedAt
     }
 
@@ -186,9 +174,6 @@ struct BackupSession: Equatable, Sendable, Codable {
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
         desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName)
         status = try container.decode(BackupSessionStatus.self, forKey: .status)
-        transferredCount = try container.decodeIfPresent(Int.self, forKey: .transferredCount)
-        totalCount = try container.decodeIfPresent(Int.self, forKey: .totalCount)
-        failedCount = try container.decodeIfPresent(Int.self, forKey: .failedCount)
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 }

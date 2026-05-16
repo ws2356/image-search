@@ -359,8 +359,7 @@ final class MobileAppModel: ObservableObject {
         await backupSessionProvider.saveBackupSession(
             status: .stopped,
             sessionID: pairingStatus.sessionID,
-            desktopName: pairingStatus.desktopName,
-            snapshot: interruptionSnapshot
+            desktopName: pairingStatus.desktopName
         )
     }
 
@@ -404,8 +403,7 @@ final class MobileAppModel: ObservableObject {
         await backupSessionProvider.saveBackupSession(
             status: .stopped,
             sessionID: pairingStatus.sessionID,
-            desktopName: pairingStatus.desktopName,
-            snapshot: await currentTransferSnapshot()
+            desktopName: pairingStatus.desktopName
         )
     }
 
@@ -457,8 +455,7 @@ final class MobileAppModel: ObservableObject {
         await backupSessionProvider.saveBackupSession(
             status: snapshot.failedCount == 0 ? .completed : .failed,
             sessionID: pairingStatus.sessionID,
-            desktopName: pairingStatus.desktopName,
-            snapshot: snapshot
+            desktopName: pairingStatus.desktopName
         )
     }
 

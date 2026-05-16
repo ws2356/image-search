@@ -81,9 +81,6 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
                 sessionID: "snapshot-session",
                 desktopName: "Desk Mac",
                 status: .completed,
-                transferredCount: completedSnapshot.transferredCount,
-                totalCount: completedSnapshot.totalCount,
-                failedCount: completedSnapshot.failedCount,
                 updatedAt: Date()
             ),
             permissionSummary: .allClear,
