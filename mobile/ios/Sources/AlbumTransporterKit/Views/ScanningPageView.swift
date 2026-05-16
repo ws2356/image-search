@@ -6,7 +6,6 @@ struct ScanningPageView: View {
     var body: some View {
         if #available(iOS 16.0, *) {
             LiveQRCodeScannerView(
-                status: viewModel.status,
                 onScanComplete: { scannedValue in
                     Task {
                         await viewModel.onQRScanned(scannedValue: scannedValue)
@@ -31,7 +30,6 @@ struct ScanningPageView: View {
             .toolbar(.hidden, for: .navigationBar)
         } else {
             LiveQRCodeScannerView(
-                status: viewModel.status,
                 onScanComplete: { scannedValue in
                     Task {
                         await viewModel.onQRScanned(scannedValue: scannedValue)

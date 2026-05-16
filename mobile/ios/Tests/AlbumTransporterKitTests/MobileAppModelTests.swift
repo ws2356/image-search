@@ -299,7 +299,7 @@ final class MobileAppModelTests: XCTestCase {
         model: MobileAppModel,
         telemetryService: TelemetryService = NoopTelemetryService()
     ) async {
-        await model.showPairingProgress()
+        await model.showPairingPage()
         await orchestrateVisiblePairPage(model: model, telemetryService: telemetryService)
     }
 

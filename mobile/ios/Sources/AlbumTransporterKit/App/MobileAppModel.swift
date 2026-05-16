@@ -76,7 +76,7 @@ final class MobileAppModel: ObservableObject {
         case .scan:
             switch result {
             case .success:
-                await showPairingProgress()
+                await showPairingPage()
             case .cancel:
                 await returnHome()
             case .failure:
@@ -254,10 +254,10 @@ final class MobileAppModel: ObservableObject {
     }
 
     func beginPairing() async {
-        await showPairingProgress()
+        await showPairingPage()
     }
 
-    func showPairingProgress() async {
+    func showPairingPage() async {
         beginTelemetrySpan(.pairingFlow)
         transitionBackupFlow(.pairingStarted)
         route = .pair

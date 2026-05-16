@@ -10,7 +10,6 @@ private enum QRCodeScannerAccessState: Equatable {
 }
 
 struct LiveQRCodeScannerView: View {
-    let status: PairingStatus
     let onScanComplete: (_ scannedValue: String) -> Void
     let onScanFailure: () -> Void
     let onBack: () -> Void
@@ -71,12 +70,6 @@ struct LiveQRCodeScannerView: View {
                     }
                 }
             }
-        }
-        .onChange(of: status.phase) { newPhase in
-            guard newPhase != .pairing else {
-                return
-            }
-            lastSubmittedValue = ""
         }
         .task {
             await prepareCameraAccess()
@@ -178,7 +171,7 @@ struct LiveQRCodeScannerView: View {
             return
         }
 
-        guard status.phase != .pairing, lastSubmittedValue != trimmedValue else {
+        guard lastSubmittedValue != trimmedValue else {
             return
         }
 
