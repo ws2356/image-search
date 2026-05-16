@@ -394,10 +394,10 @@ struct TransferSnapshot: Equatable, Sendable, Codable {
     }
 
     var transferSpeedText: String? {
-        guard let transferSpeedBytesPerSecond else {
-            return nil
-        }
-        return String(format: "%.2f MB/s", transferSpeedBytesPerSecond / 1_048_576.0)
+        String(
+            format: "%.2f MB/s",
+            (transferSpeedBytesPerSecond ?? 0) / 1_048_576.0
+        )
     }
 
     static func empty(

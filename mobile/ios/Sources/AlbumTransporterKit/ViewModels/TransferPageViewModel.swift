@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 @MainActor
 final class TransferPageViewModel: ObservableObject {
@@ -8,8 +7,6 @@ final class TransferPageViewModel: ObservableObject {
     private let pollingIntervalNanoseconds: UInt64
     private var transferPollingTask: Task<Void, Never>?
     private var hasStartedTransferOrchestration = false
-    private let snapshotSubject = CurrentValueSubject<TransferSnapshot, Never>(.empty())
-    private var snapshotUpdateCancellable: AnyCancellable?
 
     private var transferService: TransferService {
         model.transferServiceForTransferView
@@ -28,17 +25,10 @@ final class TransferPageViewModel: ObservableObject {
         self.telemetryService = telemetryService
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
         self.snapshot = .empty(transport: model.pairingStatus.transport ?? .lan)
-        self.snapshotSubject.send(self.snapshot)
-        self.snapshotUpdateCancellable = snapshotSubject
-            .removeDuplicates()
-            .throttle(for: .milliseconds(250), scheduler: RunLoop.main, latest: true)
-            .sink { [weak self] snapshot in
-                self?.snapshot = snapshot
-            }
-        // TODO: do not invoke it here. Instead trigger it from a view lifecycle
-        Task { [weak self] in
-            await self?.loadStagedSnapshot()
-        }
+    }
+
+    func loadFromViewLifecycle() async {
+        await loadStagedSnapshot()
     }
 
     var isShowingStopConfirmationBinding: Binding<Bool> {
@@ -82,11 +72,7 @@ final class TransferPageViewModel: ObservableObject {
         await transferService.stageTransferCompletionState(nil)
         let transferStartedAt = Date()
         startTransferPolling()
-        let finalSnapshot = await transferService.startTransfer { [weak self] snapshot in
-            Task { @MainActor in
-                self?.applySnapshotIfNewer(snapshot)
-            }
-        }
+        let finalSnapshot = await transferService.startTransfer { _ in }
         applySnapshotIfNewer(finalSnapshot)
         guard model.route == .transfer else {
             return
@@ -158,7 +144,7 @@ final class TransferPageViewModel: ObservableObject {
         else {
             return
         }
-        snapshotSubject.send(newSnapshot)
+        snapshot = newSnapshot
     }
 
     private func loadStagedSnapshot() async {

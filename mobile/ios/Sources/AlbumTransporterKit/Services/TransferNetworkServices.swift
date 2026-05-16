@@ -2589,7 +2589,7 @@ actor PhotoLibraryTransferService: TransferService {
             let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
-                failedCount: 1,
+                failedCount: 0,
                 transport: .lan,
                 etaMinutes: nil,
                 phase: .failed,

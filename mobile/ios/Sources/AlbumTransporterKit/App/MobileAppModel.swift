@@ -499,13 +499,15 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.transferStarted)
         route = .transfer
         let isRemoveAfterBackupEnabled = await permissionService.removeAfterBackupEnabled()
+        let isIncompleteLibrary = await permissionService.loadPermissionSummary().mediaScope != .full
         let initialSnapshot = initialTransferSnapshot()
         await transferService.stageTransferSnapshot(initialSnapshot)
         await transferService.stageTransferCompletionState(nil)
         endTelemetrySpan(.backupPreflight, status: .ok)
         beginTelemetrySpan(.transferFlow)
         recordTelemetry(.transferStarted, attributes: transferStartTelemetryAttributes(
-            isRemoveAfterBackupEnabled: isRemoveAfterBackupEnabled
+            isRemoveAfterBackupEnabled: isRemoveAfterBackupEnabled,
+            isIncompleteLibrary: isIncompleteLibrary
         ))
     }
 
@@ -553,10 +555,12 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func transferStartTelemetryAttributes(
-        isRemoveAfterBackupEnabled: Bool
+        isRemoveAfterBackupEnabled: Bool,
+        isIncompleteLibrary: Bool
     ) -> MobileTelemetryAttributes {
         [
-            "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled)
+            "transfer.remove_after_backup_enabled": .bool(isRemoveAfterBackupEnabled),
+            "transfer.is_incomplete_library": .bool(isIncompleteLibrary)
         ]
     }
 

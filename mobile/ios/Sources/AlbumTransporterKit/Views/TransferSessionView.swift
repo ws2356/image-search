@@ -19,6 +19,11 @@ struct TransferSessionView: View {
         .task {
             await viewModel.orchestrateTransfer()
         }
+        .onAppear {
+            Task {
+                await viewModel.loadFromViewLifecycle()
+            }
+        }
         .compatibleOnChange(of: viewModel.isShowingStopConfirmation) { isPresented in
             guard isPresented else { return }
             viewModel.recordStopConfirmationPresented()

@@ -1154,7 +1154,7 @@ final class MobileAppModelTests: XCTestCase {
         )
         XCTAssertEqual(
             failureRecord?.attributes["pairing.failure_message"],
-            .string(QRCodePayloadDecoderError.invalidURL.message)
+            .string(QRCodePayloadDecoderError.invalidHost.message)
         )
         XCTAssertEqual(
             failureRecord?.attributes["app.route"],
