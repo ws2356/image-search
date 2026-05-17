@@ -288,20 +288,15 @@ final class MobileAppModel: ObservableObject {
     }
 
     func handleInvalidPairingPayload(message: String) {
-        pairingStatus = PairingStatus(
-            phase: .failed,
-            backupFlowState: .pendingPairing,
-            desktopName: backupSessionProvider.backupSession?.desktopName,
-            sessionID: nil,
-            transport: nil,
-            message: message
-        )
-        applyPairingStatusStateTransition(pairingStatus)
         reportPairingFailure(
             reason: "invalid_qr_payload",
             pairingAttributes: [
                 "pairing.failure_message": .string(message)
             ]
+        )
+        presentErrorSummary(
+            title: "Invalid QR Code",
+            message: "Invalid QR code. Please scan the QR code again from the AuSearch app on your PC."
         )
     }
 

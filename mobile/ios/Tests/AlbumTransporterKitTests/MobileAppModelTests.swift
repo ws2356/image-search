@@ -1167,6 +1167,33 @@ final class MobileAppModelTests: XCTestCase {
         )
     }
 
+    func test_invalid_qr_code_navigates_to_error_page() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: FailingQRCodePayloadDecoder(error: .invalidURL),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            telemetryClient: NoopTelemetryClient()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        await startPairing(model: model, qrString: "invalid-qr-code")
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        // Verify that the route transitions to error page, not stuck at pairing
+        if case .error = model.route {
+            XCTAssert(true, "Successfully navigated to error page")
+        } else {
+            XCTFail("Expected route to be .error but got \(model.route)")
+        }
+
+        // Verify error summary contains expected messages
+        XCTAssertEqual(model.errorSummary.title, "Invalid QR Code")
+        XCTAssertEqual(model.errorSummary.message, "Invalid QR code. Please scan the QR code again from the AuSearch app on your PC.")
+    }
+
     func test_begin_pairing_records_unexpected_pairing_phase_failure_reason() async {
         let telemetryClient = RecordingTelemetryClient()
         let model = makeModel(
