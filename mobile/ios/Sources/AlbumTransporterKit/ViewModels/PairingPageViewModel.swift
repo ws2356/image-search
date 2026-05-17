@@ -48,6 +48,7 @@ final class PairingPageViewModel: ObservableObject {
         }
     }
 
+    // TODO: there should not be such a thing as "scan again" in pairing page. If failed, it should just navigate to error page
     func scanAgainTapped() async {
         telemetryService.recordInteraction(name: "scan_again_tapped", location: "pairing")
         let result = PairingPageResult(result: .success(()))
