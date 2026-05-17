@@ -91,7 +91,6 @@ struct PairingStatusView: View {
         viewModel.status
     }
 
-    @ViewBuilder
     private var pairingHero: some View {
         VStack(spacing: 12) {
             ZStack {
@@ -113,7 +112,7 @@ struct PairingStatusView: View {
                 .font(.system(size: pairingTitleSize, weight: .bold))
                 .foregroundStyle(Color(hex: 0x1C1C1E))
 
-            Text(status.message)
+            Text(pairingMessage)
                 .font(.system(size: 15))
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .multilineTextAlignment(.center)
@@ -286,5 +285,9 @@ struct PairingStatusView: View {
 
     private var pairingButtonIcon: String {
         "qrcode.viewfinder"
+    }
+
+    private var pairingMessage: String {
+        "Validating the QR payload and establishing a secure local session with the desktop."
     }
 }

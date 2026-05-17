@@ -469,8 +469,7 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
             backupFlowState: .transferStopped,
             desktopName: "Desk Mac",
             sessionID: "preview-session",
-            transport: .usb,
-            message: "Connected."
+            transport: .usb
         )
     )
     let telemetryService = HomeViewPreviewTelemetryService()

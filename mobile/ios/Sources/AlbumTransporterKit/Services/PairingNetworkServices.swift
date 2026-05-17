@@ -214,8 +214,7 @@ struct DesktopBootstrapPairingService: PairingService {
                     backupFlowState: .pairingStopped,
                     desktopName: nil,
                     sessionID: request.sessionID,
-                    transport: nil,
-                    message: response.message
+                    transport: nil
                 )
             }
 
@@ -225,8 +224,7 @@ struct DesktopBootstrapPairingService: PairingService {
                     backupFlowState: .pairingStopped,
                     desktopName: nil,
                     sessionID: request.sessionID,
-                    transport: nil,
-                    message: response.message
+                    transport: nil
                 )
             }
 
@@ -262,8 +260,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 backupFlowState: .pairingCompleted,
                 desktopName: desktopName,
                 sessionID: sessionID,
-                transport: transport,
-                message: response.message
+                transport: transport
             )
         } catch let error as PairingServiceError {
             return PairingStatus(
@@ -271,8 +268,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 backupFlowState: error.backupFlowState,
                 desktopName: nil,
                 sessionID: nil,
-                transport: nil,
-                message: error.message
+                transport: nil
             )
         } catch {
             return PairingStatus(
@@ -280,8 +276,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 backupFlowState: .pendingPairing,
                 desktopName: nil,
                 sessionID: nil,
-                transport: nil,
-                message: "Desktop pairing failed: \(error.localizedDescription)"
+                transport: nil
             )
         }
     }

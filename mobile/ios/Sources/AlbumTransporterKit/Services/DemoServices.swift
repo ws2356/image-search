@@ -27,8 +27,7 @@ struct DemoPairingService: PairingService {
             backupFlowState: .pairingCompleted,
             desktopName: desktopName,
             sessionID: payload.sessionID,
-            transport: .lan,
-            message: "Secure local pairing established using payload \(payload.sessionID). The desktop will validate whether this is a new, repeat, or resumable session."
+            transport: .lan
         )
     }
 }

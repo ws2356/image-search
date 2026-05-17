@@ -310,8 +310,7 @@ final class MobileAppModel: ObservableObject {
             backupFlowState: .pendingPairing,
             desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
-            transport: nil,
-            message: "Point the camera at the desktop QR code shown in the PC app."
+            transport: nil
         )
         route = .scan
         recordTelemetry(.scanStarted)
@@ -360,8 +359,7 @@ final class MobileAppModel: ObservableObject {
             backupFlowState: .pendingPairing,
             desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
-            transport: nil,
-            message: "Validating the QR payload and establishing a secure local session with the desktop."
+            transport: nil
         )
         recordTelemetry(.pairingStarted)
     }
@@ -842,8 +840,7 @@ final class MobileAppModel: ObservableObject {
             backupFlowState: backupFlowState(for: session.status),
             desktopName: session.desktopName,
             sessionID: session.sessionID,
-            transport: nil,
-            message: "Scan the desktop QR code to begin secure local pairing."
+            transport: nil
         )
     }
 

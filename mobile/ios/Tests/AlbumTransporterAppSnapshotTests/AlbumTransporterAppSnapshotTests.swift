@@ -97,8 +97,7 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
                 backupFlowState: .transferCompleted,
                 desktopName: "Desk Mac",
                 sessionID: "snapshot-session",
-                transport: .usb,
-                message: "Connected."
+                transport: .usb
             )
         )
         let telemetryService = SnapshotTelemetryService()
@@ -232,8 +231,7 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
             backupFlowState: .transferInProgress,
             desktopName: "Desk Mac",
             sessionID: "snapshot-session",
-            transport: snapshot.transport,
-            message: "Connected."
+            transport: snapshot.transport
         )
         self.transferService = SnapshotTransferService(snapshot: snapshot, completionState: nil)
     }

@@ -35,14 +35,13 @@ final class PairingPageViewModel: ObservableObject {
 
         guard case .success(let payload) = payloadResult else {
             if case .failure(let error) = payloadResult {
-                // Invalid QR code - create failed status with error message
+                // Invalid QR code - create failed status
                 let failedStatus = PairingStatus(
                     phase: .failed,
                     backupFlowState: .pendingPairing,
                     desktopName: nil,
                     sessionID: nil,
-                    transport: nil,
-                    message: error.message
+                    transport: nil
                 )
                 let result = PairingPageResult(result: .failure(.invalidQR(detail: error)), pairingStatus: failedStatus)
                 await model.onPairingCompleted(with: result)

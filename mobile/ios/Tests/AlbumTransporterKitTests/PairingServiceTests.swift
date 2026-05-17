@@ -116,7 +116,7 @@ final class PairingServiceTests: XCTestCase {
         let result = await service.startPairing(using: .demo)
 
         XCTAssertEqual(result.phase, .expired)
-        XCTAssertEqual(result.message, "This QR code expired on desktop. Refresh and scan again.")
+        XCTAssertEqual(result.backupFlowState, .pairingExpired)
     }
 
     func test_desktop_bootstrap_pairing_service_retries_next_advertised_endpoint() async {
@@ -391,7 +391,6 @@ final class PairingServiceTests: XCTestCase {
 
         XCTAssertEqual(result.phase, .failed)
         XCTAssertEqual(result.backupFlowState, .pairingStopped)
-        XCTAssertEqual(result.message, "Desktop canceled this pairing request.")
         XCTAssertNil(trustedDesktop)
     }
 }

@@ -1319,8 +1319,7 @@ private struct StaticPairingService: PairingService {
             backupFlowState: .pairingCompleted,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,
-            transport: .lan,
-            message: "Pairing succeeded for \(payload.sessionID)."
+            transport: .lan
         )
     }
 }
@@ -1332,8 +1331,7 @@ private struct StoppedPairingService: PairingService {
             backupFlowState: .pairingStopped,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,
-            transport: nil,
-            message: "Desktop canceled this pairing request."
+            transport: nil
         )
     }
 }
@@ -1345,8 +1343,7 @@ private struct UnexpectedPhasePairingService: PairingService {
             backupFlowState: .pendingPairing,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,
-            transport: nil,
-            message: "Still pairing."
+            transport: nil
         )
     }
 }

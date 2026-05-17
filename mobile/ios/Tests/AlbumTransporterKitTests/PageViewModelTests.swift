@@ -25,8 +25,7 @@ final class PageViewModelTests: XCTestCase {
             backupFlowState: .transferStopped,
             desktopName: "Desk Mac",
             sessionID: "session-1",
-            transport: .lan,
-            message: "Connected."
+            transport: .lan
         )
         await model.backupSessionProvider.saveBackupSession(
             BackupSession(
@@ -117,8 +116,7 @@ final class PageViewModelTests: XCTestCase {
             phase: .pairing,
             desktopName: nil,
             sessionID: nil,
-            transport: nil,
-            message: "Pairing in progress."
+            transport: nil
         )
         let viewModel = PairingPageViewModel(
             model: model,
@@ -141,8 +139,7 @@ final class PageViewModelTests: XCTestCase {
             phase: .failed,
             desktopName: nil,
             sessionID: nil,
-            transport: nil,
-            message: "Pairing failed."
+            transport: nil
         )
         let viewModel = PairingPageViewModel(
             model: model,
@@ -683,8 +680,7 @@ private actor StubPairingService: PairingService {
             backupFlowState: .pairingCompleted,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,
-            transport: .lan,
-            message: "Pairing succeeded."
+            transport: .lan
         )
     }
 

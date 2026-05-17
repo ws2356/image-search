@@ -90,7 +90,6 @@ struct PairingStatus: Equatable, Sendable, Codable {
     var desktopName: String?
     var sessionID: String?
     var transport: TransferTransport?
-    var message: String
 
     enum CodingKeys: String, CodingKey {
         case phase
@@ -98,7 +97,6 @@ struct PairingStatus: Equatable, Sendable, Codable {
         case desktopName
         case sessionID
         case transport
-        case message
     }
 
     init(
@@ -106,15 +104,13 @@ struct PairingStatus: Equatable, Sendable, Codable {
         backupFlowState: MobileBackupFlowState = .pendingPairing,
         desktopName: String?,
         sessionID: String?,
-        transport: TransferTransport?,
-        message: String
+        transport: TransferTransport?
     ) {
         self.phase = phase
         self.backupFlowState = backupFlowState
         self.desktopName = desktopName
         self.sessionID = sessionID
         self.transport = transport
-        self.message = message
     }
 
     init(from decoder: Decoder) throws {
@@ -124,7 +120,6 @@ struct PairingStatus: Equatable, Sendable, Codable {
         desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName)
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
         transport = try container.decodeIfPresent(TransferTransport.self, forKey: .transport)
-        message = try container.decode(String.self, forKey: .message)
     }
 
     static let idle = PairingStatus(
@@ -132,8 +127,7 @@ struct PairingStatus: Equatable, Sendable, Codable {
         backupFlowState: .pendingPairing,
         desktopName: nil,
         sessionID: nil,
-        transport: nil,
-        message: "Scan the desktop QR code to begin secure local pairing."
+        transport: nil
     )
 }
 

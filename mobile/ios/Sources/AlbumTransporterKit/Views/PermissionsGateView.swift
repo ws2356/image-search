@@ -180,8 +180,7 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         backupFlowState: .pairingCompleted,
         desktopName: "Desk Mac",
         sessionID: "preview-session",
-        transport: .lan,
-        message: "Connected."
+        transport: .lan
     )
     var pairingService: PairingService = DemoPairingService()
     var transferService: TransferService = PermissionsGatePreviewTransferService()

@@ -448,8 +448,7 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
         backupFlowState: .transferInProgress,
         desktopName: "Desk Mac",
         sessionID: "preview-session",
-        transport: .usb,
-        message: "Connected."
+        transport: .usb
     )
     var permissionService: PermissionService
     var route: AppRoute = .transfer
