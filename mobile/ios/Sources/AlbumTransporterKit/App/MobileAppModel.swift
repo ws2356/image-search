@@ -95,37 +95,16 @@ final class MobileAppModel: ObservableObject {
         
         switch result.result {
         case .success:
-            // Success - validate that pairing actually succeeded
-            guard pairingStatus.phase == .paired else {
-                // Unexpected phase - report failure but don't navigate
+            guard pairingStatus.backupFlowState == .pairingCompleted else {
                 reportPairingFailure(
-                    reason: "unexpected_pairing_phase",
+                    reason: "pairing_success_without_completion_state",
                     pairingAttributes: [
-                        "pairing.result_phase": .string(pairingStatus.phase.rawValue)
+                        "pairing.backup_flow_state": .string(pairingStatus.backupFlowState.rawValue)
                     ]
                 )
                 return
             }
-            
-            // Handle desktop stopping pairing
-            if pairingStatus.backupFlowState == .pairingStopped {
-                route = .home
-                reportPairingFailure(reason: "desktop_stopped_pairing")
-                endTelemetrySpan(
-                    .backupSession,
-                    attributes: [
-                        "backup.failure_reason": .string("desktop_stopped_pairing")
-                    ],
-                    status: .error("desktop_stopped_pairing")
-                )
-                await backupSessionProvider.saveBackupSession(
-                    status: .failed,
-                    sessionID: pairingStatus.sessionID,
-                    desktopName: pairingStatus.desktopName
-                )
-                return
-            }
-            
+
             // Pairing succeeded - save session and navigate to permissions
             await backupSessionProvider.saveBackupSession(
                 status: .paired,
@@ -135,16 +114,7 @@ final class MobileAppModel: ObservableObject {
             route = .permissions
             recordTelemetry(.pairingSucceeded)
             endTelemetrySpan(.pairingFlow, status: .ok)
-            
-        case .failure(.unexpectedPhase):
-            // Unexpected phase - report but stay on pairing page
-            reportPairingFailure(
-                reason: "unexpected_pairing_phase",
-                pairingAttributes: [
-                    "pairing.result_phase": .string(pairingStatus.phase.rawValue)
-                ]
-            )
-            
+
         case .failure(.cancelled):
             // User cancelled pairing - return home
             await returnHome()
@@ -306,7 +276,6 @@ final class MobileAppModel: ObservableObject {
         beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
-            phase: .scanning,
             backupFlowState: .pendingPairing,
             desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
@@ -355,7 +324,6 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.pairingStarted)
         route = .pair(qrString: qrString)
         pairingStatus = PairingStatus(
-            phase: .pairing,
             backupFlowState: .pendingPairing,
             desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
@@ -836,7 +804,6 @@ final class MobileAppModel: ObservableObject {
 
     private func pairingStatus(for session: BackupSession) -> PairingStatus {
         PairingStatus(
-            phase: .paired,
             backupFlowState: backupFlowState(for: session.status),
             desktopName: session.desktopName,
             sessionID: session.sessionID,

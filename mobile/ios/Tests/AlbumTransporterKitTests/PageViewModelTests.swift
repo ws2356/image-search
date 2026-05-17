@@ -21,7 +21,6 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.backupFlowState = .transferStopped
         model.pairingStatus = PairingStatus(
-            phase: .paired,
             backupFlowState: .transferStopped,
             desktopName: "Desk Mac",
             sessionID: "session-1",
@@ -101,10 +100,8 @@ final class PageViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.status, model.pairingStatus)
 
-        await viewModel.scanAgainTapped()
         await viewModel.backTapped()
 
-        XCTAssertEqual(model.openScanRouteCallCount, 1)
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
@@ -113,7 +110,6 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
-            phase: .pairing,
             desktopName: nil,
             sessionID: nil,
             transport: nil
@@ -128,7 +124,7 @@ final class PageViewModelTests: XCTestCase {
 
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
         XCTAssertEqual(startPairingCallCount, 1)
-        XCTAssertEqual(model.pairingStatus.phase, .paired)
+        XCTAssertEqual(model.pairingStatus.backupFlowState, .pairingCompleted)
     }
 
     func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
@@ -136,7 +132,7 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
-            phase: .failed,
+            backupFlowState: .pairingStopped,
             desktopName: nil,
             sessionID: nil,
             transport: nil
@@ -672,7 +668,6 @@ private actor StubPairingService: PairingService {
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
         startPairingInvocations += 1
         return PairingStatus(
-            phase: .paired,
             backupFlowState: .pairingCompleted,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,

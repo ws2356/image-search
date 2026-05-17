@@ -7,7 +7,6 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
     private static let allowedMetricAttributeKeys: Set<String> = [
         "app.route",
         "backup.flow_state",
-        "pairing.phase",
         "permission.media_scope",
         "backup.remove_after_backup_enabled",
         "app.has_paired_desktop",

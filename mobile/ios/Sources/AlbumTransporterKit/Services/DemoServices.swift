@@ -23,7 +23,6 @@ struct DemoPairingService: PairingService {
         try? await Task.sleep(nanoseconds: 250_000_000)
 
         return PairingStatus(
-            phase: .paired,
             backupFlowState: .pairingCompleted,
             desktopName: desktopName,
             sessionID: payload.sessionID,

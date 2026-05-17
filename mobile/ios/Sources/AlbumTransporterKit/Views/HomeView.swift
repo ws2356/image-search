@@ -465,7 +465,6 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
         transferSnapshot: snapshot,
         backupFlowState: .transferStopped,
         pairingStatus: PairingStatus(
-            phase: .paired,
             backupFlowState: .transferStopped,
             desktopName: "Desk Mac",
             sessionID: "preview-session",

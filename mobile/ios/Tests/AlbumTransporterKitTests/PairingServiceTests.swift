@@ -69,7 +69,6 @@ final class PairingServiceTests: XCTestCase {
         let result = await service.startPairing(using: .demo)
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.phase, .paired)
         XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(result.desktopName, "Studio Mac")
         XCTAssertEqual(result.sessionID, "pairing-demo-001")
@@ -115,7 +114,6 @@ final class PairingServiceTests: XCTestCase {
 
         let result = await service.startPairing(using: .demo)
 
-        XCTAssertEqual(result.phase, .expired)
         XCTAssertEqual(result.backupFlowState, .pairingExpired)
     }
 
@@ -167,7 +165,6 @@ final class PairingServiceTests: XCTestCase {
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
         let requestedEndpoints = await bootstrapClient.requestedEndpoints()
 
-        XCTAssertEqual(result.phase, .paired)
         XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(
             requestedEndpoints,
@@ -221,7 +218,6 @@ final class PairingServiceTests: XCTestCase {
         let lanRequestedEndpoints = await lanClient.requestedEndpoints()
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.phase, .paired)
         XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(result.transport, .usb)
         XCTAssertEqual(lanRequestedEndpoints, [])
@@ -271,7 +267,6 @@ final class PairingServiceTests: XCTestCase {
         let lanRequestedEndpoints = await lanClient.requestedEndpoints()
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.phase, .paired)
         XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(result.transport, .lan)
         XCTAssertEqual(lanRequestedEndpoints, ["http://127.0.0.1:38933/api/mobile/pairing/claim"])
@@ -331,7 +326,6 @@ final class PairingServiceTests: XCTestCase {
         let stateRequestCount = await bootstrapClient.stateRequestCount()
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.phase, .paired)
         XCTAssertEqual(result.backupFlowState, .pairingCompleted)
         XCTAssertEqual(stateRequestCount, 1)
         XCTAssertEqual(trustedDesktop?.desktopDeviceID, "desktop-device-001")
@@ -389,7 +383,6 @@ final class PairingServiceTests: XCTestCase {
         let result = await service.startPairing(using: .demo)
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.phase, .failed)
         XCTAssertEqual(result.backupFlowState, .pairingStopped)
         XCTAssertNil(trustedDesktop)
     }

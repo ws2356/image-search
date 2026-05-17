@@ -188,7 +188,6 @@ final class DefaultTelemetryService: TelemetryService {
         var attributes: MobileTelemetryAttributes = [
             "app.route": .string(routeName(context.route)),
             "backup.flow_state": .string(context.backupFlowState.rawValue),
-            "pairing.phase": .string(context.pairingStatus.phase.rawValue),
             "app.has_paired_desktop": .bool(context.pairingStatus.desktopName?.isEmpty == false),
             "transfer.transferred_count": .int(transferSnapshot.transferredCount),
             "transfer.total_count": .int(transferSnapshot.totalCount),

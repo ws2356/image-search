@@ -210,7 +210,6 @@ struct DesktopBootstrapPairingService: PairingService {
                 throw PairingServiceError.expired(message: response.message)
             case .pairingStopped:
                 return PairingStatus(
-                    phase: .failed,
                     backupFlowState: .pairingStopped,
                     desktopName: nil,
                     sessionID: request.sessionID,
@@ -220,7 +219,6 @@ struct DesktopBootstrapPairingService: PairingService {
 
             guard response.backupState == .pairingCompleted else {
                 return PairingStatus(
-                    phase: .failed,
                     backupFlowState: .pairingStopped,
                     desktopName: nil,
                     sessionID: request.sessionID,
@@ -256,7 +254,6 @@ struct DesktopBootstrapPairingService: PairingService {
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)
 
             return PairingStatus(
-                phase: .paired,
                 backupFlowState: .pairingCompleted,
                 desktopName: desktopName,
                 sessionID: sessionID,
@@ -264,7 +261,6 @@ struct DesktopBootstrapPairingService: PairingService {
             )
         } catch let error as PairingServiceError {
             return PairingStatus(
-                phase: error.phase,
                 backupFlowState: error.backupFlowState,
                 desktopName: nil,
                 sessionID: nil,
@@ -272,7 +268,6 @@ struct DesktopBootstrapPairingService: PairingService {
             )
         } catch {
             return PairingStatus(
-                phase: .failed,
                 backupFlowState: .pendingPairing,
                 desktopName: nil,
                 sessionID: nil,
@@ -391,15 +386,6 @@ private enum PairingDebugLogger {
 }
 
 private extension PairingServiceError {
-    var phase: PairingPhase {
-        switch self {
-        case .expired:
-            return .expired
-        default:
-            return .failed
-        }
-    }
-
     var backupFlowState: MobileBackupFlowState {
         switch self {
         case .expired:

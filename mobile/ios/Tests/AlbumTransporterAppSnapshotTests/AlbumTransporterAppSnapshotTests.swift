@@ -93,7 +93,6 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
             route: .completed,
             backupFlowState: .transferCompleted,
             pairingStatus: PairingStatus(
-                phase: .paired,
                 backupFlowState: .transferCompleted,
                 desktopName: "Desk Mac",
                 sessionID: "snapshot-session",
@@ -227,7 +226,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
         )
         permissionService = SnapshotPermissionService(summary: .allClear)
         pairingStatus = PairingStatus(
-            phase: .paired,
             backupFlowState: .transferInProgress,
             desktopName: "Desk Mac",
             sessionID: "snapshot-session",

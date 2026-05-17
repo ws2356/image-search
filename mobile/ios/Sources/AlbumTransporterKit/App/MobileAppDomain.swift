@@ -75,55 +75,25 @@ enum TransferTransport: String, Equatable, Hashable, Sendable, Codable {
     }
 }
 
-enum PairingPhase: String, Equatable, Sendable, Codable {
-    case instructions
-    case scanning
-    case pairing
-    case paired
-    case expired
-    case failed
-}
-
 struct PairingStatus: Equatable, Sendable, Codable {
-    var phase: PairingPhase
-    var backupFlowState: MobileBackupFlowState
+    var backupFlowState: MobileBackupFlowState // TODO: Should be stored somewhere, e.g. state machine
     var desktopName: String?
     var sessionID: String?
     var transport: TransferTransport?
 
-    enum CodingKeys: String, CodingKey {
-        case phase
-        case backupFlowState
-        case desktopName
-        case sessionID
-        case transport
-    }
-
     init(
-        phase: PairingPhase,
         backupFlowState: MobileBackupFlowState = .pendingPairing,
         desktopName: String?,
         sessionID: String?,
         transport: TransferTransport?
     ) {
-        self.phase = phase
         self.backupFlowState = backupFlowState
         self.desktopName = desktopName
         self.sessionID = sessionID
         self.transport = transport
     }
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        phase = try container.decode(PairingPhase.self, forKey: .phase)
-        backupFlowState = try container.decodeIfPresent(MobileBackupFlowState.self, forKey: .backupFlowState) ?? .pendingPairing
-        desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName)
-        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
-        transport = try container.decodeIfPresent(TransferTransport.self, forKey: .transport)
-    }
-
     static let idle = PairingStatus(
-        phase: .instructions,
         backupFlowState: .pendingPairing,
         desktopName: nil,
         sessionID: nil,

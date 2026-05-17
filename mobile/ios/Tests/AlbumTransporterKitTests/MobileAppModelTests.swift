@@ -845,7 +845,7 @@ final class MobileAppModelTests: XCTestCase {
         await orchestrateVisiblePairPage(model: model)
 
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.pairingStatus.phase, .paired)
+        XCTAssertEqual(model.pairingStatus.backupFlowState, .pairingCompleted)
     }
 
     func test_handle_incoming_universal_link_with_invalid_payload_shows_pairing_failure() async {
@@ -994,7 +994,7 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertFalse(model.isShowingIncomingLinkReplacementConfirmation)
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.pairingStatus.phase, .paired)
+        XCTAssertEqual(model.pairingStatus.backupFlowState, .pairingCompleted)
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
         let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
@@ -1195,7 +1195,7 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.errorSummary.message, QRCodePayloadDecoderError.invalidHost.message)
     }
 
-    func test_begin_pairing_records_unexpected_pairing_phase_failure_reason() async {
+    func test_begin_pairing_records_pairing_failed_when_service_does_not_complete_pairing() async {
         let telemetryClient = RecordingTelemetryClient()
         let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
@@ -1211,19 +1211,15 @@ final class MobileAppModelTests: XCTestCase {
         await startPairing(model: model)
         try? await Task.sleep(nanoseconds: 50_000_000)
 
-        if case .pair = model.route {
-            XCTAssertEqual(model.pairingStatus.phase, .pairing)
+        if case .error = model.route {
+            XCTAssertEqual(model.pairingStatus.backupFlowState, .pendingPairing)
         } else {
-            XCTFail("Expected route to be .pair but got \(model.route)")
+            XCTFail("Expected route to be .error but got \(model.route)")
         }
         let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
         XCTAssertEqual(
             failureRecord?.attributes["pairing.failure_reason"],
-            .string("unexpected_pairing_phase")
-        )
-        XCTAssertEqual(
-            failureRecord?.attributes["pairing.result_phase"],
-            .string(PairingPhase.pairing.rawValue)
+            .string("Pairing Failed")
         )
     }
 
@@ -1315,7 +1311,6 @@ final class MobileAppModelTests: XCTestCase {
 private struct StaticPairingService: PairingService {
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
         PairingStatus(
-            phase: .paired,
             backupFlowState: .pairingCompleted,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,
@@ -1327,7 +1322,6 @@ private struct StaticPairingService: PairingService {
 private struct StoppedPairingService: PairingService {
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
         PairingStatus(
-            phase: .failed,
             backupFlowState: .pairingStopped,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,
@@ -1339,7 +1333,6 @@ private struct StoppedPairingService: PairingService {
 private struct UnexpectedPhasePairingService: PairingService {
     func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
         PairingStatus(
-            phase: .pairing,
             backupFlowState: .pendingPairing,
             desktopName: "Studio Mac",
             sessionID: payload.sessionID,

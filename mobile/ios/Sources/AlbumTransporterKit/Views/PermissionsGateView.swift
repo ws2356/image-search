@@ -176,7 +176,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
     )
     var backupFlowState: MobileBackupFlowState = .pairingCompleted
     var pairingStatus = PairingStatus(
-        phase: .paired,
         backupFlowState: .pairingCompleted,
         desktopName: "Desk Mac",
         sessionID: "preview-session",

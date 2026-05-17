@@ -33,7 +33,6 @@ struct ScanningPageResult {
 enum PairingPageError: Error, Equatable {
     case invalidQR(detail: QRCodePayloadDecoderError)
     case pairingFailed
-    case unexpectedPhase
     case cancelled
     case unknown
     
@@ -43,8 +42,6 @@ enum PairingPageError: Error, Equatable {
             return detail.title
         case .pairingFailed:
             return "Pairing Failed"
-        case .unexpectedPhase:
-            return "Unexpected Pairing Status"
         case .cancelled:
             return "Pairing Cancelled"
         case .unknown:
@@ -58,8 +55,6 @@ enum PairingPageError: Error, Equatable {
             return detail.message
         case .pairingFailed:
             return "Pairing failed. Please try again."
-        case .unexpectedPhase:
-            return "Unexpected pairing status. Please try again."
         case .cancelled:
             return "Pairing was cancelled."
         case .unknown:
