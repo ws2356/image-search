@@ -130,8 +130,7 @@ final class PageViewModelTests: XCTestCase {
 
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
         XCTAssertEqual(startPairingCallCount, 1)
-        XCTAssertEqual(model.handlePairingAttemptCompletedCallCount, 1)
-        XCTAssertEqual(model.lastHandledPairingResult?.phase, .paired)
+        XCTAssertEqual(model.pairingStatus.phase, .paired)
     }
 
     func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
@@ -155,7 +154,6 @@ final class PageViewModelTests: XCTestCase {
 
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
         XCTAssertEqual(startPairingCallCount, 0)
-        XCTAssertEqual(model.handlePairingAttemptCompletedCallCount, 0)
     }
 
     func test_permissions_page_view_model_maps_summary_and_actions() async {
@@ -451,8 +449,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var scanFailureCallCount = 0
     var pairingFailureCallCount = 0
     var requestStopTransferCallCount = 0
-    var handlePairingAttemptCompletedCallCount = 0
-    var lastHandledPairingResult: PairingStatus?
 
     init(telemetryServiceActor: StubTelemetryService = StubTelemetryService()) {
         self.telemetryServiceActor = telemetryServiceActor
@@ -505,6 +501,9 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     }
 
     func onPairingCompleted(with result: PairingPageResult) async {
+        if let status = result.pairingStatus {
+            pairingStatus = status
+        }
         switch result.result {
         case .success:
             openScanRouteCallCount += 1
@@ -542,23 +541,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         case .failure:
             returnHomeCallCount += 1
         }
-    }
-
-    func handleInvalidPairingPayload(message: String) {
-        pairingStatus = PairingStatus(
-            phase: .failed,
-            backupFlowState: .pendingPairing,
-            desktopName: homeSummary.desktopName,
-            sessionID: nil,
-            transport: nil,
-            message: message
-        )
-    }
-
-    func handlePairingAttemptCompleted(_ result: PairingStatus) async {
-        handlePairingAttemptCompletedCallCount += 1
-        lastHandledPairingResult = result
-        pairingStatus = result
     }
 
 }

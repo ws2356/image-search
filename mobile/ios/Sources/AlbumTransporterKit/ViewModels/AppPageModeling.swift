@@ -35,8 +35,6 @@ extension MobileAppModel: PermissionsPageModeling {}
 @MainActor
 protocol PairingPageModeling: AppPageModeling {
     var pairingService: PairingService { get }
-    func handleInvalidPairingPayload(message: String)
-    func handlePairingAttemptCompleted(_ result: PairingStatus) async
 }
 
 extension MobileAppModel: PairingPageModeling {}

@@ -87,12 +87,95 @@ final class MobileAppModel: ObservableObject {
     }
 
     func onPairingCompleted(with result: PairingPageResult) async {
+        // Update pairing status with the result from the view model
+        if let resultStatus = result.pairingStatus {
+            pairingStatus = resultStatus
+            applyPairingStatusStateTransition(resultStatus)
+        }
+        
         switch result.result {
         case .success:
-            await openScanFlow()
+            // Success - validate that pairing actually succeeded
+            guard pairingStatus.phase == .paired else {
+                // Unexpected phase - report failure but don't navigate
+                reportPairingFailure(
+                    reason: "unexpected_pairing_phase",
+                    pairingAttributes: [
+                        "pairing.result_phase": .string(pairingStatus.phase.rawValue)
+                    ]
+                )
+                return
+            }
+            
+            // Handle desktop stopping pairing
+            if pairingStatus.backupFlowState == .pairingStopped {
+                route = .home
+                reportPairingFailure(reason: "desktop_stopped_pairing")
+                endTelemetrySpan(
+                    .backupSession,
+                    attributes: [
+                        "backup.failure_reason": .string("desktop_stopped_pairing")
+                    ],
+                    status: .error("desktop_stopped_pairing")
+                )
+                await backupSessionProvider.saveBackupSession(
+                    status: .failed,
+                    sessionID: pairingStatus.sessionID,
+                    desktopName: pairingStatus.desktopName
+                )
+                return
+            }
+            
+            // Pairing succeeded - save session and navigate to permissions
+            await backupSessionProvider.saveBackupSession(
+                status: .paired,
+                sessionID: pairingStatus.sessionID,
+                desktopName: pairingStatus.desktopName
+            )
+            route = .permissions
+            recordTelemetry(.pairingSucceeded)
+            endTelemetrySpan(.pairingFlow, status: .ok)
+            
+        case .failure(.unexpectedPhase):
+            // Unexpected phase - report but stay on pairing page
+            reportPairingFailure(
+                reason: "unexpected_pairing_phase",
+                pairingAttributes: [
+                    "pairing.result_phase": .string(pairingStatus.phase.rawValue)
+                ]
+            )
+            
         case .failure(.cancelled):
+            // User cancelled pairing - return home
             await returnHome()
+            
         case .failure(.pairingFailed), .failure(.unknown):
+            // Check if desktop stopped pairing
+            if pairingStatus.backupFlowState == .pairingStopped {
+                route = .home
+                reportPairingFailure(reason: "desktop_stopped_pairing")
+                endTelemetrySpan(
+                    .backupSession,
+                    attributes: [
+                        "backup.failure_reason": .string("desktop_stopped_pairing")
+                    ],
+                    status: .error("desktop_stopped_pairing")
+                )
+                await backupSessionProvider.saveBackupSession(
+                    status: .failed,
+                    sessionID: pairingStatus.sessionID,
+                    desktopName: pairingStatus.desktopName
+                )
+                return
+            }
+            
+            // Pairing failed (invalid QR or other error) - show error page
+            reportPairingFailure(
+                reason: "invalid_qr_payload",
+                pairingAttributes: [
+                    "pairing.failure_message": .string(pairingStatus.message)
+                ]
+            )
             presentErrorSummary(
                 title: "Pairing flow failed",
                 message: "AuBackup couldn't continue the pairing flow. Restart the backup session or return home."
@@ -285,62 +368,6 @@ final class MobileAppModel: ObservableObject {
             message: "Validating the QR payload and establishing a secure local session with the desktop."
         )
         recordTelemetry(.pairingStarted)
-    }
-
-    func handleInvalidPairingPayload(message: String) {
-        reportPairingFailure(
-            reason: "invalid_qr_payload",
-            pairingAttributes: [
-                "pairing.failure_message": .string(message)
-            ]
-        )
-        presentErrorSummary(
-            title: "Invalid QR Code",
-            message: "Invalid QR code. Please scan the QR code again from the AuSearch app on your PC."
-        )
-    }
-
-    func handlePairingAttemptCompleted(_ result: PairingStatus) async {
-        pairingStatus = result
-        applyPairingStatusStateTransition(result)
-
-        if result.backupFlowState == .pairingStopped {
-            route = .home
-            reportPairingFailure(reason: "desktop_stopped_pairing")
-            endTelemetrySpan(
-                .backupSession,
-                attributes: [
-                    "backup.failure_reason": .string("desktop_stopped_pairing")
-                ],
-                status: .error("desktop_stopped_pairing")
-            )
-            await backupSessionProvider.saveBackupSession(
-                status: .failed,
-                sessionID: result.sessionID,
-                desktopName: result.desktopName
-            )
-            return
-        }
-
-        guard result.phase == .paired else {
-            reportPairingFailure(
-                reason: "unexpected_pairing_phase",
-                pairingAttributes: [
-                    "pairing.result_phase": .string(result.phase.rawValue)
-                ]
-            )
-            return
-        }
-
-        await backupSessionProvider.saveBackupSession(
-            status: .paired,
-            sessionID: result.sessionID,
-            desktopName: result.desktopName
-        )
-        route = .permissions
-
-        recordTelemetry(.pairingSucceeded)
-        endTelemetrySpan(.pairingFlow, status: .ok)
     }
 
     func abortPreflightAndReturnHome(reason: String) async {

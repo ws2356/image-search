@@ -33,18 +33,40 @@ final class PairingPageViewModel: ObservableObject {
 
         let payloadResult = qrCodePayloadDecoder.decode(scannedValue: qrString)
 
-        // TODO: pass a pairing error struct to be consumed by error page
         guard case .success(let payload) = payloadResult else {
             if case .failure(let error) = payloadResult {
-                model.handleInvalidPairingPayload(message: error.message)
+                // Invalid QR code - create failed status with error message
+                let failedStatus = PairingStatus(
+                    phase: .failed,
+                    backupFlowState: .pendingPairing,
+                    desktopName: nil,
+                    sessionID: nil,
+                    transport: nil,
+                    message: error.message
+                )
+                let result = PairingPageResult(result: .failure(.pairingFailed), pairingStatus: failedStatus)
+                await model.onPairingCompleted(with: result)
             }
             return
         }
 
-        // TODO: do not propogate message, just consume it within the pairing page
-        let result = await model.pairingService.startPairing(using: payload)
+        // Start pairing with the decoded payload
+        let pairingResult = await model.pairingService.startPairing(using: payload)
+        
+        // Check if route is still .pair (user might have cancelled)
         if case .pair = model.route {
-            await model.handlePairingAttemptCompleted(result)
+            // Report the result with the pairing status
+            let pageResult: PairingPageResult
+            if pairingResult.phase == .paired {
+                pageResult = PairingPageResult(result: .success(()), pairingStatus: pairingResult)
+            } else if pairingResult.phase == .pairing {
+                // Unexpected phase - service is still in pairing state
+                pageResult = PairingPageResult(result: .failure(.unexpectedPhase), pairingStatus: pairingResult)
+            } else {
+                // Failed or other phase
+                pageResult = PairingPageResult(result: .failure(.pairingFailed), pairingStatus: pairingResult)
+            }
+            await model.onPairingCompleted(with: pageResult)
         }
     }
 

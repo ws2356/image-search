@@ -32,12 +32,19 @@ struct ScanningPageResult {
 
 enum PairingPageError: Error, Equatable {
     case pairingFailed
+    case unexpectedPhase
     case cancelled
     case unknown
 }
 
 struct PairingPageResult {
     let result: Result<Void, PairingPageError>
+    let pairingStatus: PairingStatus?
+    
+    init(result: Result<Void, PairingPageError>, pairingStatus: PairingStatus? = nil) {
+        self.result = result
+        self.pairingStatus = pairingStatus
+    }
 }
 
 enum PermissionsPageError: Error, Equatable {
