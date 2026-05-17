@@ -364,7 +364,7 @@ final class MobileAppModel: ObservableObject {
         recordTelemetry(.pairingStarted)
     }
 
-    func abortPreflightAndReturnHome(reason: String) async {
+    private func abortPreflightAndReturnHome(reason: String) async {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
         await permissionService.setRemoveAfterBackupEnabled(false)

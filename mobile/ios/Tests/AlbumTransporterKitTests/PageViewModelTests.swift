@@ -469,10 +469,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
 
     func persistSnapshot() {}
 
-    func abortPreflightAndReturnHome(reason: String) async {
-        _ = reason
-    }
-
     func onHomeCompleted(with result: HomePageResult) async {
         switch result.result {
         case .success:

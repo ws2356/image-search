@@ -194,10 +194,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
 
     func requestStopTransfer() {}
 
-    func abortPreflightAndReturnHome(reason: String) async {
-        _ = reason
-    }
-
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
     func onPairingCompleted(with result: PairingPageResult) async {}

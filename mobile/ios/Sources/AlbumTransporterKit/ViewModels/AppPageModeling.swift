@@ -27,7 +27,6 @@ extension MobileAppModel: AppPageModeling {}
 @MainActor
 protocol PermissionsPageModeling: AppPageModeling {
     var pairingService: PairingService { get }
-    func abortPreflightAndReturnHome(reason: String) async
 }
 
 extension MobileAppModel: PermissionsPageModeling {}
