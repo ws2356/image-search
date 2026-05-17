@@ -862,11 +862,11 @@ final class MobileAppModelTests: XCTestCase {
         await model.handleIncomingUniversalLink(URL(string: "https://dl.boldman.net?sid=missing-fields")!)
         await orchestrateVisiblePairPage(model: model)
 
-        if case .pair = model.route {
-            XCTAssertEqual(model.pairingStatus.phase, .failed)
-            XCTAssertTrue(model.pairingStatus.message.contains("missing the required field"))
+        if case .error = model.route {
+            XCTAssertEqual(model.errorSummary.title, "Invalid QR Code")
+            XCTAssertTrue(model.errorSummary.message.contains("scan the QR code again"))
         } else {
-            XCTFail("Expected route to be .pair but got \(model.route)")
+            XCTFail("Expected route to be .error but got \(model.route)")
         }
     }
 
@@ -1174,7 +1174,7 @@ final class MobileAppModelTests: XCTestCase {
             pairingService: StaticPairingService(),
             permissionService: StaticPermissionService(summary: .demo),
             transferService: StaticTransferService(),
-            telemetryClient: NoopTelemetryClient()
+            telemetryClient: RecordingTelemetryClient()
         )
 
         await model.load()
