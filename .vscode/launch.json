@@ -20,7 +20,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "PyQtInspect",
-      "args": ["--direct", "--qt-support=pyside6", "--file", "${workspaceFolder}/inspect_main.py"],
+      "args": ["--direct", "--qt-support=pyside6", "--file", "${workspaceFolder}/main_non_module.py"],
       "justMyCode": false,
       "logToFile": true
     },
