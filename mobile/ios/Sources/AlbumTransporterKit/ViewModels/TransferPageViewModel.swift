@@ -73,6 +73,7 @@ final class TransferPageViewModel: ObservableObject {
         await transferService.stageTransferCompletionState(nil)
         let transferStartedAt = Date()
         startTransferPolling()
+        // TODO: error handling
         let finalSnapshot = await transferService.startTransfer { _ in }
         applySnapshotIfNewer(finalSnapshot)
         guard model.route == .transfer else {
@@ -91,7 +92,7 @@ final class TransferPageViewModel: ObservableObject {
             )
         )
         await transferService.stageTransferSnapshot(snapshot)
-        let result = TransferPageResult(result: .success(()), target: .secondary)
+        let result = TransferPageResult(result: .success(()), target: nil)
         await model.onTransferCompleted(with: result)
     }
 

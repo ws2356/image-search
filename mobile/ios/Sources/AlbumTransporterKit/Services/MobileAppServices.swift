@@ -545,6 +545,10 @@ enum QRCodePayloadDecoderError: Error, Equatable, Sendable {
     case invalidEndpoint
     case invalidSuggestedUSBPort
     case missingField(String)
+    
+    var title: String {
+        return "Invalid QR code"
+    }
 
     var message: String {
         switch self {

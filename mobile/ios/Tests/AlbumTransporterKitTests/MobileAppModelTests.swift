@@ -863,8 +863,8 @@ final class MobileAppModelTests: XCTestCase {
         await orchestrateVisiblePairPage(model: model)
 
         if case .error = model.route {
-            XCTAssertEqual(model.errorSummary.title, "Invalid QR Code")
-            XCTAssertTrue(model.errorSummary.message.contains("scan the QR code again"))
+            XCTAssertEqual(model.errorSummary.title, PairingPageError.invalidQR.title)
+            XCTAssertEqual(model.errorSummary.message, PairingPageError.invalidQR.message)
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")
         }
@@ -1155,7 +1155,7 @@ final class MobileAppModelTests: XCTestCase {
         let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
         XCTAssertEqual(
             failureRecord?.attributes["pairing.failure_reason"],
-            .string("invalid_qr_payload")
+            .string(QRCodePayloadDecoderError.invalidHost.title)
         )
         XCTAssertEqual(
             failureRecord?.attributes["pairing.failure_message"],
@@ -1190,8 +1190,8 @@ final class MobileAppModelTests: XCTestCase {
         }
 
         // Verify error summary contains expected messages
-        XCTAssertEqual(model.errorSummary.title, "Invalid QR Code")
-        XCTAssertEqual(model.errorSummary.message, "Invalid QR code. Please scan the QR code again from the AuSearch app on your PC.")
+        XCTAssertEqual(model.errorSummary.title, QRCodePayloadDecoderError.invalidHost.title)
+        XCTAssertEqual(model.errorSummary.message, QRCodePayloadDecoderError.invalidHost.message)
     }
 
     func test_begin_pairing_records_unexpected_pairing_phase_failure_reason() async {

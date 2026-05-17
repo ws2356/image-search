@@ -149,7 +149,7 @@ final class MobileAppModel: ObservableObject {
             // User cancelled pairing - return home
             await returnHome()
             
-        case .failure(.pairingFailed), .failure(.unknown):
+        case .failure(let error):
             // Check if desktop stopped pairing
             if pairingStatus.backupFlowState == .pairingStopped {
                 route = .home
@@ -171,14 +171,14 @@ final class MobileAppModel: ObservableObject {
             
             // Pairing failed (invalid QR or other error) - show error page
             reportPairingFailure(
-                reason: "invalid_qr_payload",
+                reason: error.title,
                 pairingAttributes: [
-                    "pairing.failure_message": .string(pairingStatus.message)
+                    "pairing.failure_message": .string(error.message)
                 ]
             )
             presentErrorSummary(
-                title: "Pairing flow failed",
-                message: "AuBackup couldn't continue the pairing flow. Restart the backup session or return home."
+                title: error.title,
+                message: error.message
             )
         }
     }
@@ -202,11 +202,7 @@ final class MobileAppModel: ObservableObject {
     func onTransferCompleted(with result: TransferPageResult) async {
         switch result.result {
         case .success:
-            if result.target == .primary {
-                requestStopTransfer()
-            } else if result.target == .secondary {
-                await finalizeCompletedTransfer()
-            }
+            await finalizeCompletedTransfer()
         case .failure(.stopConfirmed):
             await finalizeStoppedTransfer()
         case .failure(.transferFailed), .failure(.unknown):

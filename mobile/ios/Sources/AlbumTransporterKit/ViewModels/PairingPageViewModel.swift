@@ -44,7 +44,7 @@ final class PairingPageViewModel: ObservableObject {
                     transport: nil,
                     message: error.message
                 )
-                let result = PairingPageResult(result: .failure(.pairingFailed), pairingStatus: failedStatus)
+                let result = PairingPageResult(result: .failure(.invalidQR(detail: error)), pairingStatus: failedStatus)
                 await model.onPairingCompleted(with: result)
             }
             return
