@@ -67,12 +67,12 @@ final class PairingServiceTests: XCTestCase {
         )
 
         let result = await service.startPairing(using: .demo)
+        let response = requirePairingSuccess(result)
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
-        XCTAssertEqual(result.desktopName, "Studio Mac")
-        XCTAssertEqual(result.sessionID, "pairing-demo-001")
-        XCTAssertEqual(result.transport, .lan)
+        XCTAssertEqual(response.desktopName, "Studio Mac")
+        XCTAssertEqual(response.sessionID, "pairing-demo-001")
+        XCTAssertEqual(response.transport, .lan)
         XCTAssertEqual(trustedDesktop?.desktopDeviceID, "desktop-device-001")
         XCTAssertEqual(trustedDesktop?.desktopName, "Studio Mac")
         XCTAssertEqual(trustedDesktop?.mobileDeviceUUID, "ios-device-001")
@@ -113,8 +113,9 @@ final class PairingServiceTests: XCTestCase {
         )
 
         let result = await service.startPairing(using: .demo)
+        let error = requirePairingFailure(result)
 
-        XCTAssertEqual(result.backupFlowState, .pairingExpired)
+        XCTAssertEqual(error, .expired(message: "This QR code expired on desktop. Refresh and scan again."))
     }
 
     func test_desktop_bootstrap_pairing_service_retries_next_advertised_endpoint() async {
@@ -162,10 +163,11 @@ final class PairingServiceTests: XCTestCase {
         )
 
         let result = await service.startPairing(using: payload)
+        let response = requirePairingSuccess(result)
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
         let requestedEndpoints = await bootstrapClient.requestedEndpoints()
 
-        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
+        XCTAssertEqual(response.sessionID, "pairing-demo-001")
         XCTAssertEqual(
             requestedEndpoints,
             [
@@ -215,11 +217,11 @@ final class PairingServiceTests: XCTestCase {
         )
 
         let result = await service.startPairing(using: .demo)
+        let response = requirePairingSuccess(result)
         let lanRequestedEndpoints = await lanClient.requestedEndpoints()
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
-        XCTAssertEqual(result.transport, .usb)
+        XCTAssertEqual(response.transport, .usb)
         XCTAssertEqual(lanRequestedEndpoints, [])
         XCTAssertEqual(trustedDesktop?.transport, .usb)
     }
@@ -264,11 +266,11 @@ final class PairingServiceTests: XCTestCase {
         )
 
         let result = await service.startPairing(using: .demo)
+        let response = requirePairingSuccess(result)
         let lanRequestedEndpoints = await lanClient.requestedEndpoints()
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
-        XCTAssertEqual(result.transport, .lan)
+        XCTAssertEqual(response.transport, .lan)
         XCTAssertEqual(lanRequestedEndpoints, ["http://127.0.0.1:38933/api/mobile/pairing/claim"])
         XCTAssertEqual(trustedDesktop?.transport, .lan)
     }
@@ -323,10 +325,11 @@ final class PairingServiceTests: XCTestCase {
         )
 
         let result = await service.startPairing(using: .demo)
+        let response = requirePairingSuccess(result)
         let stateRequestCount = await bootstrapClient.stateRequestCount()
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.backupFlowState, .pairingCompleted)
+        XCTAssertEqual(response.sessionID, "pairing-demo-001")
         XCTAssertEqual(stateRequestCount, 1)
         XCTAssertEqual(trustedDesktop?.desktopDeviceID, "desktop-device-001")
     }
@@ -381,10 +384,39 @@ final class PairingServiceTests: XCTestCase {
         )
 
         let result = await service.startPairing(using: .demo)
+        let error = requirePairingFailure(result)
         let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
 
-        XCTAssertEqual(result.backupFlowState, .pairingStopped)
+        XCTAssertEqual(error, .rejected(message: "Desktop canceled this pairing request."))
         XCTAssertNil(trustedDesktop)
+    }
+}
+
+private func requirePairingSuccess(
+    _ result: Result<PairingResponse, PairingError>,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) -> PairingResponse {
+    switch result {
+    case .success(let response):
+        return response
+    case .failure(let error):
+        XCTFail("Expected pairing success, got \(error)", file: file, line: line)
+        return PairingResponse(sessionID: "", desktopName: "", transport: .lan)
+    }
+}
+
+private func requirePairingFailure(
+    _ result: Result<PairingResponse, PairingError>,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) -> PairingError {
+    switch result {
+    case .success(let response):
+        XCTFail("Expected pairing failure, got success \(response)", file: file, line: line)
+        return .transport(message: "")
+    case .failure(let error):
+        return error
     }
 }
 

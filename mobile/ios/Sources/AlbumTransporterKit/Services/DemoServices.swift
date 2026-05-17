@@ -19,14 +19,15 @@ actor InMemoryBackupSessionStore: BackupSessionStore {
 struct DemoPairingService: PairingService {
     var desktopName = "Studio Mac"
 
-    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
+    func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError> {
         try? await Task.sleep(nanoseconds: 250_000_000)
 
-        return PairingStatus(
-            backupFlowState: .pairingCompleted,
-            desktopName: desktopName,
-            sessionID: payload.sessionID,
-            transport: .lan
+        return .success(
+            PairingResponse(
+                sessionID: payload.sessionID,
+                desktopName: desktopName,
+                transport: .lan
+            )
         )
     }
 }

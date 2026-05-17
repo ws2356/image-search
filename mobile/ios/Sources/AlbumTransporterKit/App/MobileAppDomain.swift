@@ -76,25 +76,21 @@ enum TransferTransport: String, Equatable, Hashable, Sendable, Codable {
 }
 
 struct PairingStatus: Equatable, Sendable, Codable {
-    var backupFlowState: MobileBackupFlowState // TODO: Should be stored somewhere, e.g. state machine
     var desktopName: String?
     var sessionID: String?
     var transport: TransferTransport?
 
     init(
-        backupFlowState: MobileBackupFlowState = .pendingPairing,
         desktopName: String?,
         sessionID: String?,
         transport: TransferTransport?
     ) {
-        self.backupFlowState = backupFlowState
         self.desktopName = desktopName
         self.sessionID = sessionID
         self.transport = transport
     }
 
     static let idle = PairingStatus(
-        backupFlowState: .pendingPairing,
         desktopName: nil,
         sessionID: nil,
         transport: nil

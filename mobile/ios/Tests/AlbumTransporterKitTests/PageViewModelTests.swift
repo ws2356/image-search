@@ -21,7 +21,6 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.backupFlowState = .transferStopped
         model.pairingStatus = PairingStatus(
-            backupFlowState: .transferStopped,
             desktopName: "Desk Mac",
             sessionID: "session-1",
             transport: .lan
@@ -124,15 +123,15 @@ final class PageViewModelTests: XCTestCase {
 
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
         XCTAssertEqual(startPairingCallCount, 1)
-        XCTAssertEqual(model.pairingStatus.backupFlowState, .pairingCompleted)
+        XCTAssertEqual(model.pairingStatus.sessionID, PairingQRCodePayload.demo.sessionID)
     }
 
     func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
+        model.backupFlowState = .pairingStopped
         model.pairingStatus = PairingStatus(
-            backupFlowState: .pairingStopped,
             desktopName: nil,
             sessionID: nil,
             transport: nil
@@ -490,11 +489,13 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     }
 
     func onPairingCompleted(with result: PairingPageResult) async {
-        if let status = result.pairingStatus {
-            pairingStatus = status
-        }
         switch result.result {
-        case .success:
+        case .success(let response):
+            pairingStatus = PairingStatus(
+                desktopName: response.desktopName,
+                sessionID: response.sessionID,
+                transport: response.transport
+            )
             openScanRouteCallCount += 1
         case .failure:
             returnHomeCallCount += 1
@@ -665,13 +666,14 @@ private actor StubTransferService: TransferService {
 private actor StubPairingService: PairingService {
     private var startPairingInvocations = 0
 
-    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
+    func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError> {
         startPairingInvocations += 1
-        return PairingStatus(
-            backupFlowState: .pairingCompleted,
-            desktopName: "Studio Mac",
-            sessionID: payload.sessionID,
-            transport: .lan
+        return .success(
+            PairingResponse(
+                sessionID: payload.sessionID,
+                desktopName: "Studio Mac",
+                transport: .lan
+            )
         )
     }
 

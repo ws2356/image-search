@@ -431,7 +431,7 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertTrue(permissionsViewModel.isShowingLowBatteryWarning)
     }
 
-    func test_begin_pairing_returns_home_when_desktop_stops_pairing() async {
+    func test_begin_pairing_shows_error_when_desktop_stops_pairing() async {
         let model = makeModel(
             stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
             qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
@@ -445,7 +445,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
         await startPairing(model: model)
 
-        XCTAssertEqual(model.route, .home)
+        XCTAssertEqual(model.route, .error)
     }
 
     func test_start_backup_shows_full_media_access_reminder_before_continuing() async {
@@ -845,7 +845,7 @@ final class MobileAppModelTests: XCTestCase {
         await orchestrateVisiblePairPage(model: model)
 
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.pairingStatus.backupFlowState, .pairingCompleted)
+        XCTAssertEqual(model.pairingStatus.sessionID, PairingQRCodePayload.demo.sessionID)
     }
 
     func test_handle_incoming_universal_link_with_invalid_payload_shows_pairing_failure() async {
@@ -863,9 +863,8 @@ final class MobileAppModelTests: XCTestCase {
         await orchestrateVisiblePairPage(model: model)
 
         if case .error = model.route {
-            let expectedError = PairingPageError.invalidQR(detail: .missingField("v"))
-            XCTAssertEqual(model.errorSummary.title, expectedError.title)
-            XCTAssertEqual(model.errorSummary.message, expectedError.message)
+            XCTAssertEqual(model.errorSummary.title, PairingError.decoding(message: "").title)
+            XCTAssertEqual(model.errorSummary.message, QRCodePayloadDecoderError.missingField("v").message)
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")
         }
@@ -994,7 +993,7 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertFalse(model.isShowingIncomingLinkReplacementConfirmation)
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.pairingStatus.backupFlowState, .pairingCompleted)
+        XCTAssertEqual(model.pairingStatus.sessionID, "pairing-replacement-001")
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
         let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
@@ -1212,7 +1211,7 @@ final class MobileAppModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         if case .error = model.route {
-            XCTAssertEqual(model.pairingStatus.backupFlowState, .pendingPairing)
+            XCTAssertNil(model.pairingStatus.sessionID)
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")
         }
@@ -1309,35 +1308,28 @@ final class MobileAppModelTests: XCTestCase {
 }
 
 private struct StaticPairingService: PairingService {
-    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
-        PairingStatus(
-            backupFlowState: .pairingCompleted,
-            desktopName: "Studio Mac",
-            sessionID: payload.sessionID,
-            transport: .lan
+    func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError> {
+        .success(
+            PairingResponse(
+                sessionID: payload.sessionID,
+                desktopName: "Studio Mac",
+                transport: .lan
+            )
         )
     }
 }
 
 private struct StoppedPairingService: PairingService {
-    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
-        PairingStatus(
-            backupFlowState: .pairingStopped,
-            desktopName: "Studio Mac",
-            sessionID: payload.sessionID,
-            transport: nil
-        )
+    func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError> {
+        _ = payload
+        return .failure(.rejected(message: "Desktop canceled this pairing request."))
     }
 }
 
 private struct UnexpectedPhasePairingService: PairingService {
-    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
-        PairingStatus(
-            backupFlowState: .pendingPairing,
-            desktopName: "Studio Mac",
-            sessionID: payload.sessionID,
-            transport: nil
-        )
+    func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError> {
+        _ = payload
+        return .failure(.transport(message: "Unexpected pairing state."))
     }
 }
 

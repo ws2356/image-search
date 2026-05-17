@@ -178,7 +178,7 @@ struct DesktopBootstrapPairingService: PairingService {
         await bootstrapClient.primeInternetAccess()
     }
 
-    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus {
+    func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError> {
         let identity = await identityProvider.currentIdentity()
         let clientNonce = UUID().uuidString.lowercased()
         let request = PairingClaimRequest(
@@ -209,21 +209,11 @@ struct DesktopBootstrapPairingService: PairingService {
             case .pairingExpired:
                 throw PairingServiceError.expired(message: response.message)
             case .pairingStopped:
-                return PairingStatus(
-                    backupFlowState: .pairingStopped,
-                    desktopName: nil,
-                    sessionID: request.sessionID,
-                    transport: nil
-                )
+                return .failure(.rejected(message: response.message))
             }
 
             guard response.backupState == .pairingCompleted else {
-                return PairingStatus(
-                    backupFlowState: .pairingStopped,
-                    desktopName: nil,
-                    sessionID: request.sessionID,
-                    transport: nil
-                )
+                return .failure(.rejected(message: response.message))
             }
 
             guard let sessionID = response.sessionID,
@@ -253,26 +243,17 @@ struct DesktopBootstrapPairingService: PairingService {
             )
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)
 
-            return PairingStatus(
-                backupFlowState: .pairingCompleted,
-                desktopName: desktopName,
-                sessionID: sessionID,
-                transport: transport
+            return .success(
+                PairingResponse(
+                    sessionID: sessionID,
+                    desktopName: desktopName,
+                    transport: transport
+                )
             )
         } catch let error as PairingServiceError {
-            return PairingStatus(
-                backupFlowState: error.backupFlowState,
-                desktopName: nil,
-                sessionID: nil,
-                transport: nil
-            )
+            return .failure(PairingError(error))
         } catch {
-            return PairingStatus(
-                backupFlowState: .pendingPairing,
-                desktopName: nil,
-                sessionID: nil,
-                transport: nil
-            )
+            return .failure(.transport(message: error.localizedDescription))
         }
     }
 
@@ -382,30 +363,6 @@ private enum PairingDebugLogger {
 
     static func error(_ message: String) {
         logger.error("\(message, privacy: .public)")
-    }
-}
-
-private extension PairingServiceError {
-    var backupFlowState: MobileBackupFlowState {
-        switch self {
-        case .expired:
-            return .pairingExpired
-        default:
-            return .pendingPairing
-        }
-    }
-
-    var message: String {
-        switch self {
-        case .invalidHTTPResponse:
-            return "Desktop pairing returned an invalid network response."
-        case .unsupportedResponseSchema:
-            return "Desktop pairing returned an unsupported response schema."
-        case .invalidAcceptedResponse:
-            return "Desktop pairing returned an incomplete acceptance payload."
-        case .rejected(let message), .expired(let message), .transport(let message), .decoding(let message):
-            return message
-        }
     }
 }
 

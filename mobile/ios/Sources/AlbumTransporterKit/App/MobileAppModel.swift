@@ -87,25 +87,14 @@ final class MobileAppModel: ObservableObject {
     }
 
     func onPairingCompleted(with result: PairingPageResult) async {
-        // Update pairing status with the result from the view model
-        if let resultStatus = result.pairingStatus {
-            pairingStatus = resultStatus
-            applyPairingStatusStateTransition(resultStatus)
-        }
-        
         switch result.result {
-        case .success:
-            guard pairingStatus.backupFlowState == .pairingCompleted else {
-                reportPairingFailure(
-                    reason: "pairing_success_without_completion_state",
-                    pairingAttributes: [
-                        "pairing.backup_flow_state": .string(pairingStatus.backupFlowState.rawValue)
-                    ]
-                )
-                return
-            }
-
-            // Pairing succeeded - save session and navigate to permissions
+        case .success(let pairingResponse):
+            pairingStatus = PairingStatus(
+                desktopName: pairingResponse.desktopName,
+                sessionID: pairingResponse.sessionID,
+                transport: pairingResponse.transport
+            )
+            transitionBackupFlow(.pairingAccepted)
             await backupSessionProvider.saveBackupSession(
                 status: .paired,
                 sessionID: pairingStatus.sessionID,
@@ -115,31 +104,40 @@ final class MobileAppModel: ObservableObject {
             recordTelemetry(.pairingSucceeded)
             endTelemetrySpan(.pairingFlow, status: .ok)
 
-        case .failure(.cancelled):
-            // User cancelled pairing - return home
+        case .failure(.cancel):
             await returnHome()
-            
+
+        case .failure(.rejected(let message)):
+            transitionBackupFlow(.pairingStopped)
+            reportPairingFailure(
+                reason: "desktop_stopped_pairing",
+                pairingAttributes: [
+                    "pairing.failure_message": .string(message)
+                ]
+            )
+            endTelemetrySpan(
+                .backupSession,
+                attributes: [
+                    "backup.failure_reason": .string("desktop_stopped_pairing")
+                ],
+                status: .error("desktop_stopped_pairing")
+            )
+            await backupSessionProvider.saveBackupSession(
+                status: .failed,
+                sessionID: pairingStatus.sessionID,
+                desktopName: pairingStatus.desktopName
+            )
+            presentErrorSummary(
+                title: PairingError.rejected(message: message).title,
+                message: message
+            )
+
         case .failure(let error):
-            // Check if desktop stopped pairing
-            if pairingStatus.backupFlowState == .pairingStopped {
-                route = .home
-                reportPairingFailure(reason: "desktop_stopped_pairing")
-                endTelemetrySpan(
-                    .backupSession,
-                    attributes: [
-                        "backup.failure_reason": .string("desktop_stopped_pairing")
-                    ],
-                    status: .error("desktop_stopped_pairing")
-                )
-                await backupSessionProvider.saveBackupSession(
-                    status: .failed,
-                    sessionID: pairingStatus.sessionID,
-                    desktopName: pairingStatus.desktopName
-                )
-                return
+            if case .expired = error {
+                transitionBackupFlow(.pairingExpired)
+            } else {
+                transitionBackupFlow(.pairingStarted)
             }
-            
-            // Pairing failed (invalid QR or other error) - show error page
             reportPairingFailure(
                 reason: error.title,
                 pairingAttributes: [
@@ -276,7 +274,6 @@ final class MobileAppModel: ObservableObject {
         beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
-            backupFlowState: .pendingPairing,
             desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
             transport: nil
@@ -324,7 +321,6 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.pairingStarted)
         route = .pair(qrString: qrString)
         pairingStatus = PairingStatus(
-            backupFlowState: .pendingPairing,
             desktopName: backupSessionProvider.backupSession?.desktopName,
             sessionID: nil,
             transport: nil
@@ -615,29 +611,6 @@ final class MobileAppModel: ObservableObject {
         snapshot.failedCount == 0 ? .ok : .error("transfer_completed_with_failures")
     }
 
-    private func applyPairingStatusStateTransition(_ status: PairingStatus) {
-        switch status.backupFlowState {
-        case .pendingPairing:
-            transitionBackupFlow(.pairingStarted)
-        case .pairingMismatched:
-            transitionBackupFlow(.pairingMismatchDetected)
-        case .pairingCompleted:
-            transitionBackupFlow(.pairingAccepted)
-        case .pairingExpired:
-            transitionBackupFlow(.pairingExpired)
-        case .pairingStopped:
-            transitionBackupFlow(.pairingStopped)
-        case .transferInProgress:
-            transitionBackupFlow(.transferStarted)
-        case .transferStopped:
-            transitionBackupFlow(.transferStopped)
-        case .transferCompleted:
-            transitionBackupFlow(.transferCompleted)
-        case .transferFailed:
-            transitionBackupFlow(.transferFailed)
-        }
-    }
-
     private func transitionBackupFlow(_ event: MobileBackupFlowEvent) {
         backupFlowStateMachine.transition(event)
     }
@@ -804,7 +777,6 @@ final class MobileAppModel: ObservableObject {
 
     private func pairingStatus(for session: BackupSession) -> PairingStatus {
         PairingStatus(
-            backupFlowState: backupFlowState(for: session.status),
             desktopName: session.desktopName,
             sessionID: session.sessionID,
             transport: nil

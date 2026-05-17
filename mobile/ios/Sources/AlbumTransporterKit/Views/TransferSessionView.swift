@@ -444,7 +444,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
     let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState = .transferInProgress
     var pairingStatus = PairingStatus(
-        backupFlowState: .transferInProgress,
         desktopName: "Desk Mac",
         sessionID: "preview-session",
         transport: .usb

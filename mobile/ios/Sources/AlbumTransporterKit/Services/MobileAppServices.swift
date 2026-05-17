@@ -36,7 +36,71 @@ extension BackupSessionProviding {
 
 protocol PairingService: Sendable {
     func primeNetworkAccess() async
-    func startPairing(using payload: PairingQRCodePayload) async -> PairingStatus
+    func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError>
+}
+
+struct PairingResponse: Equatable, Sendable {
+    let sessionID: String
+    let desktopName: String
+    let transport: TransferTransport
+}
+
+enum PairingError: Error, Equatable, Sendable {
+    case invalidHTTPResponse
+    case unsupportedResponseSchema
+    case invalidAcceptedResponse
+    case rejected(message: String)
+    case expired(message: String)
+    case transport(message: String)
+    case decoding(message: String)
+    case cancel
+
+    var title: String {
+        switch self {
+        case .expired:
+            return "QR Code Expired"
+        case .decoding:
+            return "Invalid QR code"
+        case .cancel:
+            return "Pairing Cancelled"
+        default:
+            return "Pairing Failed"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .invalidHTTPResponse:
+            return "Desktop pairing returned an invalid network response."
+        case .unsupportedResponseSchema:
+            return "Desktop pairing returned an unsupported response schema."
+        case .invalidAcceptedResponse:
+            return "Desktop pairing returned an incomplete acceptance payload."
+        case .rejected(let message), .expired(let message), .transport(let message), .decoding(let message):
+            return message
+        case .cancel:
+            return "Pairing was cancelled."
+        }
+    }
+
+    init(_ error: PairingServiceError) {
+        switch error {
+        case .invalidHTTPResponse:
+            self = .invalidHTTPResponse
+        case .unsupportedResponseSchema:
+            self = .unsupportedResponseSchema
+        case .invalidAcceptedResponse:
+            self = .invalidAcceptedResponse
+        case .rejected(let message):
+            self = .rejected(message: message)
+        case .expired(let message):
+            self = .expired(message: message)
+        case .transport(let message):
+            self = .transport(message: message)
+        case .decoding(let message):
+            self = .decoding(message: message)
+        }
+    }
 }
 
 protocol PairingBootstrapClient: Sendable {

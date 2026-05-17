@@ -30,46 +30,11 @@ struct ScanningPageResult {
     let result: Result<String, ScanningPageError>  // Success contains scanned QR string
 }
 
-enum PairingPageError: Error, Equatable {
-    case invalidQR(detail: QRCodePayloadDecoderError)
-    case pairingFailed
-    case cancelled
-    case unknown
-    
-    var title: String {
-        switch self {
-        case .invalidQR(let detail):
-            return detail.title
-        case .pairingFailed:
-            return "Pairing Failed"
-        case .cancelled:
-            return "Pairing Cancelled"
-        case .unknown:
-            return "Unknown Pairing Error"
-        }
-    }
-
-    var message: String {
-        switch self {
-        case .invalidQR(let detail):
-            return detail.message
-        case .pairingFailed:
-            return "Pairing failed. Please try again."
-        case .cancelled:
-            return "Pairing was cancelled."
-        case .unknown:
-            return "An unknown error occurred during pairing."
-        }
-    }
-}
-
 struct PairingPageResult {
-    let result: Result<Void, PairingPageError>
-    let pairingStatus: PairingStatus?
-    
-    init(result: Result<Void, PairingPageError>, pairingStatus: PairingStatus? = nil) {
+    let result: Result<PairingResponse, PairingError>
+
+    init(result: Result<PairingResponse, PairingError>) {
         self.result = result
-        self.pairingStatus = pairingStatus
     }
 }
 
