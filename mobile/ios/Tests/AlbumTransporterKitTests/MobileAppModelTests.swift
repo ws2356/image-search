@@ -863,8 +863,9 @@ final class MobileAppModelTests: XCTestCase {
         await orchestrateVisiblePairPage(model: model)
 
         if case .error = model.route {
-            XCTAssertEqual(model.errorSummary.title, PairingPageError.invalidQR.title)
-            XCTAssertEqual(model.errorSummary.message, PairingPageError.invalidQR.message)
+            let expectedError = PairingPageError.invalidQR(detail: .missingField("v"))
+            XCTAssertEqual(model.errorSummary.title, expectedError.title)
+            XCTAssertEqual(model.errorSummary.message, expectedError.message)
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")
         }
