@@ -280,6 +280,7 @@ final class MobileAppModelTests: XCTestCase {
         let resolvedTelemetryContextProvider = telemetryContextProvider ?? DefaultTelemetryContextProvider()
         let resolvedTelemetryService = telemetryService ?? DefaultTelemetryService(
             transferService: transferService,
+            transportResolver: transferService,
             telemetryClient: telemetryClient,
             contextProvider: resolvedTelemetryContextProvider
         )
@@ -485,6 +486,7 @@ final class MobileAppModelTests: XCTestCase {
         let transferViewModel = TransferPageViewModel(
             model: model,
             telemetryService: NoopTelemetryService(),
+            transportResolver: model.transferService,
             pollingIntervalNanoseconds: 10_000_000
         )
         await transferViewModel.orchestrateTransfer()
@@ -570,11 +572,16 @@ final class MobileAppModelTests: XCTestCase {
         let stagedSnapshot = await transferService.progressSnapshot()
         XCTAssertNotNil(stagedSnapshot)
         XCTAssertEqual(stagedSnapshot?.transport, .lan)
-        let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
-        XCTAssertEqual(
-            stopRecord?.attributes["transfer.stop_reason"],
-            .string("low_battery_declined")
-        )
+        var stopReasonAttribute: MobileTelemetryAttributeValue?
+        for _ in 0..<20 {
+            let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
+            stopReasonAttribute = stopRecord?.attributes["transfer.stop_reason"]
+            if stopReasonAttribute != nil {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(stopReasonAttribute, .string("low_battery_declined"))
     }
 
     func test_stop_transfer_returns_home_without_interrupted_page() async {
@@ -625,6 +632,7 @@ final class MobileAppModelTests: XCTestCase {
         let transferViewModel = TransferPageViewModel(
             model: model,
             telemetryService: NoopTelemetryService(),
+            transportResolver: model.transferService,
             pollingIntervalNanoseconds: 10_000_000
         )
         transferViewModel.requestStopTransfer()
@@ -634,7 +642,8 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertFalse(transferViewModel.isShowingStopConfirmation)
         let homeViewModel = HomePageViewModel(
             model: model,
-            telemetryService: NoopTelemetryService()
+            telemetryService: NoopTelemetryService(),
+            transportResolver: model.transferService
         )
         await homeViewModel.refreshSummary()
         XCTAssertNotNil(homeViewModel.summary.lastBackupDescription)
@@ -693,7 +702,8 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         let transferViewModel = TransferPageViewModel(
             model: model,
-            telemetryService: NoopTelemetryService()
+            telemetryService: NoopTelemetryService(),
+            transportResolver: model.transferService
         )
         let orchestrationTask = Task {
             await transferViewModel.orchestrateTransfer()
@@ -765,7 +775,8 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         let transferViewModel = TransferPageViewModel(
             model: model,
-            telemetryService: NoopTelemetryService()
+            telemetryService: NoopTelemetryService(),
+            transportResolver: model.transferService
         )
         let orchestrationTask = Task {
             await transferViewModel.orchestrateTransfer()
@@ -986,11 +997,16 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, "pairing-replacement-001")
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
-        let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
-        XCTAssertEqual(
-            stopRecord?.attributes["transfer.stop_reason"],
-            .string("replaced_by_universal_link")
-        )
+        var stopReasonAttribute: MobileTelemetryAttributeValue?
+        for _ in 0..<20 {
+            let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
+            stopReasonAttribute = stopRecord?.attributes["transfer.stop_reason"]
+            if stopReasonAttribute != nil {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(stopReasonAttribute, .string("replaced_by_universal_link"))
 
         await transferTask.value
     }
@@ -1064,7 +1080,8 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
         let transferViewModel = TransferPageViewModel(
             model: model,
-            telemetryService: NoopTelemetryService()
+            telemetryService: NoopTelemetryService(),
+            transportResolver: model.transferService
         )
         await transferViewModel.orchestrateTransfer()
 
@@ -1112,7 +1129,8 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.selectRemoveAfterBackupPreference(false)
         let transferViewModel = TransferPageViewModel(
             model: model,
-            telemetryService: NoopTelemetryService()
+            telemetryService: NoopTelemetryService(),
+            transportResolver: model.transferService
         )
         await transferViewModel.orchestrateTransfer()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -1228,6 +1246,7 @@ final class MobileAppModelTests: XCTestCase {
         let telemetryContextProvider = DefaultTelemetryContextProvider()
         let telemetryService = DefaultTelemetryService(
             transferService: transferService,
+            transportResolver: transferService,
             telemetryClient: telemetryClient,
             contextProvider: telemetryContextProvider
         )
@@ -1253,7 +1272,8 @@ final class MobileAppModelTests: XCTestCase {
         await permissionsViewModel.selectRemoveAfterBackupPreference(true)
         let transferViewModel = TransferPageViewModel(
             model: model,
-            telemetryService: telemetryService
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
         )
         await transferViewModel.orchestrateTransfer()
         try? await Task.sleep(nanoseconds: 50_000_000)

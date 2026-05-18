@@ -175,9 +175,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         )
     )
     var backupFlowState: MobileBackupFlowState = .pairingCompleted
-    var pairingStatus = PairingStatus(
-        transport: .lan
-    )
     var pairingService: PairingService = DemoPairingService()
     var transferService: TransferService = PermissionsGatePreviewTransferService()
     var errorSummary = ErrorSummary.generic

@@ -10,10 +10,6 @@ struct ScanningPageViewModel {
         self.telemetryService = telemetryService
     }
 
-    var status: PairingStatus {
-        model.pairingStatus
-    }
-
     func onQRScanned(scannedValue: String) async {
         telemetryService.recordInteraction(name: "start_pairing_tapped", location: "pairing")
         let result = ScanningPageResult(result: .success(scannedValue))

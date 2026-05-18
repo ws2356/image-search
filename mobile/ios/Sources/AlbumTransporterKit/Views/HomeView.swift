@@ -425,14 +425,14 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
         backupSession: nil,
         permissionSummary: .allClear,
         transferSnapshot: nil,
-        backupFlowState: .pendingPairing,
-        pairingStatus: .idle
+        backupFlowState: .pendingPairing
     )
     let telemetryService = HomeViewPreviewTelemetryService()
     HomeView(
         viewModel: HomePageViewModel(
             model: model,
-            telemetryService: telemetryService
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
         )
     )
 }
@@ -463,16 +463,14 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
             isCharging: true
         ),
         transferSnapshot: snapshot,
-        backupFlowState: .transferStopped,
-        pairingStatus: PairingStatus(
-            transport: .usb
-        )
+        backupFlowState: .transferStopped
     )
     let telemetryService = HomeViewPreviewTelemetryService()
     HomeView(
         viewModel: HomePageViewModel(
             model: model,
-            telemetryService: telemetryService
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
         )
     )
 }
@@ -481,7 +479,6 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
 private final class HomeViewPreviewPageModel: AppPageModeling {
     let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState = .pendingPairing
-    var pairingStatus = PairingStatus.idle
     var permissionService: PermissionService
     var transferService: TransferService
     var errorSummary = ErrorSummary.generic
@@ -491,14 +488,12 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
         backupSession: BackupSession?,
         permissionSummary: PermissionSummary,
         transferSnapshot: TransferSnapshot?,
-        backupFlowState: MobileBackupFlowState,
-        pairingStatus: PairingStatus
+        backupFlowState: MobileBackupFlowState
     ) {
         backupSessionProvider = PreviewBackupSessionProvider(session: backupSession)
         permissionService = HomeViewPreviewPermissionService(summary: permissionSummary)
         transferService = HomeViewPreviewTransferService(snapshot: transferSnapshot)
         self.backupFlowState = backupFlowState
-        self.pairingStatus = pairingStatus
     }
 
     func requestStopTransfer() {}

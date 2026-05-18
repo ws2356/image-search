@@ -389,7 +389,8 @@ private extension TransferTransport {
     TransferSessionView(
         viewModel: TransferPageViewModel(
             model: model,
-            telemetryService: telemetryService
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
         )
     )
 }
@@ -408,7 +409,8 @@ private extension TransferTransport {
     TransferSessionView(
         viewModel: TransferPageViewModel(
             model: model,
-            telemetryService: telemetryService
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
         )
     )
 }
@@ -443,9 +445,6 @@ private extension TransferSnapshot {
 private final class TransferSessionPreviewModel: TransferPageModeling {
     let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState = .transferInProgress
-    var pairingStatus = PairingStatus(
-        transport: .usb
-    )
     var permissionService: PermissionService
     var route: AppRoute = .transfer
     var errorSummary = ErrorSummary.generic
@@ -463,7 +462,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
         )
         permissionService = TransferSessionPreviewPermissionService(summary: permissionSummary)
         transferService = TransferSessionPreviewTransferService(snapshot: snapshot)
-        pairingStatus.transport = snapshot.transport
     }
 
     func requestStopTransfer() {}

@@ -20,12 +20,18 @@ struct HomeViewState: Equatable {
 @MainActor
 final class HomePageViewModel: ObservableObject {
     private let model: any AppPageModeling
+    private let transportResolver: AppTransferTransportResolving
     private let telemetryService: TelemetryService
     @Published private(set) var summary: HomeViewState = .firstLaunch
 
-    init(model: any AppPageModeling, telemetryService: TelemetryService) {
+    init(
+        model: any AppPageModeling,
+        telemetryService: TelemetryService,
+        transportResolver: AppTransferTransportResolving
+    ) {
         self.model = model
         self.telemetryService = telemetryService
+        self.transportResolver = transportResolver
     }
 
     func handlePrimaryActionTapped() async {
@@ -38,12 +44,13 @@ final class HomePageViewModel: ObservableObject {
         let permissionSummary = await model.permissionService.loadPermissionSummary()
         let backupSession = model.backupSessionProvider.backupSession
         let transferSnapshot = await model.transferService.progressSnapshot()
+        let fallbackTransport = await transportResolver.currentTransport() ?? .lan
         summary = Self.renderSummary(
             backupSession: backupSession,
             transferSnapshot: transferSnapshot,
             permissionScope: permissionSummary.mediaScope,
             backupFlowState: model.backupFlowState,
-            pairingStatus: model.pairingStatus
+            fallbackTransport: fallbackTransport
         )
     }
 
@@ -52,7 +59,7 @@ final class HomePageViewModel: ObservableObject {
         transferSnapshot: TransferSnapshot?,
         permissionScope: PermissionScope,
         backupFlowState: MobileBackupFlowState,
-        pairingStatus: PairingStatus
+        fallbackTransport: TransferTransport
     ) -> HomeViewState {
         var summary = HomeViewState(
             desktopName: backupSession?.desktopName,
@@ -75,7 +82,7 @@ final class HomePageViewModel: ObservableObject {
             summary.lastBackupDescription = "The last backup session ended with failures."
         case .stopped:
             let resolvedTransferSnapshot = transferSnapshot
-                ?? TransferSnapshot.empty(transport: pairingStatus.transport ?? .lan, phase: .stopped)
+                ?? TransferSnapshot.empty(transport: fallbackTransport, phase: .stopped)
             let totalAttempted = max(
                 resolvedTransferSnapshot.totalCount,
                 resolvedTransferSnapshot.transferredCount + resolvedTransferSnapshot.failedCount

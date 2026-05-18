@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 final class TransferPageViewModel: ObservableObject {
     private let model: any TransferPageModeling
+    private let transportResolver: AppTransferTransportResolving
     private let telemetryService: TelemetryService
     private let pollingIntervalNanoseconds: UInt64
     private var transferPollingTask: Task<Void, Never>?
@@ -19,12 +20,14 @@ final class TransferPageViewModel: ObservableObject {
     init(
         model: any TransferPageModeling,
         telemetryService: TelemetryService,
+        transportResolver: AppTransferTransportResolving,
         pollingIntervalNanoseconds: UInt64 = 1_000_000_000
     ) {
         self.model = model
+        self.transportResolver = transportResolver
         self.telemetryService = telemetryService
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
-        let initialSnapshot = TransferSnapshot.empty(transport: model.pairingStatus.transport ?? .lan)
+        let initialSnapshot = TransferSnapshot.empty(transport: .lan)
         self.snapshot = initialSnapshot
     }
 
@@ -121,6 +124,8 @@ final class TransferPageViewModel: ObservableObject {
 
     private func loadCurrentSnapshot() async {
         guard let stagedSnapshot = await transferService.progressSnapshot() else {
+            let fallbackTransport = await transportResolver.currentTransport() ?? .lan
+            snapshot = .empty(transport: fallbackTransport)
             isIncompleteLibrary = await model.permissionService.loadPermissionSummary().mediaScope != .full
             return
         }

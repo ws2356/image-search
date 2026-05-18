@@ -4,7 +4,6 @@ import Foundation
 protocol AppPageModeling: AnyObject {
     var backupSessionProvider: BackupSessionProviding { get }
     var backupFlowState: MobileBackupFlowState { get }
-    var pairingStatus: PairingStatus { get }
     var permissionService: PermissionService { get }
     var transferService: TransferService { get }
     var errorSummary: ErrorSummary { get }

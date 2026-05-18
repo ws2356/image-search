@@ -140,7 +140,12 @@ extension PermissionService {
     }
 }
 
-protocol TransferService: Sendable {
+protocol AppTransferTransportResolving: Sendable {
+    func currentTransport() async -> TransferTransport?
+    func currentLiveTransports() async -> [TransferTransport]
+}
+
+protocol TransferService: Sendable, AppTransferTransportResolving {
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot
     func stopTransfer() async -> InterruptionReason
     func completeTransfer() async -> TransferSnapshot
@@ -153,6 +158,24 @@ protocol TransferService: Sendable {
 
 extension TransferService {
     func handleAppDidBecomeActive() async {}
+
+    func currentTransport() async -> TransferTransport? {
+        await resolvedTransportSnapshot()?.transport
+    }
+
+    func currentLiveTransports() async -> [TransferTransport] {
+        guard let snapshot = await resolvedTransportSnapshot() else {
+            return []
+        }
+        return snapshot.activeTransportsForDisplay
+    }
+
+    private func resolvedTransportSnapshot() async -> TransferSnapshot? {
+        if let progressSnapshot = await progressSnapshot() {
+            return progressSnapshot
+        }
+        return await transferCompletionState()?.snapshot
+    }
 }
 
 enum TransferAssetCleanupResult: Equatable, Sendable {

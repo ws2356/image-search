@@ -17,10 +17,6 @@ final class PairingPageViewModel: ObservableObject {
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
     }
 
-    var status: PairingStatus {
-        model.pairingStatus
-    }
-
     func orchestratePairing() async {
         guard case .pair(let qrString) = model.route,
               model.backupFlowState == .pendingPairing

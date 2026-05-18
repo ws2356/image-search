@@ -25,7 +25,8 @@ public struct AlbumTransporterRootView: View {
         _homeViewModel = StateObject(
             wrappedValue: HomePageViewModel(
                 model: model,
-                telemetryService: telemetryService
+                telemetryService: telemetryService,
+                transportResolver: model.transferService
             )
         )
         _pairingViewModel = StateObject(
@@ -44,7 +45,8 @@ public struct AlbumTransporterRootView: View {
         _transferViewModel = StateObject(
             wrappedValue: TransferPageViewModel(
                 model: model,
-                telemetryService: telemetryService
+                telemetryService: telemetryService,
+                transportResolver: model.transferService
             )
         )
         _completionViewModel = StateObject(

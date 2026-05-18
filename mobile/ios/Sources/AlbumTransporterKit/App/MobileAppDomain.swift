@@ -75,20 +75,6 @@ enum TransferTransport: String, Equatable, Hashable, Sendable, Codable {
     }
 }
 
-struct PairingStatus: Equatable, Sendable, Codable {
-    var transport: TransferTransport?
-
-    init(
-        transport: TransferTransport?
-    ) {
-        self.transport = transport
-    }
-
-    static let idle = PairingStatus(
-        transport: nil
-    )
-}
-
 enum BackupSessionStatus: String, Equatable, Sendable, Codable {
     case paired
     case stopped

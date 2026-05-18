@@ -6,7 +6,11 @@ final class PageViewModelTests: XCTestCase {
     func test_home_page_view_model_maps_summary_and_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
-        let viewModel = HomePageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = HomePageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
 
         await viewModel.refreshSummary()
         XCTAssertEqual(viewModel.summary, model.homeSummary)
@@ -20,9 +24,6 @@ final class PageViewModelTests: XCTestCase {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.backupFlowState = .transferStopped
-        model.pairingStatus = PairingStatus(
-            transport: .lan
-        )
         await model.backupSessionProvider.saveBackupSession(
             BackupSession(
                 sessionID: "session-1",
@@ -43,7 +44,11 @@ final class PageViewModelTests: XCTestCase {
                 isIncompleteLibrary: false
             )
         )
-        let viewModel = HomePageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = HomePageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
 
         await viewModel.refreshSummary()
 
@@ -55,12 +60,11 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.summary.desktopName, "Desk Mac")
     }
 
-    func test_scanning_page_view_model_maps_status_binding_and_actions() async {
+    func test_scanning_page_view_model_maps_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         let viewModel = ScanningPageViewModel(model: model, telemetryService: telemetryService)
 
-        XCTAssertEqual(viewModel.status, model.pairingStatus)
         await viewModel.onQRScanned(scannedValue: "qr-value")
         await viewModel.backTapped()
         await viewModel.openSettingsTapped()
@@ -86,7 +90,7 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(model.returnHomeCallCount, 1)
     }
 
-    func test_pairing_page_view_model_maps_status_binding_and_actions() async {
+    func test_pairing_page_view_model_maps_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         let viewModel = PairingPageViewModel(
@@ -94,8 +98,6 @@ final class PageViewModelTests: XCTestCase {
             telemetryService: telemetryService,
             qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder()
         )
-
-        XCTAssertEqual(viewModel.status, model.pairingStatus)
 
         await viewModel.backTapped()
 
@@ -106,9 +108,6 @@ final class PageViewModelTests: XCTestCase {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
-        model.pairingStatus = PairingStatus(
-            transport: nil
-        )
         let viewModel = PairingPageViewModel(
             model: model,
             telemetryService: telemetryService,
@@ -127,9 +126,6 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.backupFlowState = .pairingStopped
-        model.pairingStatus = PairingStatus(
-            transport: nil
-        )
         let viewModel = PairingPageViewModel(
             model: model,
             telemetryService: telemetryService,
@@ -201,6 +197,7 @@ final class PageViewModelTests: XCTestCase {
         let viewModel = TransferPageViewModel(
             model: model,
             telemetryService: telemetryService,
+            transportResolver: model.transferService,
             pollingIntervalNanoseconds: 10_000_000
         )
 
@@ -244,7 +241,11 @@ final class PageViewModelTests: XCTestCase {
             ),
             callbackDelayNanoseconds: 200_000_000
         )
-        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
 
         let transferTask = Task { @MainActor in
             await viewModel.orchestrateTransfer()
@@ -285,7 +286,11 @@ final class PageViewModelTests: XCTestCase {
             callbackDelayNanoseconds: 200_000_000
         )
         model.route = .transfer
-        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
 
         await viewModel.orchestrateTransfer()
 
@@ -298,7 +303,11 @@ final class PageViewModelTests: XCTestCase {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .transfer
-        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
 
         await model.transferServiceActor.configureProgressSequence(
             initialSnapshot: TransferSnapshot(
@@ -381,7 +390,11 @@ final class PageViewModelTests: XCTestCase {
             ),
             callbackDelayNanoseconds: 200_000_000
         )
-        let viewModel = TransferPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
 
         let transferTask = Task { @MainActor in
             await viewModel.orchestrateTransfer()
@@ -411,7 +424,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         interruptionWarning: nil
     )
     var backupFlowState: MobileBackupFlowState = .pendingPairing
-    var pairingStatus = PairingStatus.idle
     var permissionSummary = PermissionSummary.demo
     var errorSummary = ErrorSummary.generic
     var route = AppRoute.home
@@ -485,9 +497,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     func onPairingCompleted(with result: PairingPageResult) async {
         switch result.result {
         case .success(let response):
-            pairingStatus = PairingStatus(
-                transport: response.transport
-            )
             await backupSessionProvider.saveBackupSession(
                 status: .paired,
                 sessionID: response.sessionID,

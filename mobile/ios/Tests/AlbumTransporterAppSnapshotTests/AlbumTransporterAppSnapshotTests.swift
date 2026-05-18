@@ -29,15 +29,15 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
             permissionSummary: .allClear,
             completionState: nil,
             route: .home,
-            backupFlowState: .pendingPairing,
-            pairingStatus: .idle
+            backupFlowState: .pendingPairing
         )
         let telemetryService = SnapshotTelemetryService()
         let viewController = makeHostedPage(title: "AuBackup") {
             HomeView(
                 viewModel: HomePageViewModel(
                     model: homeModel,
-                    telemetryService: telemetryService
+                    telemetryService: telemetryService,
+                    transportResolver: homeModel.transferService
                 )
             )
         }
@@ -49,7 +49,8 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
         let telemetryService = SnapshotTelemetryService()
         let transferViewModel = TransferPageViewModel(
             model: transferModel,
-            telemetryService: telemetryService
+            telemetryService: telemetryService,
+            transportResolver: transferModel.transferService
         )
         let loadedExpectation = expectation(description: "transfer snapshot loaded")
         Task { @MainActor in
@@ -91,10 +92,7 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
                 sessionDuration: 24 * 60
             ),
             route: .completed,
-            backupFlowState: .transferCompleted,
-            pairingStatus: PairingStatus(
-                transport: .usb
-            )
+            backupFlowState: .transferCompleted
         )
         let telemetryService = SnapshotTelemetryService()
         let completionViewModel = CompletionPageViewModel(
@@ -166,7 +164,6 @@ private final class SnapshotBackupSessionProvider: BackupSessionProviding {
 private final class SnapshotAppPageModel: AppPageModeling {
     let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState
-    var pairingStatus: PairingStatus
     var permissionService: PermissionService
     var errorSummary = ErrorSummary.generic
     var route: AppRoute
@@ -177,15 +174,13 @@ private final class SnapshotAppPageModel: AppPageModeling {
         permissionSummary: PermissionSummary,
         completionState: TransferCompletionState?,
         route: AppRoute,
-        backupFlowState: MobileBackupFlowState,
-        pairingStatus: PairingStatus
+        backupFlowState: MobileBackupFlowState
     ) {
         backupSessionProvider = SnapshotBackupSessionProvider(session: backupSession)
         permissionService = SnapshotPermissionService(summary: permissionSummary)
         self.route = route
         self.backupFlowState = backupFlowState
-        self.pairingStatus = pairingStatus
-        let snapshot = completionState?.snapshot ?? .empty(transport: pairingStatus.transport ?? .lan)
+        let snapshot = completionState?.snapshot ?? .empty(transport: .lan)
         self.transferService = SnapshotTransferService(
             snapshot: snapshot,
             completionState: completionState
@@ -206,7 +201,6 @@ private final class SnapshotAppPageModel: AppPageModeling {
 private final class SnapshotTransferPageModel: TransferPageModeling {
     let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState = .transferInProgress
-    var pairingStatus: PairingStatus
     var permissionService: PermissionService
     var errorSummary = ErrorSummary.generic
     var route = AppRoute.transfer
@@ -222,9 +216,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
             )
         )
         permissionService = SnapshotPermissionService(summary: .allClear)
-        pairingStatus = PairingStatus(
-            transport: snapshot.transport
-        )
         self.transferService = SnapshotTransferService(snapshot: snapshot, completionState: nil)
     }
 

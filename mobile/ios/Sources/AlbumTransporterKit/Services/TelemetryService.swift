@@ -35,13 +35,11 @@ protocol TelemetryContextProvider {
 struct TelemetryContext {
     let route: AppRoute
     let backupFlowState: MobileBackupFlowState
-    let pairingStatus: PairingStatus
     let backupSession: BackupSession?
 
     static let empty = TelemetryContext(
         route: .home,
         backupFlowState: .pendingPairing,
-        pairingStatus: .idle,
         backupSession: nil
     )
 }
@@ -62,15 +60,18 @@ final class DefaultTelemetryContextProvider: TelemetryContextProvider {
 @MainActor
 final class DefaultTelemetryService: TelemetryService {
     private let transferService: TransferService
+    private let transportResolver: AppTransferTransportResolving
     private let telemetryClient: TelemetryClient
     private let contextProvider: TelemetryContextProvider
 
     init(
         transferService: TransferService,
+        transportResolver: AppTransferTransportResolving,
         telemetryClient: TelemetryClient,
         contextProvider: TelemetryContextProvider
     ) {
         self.transferService = transferService
+        self.transportResolver = transportResolver
         self.telemetryClient = telemetryClient
         self.contextProvider = contextProvider
     }
@@ -80,14 +81,16 @@ final class DefaultTelemetryService: TelemetryService {
         attributes: MobileTelemetryAttributes = [:]
     ) {
         let transferService = transferService
+        let transportResolver = transportResolver
         let telemetryClient = telemetryClient
         let context = contextProvider.currentContext()
         Task {
             let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
+            let mergedAttributes = await mergedTelemetryAttributes(
                 extraAttributes: attributes,
                 context: context,
-                transferSnapshot: transferSnapshot
+                transferSnapshot: transferSnapshot,
+                transportResolver: transportResolver
             )
             await telemetryClient.record(event: event, attributes: mergedAttributes)
         }
@@ -98,14 +101,16 @@ final class DefaultTelemetryService: TelemetryService {
         attributes: MobileTelemetryAttributes = [:]
     ) {
         let transferService = transferService
+        let transportResolver = transportResolver
         let telemetryClient = telemetryClient
         let context = contextProvider.currentContext()
         Task {
             let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
+            let mergedAttributes = await mergedTelemetryAttributes(
                 extraAttributes: attributes,
                 context: context,
-                transferSnapshot: transferSnapshot
+                transferSnapshot: transferSnapshot,
+                transportResolver: transportResolver
             )
             await telemetryClient.begin(span: span, attributes: mergedAttributes)
         }
@@ -117,14 +122,16 @@ final class DefaultTelemetryService: TelemetryService {
         status: MobileTelemetrySpanStatus? = nil
     ) {
         let transferService = transferService
+        let transportResolver = transportResolver
         let telemetryClient = telemetryClient
         let context = contextProvider.currentContext()
         Task {
             let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
+            let mergedAttributes = await mergedTelemetryAttributes(
                 extraAttributes: attributes,
                 context: context,
-                transferSnapshot: transferSnapshot
+                transferSnapshot: transferSnapshot,
+                transportResolver: transportResolver
             )
             await telemetryClient.end(span: span, attributes: mergedAttributes, status: status)
         }
@@ -136,14 +143,16 @@ final class DefaultTelemetryService: TelemetryService {
         attributes: MobileTelemetryAttributes = [:]
     ) {
         let transferService = transferService
+        let transportResolver = transportResolver
         let telemetryClient = telemetryClient
         let context = contextProvider.currentContext()
         Task {
             let transferSnapshot = await transferService.progressSnapshot() ?? .demo
-            let mergedAttributes = mergedTelemetryAttributes(
+            let mergedAttributes = await mergedTelemetryAttributes(
                 extraAttributes: attributes,
                 context: context,
-                transferSnapshot: transferSnapshot
+                transferSnapshot: transferSnapshot,
+                transportResolver: transportResolver
             )
             await telemetryClient.increment(metric: metric, by: value, attributes: mergedAttributes)
         }
@@ -183,8 +192,9 @@ final class DefaultTelemetryService: TelemetryService {
 
     private func telemetryContextAttributes(
         context: TelemetryContext,
-        transferSnapshot: TransferSnapshot
-    ) -> MobileTelemetryAttributes {
+        transferSnapshot: TransferSnapshot,
+        transportResolver: AppTransferTransportResolving
+    ) async -> MobileTelemetryAttributes {
         var attributes: MobileTelemetryAttributes = [
             "app.route": .string(routeName(context.route)),
             "backup.flow_state": .string(context.backupFlowState.rawValue),
@@ -193,7 +203,8 @@ final class DefaultTelemetryService: TelemetryService {
             "transfer.total_count": .int(transferSnapshot.totalCount),
             "transfer.failed_count": .int(transferSnapshot.failedCount)
         ]
-        if let transport = context.pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
+        if let transport = await transportResolver.currentTransport()
+            ?? transferSnapshot.activeTransportsForDisplay.first {
             attributes["transfer.transport"] = .string(transport.rawValue)
         }
         if let sessionID = context.backupSession?.sessionID,
@@ -213,11 +224,13 @@ final class DefaultTelemetryService: TelemetryService {
     private func mergedTelemetryAttributes(
         extraAttributes: MobileTelemetryAttributes,
         context: TelemetryContext,
-        transferSnapshot: TransferSnapshot
-    ) -> MobileTelemetryAttributes {
-        var merged = telemetryContextAttributes(
+        transferSnapshot: TransferSnapshot,
+        transportResolver: AppTransferTransportResolving
+    ) async -> MobileTelemetryAttributes {
+        var merged = await telemetryContextAttributes(
             context: context,
-            transferSnapshot: transferSnapshot
+            transferSnapshot: transferSnapshot,
+            transportResolver: transportResolver
         )
         for (key, value) in extraAttributes {
             merged[key] = value

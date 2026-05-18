@@ -7,9 +7,6 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var route: AppRoute = .home {
         didSet { pushTelemetryContext() }
     }
-    @Published private(set) var pairingStatus = PairingStatus.idle {
-        didSet { pushTelemetryContext() }
-    }
     @Published private(set) var errorSummary = ErrorSummary.generic
 
     @Published var isShowingIncomingLinkReplacementConfirmation = false
@@ -89,9 +86,6 @@ final class MobileAppModel: ObservableObject {
     func onPairingCompleted(with result: PairingPageResult) async {
         switch result.result {
         case .success(let pairingResponse):
-            pairingStatus = PairingStatus(
-                transport: pairingResponse.transport
-            )
             transitionBackupFlow(.pairingAccepted)
             await backupSessionProvider.saveBackupSession(
                 status: .paired,
@@ -248,12 +242,10 @@ final class MobileAppModel: ObservableObject {
         await permissionService.setRemoveAfterBackupEnabled(false)
         let persistedBackupSession = backupSessionProvider.backupSession
         if let persistedBackupSession {
-            pairingStatus = pairingStatus(for: persistedBackupSession)
             backupFlowStateMachine = MobileBackupFlowStateMachine(
                 state: backupFlowState(for: persistedBackupSession.status)
             )
         } else {
-            pairingStatus = .idle
             backupFlowStateMachine = MobileBackupFlowStateMachine()
         }
         route = .home
@@ -270,9 +262,6 @@ final class MobileAppModel: ObservableObject {
         errorSummary = .generic
         beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
-        pairingStatus = PairingStatus(
-            transport: nil
-        )
         route = .scan
         recordTelemetry(.scanStarted)
     }
@@ -315,9 +304,6 @@ final class MobileAppModel: ObservableObject {
         beginTelemetrySpan(.pairingFlow)
         transitionBackupFlow(.pairingStarted)
         route = .pair(qrString: qrString)
-        pairingStatus = PairingStatus(
-            transport: nil
-        )
         recordTelemetry(.pairingStarted)
     }
 
@@ -614,7 +600,6 @@ final class MobileAppModel: ObservableObject {
         TelemetryContext(
             route: route,
             backupFlowState: backupFlowStateMachine.state,
-            pairingStatus: pairingStatus,
             backupSession: backupSessionProvider.backupSession
         )
     }
@@ -733,13 +718,11 @@ final class MobileAppModel: ObservableObject {
     }
 
     private func currentTransferSnapshot() async -> TransferSnapshot {
-        await transferService.progressSnapshot() ?? .empty(transport: pairingStatus.transport ?? .lan)
-    }
-
-    private func pairingStatus(for session: BackupSession) -> PairingStatus {
-        PairingStatus(
-            transport: nil
-        )
+        if let transferSnapshot = await transferService.progressSnapshot() {
+            return transferSnapshot
+        }
+        let fallbackTransport = await transferService.currentTransport() ?? .lan
+        return .empty(transport: fallbackTransport)
     }
 
     private func backupFlowState(for status: BackupSessionStatus) -> MobileBackupFlowState {

@@ -114,6 +114,7 @@ extension Container {
             @MainActor in
             DefaultTelemetryService(
                 transferService: self.transferService(),
+                transportResolver: self.transferService(),
                 telemetryClient: self.telemetryClient(),
                 contextProvider: self.telemetryContextProvider()
             )
