@@ -459,6 +459,7 @@ final class MobileAppModelTests: XCTestCase {
         await startPairing(model: model)
 
         _ = requireErrorSummary(from: model.route)
+        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingStopped)
     }
 
     func test_start_backup_shows_full_media_access_reminder_before_continuing() async {
@@ -1182,6 +1183,8 @@ final class MobileAppModelTests: XCTestCase {
             failureRecord?.attributes["app.route"],
             .string("pair")
         )
+        XCTAssertEqual(model.backupFlowState, .pairingFailed)
+        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingFailed)
     }
 
     func test_invalid_qr_code_navigates_to_error_page() async {
@@ -1225,6 +1228,8 @@ final class MobileAppModelTests: XCTestCase {
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")
         }
+        XCTAssertEqual(model.backupFlowState, .pairingFailed)
+        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingFailed)
         let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
         XCTAssertEqual(
             failureRecord?.attributes["pairing.failure_reason"],

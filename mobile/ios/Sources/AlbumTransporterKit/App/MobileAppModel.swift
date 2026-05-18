@@ -87,7 +87,7 @@ final class MobileAppModel: ObservableObject {
         case .success(let pairingResponse):
             transitionBackupFlow(.pairingAccepted)
             await backupSessionProvider.saveBackupSession(
-                status: .paired,
+                status: .pairingCompleted,
                 sessionID: pairingResponse.sessionID,
                 desktopName: pairingResponse.desktopName
             )
@@ -114,7 +114,7 @@ final class MobileAppModel: ObservableObject {
                 status: .error("desktop_stopped_pairing")
             )
             await backupSessionProvider.saveBackupSession(
-                status: .failed,
+                status: .pairingStopped,
                 sessionID: backupSessionProvider.backupSession?.sessionID,
                 desktopName: backupSessionProvider.backupSession?.desktopName
             )
@@ -123,17 +123,31 @@ final class MobileAppModel: ObservableObject {
                 message: message
             )
 
+        case .failure(.expired(let message)):
+            transitionBackupFlow(.pairingExpired)
+            reportPairingFailure(
+                reason: PairingError.expired(message: message).title,
+                pairingAttributes: [
+                    "pairing.failure_message": .string(message)
+                ]
+            )
+            presentErrorSummary(
+                title: PairingError.expired(message: message).title,
+                message: message
+            )
+
         case .failure(let error):
-            if case .expired = error {
-                transitionBackupFlow(.pairingExpired)
-            } else {
-                transitionBackupFlow(.pairingStarted)
-            }
+            transitionBackupFlow(.pairingFailed)
             reportPairingFailure(
                 reason: error.title,
                 pairingAttributes: [
                     "pairing.failure_message": .string(error.message)
                 ]
+            )
+            await backupSessionProvider.saveBackupSession(
+                status: .pairingFailed,
+                sessionID: backupSessionProvider.backupSession?.sessionID,
+                desktopName: backupSessionProvider.backupSession?.desktopName
             )
             presentErrorSummary(
                 title: error.title,
@@ -242,7 +256,7 @@ final class MobileAppModel: ObservableObject {
         let persistedBackupSession = backupSessionProvider.backupSession
         if let persistedBackupSession {
             backupFlowStateMachine = MobileBackupFlowStateMachine(
-                state: backupFlowState(for: persistedBackupSession.status)
+                state: persistedBackupSession.status
             )
         } else {
             backupFlowStateMachine = MobileBackupFlowStateMachine()
@@ -326,7 +340,7 @@ final class MobileAppModel: ObservableObject {
             status: .error(reason)
         )
         await backupSessionProvider.saveBackupSession(
-            status: .stopped,
+            status: .transferStopped,
             sessionID: backupSessionProvider.backupSession?.sessionID,
             desktopName: backupSessionProvider.backupSession?.desktopName
         )
@@ -363,7 +377,7 @@ final class MobileAppModel: ObservableObject {
             status: .error(reason)
         )
         await backupSessionProvider.saveBackupSession(
-            status: .stopped,
+            status: .transferStopped,
             sessionID: backupSessionProvider.backupSession?.sessionID,
             desktopName: backupSessionProvider.backupSession?.desktopName
         )
@@ -407,7 +421,7 @@ final class MobileAppModel: ObservableObject {
             status: completionStatus
         )
         await backupSessionProvider.saveBackupSession(
-            status: snapshot.failedCount == 0 ? .completed : .failed,
+            status: snapshot.failedCount == 0 ? .transferCompleted : .transferFailed,
             sessionID: backupSessionProvider.backupSession?.sessionID,
             desktopName: backupSessionProvider.backupSession?.desktopName
         )
@@ -717,16 +731,4 @@ final class MobileAppModel: ObservableObject {
         return .empty(transport: fallbackTransport)
     }
 
-    private func backupFlowState(for status: BackupSessionStatus) -> MobileBackupFlowState {
-        switch status {
-        case .paired:
-            return .pairingCompleted
-        case .stopped:
-            return .transferStopped
-        case .completed:
-            return .transferCompleted
-        case .failed:
-            return .transferFailed
-        }
-    }
 }

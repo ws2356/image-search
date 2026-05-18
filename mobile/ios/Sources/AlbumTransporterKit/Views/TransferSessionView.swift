@@ -455,7 +455,7 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
             session: BackupSession(
                 sessionID: "preview-session",
                 desktopName: "Desk Mac",
-                status: .paired,
+                status: .pairingCompleted,
                 updatedAt: Date()
             )
         )

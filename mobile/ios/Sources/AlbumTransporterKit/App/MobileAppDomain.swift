@@ -75,17 +75,10 @@ enum TransferTransport: String, Equatable, Hashable, Sendable, Codable {
     }
 }
 
-enum BackupSessionStatus: String, Equatable, Sendable, Codable {
-    case paired
-    case stopped
-    case completed
-    case failed
-}
-
 struct BackupSession: Equatable, Sendable, Codable {
     var sessionID: String?
     var desktopName: String?
-    var status: BackupSessionStatus
+    var status: MobileBackupFlowState
     var updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -98,7 +91,7 @@ struct BackupSession: Equatable, Sendable, Codable {
     init(
         sessionID: String?,
         desktopName: String?,
-        status: BackupSessionStatus,
+        status: MobileBackupFlowState,
         updatedAt: Date
     ) {
         self.sessionID = sessionID
@@ -111,7 +104,7 @@ struct BackupSession: Equatable, Sendable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
         desktopName = try container.decodeIfPresent(String.self, forKey: .desktopName)
-        status = try container.decode(BackupSessionStatus.self, forKey: .status)
+        status = try container.decode(MobileBackupFlowState.self, forKey: .status)
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
 }

@@ -6,6 +6,7 @@ enum MobileBackupFlowState: String, Equatable, Sendable, Codable {
     case pairingCompleted
     case pairingExpired
     case pairingStopped
+    case pairingFailed
     case transferInProgress
     case transferStopped
     case transferCompleted
@@ -48,7 +49,7 @@ struct MobileBackupFlowStateMachine: Equatable, Sendable {
         case (.pendingPairing, .pairingAccepted):
             return .pairingCompleted
         case (.pendingPairing, .pairingFailed):
-            return .pendingPairing
+            return .pairingFailed
         case (.pendingPairing, .pairingMismatchDetected):
             return .pairingMismatched
         case (.pendingPairing, .pairingExpired):
@@ -64,7 +65,9 @@ struct MobileBackupFlowStateMachine: Equatable, Sendable {
             return .pairingExpired
         case (.pairingMismatched, .pairingStopped):
             return .pairingStopped
-        case (.pairingMismatched, .pairingFailed), (.pairingMismatched, .pairingStarted):
+        case (.pairingMismatched, .pairingFailed):
+            return .pairingFailed
+        case (.pairingMismatched, .pairingStarted):
             return .pendingPairing
 
         case (.pairingCompleted, .pairingAccepted):
@@ -76,7 +79,7 @@ struct MobileBackupFlowStateMachine: Equatable, Sendable {
         case (.pairingCompleted, .transferStarted):
             return .transferInProgress
         case (.pairingCompleted, .pairingFailed):
-            return .pendingPairing
+            return .pairingFailed
 
         case (.pairingExpired, .pairingExpired):
             return .pairingExpired
@@ -86,15 +89,30 @@ struct MobileBackupFlowStateMachine: Equatable, Sendable {
             return .pairingMismatched
         case (.pairingExpired, .pairingStopped):
             return .pairingStopped
-        case (.pairingExpired, .pairingStarted), (.pairingExpired, .pairingFailed):
+        case (.pairingExpired, .pairingStarted):
             return .pendingPairing
+        case (.pairingExpired, .pairingFailed):
+            return .pairingFailed
 
         case (.pairingStopped, .pairingStopped):
             return .pairingStopped
         case (.pairingStopped, .pairingAccepted):
             return .pairingCompleted
-        case (.pairingStopped, .pairingStarted), (.pairingStopped, .pairingFailed):
+        case (.pairingStopped, .pairingStarted):
             return .pendingPairing
+        case (.pairingStopped, .pairingFailed):
+            return .pairingFailed
+
+        case (.pairingFailed, .pairingFailed):
+            return .pairingFailed
+        case (.pairingFailed, .pairingStarted):
+            return .pendingPairing
+        case (.pairingFailed, .pairingAccepted):
+            return .pairingCompleted
+        case (.pairingFailed, .pairingExpired):
+            return .pairingExpired
+        case (.pairingFailed, .pairingStopped):
+            return .pairingStopped
 
         case (.transferInProgress, .transferStarted):
             return .transferInProgress

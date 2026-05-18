@@ -170,7 +170,7 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         session: BackupSession(
             sessionID: "preview-session",
             desktopName: "Desk Mac",
-            status: .paired,
+            status: .pairingCompleted,
             updatedAt: Date()
         )
     )

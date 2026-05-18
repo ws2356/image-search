@@ -74,13 +74,13 @@ final class HomePageViewModel: ObservableObject {
         }
 
         switch backupSession.status {
-        case .paired:
+        case .pairingCompleted, .transferInProgress:
             summary.lastBackupDescription = "Paired and ready for backup."
-        case .completed:
+        case .transferCompleted:
             summary.lastBackupDescription = "Last backup completed just now."
-        case .failed:
+        case .pairingFailed, .transferFailed:
             summary.lastBackupDescription = "The last backup session ended with failures."
-        case .stopped:
+        case .pairingStopped, .transferStopped:
             let resolvedTransferSnapshot = transferSnapshot
                 ?? TransferSnapshot.empty(transport: fallbackTransport, phase: .stopped)
             let totalAttempted = max(
@@ -97,6 +97,8 @@ final class HomePageViewModel: ObservableObject {
             if backupFlowState == .transferStopped {
                 summary.interruptionWarning = "The previous session stopped before all newly captured media finished transferring."
             }
+        case .pendingPairing, .pairingMismatched, .pairingExpired:
+            break
         }
 
         return summary

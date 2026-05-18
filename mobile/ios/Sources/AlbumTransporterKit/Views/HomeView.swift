@@ -455,7 +455,7 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
         backupSession: BackupSession(
             sessionID: "preview-session",
             desktopName: "Desk Mac",
-            status: .stopped,
+            status: .transferStopped,
             updatedAt: Date()
         ),
         permissionSummary: PermissionSummary(

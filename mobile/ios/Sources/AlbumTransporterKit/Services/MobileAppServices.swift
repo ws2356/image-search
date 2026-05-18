@@ -18,7 +18,7 @@ protocol BackupSessionProviding: AnyObject {
 @MainActor
 extension BackupSessionProviding {
     func saveBackupSession(
-        status: BackupSessionStatus,
+        status: MobileBackupFlowState,
         sessionID: String? = nil,
         desktopName: String? = nil
     ) async {

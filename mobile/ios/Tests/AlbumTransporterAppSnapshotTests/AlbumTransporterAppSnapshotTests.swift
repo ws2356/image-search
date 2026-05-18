@@ -81,7 +81,7 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
             backupSession: BackupSession(
                 sessionID: "snapshot-session",
                 desktopName: "Desk Mac",
-                status: .completed,
+                status: .transferCompleted,
                 updatedAt: Date()
             ),
             permissionSummary: .allClear,
@@ -208,7 +208,7 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
             session: BackupSession(
                 sessionID: "snapshot-session",
                 desktopName: "Desk Mac",
-                status: .paired,
+                status: .pairingCompleted,
                 updatedAt: Date()
             )
         )

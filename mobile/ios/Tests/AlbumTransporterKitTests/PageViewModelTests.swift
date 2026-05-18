@@ -28,7 +28,7 @@ final class PageViewModelTests: XCTestCase {
             BackupSession(
                 sessionID: "session-1",
                 desktopName: "Desk Mac",
-                status: .stopped,
+                status: .transferStopped,
                 updatedAt: Date()
             )
         )
@@ -121,6 +121,7 @@ final class PageViewModelTests: XCTestCase {
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
         XCTAssertEqual(startPairingCallCount, 1)
         XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
+        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingCompleted)
     }
 
     func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
@@ -488,7 +489,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         switch result.result {
         case .success(let response):
             await backupSessionProvider.saveBackupSession(
-                status: .paired,
+                status: .pairingCompleted,
                 sessionID: response.sessionID,
                 desktopName: response.desktopName
             )
