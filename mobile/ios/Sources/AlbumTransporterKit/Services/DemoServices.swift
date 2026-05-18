@@ -64,30 +64,24 @@ actor DemoTransferService: TransferService {
         return currentSnapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
+    func completeTransfer() async -> TransferSnapshot {
         try? await Task.sleep(nanoseconds: 150_000_000)
 
-        var resumed = snapshot
-        resumed.transferredCount = min(snapshot.totalCount, snapshot.transferredCount + 126)
-        resumed.failedCount = max(snapshot.failedCount - 1, 0)
-        resumed.etaMinutes = resumed.transferredCount == resumed.totalCount ? nil : 8
-        resumed.phase = .transferring
-        progress(resumed)
-        return resumed
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        try? await Task.sleep(nanoseconds: 150_000_000)
-
-        var completed = current
-        completed.transferredCount = current.totalCount
+        var completed = currentSnapshot
+        completed.transferredCount = completed.totalCount
         completed.etaMinutes = nil
         completed.phase = .completed
         currentSnapshot = completed
+        completionState = TransferCompletionState(
+            snapshot: completed,
+            cleanupResult: .skipped,
+            completedAt: Date(),
+            sessionDuration: nil
+        )
         return completed
     }
 
@@ -95,19 +89,8 @@ actor DemoTransferService: TransferService {
         currentSnapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        currentSnapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            currentSnapshot = snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

@@ -94,7 +94,6 @@ final class AlbumTransporterAppSnapshotTests: XCTestCase {
             backupFlowState: .transferCompleted,
             pairingStatus: PairingStatus(
                 desktopName: "Desk Mac",
-                sessionID: "snapshot-session",
                 transport: .usb
             )
         )
@@ -226,7 +225,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
         permissionService = SnapshotPermissionService(summary: .allClear)
         pairingStatus = PairingStatus(
             desktopName: "Desk Mac",
-            sessionID: "snapshot-session",
             transport: snapshot.transport
         )
         self.transferService = SnapshotTransferService(snapshot: snapshot, completionState: nil)
@@ -256,41 +254,21 @@ private actor SnapshotTransferService: TransferService {
         return snapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(
-        from snapshot: TransferSnapshot,
-        progress: @escaping @Sendable (TransferSnapshot) -> Void
-    ) async -> TransferSnapshot {
-        self.snapshot = snapshot
-        progress(snapshot)
+    func completeTransfer() async -> TransferSnapshot {
+        snapshot.phase = .completed
         return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        snapshot = current
-        return current
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        self.snapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            self.snapshot = snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

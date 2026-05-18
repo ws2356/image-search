@@ -2364,6 +2364,8 @@ actor PhotoLibraryTransferService: TransferService {
     private var stopRequested = false
     private var currentSnapshot: TransferSnapshot?
     private var currentCompletionState: TransferCompletionState?
+    private var currentCleanupResult: TransferAssetCleanupResult = .skipped
+    private var transferStartedAt: Date?
 
     init(
         assetSource: TransferAssetSource,
@@ -2387,43 +2389,44 @@ actor PhotoLibraryTransferService: TransferService {
         await runTransfer(progress: progress)
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         stopRequested = true
+        currentCompletionState = nil
+        transferStartedAt = nil
+        let snapshot = terminalOperationSnapshotFallback()
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
             return .stoppedByUser
         }
         _ = await reportStoppedTransferToDesktop(
             desktop: trustedDesktop,
-            transferredCount: current.transferredCount,
-            failedCount: current.failedCount
+            transferredCount: snapshot.transferredCount,
+            failedCount: snapshot.failedCount
         )
         return .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        await runTransfer(progress: progress)
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
+    func completeTransfer() async -> TransferSnapshot {
+        let snapshot = terminalOperationSnapshotFallback()
         guard let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
-            var failedSnapshot = current
+            var failedSnapshot = snapshot
             failedSnapshot.failedCount = max(failedSnapshot.failedCount, 1)
             failedSnapshot.phase = .failed
             failedSnapshot.etaMinutes = nil
             failedSnapshot.failureMessage = "Backup finished on the phone, but the paired desktop record is no longer available."
             currentSnapshot = failedSnapshot
+            updateCompletionState(for: failedSnapshot)
             return failedSnapshot
         }
 
         do {
             _ = try await transferClient.completeSession(
                 desktop: trustedDesktop,
-                transferredCount: current.transferredCount,
-                failedCount: current.failedCount,
+                transferredCount: snapshot.transferredCount,
+                failedCount: snapshot.failedCount,
                 interruptionReason: nil
             )
             let resolvedTransport = await resolvedTransport(for: trustedDesktop)
-            var completedSnapshot = current
+            var completedSnapshot = snapshot
             completedSnapshot.transport = resolvedTransport
             completedSnapshot.phase = .completed
             completedSnapshot.etaMinutes = nil
@@ -2433,13 +2436,14 @@ actor PhotoLibraryTransferService: TransferService {
                 desktop: trustedDesktop
             )
             TransferDebugLogger.info(
-                "Desktop confirmed transfer completion session_id=\(trustedDesktop.lastSessionID) transferred=\(current.transferredCount) failed=\(current.failedCount)"
+                "Desktop confirmed transfer completion session_id=\(trustedDesktop.lastSessionID) transferred=\(snapshot.transferredCount) failed=\(snapshot.failedCount)"
             )
             currentSnapshot = completedSnapshot
+            updateCompletionState(for: completedSnapshot)
             return completedSnapshot
         } catch let error as TransferClientError {
             let resolvedTransport = await resolvedTransport(for: trustedDesktop)
-            var failedSnapshot = current
+            var failedSnapshot = snapshot
             failedSnapshot.transport = resolvedTransport
             failedSnapshot.failedCount = max(failedSnapshot.failedCount, 1)
             failedSnapshot.phase = .failed
@@ -2453,10 +2457,11 @@ actor PhotoLibraryTransferService: TransferService {
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
             currentSnapshot = failedSnapshot
+            updateCompletionState(for: failedSnapshot)
             return failedSnapshot
         } catch {
             let resolvedTransport = await resolvedTransport(for: trustedDesktop)
-            var failedSnapshot = current
+            var failedSnapshot = snapshot
             failedSnapshot.transport = resolvedTransport
             failedSnapshot.failedCount = max(failedSnapshot.failedCount, 1)
             failedSnapshot.phase = .failed
@@ -2470,7 +2475,35 @@ actor PhotoLibraryTransferService: TransferService {
                 "Transfer completion request failed session_id=\(trustedDesktop.lastSessionID) error=\(TransferDebugLogger.describe(error))"
             )
             currentSnapshot = failedSnapshot
+            updateCompletionState(for: failedSnapshot)
             return failedSnapshot
+        }
+    }
+
+    private func terminalOperationSnapshotFallback() -> TransferSnapshot {
+        currentSnapshot ?? TransferSnapshot.empty()
+    }
+
+    private func updateCompletionState(for snapshot: TransferSnapshot) {
+        let sessionDuration = transferStartedAt.map { max(0, Date().timeIntervalSince($0)) }
+        currentCompletionState = TransferCompletionState(
+            snapshot: snapshot,
+            cleanupResult: currentCleanupResult,
+            completedAt: Date(),
+            sessionDuration: sessionDuration
+        )
+        transferStartedAt = nil
+    }
+
+    private func updateCleanupResult(_ cleanupResult: TransferAssetCleanupResult) {
+        currentCleanupResult = cleanupResult
+        if let completionState = currentCompletionState {
+            currentCompletionState = TransferCompletionState(
+                snapshot: completionState.snapshot,
+                cleanupResult: cleanupResult,
+                completedAt: completionState.completedAt,
+                sessionDuration: completionState.sessionDuration
+            )
         }
     }
 
@@ -2497,19 +2530,8 @@ actor PhotoLibraryTransferService: TransferService {
         return snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        currentSnapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         currentCompletionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        currentCompletionState = completionState
-        if let snapshot = completionState?.snapshot {
-            currentSnapshot = snapshot
-        }
     }
 
     func handleAppDidBecomeActive() async {
@@ -2533,12 +2555,14 @@ actor PhotoLibraryTransferService: TransferService {
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
         let candidateAssetIDs = Array(successfullyTransferredAssetIDs)
         guard !candidateAssetIDs.isEmpty else {
+            updateCleanupResult(.skipped)
             return .skipped
         }
 
         let fetchedAssets = PHAsset.fetchAssets(withLocalIdentifiers: candidateAssetIDs, options: nil)
         guard fetchedAssets.count > 0 else {
             successfullyTransferredAssetIDs.removeAll()
+            updateCleanupResult(.skipped)
             return .skipped
         }
 
@@ -2567,13 +2591,17 @@ actor PhotoLibraryTransferService: TransferService {
             TransferDebugLogger.info(
                 "Moved transferred assets to Recently Removed removed_count=\(removedCount)"
             )
-            return .removed(removedCount)
+            let cleanupResult: TransferAssetCleanupResult = .removed(removedCount)
+            updateCleanupResult(cleanupResult)
+            return cleanupResult
         } catch {
             let message = "Photo library cleanup failed. \(error.localizedDescription)"
             TransferDebugLogger.error(
                 "Failed to move transferred assets to Recently Removed error=\(TransferDebugLogger.describe(error))"
             )
-            return .failed(message: message)
+            let cleanupResult: TransferAssetCleanupResult = .failed(message: message)
+            updateCleanupResult(cleanupResult)
+            return cleanupResult
         }
     }
 
@@ -2581,6 +2609,8 @@ actor PhotoLibraryTransferService: TransferService {
         stopRequested = false
         successfullyTransferredAssetIDs.removeAll()
         currentCompletionState = nil
+        currentCleanupResult = .skipped
+        transferStartedAt = Date()
         totalPreparedTransferBytes = 0
         processedPreparedTransferBytes = 0
         nonSkippedTransferredBytesForSpeed = 0

@@ -466,7 +466,6 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
         backupFlowState: .transferStopped,
         pairingStatus: PairingStatus(
             desktopName: "Desk Mac",
-            sessionID: "preview-session",
             transport: .usb
         )
     )
@@ -549,39 +548,22 @@ private actor HomeViewPreviewTransferService: TransferService {
         return currentSnapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
-        _ = current
+    func stopTransfer() async -> InterruptionReason {
         return .stoppedByUser
     }
 
-    func resumeTransfer(
-        from snapshot: TransferSnapshot,
-        progress: @escaping @Sendable (TransferSnapshot) -> Void
-    ) async -> TransferSnapshot {
-        self.snapshot = snapshot
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        snapshot = current
-        return current
+    func completeTransfer() async -> TransferSnapshot {
+        let completedSnapshot = snapshot ?? .demo
+        snapshot = completedSnapshot
+        return completedSnapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        self.snapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         nil
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        _ = completionState
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

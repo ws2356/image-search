@@ -72,7 +72,7 @@ final class TransferServiceTests: XCTestCase {
         )
 
         let startSnapshot = await service.startTransfer(progress: { _ in })
-        let completedSnapshot = await service.completeTransfer(current: startSnapshot)
+        let completedSnapshot = await service.completeTransfer()
         let uploadedAssetIDs = await transferClient.uploadedAssetIDs()
         let startedAssetCount = await transferClient.startedAssetCount()
         let completedTransferredCount = await transferClient.completedTransferredCount()
@@ -924,24 +924,13 @@ final class TransferServiceTests: XCTestCase {
             transferClient: transferClient,
             trustedDesktopStore: trustedDesktopStore
         )
-        let currentSnapshot = TransferSnapshot(
-            transferredCount: 3,
-            totalCount: 10,
-            failedCount: 0,
-            transport: .lan,
-            etaMinutes: nil,
-            statusMessage: "Stopping backup…",
-            guidanceMessage: "",
-            isIncompleteLibrary: false
-        )
-
-        let reason = await service.stopTransfer(current: currentSnapshot)
+        let reason = await service.stopTransfer()
         let completedTransferredCount = await transferClient.completedTransferredCount()
         let completedFailedCount = await transferClient.completedFailedCount()
         let completedInterruptionReason = await transferClient.completedInterruptionReason()
 
         XCTAssertEqual(reason, .stoppedByUser)
-        XCTAssertEqual(completedTransferredCount, 3)
+        XCTAssertEqual(completedTransferredCount, 0)
         XCTAssertEqual(completedFailedCount, 0)
         XCTAssertEqual(completedInterruptionReason, "stopped_by_user")
     }
@@ -983,18 +972,7 @@ final class TransferServiceTests: XCTestCase {
             await service.startTransfer(progress: { _ in })
         }
         try? await Task.sleep(nanoseconds: 50_000_000)
-        let stopReason = await service.stopTransfer(
-            current: TransferSnapshot(
-                transferredCount: 0,
-                totalCount: 1,
-                failedCount: 0,
-                transport: .lan,
-                etaMinutes: nil,
-                statusMessage: "Stopping backup…",
-                guidanceMessage: "",
-                isIncompleteLibrary: false
-            )
-        )
+        let stopReason = await service.stopTransfer()
         let startSnapshot = await startTask.value
         let startedAssetCount = await transferClient.startedAssetCount()
         let completeSessionCallCount = await transferClient.completeSessionCallCount()
@@ -1042,18 +1020,7 @@ final class TransferServiceTests: XCTestCase {
             await service.startTransfer(progress: { _ in })
         }
         try? await Task.sleep(nanoseconds: 50_000_000)
-        let stopReason = await service.stopTransfer(
-            current: TransferSnapshot(
-                transferredCount: 0,
-                totalCount: 1,
-                failedCount: 0,
-                transport: .lan,
-                etaMinutes: nil,
-                statusMessage: "Stopping backup…",
-                guidanceMessage: "",
-                isIncompleteLibrary: false
-            )
-        )
+        let stopReason = await service.stopTransfer()
         let startSnapshot = await startTask.value
         let startedAssetCount = await transferClient.startedAssetCount()
         let completeSessionCallCount = await transferClient.completeSessionCallCount()

@@ -142,13 +142,10 @@ extension PermissionService {
 
 protocol TransferService: Sendable {
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot
+    func stopTransfer() async -> InterruptionReason
+    func completeTransfer() async -> TransferSnapshot
     func progressSnapshot() async -> TransferSnapshot?
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async
     func transferCompletionState() async -> TransferCompletionState?
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult
     func handleAppDidBecomeActive() async
     func handleMemoryWarning() async

@@ -517,13 +517,8 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .transfer)
         XCTAssertEqual(model.backupFlowState, .transferInProgress)
         let stagedSnapshot = await transferService.progressSnapshot()
-        XCTAssertEqual(stagedSnapshot?.transferredCount, 0)
-        XCTAssertEqual(stagedSnapshot?.totalCount, 0)
+        XCTAssertNotNil(stagedSnapshot)
         XCTAssertEqual(stagedSnapshot?.transport, .lan)
-        XCTAssertEqual(
-            stagedSnapshot?.statusMessage,
-            "Preparing the local media backup with the paired desktop."
-        )
 
         let transferStartedRecord = await telemetryClient.latestRecord(for: .transferStarted)
         XCTAssertEqual(
@@ -573,13 +568,8 @@ final class MobileAppModelTests: XCTestCase {
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 0)
         let stagedSnapshot = await transferService.progressSnapshot()
-        XCTAssertEqual(stagedSnapshot?.transferredCount, 0)
-        XCTAssertEqual(stagedSnapshot?.totalCount, 0)
+        XCTAssertNotNil(stagedSnapshot)
         XCTAssertEqual(stagedSnapshot?.transport, .lan)
-        XCTAssertEqual(
-            stagedSnapshot?.statusMessage,
-            "Backup canceled before transfer started."
-        )
         let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
         XCTAssertEqual(
             stopRecord?.attributes["transfer.stop_reason"],
@@ -845,7 +835,7 @@ final class MobileAppModelTests: XCTestCase {
         await orchestrateVisiblePairPage(model: model)
 
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.pairingStatus.sessionID, PairingQRCodePayload.demo.sessionID)
+        XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
     }
 
     func test_handle_incoming_universal_link_with_invalid_payload_shows_pairing_failure() async {
@@ -993,7 +983,7 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertFalse(model.isShowingIncomingLinkReplacementConfirmation)
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.pairingStatus.sessionID, "pairing-replacement-001")
+        XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, "pairing-replacement-001")
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
         let stopRecord = await telemetryClient.latestRecord(for: .transferStopped)
@@ -1211,7 +1201,7 @@ final class MobileAppModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         if case .error = model.route {
-            XCTAssertNil(model.pairingStatus.sessionID)
+            XCTAssertNil(model.backupSessionProvider.backupSession?.sessionID)
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")
         }
@@ -1390,17 +1380,12 @@ private struct StaticTransferService: TransferService {
         return .demo
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        current
+    func completeTransfer() async -> TransferSnapshot {
+        .demo
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
@@ -1409,14 +1394,6 @@ private struct StaticTransferService: TransferService {
 
     func transferCompletionState() async -> TransferCompletionState? {
         nil
-    }
-
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        _ = snapshot
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        _ = completionState
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
@@ -1459,36 +1436,20 @@ private actor PollingTransferService: TransferService {
         return finalSnapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        currentSnapshotValue = snapshot
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        current
+    func completeTransfer() async -> TransferSnapshot {
+        currentSnapshotValue ?? finalSnapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         currentSnapshotValue
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        currentSnapshotValue = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            currentSnapshotValue = snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
@@ -1512,42 +1473,42 @@ private actor CleanupTrackingTransferService: TransferService {
         return completedSnapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        snapshot = current
-        return current
+    func completeTransfer() async -> TransferSnapshot {
+        let resolvedSnapshot = snapshot ?? self.completedSnapshot
+        snapshot = resolvedSnapshot
+        completionState = TransferCompletionState(
+            snapshot: resolvedSnapshot,
+            cleanupResult: .skipped,
+            completedAt: Date(),
+            sessionDuration: 1
+        )
+        return resolvedSnapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot ?? completedSnapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        self.snapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
     }
 
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            self.snapshot = snapshot
-        }
-    }
-
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
         cleanupCalls += 1
-        return .removed(completedSnapshot.transferredCount)
+        let cleanupResult: TransferAssetCleanupResult = .removed(completedSnapshot.transferredCount)
+        if let completionState {
+            self.completionState = TransferCompletionState(
+                snapshot: completionState.snapshot,
+                cleanupResult: cleanupResult,
+                completedAt: completionState.completedAt,
+                sessionDuration: completionState.sessionDuration
+            )
+        }
+        return cleanupResult
     }
 
     func cleanupCallCount() -> Int {
@@ -1575,36 +1536,20 @@ private actor CallbackOnlyTransferService: TransferService {
         return finalSnapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        current
+    func completeTransfer() async -> TransferSnapshot {
+        currentSnapshotValue ?? finalSnapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         currentSnapshotValue
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        currentSnapshotValue = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            currentSnapshotValue = snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
@@ -1622,39 +1567,21 @@ private actor StopTrackingTransferService: TransferService {
         return snapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         stopCalls += 1
         return .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        self.snapshot = snapshot
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        snapshot = current
-        return current
+    func completeTransfer() async -> TransferSnapshot {
+        snapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        self.snapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            self.snapshot = snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
@@ -1676,38 +1603,20 @@ private actor ForegroundRecoveryTrackingTransferService: TransferService {
         return snapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        self.snapshot = snapshot
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        snapshot = current
-        return current
+    func completeTransfer() async -> TransferSnapshot {
+        snapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        self.snapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            self.snapshot = snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {
@@ -1749,39 +1658,21 @@ private actor DelayedTransferService: TransferService {
         return finalSnapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
-        _ = current
+    func stopTransfer() async -> InterruptionReason {
         stopCalls += 1
         return .stoppedByUser
     }
 
-    func resumeTransfer(from snapshot: TransferSnapshot, progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
-        self.snapshot = snapshot
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        current
+    func completeTransfer() async -> TransferSnapshot {
+        snapshot ?? finalSnapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        self.snapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            self.snapshot = snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

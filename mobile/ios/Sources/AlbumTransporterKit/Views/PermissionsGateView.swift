@@ -177,7 +177,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
     var backupFlowState: MobileBackupFlowState = .pairingCompleted
     var pairingStatus = PairingStatus(
         desktopName: "Desk Mac",
-        sessionID: "preview-session",
         transport: .lan
     )
     var pairingService: PairingService = DemoPairingService()
@@ -229,37 +228,20 @@ private actor PermissionsGatePreviewTransferService: TransferService {
         return snapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
-        _ = current
+    func stopTransfer() async -> InterruptionReason {
         return .stoppedByUser
     }
 
-    func resumeTransfer(
-        from snapshot: TransferSnapshot,
-        progress: @escaping @Sendable (TransferSnapshot) -> Void
-    ) async -> TransferSnapshot {
-        progress(snapshot)
-        return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        current
+    func completeTransfer() async -> TransferSnapshot {
+        .demo
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         .demo
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        _ = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         nil
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        _ = completionState
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

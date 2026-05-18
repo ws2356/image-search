@@ -77,22 +77,18 @@ enum TransferTransport: String, Equatable, Hashable, Sendable, Codable {
 
 struct PairingStatus: Equatable, Sendable, Codable {
     var desktopName: String?
-    var sessionID: String?
     var transport: TransferTransport?
 
     init(
         desktopName: String?,
-        sessionID: String?,
         transport: TransferTransport?
     ) {
         self.desktopName = desktopName
-        self.sessionID = sessionID
         self.transport = transport
     }
 
     static let idle = PairingStatus(
         desktopName: nil,
-        sessionID: nil,
         transport: nil
     )
 }

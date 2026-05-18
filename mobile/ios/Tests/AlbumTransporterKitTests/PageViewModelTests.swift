@@ -22,7 +22,6 @@ final class PageViewModelTests: XCTestCase {
         model.backupFlowState = .transferStopped
         model.pairingStatus = PairingStatus(
             desktopName: "Desk Mac",
-            sessionID: "session-1",
             transport: .lan
         )
         await model.backupSessionProvider.saveBackupSession(
@@ -33,7 +32,7 @@ final class PageViewModelTests: XCTestCase {
                 updatedAt: Date()
             )
         )
-        await model.transferServiceActor.stageTransferSnapshot(
+        await model.transferServiceActor.setSnapshot(
             TransferSnapshot(
                 transferredCount: 3,
                 totalCount: 10,
@@ -110,7 +109,6 @@ final class PageViewModelTests: XCTestCase {
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
             desktopName: nil,
-            sessionID: nil,
             transport: nil
         )
         let viewModel = PairingPageViewModel(
@@ -123,7 +121,7 @@ final class PageViewModelTests: XCTestCase {
 
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
         XCTAssertEqual(startPairingCallCount, 1)
-        XCTAssertEqual(model.pairingStatus.sessionID, PairingQRCodePayload.demo.sessionID)
+        XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
     }
 
     func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
@@ -133,7 +131,6 @@ final class PageViewModelTests: XCTestCase {
         model.backupFlowState = .pairingStopped
         model.pairingStatus = PairingStatus(
             desktopName: nil,
-            sessionID: nil,
             transport: nil
         )
         let viewModel = PairingPageViewModel(
@@ -451,11 +448,11 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     }
 
     func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
-        await transferServiceActor.stageTransferSnapshot(currentSnapshot)
+        await transferServiceActor.setSnapshot(currentSnapshot)
     }
 
     func completeTransfer(with snapshot: TransferSnapshot) async {
-        await transferServiceActor.stageTransferSnapshot(snapshot)
+        await transferServiceActor.setSnapshot(snapshot)
     }
 
     func permissionServiceLoadCallCount() async -> Int {
@@ -493,8 +490,12 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         case .success(let response):
             pairingStatus = PairingStatus(
                 desktopName: response.desktopName,
-                sessionID: response.sessionID,
                 transport: response.transport
+            )
+            await backupSessionProvider.saveBackupSession(
+                status: .paired,
+                sessionID: response.sessionID,
+                desktopName: response.desktopName
             )
             openScanRouteCallCount += 1
         case .failure:
@@ -597,9 +598,12 @@ private actor StubTransferService: TransferService {
     private var completionState: TransferCompletionState?
     private var progressSequence: (initial: TransferSnapshot, final: TransferSnapshot, delayNanoseconds: UInt64)?
     private var startTransferInvocations = 0
+    private var transferStartedAt: Date?
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         startTransferInvocations += 1
+        transferStartedAt = Date()
+        completionState = nil
         if let progressSequence {
             snapshot = progressSequence.initial
             progress(progressSequence.initial)
@@ -611,39 +615,32 @@ private actor StubTransferService: TransferService {
         return snapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
+    func stopTransfer() async -> InterruptionReason {
         .stoppedByUser
     }
 
-    func resumeTransfer(
-        from snapshot: TransferSnapshot,
-        progress: @escaping @Sendable (TransferSnapshot) -> Void
-    ) async -> TransferSnapshot {
-        snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        snapshot = current
-        return current
+    func completeTransfer() async -> TransferSnapshot {
+        snapshot.phase = .completed
+        completionState = TransferCompletionState(
+            snapshot: snapshot,
+            cleanupResult: .skipped,
+            completedAt: Date(),
+            sessionDuration: transferStartedAt.map { max(0, Date().timeIntervalSince($0)) }
+        )
+        transferStartedAt = nil
+        return snapshot
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
+    func setSnapshot(_ snapshot: TransferSnapshot) async {
         self.snapshot = snapshot
     }
 
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        self.completionState = completionState
-        if let snapshot = completionState?.snapshot {
-            self.snapshot = snapshot
-        }
     }
 
     func configureProgressSequence(

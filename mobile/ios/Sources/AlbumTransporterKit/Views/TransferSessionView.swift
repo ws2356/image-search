@@ -445,7 +445,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
     var backupFlowState: MobileBackupFlowState = .transferInProgress
     var pairingStatus = PairingStatus(
         desktopName: "Desk Mac",
-        sessionID: "preview-session",
         transport: .usb
     )
     var permissionService: PermissionService
@@ -491,41 +490,21 @@ private actor TransferSessionPreviewTransferService: TransferService {
         return snapshot
     }
 
-    func stopTransfer(current: TransferSnapshot) async -> InterruptionReason {
-        snapshot = current
+    func stopTransfer() async -> InterruptionReason {
         return .stoppedByUser
     }
 
-    func resumeTransfer(
-        from snapshot: TransferSnapshot,
-        progress: @escaping @Sendable (TransferSnapshot) -> Void
-    ) async -> TransferSnapshot {
-        self.snapshot = snapshot
-        progress(snapshot)
+    func completeTransfer() async -> TransferSnapshot {
+        snapshot.phase = .completed
         return snapshot
-    }
-
-    func completeTransfer(current: TransferSnapshot) async -> TransferSnapshot {
-        snapshot = current
-        return current
     }
 
     func progressSnapshot() async -> TransferSnapshot? {
         snapshot
     }
 
-    func stageTransferSnapshot(_ snapshot: TransferSnapshot) async {
-        self.snapshot = snapshot
-    }
-
     func transferCompletionState() async -> TransferCompletionState? {
         nil
-    }
-
-    func stageTransferCompletionState(_ completionState: TransferCompletionState?) async {
-        if let completionState {
-            snapshot = completionState.snapshot
-        }
     }
 
     func moveSuccessfullyTransferredAssetsToRecentlyRemoved() async -> TransferAssetCleanupResult {

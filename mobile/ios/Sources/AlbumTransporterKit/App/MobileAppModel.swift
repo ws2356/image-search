@@ -91,13 +91,12 @@ final class MobileAppModel: ObservableObject {
         case .success(let pairingResponse):
             pairingStatus = PairingStatus(
                 desktopName: pairingResponse.desktopName,
-                sessionID: pairingResponse.sessionID,
                 transport: pairingResponse.transport
             )
             transitionBackupFlow(.pairingAccepted)
             await backupSessionProvider.saveBackupSession(
                 status: .paired,
-                sessionID: pairingStatus.sessionID,
+                sessionID: pairingResponse.sessionID,
                 desktopName: pairingStatus.desktopName
             )
             route = .permissions
@@ -124,7 +123,7 @@ final class MobileAppModel: ObservableObject {
             )
             await backupSessionProvider.saveBackupSession(
                 status: .failed,
-                sessionID: pairingStatus.sessionID,
+                sessionID: backupSessionProvider.backupSession?.sessionID,
                 desktopName: pairingStatus.desktopName
             )
             presentErrorSummary(
@@ -259,7 +258,6 @@ final class MobileAppModel: ObservableObject {
             backupFlowStateMachine = MobileBackupFlowStateMachine()
         }
         route = .home
-        await transferService.stageTransferCompletionState(nil)
         let pairingService = pairingService
         Task.detached(priority: .utility) {
             await pairingService.primeNetworkAccess()
@@ -275,7 +273,6 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
             desktopName: backupSessionProvider.backupSession?.desktopName,
-            sessionID: nil,
             transport: nil
         )
         route = .scan
@@ -322,7 +319,6 @@ final class MobileAppModel: ObservableObject {
         route = .pair(qrString: qrString)
         pairingStatus = PairingStatus(
             desktopName: backupSessionProvider.backupSession?.desktopName,
-            sessionID: nil,
             transport: nil
         )
         recordTelemetry(.pairingStarted)
@@ -332,9 +328,6 @@ final class MobileAppModel: ObservableObject {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
         await permissionService.setRemoveAfterBackupEnabled(false)
-        let interruptionSnapshot = preflightInterruptionSnapshot()
-        await transferService.stageTransferSnapshot(interruptionSnapshot)
-        await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
         route = .home
         let stopAttributes = transferStopTelemetryAttributes(reason: reason)
@@ -353,7 +346,7 @@ final class MobileAppModel: ObservableObject {
         )
         await backupSessionProvider.saveBackupSession(
             status: .stopped,
-            sessionID: pairingStatus.sessionID,
+            sessionID: backupSessionProvider.backupSession?.sessionID,
             desktopName: pairingStatus.desktopName
         )
     }
@@ -370,14 +363,11 @@ final class MobileAppModel: ObservableObject {
         guard route == .transfer else {
             return
         }
-        let snapshot = await currentTransferSnapshot()
-        _ = await transferService.stopTransfer(current: snapshot)
-        await transferService.stageTransferSnapshot(snapshot)
+        _ = await transferService.stopTransfer()
         await finalizeStoppedTransfer(reason: "replaced_by_universal_link")
     }
 
     private func finalizeStoppedTransfer(reason: String) async {
-        await transferService.stageTransferCompletionState(nil)
         transitionBackupFlow(.transferStopped)
         route = .home
 
@@ -397,7 +387,7 @@ final class MobileAppModel: ObservableObject {
         )
         await backupSessionProvider.saveBackupSession(
             status: .stopped,
-            sessionID: pairingStatus.sessionID,
+            sessionID: backupSessionProvider.backupSession?.sessionID,
             desktopName: pairingStatus.desktopName
         )
     }
@@ -441,13 +431,12 @@ final class MobileAppModel: ObservableObject {
         )
         await backupSessionProvider.saveBackupSession(
             status: snapshot.failedCount == 0 ? .completed : .failed,
-            sessionID: pairingStatus.sessionID,
+            sessionID: backupSessionProvider.backupSession?.sessionID,
             desktopName: pairingStatus.desktopName
         )
     }
 
     func returnHome() async {
-        await transferService.stageTransferCompletionState(nil)
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
         await permissionService.setRemoveAfterBackupEnabled(false)
@@ -484,9 +473,6 @@ final class MobileAppModel: ObservableObject {
         route = .transfer
         let isRemoveAfterBackupEnabled = await permissionService.removeAfterBackupEnabled()
         let isIncompleteLibrary = await permissionService.loadPermissionSummary().mediaScope != .full
-        let initialSnapshot = initialTransferSnapshot()
-        await transferService.stageTransferSnapshot(initialSnapshot)
-        await transferService.stageTransferCompletionState(nil)
         endTelemetrySpan(.backupPreflight, status: .ok)
         beginTelemetrySpan(.transferFlow)
         recordTelemetry(.transferStarted, attributes: transferStartTelemetryAttributes(
@@ -513,28 +499,6 @@ final class MobileAppModel: ObservableObject {
             .pairingFlow,
             attributes: resolvedPairingAttributes,
             status: .error(reason)
-        )
-    }
-
-    private func initialTransferSnapshot() -> TransferSnapshot {
-        TransferSnapshot(
-            transferredCount: 0,
-            totalCount: 0,
-            failedCount: 0,
-            transport: pairingStatus.transport ?? .lan,
-            etaMinutes: nil,
-            phase: .preparing
-        )
-    }
-
-    private func preflightInterruptionSnapshot() -> TransferSnapshot {
-        TransferSnapshot(
-            transferredCount: 0,
-            totalCount: 0,
-            failedCount: 0,
-            transport: pairingStatus.transport ?? .lan,
-            etaMinutes: nil,
-            phase: .stopped
         )
     }
 
@@ -778,7 +742,6 @@ final class MobileAppModel: ObservableObject {
     private func pairingStatus(for session: BackupSession) -> PairingStatus {
         PairingStatus(
             desktopName: session.desktopName,
-            sessionID: session.sessionID,
             transport: nil
         )
     }

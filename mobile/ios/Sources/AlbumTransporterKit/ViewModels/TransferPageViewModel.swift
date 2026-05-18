@@ -24,7 +24,8 @@ final class TransferPageViewModel: ObservableObject {
         self.model = model
         self.telemetryService = telemetryService
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
-        self.snapshot = .empty(transport: model.pairingStatus.transport ?? .lan)
+        let initialSnapshot = TransferSnapshot.empty(transport: model.pairingStatus.transport ?? .lan)
+        self.snapshot = initialSnapshot
     }
 
     func loadFromViewLifecycle() async {
@@ -52,8 +53,7 @@ final class TransferPageViewModel: ObservableObject {
         telemetryService.recordInteraction(name: "stop_confirmed", location: "stop_confirmation")
         isShowingStopConfirmation = false
         let currentSnapshot = await transferService.progressSnapshot() ?? snapshot
-        _ = await transferService.stopTransfer(current: currentSnapshot)
-        await transferService.stageTransferSnapshot(currentSnapshot)
+        _ = await transferService.stopTransfer()
         snapshot = currentSnapshot
         let result = TransferPageResult(result: .failure(.stopConfirmed), target: .stopTransferConfirmed)
         await model.onTransferCompleted(with: result)
@@ -70,28 +70,20 @@ final class TransferPageViewModel: ObservableObject {
         }
 
         await loadCurrentSnapshot()
-        await transferService.stageTransferCompletionState(nil)
-        let transferStartedAt = Date()
         startTransferPolling()
-        // TODO: error handling
-        let finalSnapshot = await transferService.startTransfer { _ in }
+        let finalSnapshot = await transferService.startTransfer { [weak self] snapshot in
+            Task { @MainActor in
+                self?.applySnapshotIfNewer(snapshot)
+            }
+        }
         applySnapshotIfNewer(finalSnapshot)
         guard model.route == .transfer else {
             return
         }
 
-        let completedSnapshot = await transferService.completeTransfer(current: snapshot)
+        let completedSnapshot = await transferService.completeTransfer()
         applySnapshotIfNewer(completedSnapshot)
-        let resolvedCleanupResult = await resolveCleanupResult()
-        await transferService.stageTransferCompletionState(
-            TransferCompletionState(
-                snapshot: snapshot,
-                cleanupResult: resolvedCleanupResult,
-                completedAt: Date(),
-                sessionDuration: Date().timeIntervalSince(transferStartedAt)
-            )
-        )
-        await transferService.stageTransferSnapshot(snapshot)
+        _ = await resolveCleanupResult()
         let result = TransferPageResult(result: .success(()), target: nil)
         await model.onTransferCompleted(with: result)
     }
@@ -114,7 +106,13 @@ final class TransferPageViewModel: ObservableObject {
                         self.applySnapshotIfNewer(inFlightSnapshot)
                     }
                 }
-                try? await Task.sleep(nanoseconds: interval)
+                let sleepInterval: UInt64
+                if self.snapshot.totalCount == 0, self.snapshot.transferredCount == 0 {
+                    sleepInterval = min(interval, 10_000_000)
+                } else {
+                    sleepInterval = interval
+                }
+                try? await Task.sleep(nanoseconds: sleepInterval)
             }
         }
     }
@@ -141,9 +139,10 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     private func applySnapshotIfNewer(_ newSnapshot: TransferSnapshot) {
+        let currentSnapshot = snapshot
         guard
-            newSnapshot.totalCount != snapshot.totalCount
-                || newSnapshot.transferredCount >= snapshot.transferredCount
+            newSnapshot.totalCount != currentSnapshot.totalCount
+                || newSnapshot.transferredCount >= currentSnapshot.transferredCount
         else {
             return
         }

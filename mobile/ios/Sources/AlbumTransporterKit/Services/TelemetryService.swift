@@ -196,7 +196,7 @@ final class DefaultTelemetryService: TelemetryService {
         if let transport = context.pairingStatus.transport ?? transferSnapshot.activeTransportsForDisplay.first {
             attributes["transfer.transport"] = .string(transport.rawValue)
         }
-        if let sessionID = context.pairingStatus.sessionID ?? context.backupSession?.sessionID,
+        if let sessionID = context.backupSession?.sessionID,
            !sessionID.isEmpty {
             attributes["correlation.session_id"] = .string(sessionID)
         }
