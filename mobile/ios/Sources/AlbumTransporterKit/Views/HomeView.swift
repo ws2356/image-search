@@ -22,6 +22,7 @@ struct HomeView: View {
         }
         .compatibleScrollBounceBasedOnSize()
         .task {
+            // TODO: should also be triggerred by backupSessionProvider.backupSessionPublisher, when backup state changes
             await viewModel.refreshSummary()
         }
     }
