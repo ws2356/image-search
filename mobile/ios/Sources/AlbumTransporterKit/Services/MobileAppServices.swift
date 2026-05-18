@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 protocol BackupSessionStore: Sendable {
     func loadBackupSession() async -> BackupSession?
@@ -143,6 +144,7 @@ extension PermissionService {
 protocol AppTransferTransportResolving: Sendable {
     func currentTransport() async -> TransferTransport?
     func currentLiveTransports() async -> [TransferTransport]
+    func isUSBTransportAlive() async -> Bool
 }
 
 protocol TransferService: Sendable, AppTransferTransportResolving {
@@ -170,11 +172,42 @@ extension TransferService {
         return snapshot.activeTransportsForDisplay
     }
 
+    func isUSBTransportAlive() async -> Bool {
+        await currentLiveTransports().contains(.usb)
+    }
+
     private func resolvedTransportSnapshot() async -> TransferSnapshot? {
         if let progressSnapshot = await progressSnapshot() {
             return progressSnapshot
         }
         return await transferCompletionState()?.snapshot
+    }
+}
+
+@MainActor
+protocol IdleTimerControlling: AnyObject {
+    var isIdleTimerDisabled: Bool { get set }
+}
+
+@MainActor
+final class ApplicationIdleTimerController: IdleTimerControlling {
+    var isIdleTimerDisabled: Bool {
+        get { UIApplication.shared.isIdleTimerDisabled }
+        set { UIApplication.shared.isIdleTimerDisabled = newValue }
+    }
+}
+
+@MainActor
+protocol BatteryLevelProviding {
+    func currentBatteryLevel() -> Float?
+}
+
+struct DeviceBatteryLevelProvider: BatteryLevelProviding {
+    @MainActor
+    func currentBatteryLevel() -> Float? {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let batteryLevel = UIDevice.current.batteryLevel
+        return batteryLevel >= 0 ? batteryLevel : nil
     }
 }
 

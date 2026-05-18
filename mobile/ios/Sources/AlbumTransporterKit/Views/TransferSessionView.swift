@@ -24,6 +24,9 @@ struct TransferSessionView: View {
                 await viewModel.loadFromViewLifecycle()
             }
         }
+        .onDisappear {
+            viewModel.handleViewDidDisappear()
+        }
         .compatibleOnChange(of: viewModel.isShowingStopConfirmation) { isPresented in
             guard isPresented else { return }
             viewModel.recordStopConfirmationPresented()

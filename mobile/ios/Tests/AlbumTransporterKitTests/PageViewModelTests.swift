@@ -212,6 +212,50 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.isShowingStopConfirmation)
     }
 
+    func test_transfer_page_view_model_disables_idle_timer_when_usb_transport_is_alive() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let idleTimerController = StubIdleTimerController()
+        let batteryLevelProvider = StubBatteryLevelProvider(level: 0.5)
+        await model.transferServiceActor.setUSBTransportAlive(true)
+        let viewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService,
+            idleTimerController: idleTimerController,
+            batteryLevelProvider: batteryLevelProvider,
+            pollingIntervalNanoseconds: 10_000_000
+        )
+
+        await viewModel.loadFromViewLifecycle()
+
+        XCTAssertTrue(idleTimerController.isIdleTimerDisabled)
+    }
+
+    func test_transfer_page_view_model_resets_idle_timer_when_usb_is_not_alive_and_battery_is_not_above_threshold() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let idleTimerController = StubIdleTimerController()
+        let batteryLevelProvider = StubBatteryLevelProvider(level: 0.95)
+        let viewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService,
+            idleTimerController: idleTimerController,
+            batteryLevelProvider: batteryLevelProvider,
+            pollingIntervalNanoseconds: 10_000_000
+        )
+
+        await viewModel.loadFromViewLifecycle()
+        XCTAssertTrue(idleTimerController.isIdleTimerDisabled)
+
+        batteryLevelProvider.level = 0.89
+        await model.transferServiceActor.setUSBTransportAlive(false)
+        await viewModel.loadFromViewLifecycle()
+
+        XCTAssertFalse(idleTimerController.isIdleTimerDisabled)
+    }
+
     func test_transfer_page_view_model_applies_live_progress_callbacks() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
@@ -595,6 +639,7 @@ private actor StubTransferService: TransferService {
     private var progressSequence: (initial: TransferSnapshot, final: TransferSnapshot, delayNanoseconds: UInt64)?
     private var startTransferInvocations = 0
     private var transferStartedAt: Date?
+    private var usbTransportAlive = false
 
     func startTransfer(progress: @escaping @Sendable (TransferSnapshot) -> Void) async -> TransferSnapshot {
         startTransferInvocations += 1
@@ -631,8 +676,16 @@ private actor StubTransferService: TransferService {
         snapshot
     }
 
+    func isUSBTransportAlive() async -> Bool {
+        usbTransportAlive
+    }
+
     func setSnapshot(_ snapshot: TransferSnapshot) async {
         self.snapshot = snapshot
+    }
+
+    func setUSBTransportAlive(_ isAlive: Bool) async {
+        usbTransportAlive = isAlive
     }
 
     func transferCompletionState() async -> TransferCompletionState? {
@@ -678,5 +731,23 @@ private actor StubPairingService: PairingService {
 private struct StubQRCodePayloadDecoder: QRCodePayloadDecoding {
     func decode(scannedValue: String) -> Result<PairingQRCodePayload, QRCodePayloadDecoderError> {
         .success(.demo)
+    }
+}
+
+@MainActor
+private final class StubIdleTimerController: IdleTimerControlling {
+    var isIdleTimerDisabled = false
+}
+
+@MainActor
+private final class StubBatteryLevelProvider: BatteryLevelProviding {
+    var level: Float?
+
+    init(level: Float?) {
+        self.level = level
+    }
+
+    func currentBatteryLevel() -> Float? {
+        level
     }
 }

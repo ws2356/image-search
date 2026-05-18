@@ -2530,6 +2530,13 @@ actor PhotoLibraryTransferService: TransferService {
         return snapshot
     }
 
+    func isUSBTransportAlive() async -> Bool {
+        guard let usbConnectivity = transferClient as? USBTransportConnectivityChecking else {
+            return false
+        }
+        return await usbConnectivity.isUSBTransportConnected()
+    }
+
     func transferCompletionState() async -> TransferCompletionState? {
         currentCompletionState
     }

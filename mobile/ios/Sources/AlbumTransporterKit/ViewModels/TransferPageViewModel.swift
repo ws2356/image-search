@@ -5,9 +5,13 @@ final class TransferPageViewModel: ObservableObject {
     private let model: any TransferPageModeling
     private let transportResolver: AppTransferTransportResolving
     private let telemetryService: TelemetryService
+    private let idleTimerController: any IdleTimerControlling
+    private let batteryLevelProvider: any BatteryLevelProviding
     private let pollingIntervalNanoseconds: UInt64
     private var transferPollingTask: Task<Void, Never>?
+    private var idleTimerPollingTask: Task<Void, Never>?
     private var hasStartedTransferOrchestration = false
+    private static let idleTimerPollingIntervalNanoseconds: UInt64 = 1_000_000_000
 
     private var transferService: TransferService {
         model.transferService
@@ -21,11 +25,15 @@ final class TransferPageViewModel: ObservableObject {
         model: any TransferPageModeling,
         telemetryService: TelemetryService,
         transportResolver: AppTransferTransportResolving,
+        idleTimerController: any IdleTimerControlling = ApplicationIdleTimerController(),
+        batteryLevelProvider: any BatteryLevelProviding = DeviceBatteryLevelProvider(),
         pollingIntervalNanoseconds: UInt64 = 1_000_000_000
     ) {
         self.model = model
         self.transportResolver = transportResolver
         self.telemetryService = telemetryService
+        self.idleTimerController = idleTimerController
+        self.batteryLevelProvider = batteryLevelProvider
         self.pollingIntervalNanoseconds = pollingIntervalNanoseconds
         let initialSnapshot = TransferSnapshot.empty(transport: .lan)
         self.snapshot = initialSnapshot
@@ -33,6 +41,12 @@ final class TransferPageViewModel: ObservableObject {
 
     func loadFromViewLifecycle() async {
         await loadStagedSnapshot()
+        await startIdleTimerPolling()
+    }
+
+    func handleViewDidDisappear() {
+        stopIdleTimerPolling()
+        idleTimerController.isIdleTimerDisabled = false
     }
 
     var isShowingStopConfirmationBinding: Binding<Bool> {
@@ -121,6 +135,25 @@ final class TransferPageViewModel: ObservableObject {
         transferPollingTask = nil
     }
 
+    private func startIdleTimerPolling() async {
+        stopIdleTimerPolling()
+        await refreshIdleTimerPolicy()
+        idleTimerPollingTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            while !Task.isCancelled {
+                await self.refreshIdleTimerPolicy()
+                try? await Task.sleep(nanoseconds: Self.idleTimerPollingIntervalNanoseconds)
+            }
+        }
+    }
+
+    private func stopIdleTimerPolling() {
+        idleTimerPollingTask?.cancel()
+        idleTimerPollingTask = nil
+    }
+
     private func loadCurrentSnapshot() async {
         guard let stagedSnapshot = await transferService.progressSnapshot() else {
             let fallbackTransport = await transportResolver.currentTransport() ?? .lan
@@ -152,5 +185,11 @@ final class TransferPageViewModel: ObservableObject {
 
     private func loadStagedSnapshot() async {
         await loadCurrentSnapshot()
+    }
+
+    private func refreshIdleTimerPolicy() async {
+        let usbTransportAlive = await transferService.isUSBTransportAlive()
+        let batteryLevel = batteryLevelProvider.currentBatteryLevel() ?? 0
+        idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > 0.9
     }
 }

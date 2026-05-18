@@ -89,6 +89,10 @@ actor DemoTransferService: TransferService {
         currentSnapshot
     }
 
+    func isUSBTransportAlive() async -> Bool {
+        currentSnapshot.liveTransports?.contains(.usb) ?? (currentSnapshot.transport == .usb)
+    }
+
     func transferCompletionState() async -> TransferCompletionState? {
         completionState
     }
