@@ -71,11 +71,8 @@ final class TransferPageViewModel: ObservableObject {
 
         await loadCurrentSnapshot()
         startTransferPolling()
-        let finalSnapshot = await transferService.startTransfer { [weak self] snapshot in
-            Task { @MainActor in
-                self?.applySnapshotIfNewer(snapshot)
-            }
-        }
+        // DO NOT use this callback to update UI, use polling instead.
+        let finalSnapshot = await transferService.startTransfer { _ in }
         applySnapshotIfNewer(finalSnapshot)
         guard model.route == .transfer else {
             return
