@@ -317,6 +317,18 @@ final class MobileAppModelTests: XCTestCase {
         await pairingViewModel.orchestratePairing()
     }
 
+    private func requireErrorSummary(
+        from route: AppRoute,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> ErrorSummary {
+        guard case .error(let summary) = route else {
+            XCTFail("Expected route to be .error but got \(route)", file: file, line: line)
+            return .generic
+        }
+        return summary
+    }
+
     func test_transfer_snapshot_decodes_legacy_payload_without_skipped_count() throws {
         let legacyPayload = """
         {
@@ -386,7 +398,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         let scanFailureResult = ScanningPageResult(result: .failure(.scannerFailed))
         await model.onScanningCompleted(with: scanFailureResult)
-        XCTAssertEqual(model.route, .error)
+        _ = requireErrorSummary(from: model.route)
 
         let errorRetryResult = ErrorPageResult(result: .success(()))
         await model.onErrorCompleted(with: errorRetryResult)
@@ -394,7 +406,7 @@ final class MobileAppModelTests: XCTestCase {
 
         let scanFailureResult2 = ScanningPageResult(result: .failure(.scannerFailed))
         await model.onScanningCompleted(with: scanFailureResult2)
-        XCTAssertEqual(model.route, .error)
+        _ = requireErrorSummary(from: model.route)
 
         let errorCancelResult = ErrorPageResult(result: .failure(.unknown))
         await model.onErrorCompleted(with: errorCancelResult)
@@ -446,7 +458,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
         await startPairing(model: model)
 
-        XCTAssertEqual(model.route, .error)
+        _ = requireErrorSummary(from: model.route)
     }
 
     func test_start_backup_shows_full_media_access_reminder_before_continuing() async {
@@ -863,12 +875,9 @@ final class MobileAppModelTests: XCTestCase {
         await model.handleIncomingUniversalLink(URL(string: "https://dl.boldman.net?sid=missing-fields")!)
         await orchestrateVisiblePairPage(model: model)
 
-        if case .error = model.route {
-            XCTAssertEqual(model.errorSummary.title, PairingError.decoding(message: "").title)
-            XCTAssertEqual(model.errorSummary.message, QRCodePayloadDecoderError.missingField("v").message)
-        } else {
-            XCTFail("Expected route to be .error but got \(model.route)")
-        }
+        let errorSummary = requireErrorSummary(from: model.route)
+        XCTAssertEqual(errorSummary.title, PairingError.decoding(message: "").title)
+        XCTAssertEqual(errorSummary.message, QRCodePayloadDecoderError.missingField("v").message)
     }
 
     func test_handle_incoming_universal_link_prompts_before_replacing_active_transfer() async {
@@ -1190,16 +1199,9 @@ final class MobileAppModelTests: XCTestCase {
         await startPairing(model: model, qrString: "invalid-qr-code")
         try? await Task.sleep(nanoseconds: 50_000_000)
 
-        // Verify that the route transitions to error page, not stuck at pairing
-        if case .error = model.route {
-            XCTAssert(true, "Successfully navigated to error page")
-        } else {
-            XCTFail("Expected route to be .error but got \(model.route)")
-        }
-
-        // Verify error summary contains expected messages
-        XCTAssertEqual(model.errorSummary.title, QRCodePayloadDecoderError.invalidHost.title)
-        XCTAssertEqual(model.errorSummary.message, QRCodePayloadDecoderError.invalidHost.message)
+        let errorSummary = requireErrorSummary(from: model.route)
+        XCTAssertEqual(errorSummary.title, QRCodePayloadDecoderError.invalidHost.title)
+        XCTAssertEqual(errorSummary.message, QRCodePayloadDecoderError.invalidHost.message)
     }
 
     func test_begin_pairing_records_pairing_failed_when_service_does_not_complete_pairing() async {
@@ -1218,7 +1220,7 @@ final class MobileAppModelTests: XCTestCase {
         await startPairing(model: model)
         try? await Task.sleep(nanoseconds: 50_000_000)
 
-        if case .error = model.route {
+        if case .error(_) = model.route {
             XCTAssertNil(model.backupSessionProvider.backupSession?.sessionID)
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")

@@ -6,7 +6,6 @@ protocol AppPageModeling: AnyObject {
     var backupFlowState: MobileBackupFlowState { get }
     var permissionService: PermissionService { get }
     var transferService: TransferService { get }
-    var errorSummary: ErrorSummary { get }
     var route: AppRoute { get }
     
     // New page-specific result handlers

@@ -447,7 +447,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
     var backupFlowState: MobileBackupFlowState = .transferInProgress
     var permissionService: PermissionService
     var route: AppRoute = .transfer
-    var errorSummary = ErrorSummary.generic
 
     let transferService: TransferService
 

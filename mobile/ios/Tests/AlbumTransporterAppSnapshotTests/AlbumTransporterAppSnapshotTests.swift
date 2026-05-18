@@ -165,7 +165,6 @@ private final class SnapshotAppPageModel: AppPageModeling {
     let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState
     var permissionService: PermissionService
-    var errorSummary = ErrorSummary.generic
     var route: AppRoute
     let transferService: TransferService
 
@@ -202,7 +201,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     let backupSessionProvider: BackupSessionProviding
     var backupFlowState: MobileBackupFlowState = .transferInProgress
     var permissionService: PermissionService
-    var errorSummary = ErrorSummary.generic
     var route = AppRoute.transfer
     let transferService: TransferService
 

@@ -481,7 +481,6 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var permissionService: PermissionService
     var transferService: TransferService
-    var errorSummary = ErrorSummary.generic
     var route: AppRoute = .home
 
     init(

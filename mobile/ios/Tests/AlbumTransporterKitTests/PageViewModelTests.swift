@@ -79,9 +79,11 @@ final class PageViewModelTests: XCTestCase {
     func test_error_page_view_model_maps_summary_and_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let expectedSummary = ErrorSummary(title: "Preview Error", message: "Preview error message.")
+        model.route = .error(expectedSummary)
         let viewModel = ErrorPageViewModel(model: model, telemetryService: telemetryService)
 
-        XCTAssertEqual(viewModel.summary, model.errorSummary)
+        XCTAssertEqual(viewModel.summary, expectedSummary)
 
         await viewModel.retryTapped()
         await viewModel.cancelTapped()
@@ -425,7 +427,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     )
     var backupFlowState: MobileBackupFlowState = .pendingPairing
     var permissionSummary = PermissionSummary.demo
-    var errorSummary = ErrorSummary.generic
     var route = AppRoute.home
     var isShowingLowBatteryWarning = false
     var isShowingMediaAccessAlert = false

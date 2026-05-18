@@ -9,7 +9,10 @@ struct ErrorPageViewModel {
     }
 
     var summary: ErrorSummary {
-        model.errorSummary
+        guard case .error(let summary) = model.route else {
+            return .generic
+        }
+        return summary
     }
 
     func retryTapped() async {

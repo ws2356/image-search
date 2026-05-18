@@ -141,7 +141,7 @@ public struct AlbumTransporterRootView: View {
             TransferSessionView(viewModel: transferViewModel)
         case .completed:
             CompletionStateView(viewModel: completionViewModel)
-        case .error:
+        case .error(_):
             let errorViewModel = ErrorPageViewModel(
                 model: model,
                 telemetryService: container.telemetryService()

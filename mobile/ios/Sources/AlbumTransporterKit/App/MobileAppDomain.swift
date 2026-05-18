@@ -7,7 +7,7 @@ enum AppRoute: Equatable, Sendable {
     case permissions
     case transfer
     case completed
-    case error
+    case error(ErrorSummary)
 }
 
 struct ErrorSummary: Equatable, Sendable, Codable {

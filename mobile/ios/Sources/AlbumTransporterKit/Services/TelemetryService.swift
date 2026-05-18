@@ -252,7 +252,7 @@ final class DefaultTelemetryService: TelemetryService {
             return "transfer"
         case .completed:
             return "completed"
-        case .error:
+        case .error(_):
             return "error"
         }
     }

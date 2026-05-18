@@ -7,7 +7,6 @@ final class MobileAppModel: ObservableObject {
     @Published private(set) var route: AppRoute = .home {
         didSet { pushTelemetryContext() }
     }
-    @Published private(set) var errorSummary = ErrorSummary.generic
 
     @Published var isShowingIncomingLinkReplacementConfirmation = false
 
@@ -208,7 +207,7 @@ final class MobileAppModel: ObservableObject {
             return "Backup in Progress"
         case .completed:
             return "Backup Complete"
-        case .error:
+        case .error(_):
             return "Backup Error"
         }
     }
@@ -227,7 +226,7 @@ final class MobileAppModel: ObservableObject {
             return "transfer"
         case .completed:
             return "completed"
-        case .error:
+        case .error(_):
             return "error"
         }
     }
@@ -259,7 +258,6 @@ final class MobileAppModel: ObservableObject {
     func openScanFlow() async {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
-        errorSummary = .generic
         beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
         route = .scan
@@ -423,14 +421,12 @@ final class MobileAppModel: ObservableObject {
         pendingIncomingUniversalLinkPayload = nil
         isShowingIncomingLinkReplacementConfirmation = false
         await permissionService.setRemoveAfterBackupEnabled(false)
-        errorSummary = .generic
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
     }
 
     private func presentErrorSummary(title: String, message: String) {
-        errorSummary = ErrorSummary(title: title, message: message)
-        route = .error
+        route = .error(ErrorSummary(title: title, message: message))
     }
 
     private func isSupportedUniversalLink(_ url: URL) -> Bool {
