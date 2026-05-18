@@ -495,8 +495,6 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
         self.backupFlowState = backupFlowState
     }
 
-    func requestStopTransfer() {}
-
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
     func onPairingCompleted(with result: PairingPageResult) async {}

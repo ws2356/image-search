@@ -463,8 +463,6 @@ private final class TransferSessionPreviewModel: TransferPageModeling {
         transferService = TransferSessionPreviewTransferService(snapshot: snapshot)
     }
 
-    func requestStopTransfer() {}
-
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
     func onPairingCompleted(with result: PairingPageResult) async {}

@@ -208,13 +208,7 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot.transport, .lan)
 
         viewModel.requestStopTransfer()
-        let expectation = expectation(description: "stop transfer routed via page result")
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 20_000_000)
-            XCTAssertEqual(model.requestStopTransferCallCount, 1)
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        XCTAssertTrue(viewModel.isShowingStopConfirmation)
     }
 
     func test_transfer_page_view_model_applies_live_progress_callbacks() async {
@@ -447,14 +441,9 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     var returnHomeCallCount = 0
     var scanFailureCallCount = 0
     var pairingFailureCallCount = 0
-    var requestStopTransferCallCount = 0
 
     init(telemetryServiceActor: StubTelemetryService = StubTelemetryService()) {
         self.telemetryServiceActor = telemetryServiceActor
-    }
-
-    func requestStopTransfer() {
-        requestStopTransferCallCount += 1
     }
 
     func confirmStopTransfer(currentSnapshot: TransferSnapshot) async {
@@ -521,7 +510,7 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
     func onTransferCompleted(with result: TransferPageResult) async {
         switch result.result {
         case .success:
-            requestStopTransfer()
+            break
         case .failure:
             returnHomeCallCount += 1
         }

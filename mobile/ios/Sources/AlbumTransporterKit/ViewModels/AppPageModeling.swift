@@ -16,8 +16,6 @@ protocol AppPageModeling: AnyObject {
     func onTransferCompleted(with result: TransferPageResult) async
     func onCompletionCompleted(with result: CompletionPageResult) async
     func onErrorCompleted(with result: ErrorPageResult) async
-    
-    func requestStopTransfer()
 }
 
 extension MobileAppModel: AppPageModeling {}

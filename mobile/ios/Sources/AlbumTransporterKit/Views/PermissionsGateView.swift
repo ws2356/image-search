@@ -184,8 +184,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
         permissionService = PermissionsGatePreviewPermissionService(summary: summary)
     }
 
-    func requestStopTransfer() {}
-
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
     func onPairingCompleted(with result: PairingPageResult) async {}

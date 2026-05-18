@@ -44,7 +44,6 @@ final class TransferPageViewModel: ObservableObject {
 
     func requestStopTransfer() {
         telemetryService.recordInteraction(name: "stop_backup_tapped", location: "transfer")
-        model.requestStopTransfer()
         isShowingStopConfirmation = true
     }
 

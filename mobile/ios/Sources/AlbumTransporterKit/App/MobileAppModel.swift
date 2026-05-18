@@ -332,10 +332,6 @@ final class MobileAppModel: ObservableObject {
         )
     }
 
-    func requestStopTransfer() {
-        recordTelemetry(.transferStopRequested)
-    }
-
     private func finalizeStoppedTransfer() async {
         await finalizeStoppedTransfer(reason: "user_requested")
     }

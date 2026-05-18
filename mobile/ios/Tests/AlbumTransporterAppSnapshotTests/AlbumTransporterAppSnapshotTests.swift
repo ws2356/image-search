@@ -186,7 +186,6 @@ private final class SnapshotAppPageModel: AppPageModeling {
         )
     }
 
-    func requestStopTransfer() {}
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
     func onPairingCompleted(with result: PairingPageResult) async {}
@@ -217,7 +216,6 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
         self.transferService = SnapshotTransferService(snapshot: snapshot, completionState: nil)
     }
 
-    func requestStopTransfer() {}
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
     func onPairingCompleted(with result: PairingPageResult) async {}
