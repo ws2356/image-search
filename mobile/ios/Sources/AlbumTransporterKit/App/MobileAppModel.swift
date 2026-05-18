@@ -90,14 +90,13 @@ final class MobileAppModel: ObservableObject {
         switch result.result {
         case .success(let pairingResponse):
             pairingStatus = PairingStatus(
-                desktopName: pairingResponse.desktopName,
                 transport: pairingResponse.transport
             )
             transitionBackupFlow(.pairingAccepted)
             await backupSessionProvider.saveBackupSession(
                 status: .paired,
                 sessionID: pairingResponse.sessionID,
-                desktopName: pairingStatus.desktopName
+                desktopName: pairingResponse.desktopName
             )
             route = .permissions
             recordTelemetry(.pairingSucceeded)
@@ -124,7 +123,7 @@ final class MobileAppModel: ObservableObject {
             await backupSessionProvider.saveBackupSession(
                 status: .failed,
                 sessionID: backupSessionProvider.backupSession?.sessionID,
-                desktopName: pairingStatus.desktopName
+                desktopName: backupSessionProvider.backupSession?.desktopName
             )
             presentErrorSummary(
                 title: PairingError.rejected(message: message).title,
@@ -272,7 +271,6 @@ final class MobileAppModel: ObservableObject {
         beginBackupSessionTelemetry()
         transitionBackupFlow(.pairingStarted)
         pairingStatus = PairingStatus(
-            desktopName: backupSessionProvider.backupSession?.desktopName,
             transport: nil
         )
         route = .scan
@@ -318,7 +316,6 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.pairingStarted)
         route = .pair(qrString: qrString)
         pairingStatus = PairingStatus(
-            desktopName: backupSessionProvider.backupSession?.desktopName,
             transport: nil
         )
         recordTelemetry(.pairingStarted)
@@ -347,7 +344,7 @@ final class MobileAppModel: ObservableObject {
         await backupSessionProvider.saveBackupSession(
             status: .stopped,
             sessionID: backupSessionProvider.backupSession?.sessionID,
-            desktopName: pairingStatus.desktopName
+            desktopName: backupSessionProvider.backupSession?.desktopName
         )
     }
 
@@ -388,7 +385,7 @@ final class MobileAppModel: ObservableObject {
         await backupSessionProvider.saveBackupSession(
             status: .stopped,
             sessionID: backupSessionProvider.backupSession?.sessionID,
-            desktopName: pairingStatus.desktopName
+            desktopName: backupSessionProvider.backupSession?.desktopName
         )
     }
 
@@ -432,7 +429,7 @@ final class MobileAppModel: ObservableObject {
         await backupSessionProvider.saveBackupSession(
             status: snapshot.failedCount == 0 ? .completed : .failed,
             sessionID: backupSessionProvider.backupSession?.sessionID,
-            desktopName: pairingStatus.desktopName
+            desktopName: backupSessionProvider.backupSession?.desktopName
         )
     }
 
@@ -741,7 +738,6 @@ final class MobileAppModel: ObservableObject {
 
     private func pairingStatus(for session: BackupSession) -> PairingStatus {
         PairingStatus(
-            desktopName: session.desktopName,
             transport: nil
         )
     }

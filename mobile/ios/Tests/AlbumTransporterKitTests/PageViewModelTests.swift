@@ -21,7 +21,6 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.backupFlowState = .transferStopped
         model.pairingStatus = PairingStatus(
-            desktopName: "Desk Mac",
             transport: .lan
         )
         await model.backupSessionProvider.saveBackupSession(
@@ -108,7 +107,6 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.pairingStatus = PairingStatus(
-            desktopName: nil,
             transport: nil
         )
         let viewModel = PairingPageViewModel(
@@ -130,7 +128,6 @@ final class PageViewModelTests: XCTestCase {
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
         model.backupFlowState = .pairingStopped
         model.pairingStatus = PairingStatus(
-            desktopName: nil,
             transport: nil
         )
         let viewModel = PairingPageViewModel(
@@ -489,7 +486,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         switch result.result {
         case .success(let response):
             pairingStatus = PairingStatus(
-                desktopName: response.desktopName,
                 transport: response.transport
             )
             await backupSessionProvider.saveBackupSession(

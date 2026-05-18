@@ -176,7 +176,6 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
     )
     var backupFlowState: MobileBackupFlowState = .pairingCompleted
     var pairingStatus = PairingStatus(
-        desktopName: "Desk Mac",
         transport: .lan
     )
     var pairingService: PairingService = DemoPairingService()

@@ -55,7 +55,7 @@ final class HomePageViewModel: ObservableObject {
         pairingStatus: PairingStatus
     ) -> HomeViewState {
         var summary = HomeViewState(
-            desktopName: pairingStatus.desktopName ?? backupSession?.desktopName,
+            desktopName: backupSession?.desktopName,
             lastBackupDescription: nil,
             previousTransferDescription: nil,
             permissionScope: permissionScope,

@@ -465,7 +465,6 @@ final class PreviewBackupSessionProvider: BackupSessionProviding {
         transferSnapshot: snapshot,
         backupFlowState: .transferStopped,
         pairingStatus: PairingStatus(
-            desktopName: "Desk Mac",
             transport: .usb
         )
     )
