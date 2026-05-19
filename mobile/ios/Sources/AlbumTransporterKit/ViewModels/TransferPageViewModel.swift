@@ -143,8 +143,11 @@ final class TransferPageViewModel: ObservableObject {
                 return
             }
             while !Task.isCancelled {
-                await self.refreshIdleTimerPolicy()
                 try? await Task.sleep(nanoseconds: Self.idleTimerPollingIntervalNanoseconds)
+                guard !Task.isCancelled else {
+                    return
+                }
+                await self.refreshIdleTimerPolicy()
             }
         }
     }

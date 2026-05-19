@@ -1455,7 +1455,7 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
     }
 }
 
-actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving, USBTransportForegroundRecovering {
+actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, MobileCapabilityExchangeClient, MobileUpdatePromptClient, TransferTransportResolving, TransferLiveTransportResolving, USBTransportForegroundRecovering, USBTransportConnectivityChecking {
     private static let preferredTransportRetryCooldownSeconds: TimeInterval = 0.5
     let lanClient: MobileTransferClient
     let usbClient: MobileTransferClient
@@ -1696,9 +1696,7 @@ actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransfe
     }
 
     func resolveDesktopTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {
-        if let usbConnectivity = usbClient as? USBTransportConnectivityChecking,
-           await usbConnectivity.isUSBTransportConnected()
-        {
+        if await isUSBTransportConnected() {
             return .usb
         }
         if let resolvedTransport = lastResolvedTransportByDesktopID[desktop.desktopIDForRouting] {
@@ -1709,9 +1707,7 @@ actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransfe
 
     func resolveLiveTransports(for desktop: TrustedDesktopRecord) async -> [TransferTransport] {
         var liveTransports: [TransferTransport] = []
-        if let usbConnectivity = usbClient as? USBTransportConnectivityChecking,
-           await usbConnectivity.isUSBTransportConnected()
-        {
+        if await isUSBTransportConnected() {
             liveTransports.append(.usb)
         }
         if canAttemptPreferredTransport(.lan, desktop: desktop) {
@@ -1724,6 +1720,13 @@ actor AdaptiveMobileTransferClient: ChunkProgressPreferredTransportMobileTransfe
             return [resolvedTransport]
         }
         return [desktop.transport]
+    }
+
+    func isUSBTransportConnected() async -> Bool {
+        guard let usbConnectivity = usbClient as? USBTransportConnectivityChecking else {
+            return false
+        }
+        return await usbConnectivity.isUSBTransportConnected()
     }
 
     func recoverUSBTransportAfterForegroundResume(for desktop: TrustedDesktopRecord) async {

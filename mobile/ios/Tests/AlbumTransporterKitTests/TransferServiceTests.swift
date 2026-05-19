@@ -276,6 +276,34 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(refreshedSnapshot?.liveTransports, [.usb, .lan])
     }
 
+    func test_photo_library_transfer_service_reports_usb_alive_through_adaptive_transfer_client() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let adaptiveClient = AdaptiveMobileTransferClient(
+            lanClient: RecordingMobileTransferClient(),
+            usbClient: RecordingMobileTransferClient(usbConnected: true)
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(descriptors: []),
+            transferClient: adaptiveClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let usbAlive = await service.isUSBTransportAlive()
+
+        XCTAssertTrue(usbAlive)
+    }
+
     func test_photo_library_transfer_service_exposes_both_live_transports_when_usb_and_lan_are_alive() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -1063,11 +1091,12 @@ private actor ChunkSizeRecorder {
     }
 }
 
-private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving {
+private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving, USBTransportConnectivityChecking {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
     private let startDelayNanoseconds: UInt64
     private let uploadDelayNanoseconds: UInt64
+    private let usbConnected: Bool
     private var resolvedTransport: TransferTransport?
     private var liveTransports: [TransferTransport]?
     private var lookupAssetIDsByBatch: [[String]] = []
@@ -1086,6 +1115,7 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
 
     init(
         existingAssetIDs: Set<String> = [],
+        usbConnected: Bool = false,
         resolvedTransport: TransferTransport? = nil,
         liveTransports: [TransferTransport]? = nil,
         startDelayNanoseconds: UInt64 = 0,
@@ -1094,6 +1124,7 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
         uploadErrorByAssetID: [String: TransferClientError] = [:]
     ) {
         self.existingAssetIDs = existingAssetIDs
+        self.usbConnected = usbConnected
         self.resolvedTransport = resolvedTransport
         self.liveTransports = liveTransports
         self.startDelayNanoseconds = startDelayNanoseconds
@@ -1270,6 +1301,10 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
 
     func resolveLiveTransports(for desktop: TrustedDesktopRecord) async -> [TransferTransport] {
         liveTransports ?? [resolvedTransport ?? desktop.transport]
+    }
+
+    func isUSBTransportConnected() async -> Bool {
+        usbConnected
     }
 
     func setResolvedTransport(_ transport: TransferTransport?) {
