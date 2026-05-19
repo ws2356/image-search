@@ -250,16 +250,6 @@ private struct HomeStatsCard: View {
                     subtitle: lastBackup
                 )
             }
-            if let previousTransferDescription = summary.previousTransferDescription {
-                Divider().padding(.leading, 62)
-                HomeStatsRow(
-                    iconColor: Color(hex: 0x30D158),
-                    iconBackground: Color(hex: 0xE6F9ED),
-                    iconName: "arrow.up.circle",
-                    title: "Most recent transfer",
-                    subtitle: previousTransferDescription
-                )
-            }
         }
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 14))
