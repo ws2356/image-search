@@ -190,6 +190,6 @@ final class TransferPageViewModel: ObservableObject {
     private func refreshIdleTimerPolicy() async {
         let usbTransportAlive = await transferService.isUSBTransportAlive()
         let batteryLevel = batteryLevelProvider.currentBatteryLevel() ?? 0
-        idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > 0.9
+        idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > 0.8
     }
 }
