@@ -192,9 +192,9 @@ final class MobileAppModel: ObservableObject {
     func onTransferCompleted(with result: TransferPageResult) async {
         switch result.result {
         case .success:
-            await finalizeCompletedTransfer()
+            await handleCompletedTransfer()
         case .failure(.stopConfirmed):
-            await finalizeStoppedTransfer()
+            await handleStoppedTransfer()
         case .failure(.transferFailed), .failure(.unknown):
             presentErrorSummary(
                 title: "Transfer failed",
@@ -400,7 +400,8 @@ final class MobileAppModel: ObservableObject {
         )
     }
 
-    private func finalizeStoppedTransfer() async {
+    private func handleStoppedTransfer() async {
+        guard route == .transfer else { return }
         await finalizeStoppedTransfer(reason: "user_requested")
     }
 
@@ -441,7 +442,8 @@ final class MobileAppModel: ObservableObject {
         backupFlowStateMachine.state
     }
 
-    private func finalizeCompletedTransfer() async {
+    private func handleCompletedTransfer() async {
+        guard route == .transfer else { return }
         let completionContext = await resolvedTransferCompletionContext()
         let snapshot = completionContext.snapshot
         let cleanupResult = completionContext.cleanupResult
