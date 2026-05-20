@@ -59,21 +59,32 @@ actor UserDefaultsBackupSessionStore: BackupSessionStore {
 
 @MainActor
 final class DefaultBackupSessionProvider: BackupSessionProviding {
-    @Published private var currentBackupSession: BackupSession?
+    @Published private var _currentBackupSession: BackupSession?
+    @Published private var _lastBackupSession: BackupSession?
 
     private let store: BackupSessionStore
     private var hasLoaded = false
+
+    /// States that represent a terminated session and should be persisted as `lastBackupSession`.
+    private static let terminatingStatuses: Set<MobileBackupFlowState> = [
+        .transferCompleted, .transferFailed, .transferStopped,
+        .pairingFailed, .pairingStopped, .pairingExpired
+    ]
 
     init(store: BackupSessionStore) {
         self.store = store
     }
 
-    var backupSession: BackupSession? {
-        currentBackupSession
+    var currentBackupSession: BackupSession? { _currentBackupSession }
+
+    var currentBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        $_currentBackupSession.eraseToAnyPublisher()
     }
 
-    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> {
-        $currentBackupSession.eraseToAnyPublisher()
+    var lastBackupSession: BackupSession? { _lastBackupSession }
+
+    var lastBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        $_lastBackupSession.eraseToAnyPublisher()
     }
 
     func load() async {
@@ -81,19 +92,23 @@ final class DefaultBackupSessionProvider: BackupSessionProviding {
             return
         }
         hasLoaded = true
-        currentBackupSession = await store.loadBackupSession()
+        _lastBackupSession = await store.loadBackupSession()
         BackupSessionDebugLogger.debug(
-            "Backup session provider loaded status=\(currentBackupSession?.status.rawValue ?? "none") session_id_present=\(!(currentBackupSession?.sessionID ?? "").isEmpty)"
+            "Backup session provider loaded last_status=\(_lastBackupSession?.status.rawValue ?? "none") session_id_present=\(!(_lastBackupSession?.sessionID ?? "").isEmpty)"
         )
     }
 
     func saveBackupSession(_ session: BackupSession?) async {
-        currentBackupSession = session
+        _currentBackupSession = session
         BackupSessionDebugLogger.debug(
             "Backup session provider accepted update status=\(session?.status.rawValue ?? "none") session_id_present=\(!(session?.sessionID ?? "").isEmpty)"
         )
+        guard let session, Self.terminatingStatuses.contains(session.status) else {
+            return
+        }
+        _lastBackupSession = session
         let store = store
-        Task.detached(priority: .utility) {
+        Task(priority: .utility) {
             await store.saveBackupSession(session)
         }
     }

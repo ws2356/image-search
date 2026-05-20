@@ -385,24 +385,30 @@ private struct SetupStep: Identifiable {
 #if DEBUG
 @MainActor
 final class PreviewBackupSessionProvider: BackupSessionProviding {
-    private let subject: CurrentValueSubject<BackupSession?, Never>
+    private let currentSubject = CurrentValueSubject<BackupSession?, Never>(nil)
+    private let lastSubject: CurrentValueSubject<BackupSession?, Never>
 
     init(session: BackupSession?) {
-        subject = CurrentValueSubject(session)
+        lastSubject = CurrentValueSubject(session)
     }
 
-    var backupSession: BackupSession? {
-        subject.value
+    var currentBackupSession: BackupSession? { currentSubject.value }
+
+    var currentBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        currentSubject.eraseToAnyPublisher()
     }
 
-    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> {
-        subject.eraseToAnyPublisher()
+    var lastBackupSession: BackupSession? { lastSubject.value }
+
+    var lastBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        lastSubject.eraseToAnyPublisher()
     }
 
     func load() async {}
 
     func saveBackupSession(_ session: BackupSession?) async {
-        subject.send(session)
+        currentSubject.send(session)
+        lastSubject.send(session)
     }
 }
 

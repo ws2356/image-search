@@ -168,8 +168,8 @@ final class PageViewModelTests: XCTestCase {
 
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
         XCTAssertEqual(startPairingCallCount, 1)
-        XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
-        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingCompleted)
+        XCTAssertEqual(model.backupSessionProvider.currentBackupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
+        XCTAssertEqual(model.backupSessionProvider.currentBackupSession?.status, .pairingCompleted)
         let diagnosticRecord = telemetryService.latestRecord(for: .diagnosticCheckpoint)
         XCTAssertEqual(diagnosticRecord?.attributes["diagnostic.area"], .string("pairing_service_result"))
         XCTAssertEqual(diagnosticRecord?.attributes["pairing.result"], .string("success"))

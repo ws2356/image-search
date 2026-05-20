@@ -42,7 +42,7 @@ final class MobileAppModel: ObservableObject {
         self.transferService = transferService
         self.telemetryContextProvider = telemetryContextProvider
         self.telemetryService = telemetryService
-        self.backupSessionObserver = backupSessionProvider.backupSessionPublisher
+        self.backupSessionObserver = backupSessionProvider.currentBackupSessionPublisher
             .sink { [weak self] session in
                 self?.pushTelemetryContext()
                 self?.recordDiagnosticCheckpoint(
@@ -95,7 +95,7 @@ final class MobileAppModel: ObservableObject {
         recordDiagnosticCheckpoint(
             area: "pairing_result_received",
             attributes: diagnosticAttributes(
-                backupSession: backupSessionProvider.backupSession,
+                backupSession: backupSessionProvider.currentBackupSession,
                 extra: pairingResultDiagnosticAttributes(result)
             )
         )
@@ -131,8 +131,8 @@ final class MobileAppModel: ObservableObject {
             )
             await backupSessionProvider.saveBackupSession(
                 status: .pairingStopped,
-                sessionID: backupSessionProvider.backupSession?.sessionID,
-                desktopName: backupSessionProvider.backupSession?.desktopName
+                sessionID: backupSessionProvider.currentBackupSession?.sessionID,
+                desktopName: backupSessionProvider.currentBackupSession?.desktopName
             )
             presentErrorSummary(
                 title: PairingError.rejected(message: message).title,
@@ -162,8 +162,8 @@ final class MobileAppModel: ObservableObject {
             )
             await backupSessionProvider.saveBackupSession(
                 status: .pairingFailed,
-                sessionID: backupSessionProvider.backupSession?.sessionID,
-                desktopName: backupSessionProvider.backupSession?.desktopName
+                sessionID: backupSessionProvider.currentBackupSession?.sessionID,
+                desktopName: backupSessionProvider.currentBackupSession?.desktopName
             )
             presentErrorSummary(
                 title: error.title,
@@ -269,7 +269,7 @@ final class MobileAppModel: ObservableObject {
         hasLoaded = true
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
-        let persistedBackupSession = backupSessionProvider.backupSession
+        let persistedBackupSession = backupSessionProvider.lastBackupSession
         if let persistedBackupSession {
             backupFlowStateMachine = MobileBackupFlowStateMachine(
                 state: persistedBackupSession.status
@@ -319,7 +319,7 @@ final class MobileAppModel: ObservableObject {
             recordDiagnosticCheckpoint(
                 area: "incoming_universal_link_deferred",
                 attributes: diagnosticAttributes(
-                    backupSession: backupSessionProvider.backupSession,
+                    backupSession: backupSessionProvider.currentBackupSession,
                     extra: [
                         "diagnostic.trigger": .string("handle_incoming_universal_link"),
                         "pairing.payload_length": .int(payload.count)
@@ -356,7 +356,7 @@ final class MobileAppModel: ObservableObject {
         recordDiagnosticCheckpoint(
             area: "pairing_page_presented",
             attributes: diagnosticAttributes(
-                backupSession: backupSessionProvider.backupSession,
+                backupSession: backupSessionProvider.currentBackupSession,
                 extra: [
                     "pairing.payload_length": .int(qrString.count)
                 ]
@@ -386,8 +386,8 @@ final class MobileAppModel: ObservableObject {
         )
         await backupSessionProvider.saveBackupSession(
             status: .transferStopped,
-            sessionID: backupSessionProvider.backupSession?.sessionID,
-            desktopName: backupSessionProvider.backupSession?.desktopName
+            sessionID: backupSessionProvider.currentBackupSession?.sessionID,
+            desktopName: backupSessionProvider.currentBackupSession?.desktopName
         )
     }
 
@@ -423,8 +423,8 @@ final class MobileAppModel: ObservableObject {
         )
         await backupSessionProvider.saveBackupSession(
             status: .transferStopped,
-            sessionID: backupSessionProvider.backupSession?.sessionID,
-            desktopName: backupSessionProvider.backupSession?.desktopName
+            sessionID: backupSessionProvider.currentBackupSession?.sessionID,
+            desktopName: backupSessionProvider.currentBackupSession?.desktopName
         )
     }
 
@@ -467,8 +467,8 @@ final class MobileAppModel: ObservableObject {
         )
         await backupSessionProvider.saveBackupSession(
             status: snapshot.failedCount == 0 ? .transferCompleted : .transferFailed,
-            sessionID: backupSessionProvider.backupSession?.sessionID,
-            desktopName: backupSessionProvider.backupSession?.desktopName
+            sessionID: backupSessionProvider.currentBackupSession?.sessionID,
+            desktopName: backupSessionProvider.currentBackupSession?.desktopName
         )
     }
 
@@ -496,7 +496,7 @@ final class MobileAppModel: ObservableObject {
             recordDiagnosticCheckpoint(
                 area: "incoming_universal_link_skipped",
                 attributes: diagnosticAttributes(
-                    backupSession: backupSessionProvider.backupSession,
+                    backupSession: backupSessionProvider.currentBackupSession,
                     extra: [
                         "diagnostic.trigger": .string("process_incoming_universal_link_payload"),
                         "pairing.skip_reason": .string("already_processing"),
@@ -510,7 +510,7 @@ final class MobileAppModel: ObservableObject {
         recordDiagnosticCheckpoint(
             area: "incoming_universal_link_processing_started",
             attributes: diagnosticAttributes(
-                backupSession: backupSessionProvider.backupSession,
+                backupSession: backupSessionProvider.currentBackupSession,
                 extra: [
                     "diagnostic.trigger": .string("process_incoming_universal_link_payload"),
                     "pairing.payload_length": .int(payload.count)
@@ -522,7 +522,7 @@ final class MobileAppModel: ObservableObject {
             recordDiagnosticCheckpoint(
                 area: "incoming_universal_link_processing_finished",
                 attributes: diagnosticAttributes(
-                    backupSession: backupSessionProvider.backupSession,
+                    backupSession: backupSessionProvider.currentBackupSession,
                     extra: [
                         "diagnostic.trigger": .string("process_incoming_universal_link_payload"),
                         "pairing.payload_length": .int(payload.count)
@@ -726,7 +726,7 @@ final class MobileAppModel: ObservableObject {
         TelemetryContext(
             route: route,
             backupFlowState: backupFlowStateMachine.state,
-            backupSession: backupSessionProvider.backupSession
+            backupSession: backupSessionProvider.currentBackupSession
         )
     }
 

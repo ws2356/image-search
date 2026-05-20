@@ -33,7 +33,7 @@ final class HomePageViewModel: ObservableObject {
         self.model = model
         self.telemetryService = telemetryService
         self.transportResolver = transportResolver
-        self.backupSessionObserver = model.backupSessionProvider.backupSessionPublisher
+        self.backupSessionObserver = model.backupSessionProvider.lastBackupSessionPublisher
             .sink { [weak self] _ in
                 guard let self else { return }
                 Task { await self.refreshSummary() }
@@ -48,7 +48,7 @@ final class HomePageViewModel: ObservableObject {
 
     func refreshSummary() async {
         let permissionSummary = await model.permissionService.loadPermissionSummary()
-        let backupSession = model.backupSessionProvider.backupSession
+        let backupSession = model.backupSessionProvider.lastBackupSession
         let transferSnapshot = await model.transferService.progressSnapshot()
         let fallbackTransport = await transportResolver.currentTransport() ?? .lan
         let renderedSummary = Self.renderSummary(

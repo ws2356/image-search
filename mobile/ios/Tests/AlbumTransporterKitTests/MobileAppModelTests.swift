@@ -31,21 +31,31 @@ actor InMemoryAppStateStore: AppStateStore {
 
 @MainActor
 final class AppStateStoreBackedBackupSessionProvider: BackupSessionProviding {
-    @Published private var currentBackupSession: BackupSession?
+    @Published private var _currentBackupSession: BackupSession?
+    @Published private var _lastBackupSession: BackupSession?
 
     private let store: AppStateStore
     private var hasLoaded = false
+
+    private static let terminatingStatuses: Set<MobileBackupFlowState> = [
+        .transferCompleted, .transferFailed, .transferStopped,
+        .pairingFailed, .pairingStopped, .pairingExpired
+    ]
 
     init(store: AppStateStore) {
         self.store = store
     }
 
-    var backupSession: BackupSession? {
-        currentBackupSession
+    var currentBackupSession: BackupSession? { _currentBackupSession }
+
+    var currentBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        $_currentBackupSession.eraseToAnyPublisher()
     }
 
-    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> {
-        $currentBackupSession.eraseToAnyPublisher()
+    var lastBackupSession: BackupSession? { _lastBackupSession }
+
+    var lastBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        $_lastBackupSession.eraseToAnyPublisher()
     }
 
     func load() async {
@@ -53,13 +63,17 @@ final class AppStateStoreBackedBackupSessionProvider: BackupSessionProviding {
             return
         }
         hasLoaded = true
-        currentBackupSession = await store.loadLaunchSnapshot().backupSession
+        _lastBackupSession = await store.loadLaunchSnapshot().backupSession
     }
 
     func saveBackupSession(_ session: BackupSession?) async {
-        currentBackupSession = session
+        _currentBackupSession = session
+        guard let session, Self.terminatingStatuses.contains(session.status) else {
+            return
+        }
+        _lastBackupSession = session
         let store = store
-        Task.detached(priority: .utility) {
+        Task(priority: .utility) {
             await store.saveLaunchSnapshot(LaunchSnapshot(backupSession: session))
         }
     }
@@ -490,7 +504,7 @@ final class MobileAppModelTests: XCTestCase {
         await startPairing(model: model)
 
         _ = requireErrorSummary(from: model.route)
-        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingStopped)
+        XCTAssertEqual(model.backupSessionProvider.currentBackupSession?.status, .pairingStopped)
     }
 
     func test_start_backup_shows_full_media_access_reminder_before_continuing() async {
@@ -890,7 +904,7 @@ final class MobileAppModelTests: XCTestCase {
         await orchestrateVisiblePairPage(model: model)
 
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
+        XCTAssertEqual(model.backupSessionProvider.currentBackupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
     }
 
     func test_handle_incoming_universal_link_with_invalid_payload_shows_pairing_failure() async {
@@ -1035,7 +1049,7 @@ final class MobileAppModelTests: XCTestCase {
 
         XCTAssertFalse(model.isShowingIncomingLinkReplacementConfirmation)
         XCTAssertEqual(model.route, .permissions)
-        XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, "pairing-replacement-001")
+        XCTAssertEqual(model.backupSessionProvider.currentBackupSession?.sessionID, "pairing-replacement-001")
         let stopCallCount = await transferService.stopCallCount()
         XCTAssertEqual(stopCallCount, 1)
         var stopReasonAttribute: MobileTelemetryAttributeValue?
@@ -1215,7 +1229,7 @@ final class MobileAppModelTests: XCTestCase {
             .string("pair")
         )
         XCTAssertEqual(model.backupFlowState, .pairingFailed)
-        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingFailed)
+        XCTAssertEqual(model.backupSessionProvider.currentBackupSession?.status, .pairingFailed)
     }
 
     func test_invalid_qr_code_navigates_to_error_page() async {
@@ -1255,12 +1269,12 @@ final class MobileAppModelTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         if case .error(_) = model.route {
-            XCTAssertNil(model.backupSessionProvider.backupSession?.sessionID)
+            XCTAssertNil(model.backupSessionProvider.currentBackupSession?.sessionID)
         } else {
             XCTFail("Expected route to be .error but got \(model.route)")
         }
         XCTAssertEqual(model.backupFlowState, .pairingFailed)
-        XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingFailed)
+        XCTAssertEqual(model.backupSessionProvider.currentBackupSession?.status, .pairingFailed)
         let failureRecord = await telemetryClient.latestRecord(for: .pairingFailed)
         XCTAssertEqual(
             failureRecord?.attributes["pairing.failure_reason"],

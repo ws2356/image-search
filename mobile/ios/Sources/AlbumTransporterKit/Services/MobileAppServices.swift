@@ -9,8 +9,14 @@ protocol BackupSessionStore: Sendable {
 
 @MainActor
 protocol BackupSessionProviding: AnyObject {
-    var backupSession: BackupSession? { get }
-    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> { get }
+    /// The active session being built during the current pairing/transfer flow. Always `nil` at app launch.
+    var currentBackupSession: BackupSession? { get }
+    var currentBackupSessionPublisher: AnyPublisher<BackupSession?, Never> { get }
+
+    /// The most recently terminated session (transferCompleted / *Failed / *Stopped / pairingExpired),
+    /// loaded from disk at launch and used by the Home screen to show backup history.
+    var lastBackupSession: BackupSession? { get }
+    var lastBackupSessionPublisher: AnyPublisher<BackupSession?, Never> { get }
 
     func load() async
     func saveBackupSession(_ session: BackupSession?) async
@@ -23,11 +29,11 @@ extension BackupSessionProviding {
         sessionID: String? = nil,
         desktopName: String? = nil
     ) async {
-        let currentSession = backupSession
+        let activeSession = currentBackupSession
         await saveBackupSession(
             BackupSession(
-                sessionID: sessionID ?? currentSession?.sessionID,
-                desktopName: desktopName ?? currentSession?.desktopName,
+                sessionID: sessionID ?? activeSession?.sessionID,
+                desktopName: desktopName ?? activeSession?.desktopName,
                 status: status,
                 updatedAt: Date()
             )
