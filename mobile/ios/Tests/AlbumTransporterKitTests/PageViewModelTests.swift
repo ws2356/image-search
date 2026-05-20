@@ -288,7 +288,7 @@ final class PageViewModelTests: XCTestCase {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         let idleTimerController = StubIdleTimerController()
-        let batteryLevelProvider = StubBatteryLevelProvider(level: 0.95)
+        let batteryLevelProvider = StubBatteryLevelProvider(level: 0.99)
         let viewModel = TransferPageViewModel(
             model: model,
             telemetryService: telemetryService,
@@ -301,7 +301,7 @@ final class PageViewModelTests: XCTestCase {
         await viewModel.loadFromViewLifecycle()
         XCTAssertTrue(idleTimerController.isIdleTimerDisabled)
 
-        batteryLevelProvider.level = 0.89
+        batteryLevelProvider.level = TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER / 2
         await model.transferServiceActor.setUSBTransportAlive(false)
         await viewModel.loadFromViewLifecycle()
 

@@ -139,24 +139,35 @@ private extension TransferSnapshot {
 
 @MainActor
 private final class SnapshotBackupSessionProvider: BackupSessionProviding {
-    private let subject: CurrentValueSubject<BackupSession?, Never>
+    private let currentSubject: CurrentValueSubject<BackupSession?, Never>
+    private let lastSubject: CurrentValueSubject<BackupSession?, Never>
 
     init(session: BackupSession?) {
-        subject = CurrentValueSubject(session)
+        currentSubject = CurrentValueSubject(session)
+        lastSubject = CurrentValueSubject(session)
     }
 
-    var backupSession: BackupSession? {
-        subject.value
+    var currentBackupSession: BackupSession? {
+        currentSubject.value
     }
 
-    var backupSessionPublisher: AnyPublisher<BackupSession?, Never> {
-        subject.eraseToAnyPublisher()
+    var currentBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        currentSubject.eraseToAnyPublisher()
+    }
+
+    var lastBackupSession: BackupSession? {
+        lastSubject.value
+    }
+
+    var lastBackupSessionPublisher: AnyPublisher<BackupSession?, Never> {
+        lastSubject.eraseToAnyPublisher()
     }
 
     func load() async {}
 
     func saveBackupSession(_ session: BackupSession?) async {
-        subject.send(session)
+        currentSubject.send(session)
+        lastSubject.send(session)
     }
 }
 

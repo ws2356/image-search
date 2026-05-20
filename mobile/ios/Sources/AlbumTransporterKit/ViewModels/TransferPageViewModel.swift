@@ -22,6 +22,8 @@ final class TransferPageViewModel: ObservableObject {
     @Published private(set) var snapshot: TransferSnapshot
     @Published private(set) var isIncompleteLibrary = false
     @Published var isShowingStopConfirmation = false
+    
+    static let BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER: Float = 0.8
 
     init(
         model: any TransferPageModeling,
@@ -42,9 +44,8 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     func loadFromViewLifecycle() async {
-        await loadStagedSnapshot()
+        isIncompleteLibrary = await model.permissionService.loadPermissionSummary().mediaScope != .full
         await startIdleTimerPolling()
-        recordSnapshotDiagnosticIfNeeded(area: "transfer_view_loaded", snapshot: snapshot)
     }
 
     func handleViewDidDisappear() {
@@ -86,9 +87,11 @@ final class TransferPageViewModel: ObservableObject {
         defer {
             hasStartedTransferOrchestration = false
             stopTransferPolling()
+            stopIdleTimerPolling()
         }
 
-        await loadCurrentSnapshot()
+        await startIdleTimerPolling()
+        recordSnapshotDiagnosticIfNeeded(area: "transfer_view_loaded", snapshot: snapshot)
         startTransferPolling()
         // DO NOT use this callback to update UI, use polling instead.
         let finalSnapshot = await transferService.startTransfer { _ in }
@@ -173,17 +176,6 @@ final class TransferPageViewModel: ObservableObject {
         idleTimerPollingTask = nil
     }
 
-    private func loadCurrentSnapshot() async {
-        guard let stagedSnapshot = await transferService.progressSnapshot() else {
-            let fallbackTransport = await transportResolver.currentTransport() ?? .lan
-            snapshot = .empty(transport: fallbackTransport)
-            isIncompleteLibrary = await model.permissionService.loadPermissionSummary().mediaScope != .full
-            return
-        }
-        isIncompleteLibrary = await model.permissionService.loadPermissionSummary().mediaScope != .full
-        applySnapshotIfNewer(stagedSnapshot)
-    }
-
     private func resolveCleanupResult() async -> TransferAssetCleanupResult {
         guard await model.permissionService.removeAfterBackupEnabled() else {
             return .skipped
@@ -204,14 +196,10 @@ final class TransferPageViewModel: ObservableObject {
         recordSnapshotDiagnosticIfNeeded(area: "transfer_snapshot_applied", snapshot: newSnapshot)
     }
 
-    private func loadStagedSnapshot() async {
-        await loadCurrentSnapshot()
-    }
-
     private func refreshIdleTimerPolicy() async {
         let usbTransportAlive = await transferService.isUSBTransportAlive()
         let batteryLevel = batteryLevelProvider.currentBatteryLevel() ?? 0
-        idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > 0.8
+        idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER
     }
 
     private func recordSnapshotDiagnosticIfNeeded(area: String, snapshot: TransferSnapshot) {

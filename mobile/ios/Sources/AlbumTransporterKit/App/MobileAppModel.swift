@@ -279,6 +279,10 @@ final class MobileAppModel: ObservableObject {
             backupFlowStateMachine = MobileBackupFlowStateMachine()
         }
         route = .home
+        recordDiagnosticCheckpoint(
+            area: "app_load_completed",
+            attributes: diagnosticAttributes(backupSession: backupSession)
+        )
         hasFinishedLoad = true
 
         // Process any universal link that arrived before load completed.

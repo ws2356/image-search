@@ -19,11 +19,6 @@ struct TransferSessionView: View {
         .task {
             await viewModel.orchestrateTransfer()
         }
-        .onAppear {
-            Task {
-                await viewModel.loadFromViewLifecycle()
-            }
-        }
         .onDisappear {
             viewModel.handleViewDidDisappear()
         }
