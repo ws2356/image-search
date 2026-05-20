@@ -683,10 +683,12 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
         await startPairing(model: model)
 
-        let transferTask = Task {
-            await permissionsViewModel.startPreflight()
-        }
-        try? await Task.sleep(nanoseconds: 30_000_000)
+        // startPreflight() with .allClear shows the remove-after-backup prompt and returns.
+        await permissionsViewModel.startPreflight()
+        // Advance through permissions; this calls onPermissionsCompleted(.success) -> route = .transfer.
+        await permissionsViewModel.selectRemoveAfterBackupPreference(false)
+        XCTAssertEqual(model.route, .transfer)
+
         let transferViewModel = TransferPageViewModel(
             model: model,
             telemetryService: NoopTelemetryService(),
@@ -706,9 +708,6 @@ final class MobileAppModelTests: XCTestCase {
         await homeViewModel.refreshSummary()
         XCTAssertNotNil(homeViewModel.summary.lastBackupDescription)
         XCTAssertNotNil(homeViewModel.summary.previouslyTransferredDescription)
-
-        await transferTask.value
-        XCTAssertEqual(model.route, .home)
     }
 
     func test_start_backup_polls_transfer_progress_while_session_is_running() async {
