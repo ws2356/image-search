@@ -281,7 +281,7 @@ final class MobileAppModel: ObservableObject {
         route = .home
         recordDiagnosticCheckpoint(
             area: "app_load_completed",
-            attributes: diagnosticAttributes(backupSession: backupSession)
+            attributes: diagnosticAttributes(backupSession: backupSessionProvider.lastBackupSession)
         )
         hasFinishedLoad = true
 
