@@ -78,6 +78,36 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(diagnosticRecord?.attributes["transfer.transport"], .string("lan"))
     }
 
+    func test_home_page_view_model_refreshes_summary_on_backup_session_publisher_change() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = HomePageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
+
+        // Allow initial subscription emission to be processed.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertNil(viewModel.summary.lastBackupDescription, "No session history expected before load")
+
+        // Simulate backupSessionProvider.load() completing with a persisted session.
+        await model.backupSessionProvider.saveBackupSession(
+            BackupSession(
+                sessionID: "session-1",
+                desktopName: "My PC",
+                status: .transferCompleted,
+                updatedAt: Date()
+            )
+        )
+
+        // Allow the subscription-triggered refreshSummary Task to complete.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(viewModel.summary.lastBackupDescription, "Last backup completed just now.")
+        XCTAssertEqual(viewModel.summary.desktopName, "My PC")
+    }
+
     func test_scanning_page_view_model_maps_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)

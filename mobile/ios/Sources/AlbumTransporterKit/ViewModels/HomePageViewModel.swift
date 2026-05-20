@@ -23,6 +23,7 @@ final class HomePageViewModel: ObservableObject {
     private let transportResolver: AppTransferTransportResolving
     private let telemetryService: TelemetryService
     @Published private(set) var summary: HomeViewState = .firstLaunch
+    private var backupSessionObserver: AnyCancellable?
 
     init(
         model: any AppPageModeling,
@@ -32,6 +33,11 @@ final class HomePageViewModel: ObservableObject {
         self.model = model
         self.telemetryService = telemetryService
         self.transportResolver = transportResolver
+        self.backupSessionObserver = model.backupSessionProvider.backupSessionPublisher
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.refreshSummary() }
+            }
     }
 
     func handlePrimaryActionTapped() async {
