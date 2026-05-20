@@ -18,17 +18,20 @@ final class PairingPageViewModel: ObservableObject {
     }
 
     func orchestratePairing() async {
-        guard case .pair(let qrString) = model.route,
-              model.backupFlowState == .pendingPairing
-        else {
+        guard case .pair(let qrString) = model.route else {
+            await model.onPairingCompleted(with: PairingPageResult(result: .failure(.cancel)))
+            return
+        }
+
+        if model.backupFlowState != .pendingPairing {
             recordDiagnosticCheckpoint(
                 area: "pairing_orchestration_skipped",
                 attributes: [
-                    "pairing.skip_reason": .string("route_or_flow_state_mismatch")
+                    "pairing.skip_reason": .string("route_or_flow_state_mismatch state=\(model.backupFlowState.rawValue)")
                 ]
             )
-            return
         }
+            // Navigate home so the page doesn't stay stuck with nothing happening.
         guard !hasStartedPairingAttempt else {
             recordDiagnosticCheckpoint(
                 area: "pairing_orchestration_skipped",

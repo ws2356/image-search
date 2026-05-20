@@ -270,10 +270,10 @@ final class MobileAppModel: ObservableObject {
         hasLoaded = true
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
-        let persistedBackupSession = backupSessionProvider.lastBackupSession
-        if let persistedBackupSession {
+        let backupSession = backupSessionProvider.currentBackupSession
+        if let backupSession {
             backupFlowStateMachine = MobileBackupFlowStateMachine(
-                state: persistedBackupSession.status
+                state: backupSession.status
             )
         } else {
             backupFlowStateMachine = MobileBackupFlowStateMachine()
@@ -292,16 +292,6 @@ final class MobileAppModel: ObservableObject {
             await pairingService.primeNetworkAccess()
         }
         recordTelemetry(.appLaunched)
-        recordDiagnosticCheckpoint(
-            area: "app_load_completed",
-            attributes: diagnosticAttributes(
-                backupSession: persistedBackupSession,
-                extra: [
-                    "diagnostic.trigger": .string("load"),
-                    "diagnostic.has_loaded": .bool(hasLoaded)
-                ]
-            )
-        )
     }
 
     func openScanFlow() async {

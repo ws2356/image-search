@@ -175,7 +175,7 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(diagnosticRecord?.attributes["pairing.result"], .string("success"))
     }
 
-    func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
+    func test_pairing_page_view_model_navigates_home_when_flow_state_mismatches() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         model.route = .pair(qrString: PairingQRCodePayload.demoScanValue)
@@ -189,7 +189,8 @@ final class PageViewModelTests: XCTestCase {
         await viewModel.orchestratePairing()
 
         let startPairingCallCount = await model.pairingServiceActor.startPairingCallCount()
-        XCTAssertEqual(startPairingCallCount, 0)
+        XCTAssertEqual(startPairingCallCount, 0, "Should not start pairing with mismatched state")
+        XCTAssertEqual(model.returnHomeCallCount, 1, "Should navigate home to unstick the page")
     }
 
     func test_permissions_page_view_model_maps_summary_and_actions() async {
