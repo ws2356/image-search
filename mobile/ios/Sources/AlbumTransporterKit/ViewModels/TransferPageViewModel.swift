@@ -11,6 +11,8 @@ final class TransferPageViewModel: ObservableObject {
     private var transferPollingTask: Task<Void, Never>?
     private var idleTimerPollingTask: Task<Void, Never>?
     private var hasStartedTransferOrchestration = false
+    private var hasReportedMissingProgressSnapshot = false
+    private var lastSnapshotDiagnosticSignature: String?
     private static let idleTimerPollingIntervalNanoseconds: UInt64 = 1_000_000_000
 
     private var transferService: TransferService {
@@ -42,6 +44,7 @@ final class TransferPageViewModel: ObservableObject {
     func loadFromViewLifecycle() async {
         await loadStagedSnapshot()
         await startIdleTimerPolling()
+        recordSnapshotDiagnosticIfNeeded(area: "transfer_view_loaded", snapshot: snapshot)
     }
 
     func handleViewDidDisappear() {
@@ -116,7 +119,20 @@ final class TransferPageViewModel: ObservableObject {
                 }
                 if let inFlightSnapshot = await transferService.progressSnapshot() {
                     await MainActor.run {
+                        self.hasReportedMissingProgressSnapshot = false
+                    }
+                    await MainActor.run {
                         self.applySnapshotIfNewer(inFlightSnapshot)
+                    }
+                } else if !self.hasReportedMissingProgressSnapshot {
+                    await MainActor.run {
+                        self.hasReportedMissingProgressSnapshot = true
+                        self.recordDiagnosticCheckpoint(
+                            area: "transfer_poll_snapshot_missing",
+                            attributes: [
+                                "transfer.poll_interval_ms": .int(Int(self.pollingIntervalNanoseconds / 1_000_000))
+                            ]
+                        )
                     }
                 }
                 let sleepInterval: UInt64
@@ -181,9 +197,11 @@ final class TransferPageViewModel: ObservableObject {
             newSnapshot.totalCount != currentSnapshot.totalCount
                 || newSnapshot.transferredCount >= currentSnapshot.transferredCount
         else {
+            recordSnapshotDiagnosticIfNeeded(area: "transfer_snapshot_rejected", snapshot: newSnapshot)
             return
         }
         snapshot = newSnapshot
+        recordSnapshotDiagnosticIfNeeded(area: "transfer_snapshot_applied", snapshot: newSnapshot)
     }
 
     private func loadStagedSnapshot() async {
@@ -194,5 +212,66 @@ final class TransferPageViewModel: ObservableObject {
         let usbTransportAlive = await transferService.isUSBTransportAlive()
         let batteryLevel = batteryLevelProvider.currentBatteryLevel() ?? 0
         idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > 0.8
+    }
+
+    private func recordSnapshotDiagnosticIfNeeded(area: String, snapshot: TransferSnapshot) {
+        let signature = [
+            area,
+            snapshot.phase.rawValue,
+            snapshot.transport.rawValue,
+            String(snapshot.transferredCount),
+            String(snapshot.totalCount),
+            String(snapshot.failedCount),
+            String(snapshot.skippedCount),
+            (snapshot.liveTransports ?? []).map(\.rawValue).joined(separator: ",")
+        ].joined(separator: "|")
+        guard signature != lastSnapshotDiagnosticSignature else {
+            return
+        }
+        lastSnapshotDiagnosticSignature = signature
+        recordDiagnosticCheckpoint(
+            area: area,
+            attributes: [
+                "transfer.phase": .string(snapshot.phase.rawValue),
+                "transfer.transport": .string(snapshot.transport.rawValue),
+                "transfer.transferred_count": .int(snapshot.transferredCount),
+                "transfer.total_count": .int(snapshot.totalCount),
+                "transfer.failed_count": .int(snapshot.failedCount),
+                "transfer.skipped_count": .int(snapshot.skippedCount),
+                "transfer.live_transport_count": .int((snapshot.liveTransports ?? []).count),
+                "transfer.eta_present": .bool(snapshot.etaMinutes != nil),
+                "transfer.failure_message_present": .bool(snapshot.failureMessage?.isEmpty == false)
+            ]
+        )
+    }
+
+    private func recordDiagnosticCheckpoint(
+        area: String,
+        attributes: MobileTelemetryAttributes = [:]
+    ) {
+        var diagnosticAttributes = attributes
+        diagnosticAttributes["diagnostic.area"] = .string(area)
+        diagnosticAttributes["app.route"] = .string(routeName(model.route))
+        diagnosticAttributes["backup.flow_state"] = .string(model.backupFlowState.rawValue)
+        telemetryService.recordTelemetry(.diagnosticCheckpoint, attributes: diagnosticAttributes)
+    }
+
+    private func routeName(_ route: AppRoute) -> String {
+        switch route {
+        case .home:
+            return "home"
+        case .scan:
+            return "scan"
+        case .pair:
+            return "pair"
+        case .permissions:
+            return "permissions"
+        case .transfer:
+            return "transfer"
+        case .completed:
+            return "completed"
+        case .error:
+            return "error"
+        }
     }
 }

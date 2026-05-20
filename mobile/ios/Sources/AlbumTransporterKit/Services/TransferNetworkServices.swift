@@ -2366,6 +2366,8 @@ actor PhotoLibraryTransferService: TransferService {
     private var currentCompletionState: TransferCompletionState?
     private var currentCleanupResult: TransferAssetCleanupResult = .skipped
     private var transferStartedAt: Date?
+    private var lastProcessedItemProgressAt: Date?
+    private var lastBytesWithoutItemProgressDiagnosticAt: Date?
 
     init(
         assetSource: TransferAssetSource,
@@ -2716,6 +2718,13 @@ actor PhotoLibraryTransferService: TransferService {
                 desktop: trustedDesktop
             )
             currentSnapshot = initialSnapshotWithLiveTransports
+            lastProcessedItemProgressAt = Date()
+            lastBytesWithoutItemProgressDiagnosticAt = nil
+            await recordTransferDiagnosticCheckpoint(
+                area: "transfer_service_progress_update",
+                snapshot: initialSnapshotWithLiveTransports,
+                desktop: trustedDesktop
+            )
             progress(initialSnapshotWithLiveTransports)
 
             while true {
@@ -2830,6 +2839,8 @@ actor PhotoLibraryTransferService: TransferService {
         totalPreparedTransferBytes = 0
         processedPreparedTransferBytes = 0
         nonSkippedTransferredBytesForSpeed = 0
+        lastProcessedItemProgressAt = nil
+        lastBytesWithoutItemProgressDiagnosticAt = nil
         return snapshot
     }
 
@@ -3394,7 +3405,14 @@ actor PhotoLibraryTransferService: TransferService {
             to: updatedSnapshot,
             desktop: desktop
         )
+        lastProcessedItemProgressAt = Date()
+        lastBytesWithoutItemProgressDiagnosticAt = nil
         currentSnapshot = updatedSnapshotWithLiveTransports
+        await recordTransferDiagnosticCheckpoint(
+            area: "transfer_service_progress_update",
+            snapshot: updatedSnapshotWithLiveTransports,
+            desktop: desktop
+        )
         progress(updatedSnapshotWithLiveTransports)
     }
 
@@ -3418,7 +3436,56 @@ actor PhotoLibraryTransferService: TransferService {
             )
             : nil
         currentSnapshot = snapshot
+        if snapshot.phase == .transferring,
+           snapshot.totalCount > snapshot.transferredCount + snapshot.failedCount,
+           let lastProcessedItemProgressAt
+        {
+            let now = Date()
+            let secondsSinceItemProgress = now.timeIntervalSince(lastProcessedItemProgressAt)
+            let shouldRecordDiagnostic = secondsSinceItemProgress >= 3
+                && (lastBytesWithoutItemProgressDiagnosticAt == nil
+                    || now.timeIntervalSince(lastBytesWithoutItemProgressDiagnosticAt!) >= 3)
+            if shouldRecordDiagnostic,
+               let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+            {
+                lastBytesWithoutItemProgressDiagnosticAt = now
+                await recordTransferDiagnosticCheckpoint(
+                    area: "transfer_service_bytes_without_item_progress",
+                    snapshot: snapshot,
+                    desktop: trustedDesktop,
+                    extra: [
+                        "transfer.seconds_since_item_progress": .double(secondsSinceItemProgress),
+                        "transfer.speed_bps_present": .bool(snapshot.transferSpeedBytesPerSecond != nil)
+                    ]
+                )
+            }
+        }
         progress(snapshot)
+    }
+
+    private func recordTransferDiagnosticCheckpoint(
+        area: String,
+        snapshot: TransferSnapshot,
+        desktop: TrustedDesktopRecord,
+        extra: MobileTelemetryAttributes = [:]
+    ) async {
+        var attributes: MobileTelemetryAttributes = [
+            "diagnostic.area": .string(area),
+            "correlation.session_id": .string(desktop.lastSessionID),
+            "transfer.phase": .string(snapshot.phase.rawValue),
+            "transfer.transport": .string(snapshot.transport.rawValue),
+            "transfer.transferred_count": .int(snapshot.transferredCount),
+            "transfer.total_count": .int(snapshot.totalCount),
+            "transfer.failed_count": .int(snapshot.failedCount),
+            "transfer.skipped_count": .int(snapshot.skippedCount),
+            "transfer.live_transport_count": .int((snapshot.liveTransports ?? []).count),
+            "transfer.eta_present": .bool(snapshot.etaMinutes != nil),
+            "transfer.speed_bps_present": .bool(snapshot.transferSpeedBytesPerSecond != nil)
+        ]
+        for (key, value) in extra {
+            attributes[key] = value
+        }
+        await telemetryClient.record(event: .diagnosticCheckpoint, attributes: attributes)
     }
 
     private func resolvedTransport(for desktop: TrustedDesktopRecord) async -> TransferTransport {

@@ -60,6 +60,24 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.summary.desktopName, "Desk Mac")
     }
 
+    func test_home_page_view_model_records_diagnostic_checkpoint_on_refresh() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let viewModel = HomePageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService
+        )
+
+        await viewModel.refreshSummary()
+
+        let diagnosticRecord = telemetryService.latestRecord(for: .diagnosticCheckpoint)
+        XCTAssertEqual(diagnosticRecord?.attributes["diagnostic.area"], .string("home_summary_refreshed"))
+        XCTAssertEqual(diagnosticRecord?.attributes["backup.session_present"], .bool(false))
+        XCTAssertEqual(diagnosticRecord?.attributes["transfer.snapshot_present"], .bool(true))
+        XCTAssertEqual(diagnosticRecord?.attributes["transfer.transport"], .string("lan"))
+    }
+
     func test_scanning_page_view_model_maps_actions() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
@@ -122,6 +140,9 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(startPairingCallCount, 1)
         XCTAssertEqual(model.backupSessionProvider.backupSession?.sessionID, PairingQRCodePayload.demo.sessionID)
         XCTAssertEqual(model.backupSessionProvider.backupSession?.status, .pairingCompleted)
+        let diagnosticRecord = telemetryService.latestRecord(for: .diagnosticCheckpoint)
+        XCTAssertEqual(diagnosticRecord?.attributes["diagnostic.area"], .string("pairing_service_result"))
+        XCTAssertEqual(diagnosticRecord?.attributes["pairing.result"], .string("success"))
     }
 
     func test_pairing_page_view_model_ignores_reentry_after_pairing_leaves_loading_state() async {
@@ -298,6 +319,12 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.snapshot.totalCount, 5)
 
         await transferTask.value
+        XCTAssertTrue(
+            telemetryService.records.contains(where: { record in
+                record.event == .diagnosticCheckpoint
+                    && record.attributes["diagnostic.area"] == .string("transfer_snapshot_applied")
+            })
+        )
     }
 
     func test_transfer_page_view_model_stages_completion_duration() async {
@@ -607,10 +634,11 @@ private actor StubPermissionService: PermissionService {
 private final class StubTelemetryService: TelemetryService {
     var beginSpanCallCount = 0
     var recordedEvents: [MobileTelemetryEvent] = []
+    private(set) var records: [RecordedStubTelemetry] = []
 
     func recordTelemetry(_ event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) {
-        _ = attributes
         recordedEvents.append(event)
+        records.append(RecordedStubTelemetry(event: event, attributes: attributes))
     }
 
     func beginTelemetrySpan(_ span: MobileTelemetrySpan, attributes: MobileTelemetryAttributes) {
@@ -631,6 +659,15 @@ private final class StubTelemetryService: TelemetryService {
     func recordDialogView(name: String) {}
     func recordInteraction(name: String, location: String) {}
     func forceFlush() {}
+
+    func latestRecord(for event: MobileTelemetryEvent) -> RecordedStubTelemetry? {
+        records.last(where: { $0.event == event })
+    }
+}
+
+private struct RecordedStubTelemetry: Equatable {
+    let event: MobileTelemetryEvent
+    let attributes: MobileTelemetryAttributes
 }
 
 private actor StubTransferService: TransferService {

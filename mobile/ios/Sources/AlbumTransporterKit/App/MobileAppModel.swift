@@ -43,8 +43,17 @@ final class MobileAppModel: ObservableObject {
         self.telemetryContextProvider = telemetryContextProvider
         self.telemetryService = telemetryService
         self.backupSessionObserver = backupSessionProvider.backupSessionPublisher
-            .sink { [weak self] _ in
+            .sink { [weak self] session in
                 self?.pushTelemetryContext()
+                self?.recordDiagnosticCheckpoint(
+                    area: "backup_session_observed",
+                    attributes: self?.diagnosticAttributes(
+                        backupSession: session,
+                        extra: [
+                            "diagnostic.trigger": .string("backup_session_publisher")
+                        ]
+                    ) ?? [:]
+                )
             }
         pushTelemetryContext()
         configureMemoryWarningObservation()
@@ -83,6 +92,13 @@ final class MobileAppModel: ObservableObject {
     }
 
     func onPairingCompleted(with result: PairingPageResult) async {
+        recordDiagnosticCheckpoint(
+            area: "pairing_result_received",
+            attributes: diagnosticAttributes(
+                backupSession: backupSessionProvider.backupSession,
+                extra: pairingResultDiagnosticAttributes(result)
+            )
+        )
         switch result.result {
         case .success(let pairingResponse):
             transitionBackupFlow(.pairingAccepted)
@@ -267,6 +283,16 @@ final class MobileAppModel: ObservableObject {
             await pairingService.primeNetworkAccess()
         }
         recordTelemetry(.appLaunched)
+        recordDiagnosticCheckpoint(
+            area: "app_load_completed",
+            attributes: diagnosticAttributes(
+                backupSession: persistedBackupSession,
+                extra: [
+                    "diagnostic.trigger": .string("load"),
+                    "diagnostic.has_loaded": .bool(hasLoaded)
+                ]
+            )
+        )
     }
 
     func openScanFlow() async {
@@ -290,6 +316,16 @@ final class MobileAppModel: ObservableObject {
         if route == .transfer {
             pendingIncomingUniversalLinkPayload = payload
             isShowingIncomingLinkReplacementConfirmation = true
+            recordDiagnosticCheckpoint(
+                area: "incoming_universal_link_deferred",
+                attributes: diagnosticAttributes(
+                    backupSession: backupSessionProvider.backupSession,
+                    extra: [
+                        "diagnostic.trigger": .string("handle_incoming_universal_link"),
+                        "pairing.payload_length": .int(payload.count)
+                    ]
+                )
+            )
             return
         }
 
@@ -317,6 +353,15 @@ final class MobileAppModel: ObservableObject {
         transitionBackupFlow(.pairingStarted)
         route = .pair(qrString: qrString)
         recordTelemetry(.pairingStarted)
+        recordDiagnosticCheckpoint(
+            area: "pairing_page_presented",
+            attributes: diagnosticAttributes(
+                backupSession: backupSessionProvider.backupSession,
+                extra: [
+                    "pairing.payload_length": .int(qrString.count)
+                ]
+            )
+        )
     }
 
     private func abortPreflightAndReturnHome(reason: String) async {
@@ -448,10 +493,43 @@ final class MobileAppModel: ObservableObject {
 
     private func processIncomingUniversalLinkPayload(_ payload: String) async {
         guard !isProcessingIncomingUniversalLink else {
+            recordDiagnosticCheckpoint(
+                area: "incoming_universal_link_skipped",
+                attributes: diagnosticAttributes(
+                    backupSession: backupSessionProvider.backupSession,
+                    extra: [
+                        "diagnostic.trigger": .string("process_incoming_universal_link_payload"),
+                        "pairing.skip_reason": .string("already_processing"),
+                        "pairing.payload_length": .int(payload.count)
+                    ]
+                )
+            )
             return
         }
         isProcessingIncomingUniversalLink = true
-        defer { isProcessingIncomingUniversalLink = false }
+        recordDiagnosticCheckpoint(
+            area: "incoming_universal_link_processing_started",
+            attributes: diagnosticAttributes(
+                backupSession: backupSessionProvider.backupSession,
+                extra: [
+                    "diagnostic.trigger": .string("process_incoming_universal_link_payload"),
+                    "pairing.payload_length": .int(payload.count)
+                ]
+            )
+        )
+        defer {
+            isProcessingIncomingUniversalLink = false
+            recordDiagnosticCheckpoint(
+                area: "incoming_universal_link_processing_finished",
+                attributes: diagnosticAttributes(
+                    backupSession: backupSessionProvider.backupSession,
+                    extra: [
+                        "diagnostic.trigger": .string("process_incoming_universal_link_payload"),
+                        "pairing.payload_length": .int(payload.count)
+                    ]
+                )
+            )
+        }
 
         await openScanFlow()
         await showPairingPage(qrString: payload)
@@ -511,6 +589,48 @@ final class MobileAppModel: ObservableObject {
         [
             "backup.failure_reason": .string(reason)
         ]
+    }
+
+    private func pairingResultDiagnosticAttributes(_ result: PairingPageResult) -> MobileTelemetryAttributes {
+        switch result.result {
+        case .success(let response):
+            return [
+                "pairing.result": .string("success"),
+                "pairing.transport": .string(response.transport.rawValue),
+                "pairing.desktop_name_present": .bool(!response.desktopName.isEmpty)
+            ]
+        case .failure(let error):
+            return [
+                "pairing.result": .string("failure"),
+                "pairing.failure_reason": .string(error.title),
+                "pairing.failure_message": .string(error.message)
+            ]
+        }
+    }
+
+    private func diagnosticAttributes(
+        backupSession: BackupSession?,
+        extra: MobileTelemetryAttributes = [:]
+    ) -> MobileTelemetryAttributes {
+        var attributes: MobileTelemetryAttributes = [
+            "app.route": .string(routeName),
+            "backup.flow_state": .string(backupFlowState.rawValue),
+            "app.has_pending_universal_link_payload": .bool(pendingIncomingUniversalLinkPayload?.isEmpty == false),
+            "app.is_processing_incoming_universal_link": .bool(isProcessingIncomingUniversalLink),
+            "app.is_showing_incoming_link_replacement_confirmation": .bool(isShowingIncomingLinkReplacementConfirmation)
+        ]
+        if let backupSession {
+            attributes["backup.session_present"] = .bool(true)
+            attributes["backup.session_status"] = .string(backupSession.status.rawValue)
+            attributes["backup.session_id_present"] = .bool(backupSession.sessionID?.isEmpty == false)
+            attributes["backup.desktop_name_present"] = .bool(!(backupSession.desktopName ?? "").isEmpty)
+        } else {
+            attributes["backup.session_present"] = .bool(false)
+        }
+        for (key, value) in extra {
+            attributes[key] = value
+        }
+        return attributes
     }
 
     private func resolvedTransferCompletionContext() async -> (
@@ -630,6 +750,15 @@ final class MobileAppModel: ObservableObject {
 
     func recordInteraction(name: String, location: String) {
         telemetryService.recordInteraction(name: name, location: location)
+    }
+
+    private func recordDiagnosticCheckpoint(
+        area: String,
+        attributes: MobileTelemetryAttributes = [:]
+    ) {
+        var diagnosticAttributes = attributes
+        diagnosticAttributes["diagnostic.area"] = .string(area)
+        telemetryService.recordTelemetry(.diagnosticCheckpoint, attributes: diagnosticAttributes)
     }
 
     private func flushTelemetry() {

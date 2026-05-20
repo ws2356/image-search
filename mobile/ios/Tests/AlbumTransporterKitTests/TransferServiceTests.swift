@@ -187,6 +187,46 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(spans[1].attributes["transfer.asset_file_size_bytes"], .int(4096))
     }
 
+    func test_photo_library_transfer_service_records_progress_diagnostic_checkpoint() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                )
+            ]
+        )
+        let telemetryClient = RecordingSpanTelemetryClient()
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: RecordingMobileTransferClient(),
+            trustedDesktopStore: trustedDesktopStore,
+            telemetryClient: telemetryClient
+        )
+
+        _ = await service.startTransfer(progress: { _ in })
+
+        let diagnosticRecord = await telemetryClient.latestRecord(for: .diagnosticCheckpoint)
+        XCTAssertEqual(diagnosticRecord?.attributes["diagnostic.area"], .string("transfer_service_progress_update"))
+        XCTAssertEqual(diagnosticRecord?.attributes["transfer.total_count"], .int(1))
+    }
+
     func test_photo_library_transfer_service_reports_missing_desktop_record() async {
         let assetSource = StaticTransferAssetSource(descriptors: [])
         let service = PhotoLibraryTransferService(
@@ -1458,6 +1498,11 @@ private final class ProgressSnapshotRecorder: @unchecked Sendable {
 
 private actor RecordingSpanTelemetryClient: TelemetryClient {
     private var spans: [RecordedSpan] = []
+    private var records: [RecordedTelemetry] = []
+
+    func record(event: MobileTelemetryEvent, attributes: MobileTelemetryAttributes) async {
+        records.append(RecordedTelemetry(event: event, attributes: attributes))
+    }
 
     func withSpan<T: Sendable>(
         name: String,
@@ -1471,10 +1516,19 @@ private actor RecordingSpanTelemetryClient: TelemetryClient {
     func recordedSpans() -> [RecordedSpan] {
         spans
     }
+
+    func latestRecord(for event: MobileTelemetryEvent) -> RecordedTelemetry? {
+        records.last(where: { $0.event == event })
+    }
 }
 
 private struct RecordedSpan: Equatable {
     let name: String
+    let attributes: MobileTelemetryAttributes
+}
+
+private struct RecordedTelemetry: Equatable {
+    let event: MobileTelemetryEvent
     let attributes: MobileTelemetryAttributes
 }
 

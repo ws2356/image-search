@@ -294,6 +294,7 @@ extension TelemetryClient {
 
 enum MobileTelemetryEvent: String, Sendable {
     case appLaunched
+    case diagnosticCheckpoint
     case pageViewed
     case dialogViewed
     case interactionTriggered

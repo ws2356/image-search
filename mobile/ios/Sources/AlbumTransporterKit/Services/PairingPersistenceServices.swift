@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Combine
+import OSLog
 
 actor UserDefaultsBackupSessionStore: BackupSessionStore {
     private let userDefaults: UserDefaults
@@ -16,12 +17,20 @@ actor UserDefaultsBackupSessionStore: BackupSessionStore {
 
     func loadBackupSession() async -> BackupSession? {
         guard let data = userDefaults.data(forKey: backupSessionKey) else {
+            BackupSessionDebugLogger.debug("Backup session load found no persisted record key=\(backupSessionKey)")
             return nil
         }
 
         do {
-            return try JSONDecoder.pairingDecoder.decode(BackupSession.self, from: data)
+            let session = try JSONDecoder.pairingDecoder.decode(BackupSession.self, from: data)
+            BackupSessionDebugLogger.debug(
+                "Backup session load succeeded key=\(backupSessionKey) status=\(session.status.rawValue) session_id_present=\((session.sessionID?.isEmpty == false)) desktop_name_present=\(!(session.desktopName ?? "").isEmpty)"
+            )
+            return session
         } catch {
+            BackupSessionDebugLogger.error(
+                "Backup session load failed key=\(backupSessionKey) error=\(error.localizedDescription)"
+            )
             return nil
         }
     }
@@ -29,13 +38,20 @@ actor UserDefaultsBackupSessionStore: BackupSessionStore {
     func saveBackupSession(_ session: BackupSession?) async {
         guard let session else {
             userDefaults.removeObject(forKey: backupSessionKey)
+            BackupSessionDebugLogger.debug("Backup session cleared key=\(backupSessionKey)")
             return
         }
 
         do {
             let encodedSession = try JSONEncoder.pairingEncoder.encode(session)
             userDefaults.set(encodedSession, forKey: backupSessionKey)
+            BackupSessionDebugLogger.debug(
+                "Backup session save succeeded key=\(backupSessionKey) status=\(session.status.rawValue) session_id_present=\((session.sessionID?.isEmpty == false)) desktop_name_present=\(!(session.desktopName ?? "").isEmpty)"
+            )
         } catch {
+            BackupSessionDebugLogger.error(
+                "Backup session save failed key=\(backupSessionKey) status=\(session.status.rawValue) error=\(error.localizedDescription)"
+            )
             assertionFailure("Failed to encode backup session: \(error)")
         }
     }
@@ -66,14 +82,35 @@ final class DefaultBackupSessionProvider: BackupSessionProviding {
         }
         hasLoaded = true
         currentBackupSession = await store.loadBackupSession()
+        BackupSessionDebugLogger.debug(
+            "Backup session provider loaded status=\(currentBackupSession?.status.rawValue ?? "none") session_id_present=\(!(currentBackupSession?.sessionID ?? "").isEmpty)"
+        )
     }
 
     func saveBackupSession(_ session: BackupSession?) async {
         currentBackupSession = session
+        BackupSessionDebugLogger.debug(
+            "Backup session provider accepted update status=\(session?.status.rawValue ?? "none") session_id_present=\(!(session?.sessionID ?? "").isEmpty)"
+        )
         let store = store
         Task.detached(priority: .utility) {
             await store.saveBackupSession(session)
         }
+    }
+}
+
+private enum BackupSessionDebugLogger {
+    private static let logger = Logger(
+        subsystem: "AlbumTransporterKit.Pairing",
+        category: "BackupSession"
+    )
+
+    static func debug(_ message: String) {
+        logger.debug("\(message, privacy: .public)")
+    }
+
+    static func error(_ message: String) {
+        logger.error("\(message, privacy: .public)")
     }
 }
 

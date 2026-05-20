@@ -262,12 +262,24 @@ struct DesktopBootstrapPairingService: PairingService {
         request: PairingClaimRequest
     ) async throws -> PairingBootstrapAttempt {
         var retryableError: PairingServiceError?
+        PairingDebugLogger.debug(
+            "Starting pairing claim session_id=\(payload.sessionID) usb_candidate=\(payload.suggestedUSBPort != nil) lan_endpoint_count=\(payload.bootstrapURLs.count)"
+        )
 
         if let usbBootstrapClient, payload.suggestedUSBPort != nil {
             do {
+                PairingDebugLogger.debug(
+                    "Attempting USB pairing claim session_id=\(payload.sessionID) suggested_usb_port=\(payload.suggestedUSBPort ?? 0)"
+                )
                 let response = try await usbBootstrapClient.claimPairing(using: payload, request: request)
+                PairingDebugLogger.debug(
+                    "USB pairing claim completed session_id=\(payload.sessionID) backup_state=\(response.backupState.rawValue)"
+                )
                 return PairingBootstrapAttempt(endpoint: payload.bootstrapURL, response: response, transport: .usb)
             } catch let error as PairingServiceError {
+                PairingDebugLogger.error(
+                    "USB pairing claim failed session_id=\(payload.sessionID) error=\(error.localizedDescription)"
+                )
                 switch error {
                 case .expired, .rejected:
                     throw error
@@ -282,9 +294,18 @@ struct DesktopBootstrapPairingService: PairingService {
         // Try each advertised endpoint because desktops may be reachable on only one LAN.
         for endpoint in payload.bootstrapURLs {
             do {
+                PairingDebugLogger.debug(
+                    "Attempting LAN pairing claim session_id=\(payload.sessionID) endpoint=\(endpoint.absoluteString)"
+                )
                 let response = try await bootstrapClient.claimPairing(at: endpoint, request: request)
+                PairingDebugLogger.debug(
+                    "LAN pairing claim completed session_id=\(payload.sessionID) endpoint=\(endpoint.absoluteString) backup_state=\(response.backupState.rawValue)"
+                )
                 return PairingBootstrapAttempt(endpoint: endpoint, response: response, transport: .lan)
             } catch let error as PairingServiceError {
+                PairingDebugLogger.error(
+                    "LAN pairing claim failed session_id=\(payload.sessionID) endpoint=\(endpoint.absoluteString) error=\(error.localizedDescription)"
+                )
                 switch error {
                 case .expired, .rejected:
                     throw error
@@ -306,17 +327,28 @@ struct DesktopBootstrapPairingService: PairingService {
         attempt: PairingBootstrapAttempt,
         request: PairingStateRequest
     ) async throws -> PairingClaimResponse {
+        var pollAttempt = 0
         while true {
+            pollAttempt += 1
             let stateResponse: PairingClaimResponse
             switch attempt.transport {
             case .usb:
                 guard let usbBootstrapClient else {
                     throw PairingServiceError.transport(message: "Desktop USB pairing state polling is unavailable.")
                 }
+                PairingDebugLogger.debug(
+                    "Polling USB pairing state session_id=\(payload.sessionID) attempt=\(pollAttempt)"
+                )
                 stateResponse = try await usbBootstrapClient.fetchPairingState(using: payload, request: request)
             case .lan:
+                PairingDebugLogger.debug(
+                    "Polling LAN pairing state session_id=\(payload.sessionID) endpoint=\(attempt.endpoint.absoluteString) attempt=\(pollAttempt)"
+                )
                 stateResponse = try await bootstrapClient.fetchPairingState(at: attempt.endpoint, request: request)
             }
+            PairingDebugLogger.debug(
+                "Pairing state poll returned session_id=\(payload.sessionID) attempt=\(pollAttempt) state=\(stateResponse.backupState.rawValue)"
+            )
 
             switch stateResponse.backupState {
             case .pairingCompleted, .pairingStopped:

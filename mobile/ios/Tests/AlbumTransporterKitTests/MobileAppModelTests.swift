@@ -367,6 +367,37 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(model.route, .home)
     }
 
+    func test_load_records_diagnostic_checkpoint_with_persisted_backup_session() async {
+        let telemetryClient = RecordingTelemetryClient()
+        let store = InMemoryAppStateStore(
+            snapshot: LaunchSnapshot(
+                backupSession: BackupSession(
+                    sessionID: "session-123",
+                    desktopName: "Studio Mac",
+                    status: .transferCompleted,
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                )
+            )
+        )
+        let model = makeModel(
+            stateStore: store,
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            telemetryClient: telemetryClient
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let diagnosticRecord = await telemetryClient.latestRecord(for: .diagnosticCheckpoint)
+        XCTAssertEqual(diagnosticRecord?.attributes["diagnostic.area"], .string("app_load_completed"))
+        XCTAssertEqual(diagnosticRecord?.attributes["backup.session_present"], .bool(true))
+        XCTAssertEqual(diagnosticRecord?.attributes["backup.session_status"], .string("transferCompleted"))
+        XCTAssertEqual(diagnosticRecord?.attributes["backup.session_id_present"], .bool(true))
+    }
+
     func test_load_does_not_trigger_transfer_recovery_while_idle() async {
         let transferService = ForegroundRecoveryTrackingTransferService()
         let model = makeModel(

@@ -45,12 +45,24 @@ final class HomePageViewModel: ObservableObject {
         let backupSession = model.backupSessionProvider.backupSession
         let transferSnapshot = await model.transferService.progressSnapshot()
         let fallbackTransport = await transportResolver.currentTransport() ?? .lan
-        summary = Self.renderSummary(
+        let renderedSummary = Self.renderSummary(
             backupSession: backupSession,
             transferSnapshot: transferSnapshot,
             permissionScope: permissionSummary.mediaScope,
             backupFlowState: model.backupFlowState,
             fallbackTransport: fallbackTransport
+        )
+        summary = renderedSummary
+        telemetryService.recordTelemetry(
+            .diagnosticCheckpoint,
+            attributes: Self.summaryDiagnosticAttributes(
+                summary: renderedSummary,
+                backupSession: backupSession,
+                transferSnapshot: transferSnapshot,
+                permissionScope: permissionSummary.mediaScope,
+                backupFlowState: model.backupFlowState,
+                fallbackTransport: fallbackTransport
+            )
         )
     }
 
@@ -102,5 +114,42 @@ final class HomePageViewModel: ObservableObject {
         }
 
         return summary
+    }
+
+    private static func summaryDiagnosticAttributes(
+        summary: HomeViewState,
+        backupSession: BackupSession?,
+        transferSnapshot: TransferSnapshot?,
+        permissionScope: PermissionScope,
+        backupFlowState: MobileBackupFlowState,
+        fallbackTransport: TransferTransport
+    ) -> MobileTelemetryAttributes {
+        var attributes: MobileTelemetryAttributes = [
+            "diagnostic.area": .string("home_summary_refreshed"),
+            "home.permission_scope": .string(permissionScope.rawValue),
+            "home.has_session_history": .bool(summary.lastBackupDescription != nil),
+            "home.has_previous_transfer_description": .bool(summary.previousTransferDescription != nil),
+            "home.has_interruption_warning": .bool(summary.interruptionWarning != nil),
+            "backup.flow_state": .string(backupFlowState.rawValue),
+            "transfer.fallback_transport": .string(fallbackTransport.rawValue),
+            "backup.session_present": .bool(backupSession != nil)
+        ]
+        if let backupSession {
+            attributes["backup.session_status"] = .string(backupSession.status.rawValue)
+            attributes["backup.session_id_present"] = .bool(backupSession.sessionID?.isEmpty == false)
+            attributes["backup.desktop_name_present"] = .bool(!(backupSession.desktopName ?? "").isEmpty)
+        }
+        if let transferSnapshot {
+            attributes["transfer.snapshot_present"] = .bool(true)
+            attributes["transfer.phase"] = .string(transferSnapshot.phase.rawValue)
+            attributes["transfer.transferred_count"] = .int(transferSnapshot.transferredCount)
+            attributes["transfer.total_count"] = .int(transferSnapshot.totalCount)
+            attributes["transfer.failed_count"] = .int(transferSnapshot.failedCount)
+            attributes["transfer.skipped_count"] = .int(transferSnapshot.skippedCount)
+            attributes["transfer.transport"] = .string(transferSnapshot.transport.rawValue)
+        } else {
+            attributes["transfer.snapshot_present"] = .bool(false)
+        }
+        return attributes
     }
 }
