@@ -11,6 +11,7 @@ final class MobileAppModel: ObservableObject {
     @Published var isShowingIncomingLinkReplacementConfirmation = false
 
     private var hasLoaded = false
+    private var hasFinishedLoad = false
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
     private let universalLinkHost = "dl.boldman.net"
@@ -278,6 +279,14 @@ final class MobileAppModel: ObservableObject {
             backupFlowStateMachine = MobileBackupFlowStateMachine()
         }
         route = .home
+        hasFinishedLoad = true
+
+        // Process any universal link that arrived before load completed.
+        if let pendingPayload = pendingIncomingUniversalLinkPayload {
+            pendingIncomingUniversalLinkPayload = nil
+            await processIncomingUniversalLinkPayload(pendingPayload)
+        }
+
         let pairingService = pairingService
         Task.detached(priority: .utility) {
             await pairingService.primeNetworkAccess()
@@ -310,6 +319,12 @@ final class MobileAppModel: ObservableObject {
         }
         let payload = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !payload.isEmpty else {
+            return
+        }
+
+        // Stash the link if load() hasn't completed yet — it will process it after setting route = .home.
+        if !hasFinishedLoad {
+            pendingIncomingUniversalLinkPayload = payload
             return
         }
 

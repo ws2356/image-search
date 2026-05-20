@@ -926,6 +926,29 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(errorSummary.message, QRCodePayloadDecoderError.missingField("v").message)
     }
 
+    func test_handle_incoming_universal_link_arriving_before_load_is_processed_after_load() async {
+        // Regression: a universal link arriving during model.load()'s suspension was clobbered
+        // by the unconditional `route = .home` at the end of load().
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: URLQueryQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        // Universal link arrives before load() completes — it should be stashed, not processed yet.
+        await model.handleIncomingUniversalLink(URL(string: PairingQRCodePayload.demoScanValue)!)
+        XCTAssertEqual(model.route, .home, "Route must not change until load() completes")
+
+        // load() should pick up the stashed payload and process it after setting route = .home.
+        await model.load()
+        await orchestrateVisiblePairPage(model: model)
+
+        XCTAssertEqual(model.route, .permissions)
+    }
+
     func test_handle_incoming_universal_link_prompts_before_replacing_active_transfer() async {
         let inFlightSnapshot = TransferSnapshot(
             transferredCount: 1,
