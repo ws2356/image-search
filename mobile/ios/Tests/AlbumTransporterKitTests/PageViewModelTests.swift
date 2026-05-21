@@ -52,7 +52,7 @@ final class PageViewModelTests: XCTestCase {
 
         await viewModel.refreshSummary()
 
-        XCTAssertEqual(viewModel.summary.lastBackupDescription, "Stopped after 3 of 10 items.")
+        XCTAssertEqual(viewModel.summary.lastBackupDescription, "Stopped after 3 of 10 items just now.")
         XCTAssertEqual(
             viewModel.summary.previousTransferDescription,
             "3 items sent in the most recent session."

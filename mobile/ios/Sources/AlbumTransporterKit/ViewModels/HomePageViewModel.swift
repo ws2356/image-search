@@ -91,13 +91,15 @@ final class HomePageViewModel: ObservableObject {
             return summary
         }
 
+        let timeLabel = relativeTimeLabel(for: backupSession.updatedAt)
+
         switch backupSession.status {
         case .pairingCompleted, .transferInProgress:
             summary.lastBackupDescription = "Paired and ready for backup."
         case .transferCompleted:
-            summary.lastBackupDescription = "Last backup completed just now."
+            summary.lastBackupDescription = "Last backup completed \(timeLabel)."
         case .pairingFailed, .transferFailed:
-            summary.lastBackupDescription = "The last backup session ended with failures."
+            summary.lastBackupDescription = "The last backup session ended with failures \(timeLabel)."
         case .pairingStopped, .transferStopped:
             let resolvedTransferSnapshot = transferSnapshot
                 ?? TransferSnapshot.empty(transport: fallbackTransport, phase: .stopped)
@@ -106,10 +108,10 @@ final class HomePageViewModel: ObservableObject {
                 resolvedTransferSnapshot.transferredCount + resolvedTransferSnapshot.failedCount
             )
             if totalAttempted > 0 {
-                summary.lastBackupDescription = "Stopped after \(resolvedTransferSnapshot.transferredCount) of \(totalAttempted) items."
+                summary.lastBackupDescription = "Stopped after \(resolvedTransferSnapshot.transferredCount) of \(totalAttempted) items \(timeLabel)."
                 summary.previousTransferDescription = "\(resolvedTransferSnapshot.transferredCount) items sent in the most recent session."
             } else {
-                summary.lastBackupDescription = "Backup session started, then canceled before any items were sent."
+                summary.lastBackupDescription = "Backup session started, then canceled before any items were sent \(timeLabel)."
                 summary.previousTransferDescription = "0 items sent in the most recent session."
             }
             if backupFlowState == .transferStopped {
@@ -120,6 +122,16 @@ final class HomePageViewModel: ObservableObject {
         }
 
         return summary
+    }
+
+    private static func relativeTimeLabel(for date: Date) -> String {
+        if abs(date.timeIntervalSinceNow) < 60 {
+            return "just now"
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        formatter.dateTimeStyle = .named
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     private static func summaryDiagnosticAttributes(
