@@ -967,36 +967,29 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
 
     func claimPairing(
         using payload: PairingQRCodePayload,
-        request: PairingClaimRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingClaimRequest
     ) async throws -> PairingClaimResponse {
-        try await sendPairingRequest(
+        return try await sendPairingRequest(
             using: payload,
             operation: MobileTransportProtocol.pairingClaimOperation,
             request: request,
             bodySchema: PairingProtocol.schema,
             responseType: PairingClaimResponse.self,
-            expectedSchema: PairingProtocol.schema,
-            encryptionTrustKeyBase64: encryptionTrustKeyBase64,
-            encryptionSessionID: request.sessionID,
-            encryptionPlatform: request.platform
+            expectedSchema: PairingProtocol.schema
         )
     }
 
     func fetchPairingState(
         using payload: PairingQRCodePayload,
-        request: PairingStateRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingStateRequest
     ) async throws -> PairingClaimResponse {
-        try await sendPairingRequest(
+        return try await sendPairingRequest(
             using: payload,
             operation: MobileTransportProtocol.pairingStateOperation,
             request: request,
             bodySchema: PairingProtocol.schema,
             responseType: PairingClaimResponse.self,
-            expectedSchema: PairingProtocol.schema,
-            encryptionTrustKeyBase64: encryptionTrustKeyBase64,
-            encryptionSessionID: request.sessionID
+            expectedSchema: PairingProtocol.schema
         )
     }
 
@@ -1022,50 +1015,21 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
         request: RequestBody,
         bodySchema: String,
         responseType: ResponseBody.Type,
-        expectedSchema: String,
-        encryptionTrustKeyBase64: String? = nil,
-        encryptionSessionID: String? = nil,
-        encryptionPlatform: String? = nil
+        expectedSchema: String
     ) async throws -> ResponseBody {
         do {
             try await prepareUSBTransportIfNeeded(using: payload)
             let additionalFields = traceContextPayloadFields(await telemetryClient.currentTraceContext())
-            let runtimeResponse: USBTransportRuntimeResponse
-            if let encryptionTrustKeyBase64 {
-                guard let encryptionSessionID else {
-                    throw PairingServiceError.transport(
-                        message: "Desktop USB pairing encryption is missing session context."
-                    )
-                }
-                let encryptedRequest = try encryptedPairingRequest(
-                    request,
-                    trustKeyBase64: encryptionTrustKeyBase64,
-                    sessionID: encryptionSessionID,
-                    platform: encryptionPlatform
-                )
-                runtimeResponse = try await runtime.sendRequest(
-                    operation: operation,
-                    bodySchema: bodySchema,
-                    request: encryptedRequest,
-                    additionalBodyFields: additionalFields,
-                    timeout: responseTimeout
-                )
-            } else {
-                runtimeResponse = try await runtime.sendRequest(
-                    operation: operation,
-                    bodySchema: bodySchema,
-                    request: request,
-                    additionalBodyFields: additionalFields,
-                    timeout: responseTimeout
-                )
-            }
-            let responseData = try decodePairingResponsePayloadData(
-                runtimeResponse.bodyData,
-                encryptionTrustKeyBase64: encryptionTrustKeyBase64
+            let runtimeResponse = try await runtime.sendRequest(
+                operation: operation,
+                bodySchema: bodySchema,
+                request: request,
+                additionalBodyFields: additionalFields,
+                timeout: responseTimeout
             )
             let decodedResponse = try JSONDecoder.pairingDecoder.decode(
                 responseType,
-                from: responseData
+                from: runtimeResponse.bodyData
             )
             guard decodedResponse.schema == expectedSchema else {
                 throw PairingServiceError.unsupportedResponseSchema
@@ -1094,46 +1058,6 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
         }
     }
 
-    private func decodePairingResponsePayloadData(
-        _ data: Data,
-        encryptionTrustKeyBase64: String?
-    ) throws -> Data {
-        guard let encryptionTrustKeyBase64 else {
-            return data
-        }
-        guard let encryptedResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw PairingServiceError.decoding(message: "Desktop USB pairing response is not a JSON object.")
-        }
-        guard MobilePayloadEncryption.isEncryptedPayload(encryptedResponse) else {
-            throw PairingServiceError.decoding(message: "Desktop USB pairing response must be encrypted.")
-        }
-        let decryptedPayload = try MobilePayloadEncryption.decryptPayloadObject(
-            encryptedResponse,
-            trustKeyBase64: encryptionTrustKeyBase64
-        )
-        guard JSONSerialization.isValidJSONObject(decryptedPayload) else {
-            throw PairingServiceError.decoding(message: "Desktop USB pairing response payload is invalid.")
-        }
-        return try JSONSerialization.data(withJSONObject: decryptedPayload, options: [])
-    }
-
-    private func encryptedPairingRequest<RequestBody: Encodable & Sendable>(
-        _ requestBody: RequestBody,
-        trustKeyBase64: String,
-        sessionID: String,
-        platform: String?
-    ) throws -> MobileEncryptedPayload {
-        let encodedBody = try JSONEncoder.pairingEncoder.encode(requestBody)
-        guard let bodyValue = try JSONSerialization.jsonObject(with: encodedBody) as? [String: Any] else {
-            throw PairingServiceError.transport(message: "Desktop USB pairing request body could not be encoded.")
-        }
-        return try MobilePayloadEncryption.encryptPayloadObject(
-            bodyValue,
-            trustKeyBase64: trustKeyBase64,
-            sessionID: sessionID,
-            platform: platform
-        )
-    }
 }
 
 private struct USBTransferAssetUploadRequest: Codable, Sendable {

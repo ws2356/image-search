@@ -114,26 +114,22 @@ protocol PairingBootstrapClient: Sendable {
     func primeInternetAccess() async
     func claimPairing(
         at endpoint: URL,
-        request: PairingClaimRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingClaimRequest
     ) async throws -> PairingClaimResponse
     func fetchPairingState(
         at endpoint: URL,
-        request: PairingStateRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingStateRequest
     ) async throws -> PairingClaimResponse
 }
 
 protocol PairingUSBBootstrapClient: Sendable {
     func claimPairing(
         using payload: PairingQRCodePayload,
-        request: PairingClaimRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingClaimRequest
     ) async throws -> PairingClaimResponse
     func fetchPairingState(
         using payload: PairingQRCodePayload,
-        request: PairingStateRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingStateRequest
     ) async throws -> PairingClaimResponse
 }
 
@@ -400,86 +396,40 @@ extension PairingBootstrapClient {
 
     func claimPairing(
         at endpoint: URL,
-        request: PairingClaimRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingClaimRequest
     ) async throws -> PairingClaimResponse {
         _ = endpoint
         _ = request
-        _ = encryptionTrustKeyBase64
         throw PairingServiceError.transport(message: "Desktop pairing claim is unavailable.")
-    }
-
-    func claimPairing(
-        at endpoint: URL,
-        request: PairingClaimRequest
-    ) async throws -> PairingClaimResponse {
-        try await claimPairing(
-            at: endpoint,
-            request: request,
-            encryptionTrustKeyBase64: nil
-        )
     }
 
     func fetchPairingState(
         at endpoint: URL,
-        request: PairingStateRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingStateRequest
     ) async throws -> PairingClaimResponse {
         _ = endpoint
         _ = request
-        _ = encryptionTrustKeyBase64
         throw PairingServiceError.transport(message: "Desktop pairing state polling is unavailable.")
-    }
-
-    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
-        try await fetchPairingState(
-            at: endpoint,
-            request: request,
-            encryptionTrustKeyBase64: nil
-        )
     }
 }
 
 extension PairingUSBBootstrapClient {
     func claimPairing(
         using payload: PairingQRCodePayload,
-        request: PairingClaimRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingClaimRequest
     ) async throws -> PairingClaimResponse {
         _ = payload
         _ = request
-        _ = encryptionTrustKeyBase64
         throw PairingServiceError.transport(message: "Desktop USB pairing claim is unavailable.")
-    }
-
-    func claimPairing(
-        using payload: PairingQRCodePayload,
-        request: PairingClaimRequest
-    ) async throws -> PairingClaimResponse {
-        try await claimPairing(
-            using: payload,
-            request: request,
-            encryptionTrustKeyBase64: nil
-        )
     }
 
     func fetchPairingState(
         using payload: PairingQRCodePayload,
-        request: PairingStateRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingStateRequest
     ) async throws -> PairingClaimResponse {
         _ = payload
         _ = request
-        _ = encryptionTrustKeyBase64
         throw PairingServiceError.transport(message: "Desktop USB pairing state polling is unavailable.")
-    }
-
-    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse {
-        try await fetchPairingState(
-            using: payload,
-            request: request,
-            encryptionTrustKeyBase64: nil
-        )
     }
 }
 

@@ -65,55 +65,6 @@ final class TraceContextPropagationTests: XCTestCase {
         XCTAssertEqual(requestBody["tracestate"] as? String, StaticTraceContextTelemetryClient.traceState)
     }
 
-    func test_pairing_bootstrap_client_decodes_encrypted_pairing_response() async throws {
-        let trustKey = pairingTrustKey(
-            sessionID: "pairing-demo-001",
-            oneTimePasscode: "482913",
-            platform: "ios"
-        )
-        TraceContextCapturingURLProtocol.responseData = try encryptedResponseData(
-            payload: [
-                "schema": PairingProtocol.schema,
-                "status": "accepted",
-                "backup_state": "pairing_completed",
-                "message": "Pairing accepted.",
-                "session_id": "pairing-demo-001",
-                "desktop_device_id": "desktop-device-001",
-                "desktop_name": "Studio Mac",
-                "device_uuid": "ios-device-001",
-                "folder_id": 1,
-                "folder_path": "/Users/demo/Alice iPhone",
-                "transport": "lan",
-                "paired_at": "2026-04-10T16:23:04+00:00",
-                "server_nonce": "server-nonce-001",
-            ],
-            trustKeyBase64: trustKey,
-            sessionID: "pairing-demo-001",
-            platform: "ios"
-        )
-        let client = URLSessionPairingBootstrapClient(
-            session: makeSession(),
-            telemetryClient: StaticTraceContextTelemetryClient()
-        )
-
-        let response = try await client.claimPairing(
-            at: PairingQRCodePayload.demo.bootstrapURL,
-            request: PairingClaimRequest(
-                sessionID: "pairing-demo-001",
-                oneTimePasscode: "482913",
-                platform: "ios",
-                deviceUUID: "ios-device-001",
-                deviceName: "Alice iPhone",
-                installID: "install-001",
-                clientNonce: "client-nonce-001"
-            ),
-            encryptionTrustKeyBase64: trustKey
-        )
-
-        XCTAssertEqual(response.backupState, .pairingCompleted)
-        XCTAssertEqual(response.sessionID, "pairing-demo-001")
-    }
-
     func test_transfer_client_decodes_encrypted_transfer_response() async throws {
         let trustedDesktop = TrustedDesktopRecord(
             desktopDeviceID: "desktop-device-001",

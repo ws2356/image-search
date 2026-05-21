@@ -24,24 +24,19 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
 
     func claimPairing(
         at endpoint: URL,
-        request: PairingClaimRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingClaimRequest
     ) async throws -> PairingClaimResponse {
-        try await postPairingRequest(
+        return try await postPairingRequest(
             at: endpoint,
             requestBody: request,
             responseType: PairingClaimResponse.self,
-            expectedSchema: PairingProtocol.schema,
-            encryptionTrustKeyBase64: encryptionTrustKeyBase64,
-            encryptionSessionID: request.sessionID,
-            encryptionPlatform: request.platform
+            expectedSchema: PairingProtocol.schema
         )
     }
 
     func fetchPairingState(
         at endpoint: URL,
-        request: PairingStateRequest,
-        encryptionTrustKeyBase64: String?
+        request: PairingStateRequest
     ) async throws -> PairingClaimResponse {
         guard let stateEndpoint = endpoint.pairingStateURL else {
             throw PairingServiceError.transport(message: "Desktop pairing state endpoint is invalid.")
@@ -50,9 +45,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
             at: stateEndpoint,
             requestBody: request,
             responseType: PairingClaimResponse.self,
-            expectedSchema: PairingProtocol.schema,
-            encryptionTrustKeyBase64: encryptionTrustKeyBase64,
-            encryptionSessionID: request.sessionID
+            expectedSchema: PairingProtocol.schema
         )
     }
 
@@ -60,24 +53,14 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         at endpoint: URL,
         requestBody: RequestBody,
         responseType: ResponseBody.Type,
-        expectedSchema: String,
-        encryptionTrustKeyBase64: String? = nil,
-        encryptionSessionID: String? = nil,
-        encryptionDeviceUUID: String? = nil,
-        encryptionPlatform: String? = nil
+        expectedSchema: String
     ) async throws -> ResponseBody {
         var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.timeoutInterval = 5
-        urlRequest.httpBody = try await encodeRequestBody(
-            requestBody,
-            encryptionTrustKeyBase64: encryptionTrustKeyBase64,
-            encryptionSessionID: encryptionSessionID,
-            encryptionDeviceUUID: encryptionDeviceUUID,
-            encryptionPlatform: encryptionPlatform
-        )
+        urlRequest.httpBody = try await encodeRequestBody(requestBody)
 
         let data: Data
         let response: URLResponse
@@ -94,11 +77,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         }
 
         do {
-            let responseData = try decodeResponsePayloadData(
-                data,
-                encryptionTrustKeyBase64: encryptionTrustKeyBase64
-            )
-            let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: responseData)
+            let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: data)
             guard decodedResponse.schema == expectedSchema else {
                 throw PairingServiceError.unsupportedResponseSchema
             }
@@ -122,29 +101,6 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         } catch {
             throw PairingServiceError.decoding(message: error.localizedDescription)
         }
-    }
-
-    private func decodeResponsePayloadData(
-        _ data: Data,
-        encryptionTrustKeyBase64: String?
-    ) throws -> Data {
-        guard let encryptionTrustKeyBase64 else {
-            return data
-        }
-        guard let encryptedResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw PairingServiceError.decoding(message: "Desktop pairing response is not a JSON object.")
-        }
-        guard MobilePayloadEncryption.isEncryptedPayload(encryptedResponse) else {
-            throw PairingServiceError.decoding(message: "Desktop pairing response must be encrypted.")
-        }
-        let decryptedPayload = try MobilePayloadEncryption.decryptPayloadObject(
-            encryptedResponse,
-            trustKeyBase64: encryptionTrustKeyBase64
-        )
-        guard JSONSerialization.isValidJSONObject(decryptedPayload) else {
-            throw PairingServiceError.decoding(message: "Desktop pairing response payload is invalid.")
-        }
-        return try JSONSerialization.data(withJSONObject: decryptedPayload, options: [])
     }
 
     private func requestWithLocalNetworkRetry(
@@ -198,11 +154,7 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         "Local Network access is required before pairing can continue. Allow access in iOS Settings, then scan the desktop QR code again."
 
     private func encodeRequestBody<RequestBody: Encodable>(
-        _ requestBody: RequestBody,
-        encryptionTrustKeyBase64: String? = nil,
-        encryptionSessionID: String? = nil,
-        encryptionDeviceUUID: String? = nil,
-        encryptionPlatform: String? = nil
+        _ requestBody: RequestBody
     ) async throws -> Data {
         let encodedBody = try JSONEncoder.pairingEncoder.encode(requestBody)
         guard var bodyValue = try JSONSerialization.jsonObject(with: encodedBody) as? [String: Any] else {
@@ -210,23 +162,6 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         }
         for (key, value) in traceContextPayloadFields(await telemetryClient.currentTraceContext()) {
             bodyValue[key] = value
-        }
-        if let encryptionTrustKeyBase64 {
-            guard let encryptionSessionID else {
-                throw PairingServiceError.transport(message: "Desktop pairing encryption is missing session context.")
-            }
-            let encryptedPayload = try MobilePayloadEncryption.encryptPayloadObject(
-                bodyValue,
-                trustKeyBase64: encryptionTrustKeyBase64,
-                sessionID: encryptionSessionID,
-                deviceUUID: encryptionDeviceUUID,
-                platform: encryptionPlatform
-            )
-            let encryptedBody = try JSONEncoder.pairingEncoder.encode(encryptedPayload)
-            guard let encryptedBodyValue = try JSONSerialization.jsonObject(with: encryptedBody) as? [String: Any] else {
-                throw PairingServiceError.transport(message: "Desktop pairing request body could not be encrypted.")
-            }
-            bodyValue = encryptedBodyValue
         }
         guard JSONSerialization.isValidJSONObject(bodyValue) else {
             throw PairingServiceError.transport(message: "Desktop pairing request body is invalid.")
@@ -363,8 +298,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 )
                 let response = try await usbBootstrapClient.claimPairing(
                     using: payload,
-                    request: request,
-                    encryptionTrustKeyBase64: nil
+                    request: request
                 )
                 PairingDebugLogger.debug(
                     "USB pairing claim completed session_id=\(payload.sessionID) backup_state=\(response.backupState.rawValue)"
@@ -397,8 +331,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 )
                 let response = try await bootstrapClient.claimPairing(
                     at: endpoint,
-                    request: request,
-                    encryptionTrustKeyBase64: nil
+                    request: request
                 )
                 return PairingBootstrapAttempt(
                     endpoint: endpoint,
@@ -444,8 +377,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 )
                 stateResponse = try await usbBootstrapClient.fetchPairingState(
                     using: payload,
-                    request: request,
-                    encryptionTrustKeyBase64: nil
+                    request: request
                 )
             case .lan:
                 PairingDebugLogger.debug(
@@ -453,8 +385,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 )
                 stateResponse = try await bootstrapClient.fetchPairingState(
                     at: attempt.endpoint,
-                    request: request,
-                    encryptionTrustKeyBase64: nil
+                    request: request
                 )
             }
             PairingDebugLogger.debug(

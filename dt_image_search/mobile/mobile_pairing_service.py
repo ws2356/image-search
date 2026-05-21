@@ -345,18 +345,6 @@ class MobilePairingService:
         now: datetime | None = None,
     ) -> tuple[int, dict[str, object]]:
         current_time = _utc_now(now)
-        decrypted_pairing_payload, decrypt_error, _ = self._decrypt_pairing_payload_if_needed(
-            request_payload,
-            operation=PAIRING_CLAIM_OPERATION,
-        )
-        if decrypt_error is not None:
-            return _response(
-                status_code=400,
-                state=PairingResultState.REJECTED,
-                message=decrypt_error,
-                pairing_state=MobileBackupState.PENDING_PAIRING,
-            )
-        request_payload = decrypted_pairing_payload
         requested_session_id = _optional_request_string(request_payload, "sid")
         requested_device_uuid = _optional_request_string(request_payload, "device_uuid")
         requested_platform_name = _optional_request_string(request_payload, "platform")
@@ -554,18 +542,6 @@ class MobilePairingService:
         self,
         request_payload: dict[str, object],
     ) -> tuple[int, dict[str, object]]:
-        decrypted_pairing_payload, decrypt_error, _ = self._decrypt_pairing_payload_if_needed(
-            request_payload,
-            operation=PAIRING_STATE_OPERATION,
-        )
-        if decrypt_error is not None:
-            return _response(
-                status_code=400,
-                state=PairingResultState.REJECTED,
-                message=decrypt_error,
-                pairing_state=MobileBackupState.PENDING_PAIRING,
-            )
-        request_payload = decrypted_pairing_payload
         with _telemetry_span(
             "mobile.desktop.pairing.state",
             attributes=_pairing_telemetry_attributes(
@@ -935,28 +911,7 @@ class MobilePairingService:
                     "message": "Desktop requires JSON object payloads for pairing requests.",
                 },
             )
-        decrypted_pairing_payload, decrypt_error_message, encryption_trust_key_b64 = (
-            self._decrypt_pairing_payload_if_needed(
-                request.payload,
-                operation=PAIRING_CLAIM_OPERATION,
-            )
-        )
-        if decrypt_error_message is not None:
-            return MobileTransportResponse(
-                status_code=400,
-                payload={
-                    "schema": PAIRING_PROTOCOL_SCHEMA,
-                    "backup_state": MobileBackupState.PENDING_PAIRING.value,
-                    "message": decrypt_error_message,
-                },
-            )
-        status_code, response_payload = self.handle_pairing_request(decrypted_pairing_payload)
-        response_payload = self._encrypt_response_payload_if_needed(
-            response_payload=response_payload,
-            trust_key_b64=encryption_trust_key_b64,
-            session_id=self._extract_pairing_session_id(decrypted_pairing_payload),
-            platform=self._extract_pairing_platform(decrypted_pairing_payload),
-        )
+        status_code, response_payload = self.handle_pairing_request(request.payload)
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_pairing_state_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -969,28 +924,7 @@ class MobilePairingService:
                     "message": "Desktop requires JSON object payloads for pairing state requests.",
                 },
             )
-        decrypted_pairing_payload, decrypt_error_message, encryption_trust_key_b64 = (
-            self._decrypt_pairing_payload_if_needed(
-                request.payload,
-                operation=PAIRING_STATE_OPERATION,
-            )
-        )
-        if decrypt_error_message is not None:
-            return MobileTransportResponse(
-                status_code=400,
-                payload={
-                    "schema": PAIRING_PROTOCOL_SCHEMA,
-                    "backup_state": MobileBackupState.PENDING_PAIRING.value,
-                    "message": decrypt_error_message,
-                },
-            )
-        status_code, response_payload = self.handle_pairing_state_request(decrypted_pairing_payload)
-        response_payload = self._encrypt_response_payload_if_needed(
-            response_payload=response_payload,
-            trust_key_b64=encryption_trust_key_b64,
-            session_id=self._extract_pairing_session_id(decrypted_pairing_payload),
-            platform=self._extract_pairing_platform(decrypted_pairing_payload),
-        )
+        status_code, response_payload = self.handle_pairing_state_request(request.payload)
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_transfer_start_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -1255,69 +1189,6 @@ class MobilePairingService:
             )
             return state_machine
 
-    def _decrypt_pairing_payload_if_needed(
-        self,
-        request_payload: dict[str, object],
-        *,
-        operation: str,
-    ) -> tuple[dict[str, object], str | None, str | None]:
-        if not is_mobile_encrypted_payload(request_payload):
-            return request_payload, None, None
-        session_id_field = "sid" if operation == PAIRING_CLAIM_OPERATION else "session_id"
-        raw_session_id = request_payload.get(session_id_field)
-        if raw_session_id is None:
-            raw_session_id = request_payload.get("session_id")
-        if not isinstance(raw_session_id, str) or not raw_session_id.strip():
-            return (
-                request_payload,
-                f"The pairing request is missing the required field '{session_id_field}'.",
-                None,
-            )
-        session_id = raw_session_id.strip()
-        with self._lock:
-            active_session = self._active_session
-            if active_session is None or active_session.session_id != session_id:
-                return request_payload, "There is no active desktop pairing session.", None
-            candidate_platforms: list[MobilePlatform] = []
-            raw_platform = request_payload.get("platform")
-            if isinstance(raw_platform, str) and raw_platform.strip():
-                try:
-                    candidate_platforms = [MobilePlatform(raw_platform.strip())]
-                except ValueError:
-                    return request_payload, "The pairing request platform is unsupported.", None
-            elif operation == PAIRING_CLAIM_OPERATION:
-                return (
-                    request_payload,
-                    "The pairing request is missing the required field 'platform'.",
-                    None,
-                )
-            else:
-                candidate_platforms = list(active_session.tokens.keys())
-                if not candidate_platforms:
-                    candidate_platforms = [MobilePlatform.IOS, MobilePlatform.ANDROID]
-
-            candidate_trust_keys: list[str] = []
-            for candidate_platform in candidate_platforms:
-                token = active_session.token_for(candidate_platform)
-                candidate_trust_keys.append(
-                    derive_pairing_key_b64(
-                        session_id=session_id,
-                        one_time_passcode=token.one_time_passcode,
-                        platform=candidate_platform.value,
-                    )
-                )
-
-        for trust_key_b64 in candidate_trust_keys:
-            try:
-                decrypted_payload = decrypt_mobile_json_payload(
-                    encrypted_payload=request_payload,
-                    trust_key_b64=trust_key_b64,
-                )
-                return decrypted_payload, None, trust_key_b64
-            except MobilePayloadEncryptionError:
-                continue
-        return request_payload, "Desktop could not decrypt the encrypted pairing payload.", None
-
     def _decrypt_transfer_payload_if_needed(
         self,
         request_payload: dict[str, object],
@@ -1380,28 +1251,6 @@ class MobilePairingService:
         if not normalized_value:
             return None
         return normalized_value
-
-    @staticmethod
-    def _extract_pairing_session_id(payload: dict[str, object]) -> str | None:
-        raw_session_id = payload.get("sid")
-        if raw_session_id is None:
-            raw_session_id = payload.get("session_id")
-        if not isinstance(raw_session_id, str):
-            return None
-        normalized_session_id = raw_session_id.strip()
-        if not normalized_session_id:
-            return None
-        return normalized_session_id
-
-    @staticmethod
-    def _extract_pairing_platform(payload: dict[str, object]) -> str | None:
-        raw_platform = payload.get("platform")
-        if not isinstance(raw_platform, str):
-            return None
-        normalized_platform = raw_platform.strip()
-        if not normalized_platform:
-            return None
-        return normalized_platform
 
     def _encrypt_response_payload_if_needed(
         self,

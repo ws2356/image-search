@@ -2,6 +2,9 @@
   "mobile_folder": {
     "enabled": true
   },
+  "encryption": {
+    "enabled": true
+  },
   "strict_security": {
     "enabled": false
   },
