@@ -73,6 +73,23 @@ class TestDtsConfig(unittest.TestCase):
             self.assertFalse(dts_config.is_encryption_feature_enabled(default=False))
             self.assertTrue(dts_config.is_encryption_feature_enabled(default=True))
 
+    def test_strict_security_feature_flag_defaults_to_false(self):
+        with patch.object(dts_config, "get_config", return_value={}):
+            self.assertFalse(dts_config.is_strict_security_feature_enabled())
+
+    def test_strict_security_feature_flag_reads_nested_config_value(self):
+        with patch.object(dts_config, "get_config", return_value={"strict_security": {"enabled": True}}):
+            self.assertTrue(dts_config.is_strict_security_feature_enabled())
+
+    def test_strict_security_feature_flag_reads_dotted_config_value(self):
+        with patch.object(dts_config, "get_config", return_value={"strict_security.enabled": "true"}):
+            self.assertTrue(dts_config.is_strict_security_feature_enabled())
+
+    def test_strict_security_feature_flag_respects_default_for_unrecognized_value(self):
+        with patch.object(dts_config, "get_config", return_value={"strict_security": {"enabled": "maybe"}}):
+            self.assertFalse(dts_config.is_strict_security_feature_enabled(default=False))
+            self.assertTrue(dts_config.is_strict_security_feature_enabled(default=True))
+
 
 if __name__ == "__main__":
     unittest.main()

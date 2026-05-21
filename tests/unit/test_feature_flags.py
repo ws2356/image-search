@@ -147,6 +147,12 @@ class TestFeatureFlags(unittest.TestCase):
         self.assertFalse(feature_flags._extract_encryption_enabled({"encryption": {"enabled": "false"}}))
         self.assertIsNone(feature_flags._extract_encryption_enabled({"other_flag": {"enabled": True}}))
 
+    def test_extract_strict_security_enabled_supports_bool_and_string_values(self):
+        self.assertTrue(feature_flags._extract_strict_security_enabled({"strict_security": {"enabled": True}}))
+        self.assertTrue(feature_flags._extract_strict_security_enabled({"strict_security": {"enabled": "true"}}))
+        self.assertFalse(feature_flags._extract_strict_security_enabled({"strict_security": {"enabled": "false"}}))
+        self.assertIsNone(feature_flags._extract_strict_security_enabled({"other_flag": {"enabled": True}}))
+
     def test_is_encryption_enabled_falls_back_to_config_when_no_cache(self):
         store = feature_flags._FeatureFlagStore()
         with (
@@ -182,6 +188,52 @@ class TestFeatureFlags(unittest.TestCase):
         self.assertEqual(feature_flags._extract_desktop_root_trace_sample_rate(payload), 0.25)
         self.assertIsNone(feature_flags._extract_desktop_root_trace_sample_rate({"desktop": {"root_trace_sample_rate": 0.25}}))
         self.assertIsNone(feature_flags._extract_desktop_root_trace_sample_rate({"desktop_root_trace_sample_rate": 0.25}))
+
+    def test_is_strict_security_enabled_falls_back_to_config_when_no_cache(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value=None),
+            patch.object(feature_flags, "is_strict_security_feature_enabled", return_value=True),
+        ):
+            self.assertTrue(store.is_strict_security_enabled())
+
+    def test_is_strict_security_enabled_prefers_cached_remote_payload_over_config(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value={"strict_security": {"enabled": True}}),
+            patch.object(feature_flags, "is_strict_security_feature_enabled", return_value=False) as config_mock,
+        ):
+            self.assertTrue(store.is_strict_security_enabled())
+
+        config_mock.assert_not_called()
+
+    def test_refresh_worker_updates_strict_security_flag_from_remote_payload(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(
+                feature_flags,
+                "_fetch_feature_flags_payload",
+                return_value={"mobile_folder": {"enabled": True}, "strict_security": {"enabled": True}},
+            ),
+            patch.object(feature_flags, "_save_cached_feature_flags_payload"),
+        ):
+            store._refresh_worker()
+
+        self.assertTrue(store.is_strict_security_enabled())
+
+    def test_refresh_worker_updates_strict_security_without_mobile_folder_flag(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(
+                feature_flags,
+                "_fetch_feature_flags_payload",
+                return_value={"strict_security": {"enabled": True}},
+            ),
+            patch.object(feature_flags, "_save_cached_feature_flags_payload"),
+        ):
+            store._refresh_worker()
+
+        self.assertTrue(store.is_strict_security_enabled())
 
     def test_extract_desktop_root_trace_sample_rate_clamps_values(self):
         self.assertEqual(

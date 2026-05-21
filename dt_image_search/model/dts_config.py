@@ -65,6 +65,16 @@ def is_encryption_feature_enabled(default: bool = True) -> bool:
     return default
 
 
+def is_strict_security_feature_enabled(default: bool = False) -> bool:
+    config = get_config()
+    strict_security_config = config.get("strict_security")
+    if isinstance(strict_security_config, dict) and "enabled" in strict_security_config:
+        return _as_bool(strict_security_config.get("enabled"), default)
+    if "strict_security.enabled" in config:
+        return _as_bool(config.get("strict_security.enabled"), default)
+    return default
+
+
 def _as_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
         return value
