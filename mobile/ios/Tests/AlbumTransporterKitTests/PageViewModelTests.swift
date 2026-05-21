@@ -579,6 +579,8 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
             beginPairingCallCount += 1
         case .failure(let error):
             switch error {
+            case .cancel:
+                returnHomeCallCount += 1
             case .scannerFailed:
                 scanFailureCallCount += 1
             case .unknown:

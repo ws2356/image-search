@@ -18,13 +18,13 @@ struct ScanningPageViewModel {
 
     func backTapped() async {
         telemetryService.recordInteraction(name: "back_tapped", location: "pairing")
-        let result = ScanningPageResult(result: .failure(.unknown))
+        let result = ScanningPageResult(result: .failure(.cancel))
         await model.onScanningCompleted(with: result)
     }
 
     func openSettingsTapped() async {
         telemetryService.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
-        let result = ScanningPageResult(result: .failure(.unknown))
+        let result = ScanningPageResult(result: .failure(.cancel))
         await model.onScanningCompleted(with: result)
     }
 

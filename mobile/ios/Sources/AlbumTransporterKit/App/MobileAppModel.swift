@@ -79,6 +79,8 @@ final class MobileAppModel: ObservableObject {
         switch result.result {
         case .success(let qrString):
             await showPairingPage(qrString: qrString)
+        case .failure(.cancel):
+            await returnHome()
         case .failure(.scannerFailed):
             presentErrorSummary(
                 title: "Scanner failed",

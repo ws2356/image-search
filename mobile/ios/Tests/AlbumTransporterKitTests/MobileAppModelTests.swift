@@ -1088,6 +1088,50 @@ final class MobileAppModelTests: XCTestCase {
         await transferTask.value
     }
 
+    func test_cancel_from_scan_page_returns_home() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+        let scanningViewModel = ScanningPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        XCTAssertEqual(model.route, .scan)
+
+        await scanningViewModel.backTapped()
+        XCTAssertEqual(model.route, .home)
+    }
+
+    func test_open_settings_from_scan_page_returns_home() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .allClear),
+            transferService: StaticTransferService(),
+            telemetryClient: RecordingTelemetryClient()
+        )
+        let scanningViewModel = ScanningPageViewModel(
+            model: model,
+            telemetryService: NoopTelemetryService()
+        )
+
+        await model.load()
+        await model.openScanFlow()
+        XCTAssertEqual(model.route, .scan)
+
+        await scanningViewModel.openSettingsTapped()
+        XCTAssertEqual(model.route, .home)
+    }
+
     func test_open_scan_flow_returns_without_waiting_for_slow_side_effect_io() async {
         let model = makeModel(
             stateStore: SlowAppStateStore(saveDelayNanoseconds: 600_000_000),

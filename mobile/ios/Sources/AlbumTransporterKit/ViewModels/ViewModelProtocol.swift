@@ -22,6 +22,7 @@ struct HomePageResult {
 }
 
 enum ScanningPageError: Error, Equatable {
+    case cancel
     case scannerFailed
     case unknown
 }
