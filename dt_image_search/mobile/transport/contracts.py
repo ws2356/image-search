@@ -6,7 +6,6 @@ from typing import BinaryIO
 
 PAIRING_CLAIM_OPERATION = "pairing.claim"
 PAIRING_STATE_OPERATION = "pairing.state"
-PAIRING_CAPABILITY_EXCHANGE_OPERATION = "pairing.capabilities"
 CAPABILITY_EXCHANGE_OPERATION = "capabilities.exchange"
 UPDATE_PROMPT_OPERATION = "update.prompt"
 TRANSFER_START_OPERATION = "transfer.start"

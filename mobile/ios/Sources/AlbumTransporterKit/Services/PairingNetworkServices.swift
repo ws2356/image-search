@@ -22,21 +22,6 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
         _ = try? await session.data(for: request)
     }
 
-    func exchangePairingCapabilities(
-        at endpoint: URL,
-        request: PairingCapabilityExchangeRequest
-    ) async throws -> PairingCapabilityExchangeResponse {
-        guard let capabilityEndpoint = endpoint.pairingCapabilityExchangeURL else {
-            throw PairingServiceError.transport(message: "Desktop pairing capability endpoint is invalid.")
-        }
-        return try await postPairingRequest(
-            at: capabilityEndpoint,
-            requestBody: request,
-            responseType: PairingCapabilityExchangeResponse.self,
-            expectedSchema: PairingCapabilityExchangeProtocol.schema
-        )
-    }
-
     func claimPairing(
         at endpoint: URL,
         request: PairingClaimRequest,
@@ -130,9 +115,6 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
                 case .pendingPairing, .pairingMismatched, .pairingStopped:
                     throw PairingServiceError.rejected(message: pairingClaimResponse.message)
                 }
-            }
-            if let capabilityResponse = decodedResponse as? PairingCapabilityExchangeResponse {
-                throw PairingServiceError.rejected(message: capabilityResponse.message)
             }
             throw PairingServiceError.rejected(message: "Desktop pairing request failed.")
         } catch let error as PairingServiceError {
@@ -336,7 +318,7 @@ struct DesktopBootstrapPairingService: PairingService {
             }
 
             let transport = TransferTransport(rawValue: response.transport ?? TransferTransport.lan.rawValue) ?? .lan
-            let trustedRecord = TrustedDesktopRecord(
+            var trustedRecord = TrustedDesktopRecord(
                 desktopDeviceID: desktopDeviceID,
                 desktopName: desktopName,
                 endpointURL: attempt.endpoint,
@@ -347,9 +329,9 @@ struct DesktopBootstrapPairingService: PairingService {
                 usbOneTimePasscode: payload.oneTimePasscode,
                 usbSuggestedPort: payload.suggestedUSBPort,
                 pairedAt: pairedAt,
-                encryptionEnabled: attempt.encryptionEnabled,
                 strictSecurityEnabled: payload.strictSecurityEnabled
             )
+            trustedRecord = try await applyPostPairingCapabilitiesIfNeeded(trustedRecord)
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)
 
             return .success(
@@ -374,26 +356,15 @@ struct DesktopBootstrapPairingService: PairingService {
         PairingDebugLogger.debug(
             "Starting pairing claim session_id=\(payload.sessionID) usb_candidate=\(payload.suggestedUSBPort != nil) lan_endpoint_count=\(payload.bootstrapURLs.count)"
         )
-        let pairingKeyBase64 = derivePairingKeyBase64(
-            payload: payload,
-            platform: request.platform
-        )
-
         if let usbBootstrapClient, payload.suggestedUSBPort != nil {
             do {
                 PairingDebugLogger.debug(
                     "Attempting USB pairing claim session_id=\(payload.sessionID) suggested_usb_port=\(payload.suggestedUSBPort ?? 0)"
                 )
-                let encryptionEnabled = try await negotiatePairingEncryptionOverUSB(
-                    payload: payload,
-                    request: request,
-                    usbBootstrapClient: usbBootstrapClient
-                )
-                try requireEncryptedPairingIfNeeded(payload: payload, encryptionEnabled: encryptionEnabled)
                 let response = try await usbBootstrapClient.claimPairing(
                     using: payload,
                     request: request,
-                    encryptionTrustKeyBase64: encryptionEnabled ? pairingKeyBase64 : nil
+                    encryptionTrustKeyBase64: nil
                 )
                 PairingDebugLogger.debug(
                     "USB pairing claim completed session_id=\(payload.sessionID) backup_state=\(response.backupState.rawValue)"
@@ -401,9 +372,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 return PairingBootstrapAttempt(
                     endpoint: payload.bootstrapURL,
                     response: response,
-                    transport: .usb,
-                    encryptionEnabled: encryptionEnabled,
-                    encryptionTrustKeyBase64: encryptionEnabled ? pairingKeyBase64 : nil
+                    transport: .usb
                 )
             } catch let error as PairingServiceError {
                 PairingDebugLogger.error(
@@ -426,23 +395,15 @@ struct DesktopBootstrapPairingService: PairingService {
                 PairingDebugLogger.debug(
                     "Attempting LAN pairing claim session_id=\(payload.sessionID) endpoint=\(endpoint.absoluteString)"
                 )
-                let encryptionEnabled = try await negotiatePairingEncryptionOverLAN(
-                    payload: payload,
-                    endpoint: endpoint,
-                    request: request
-                )
-                try requireEncryptedPairingIfNeeded(payload: payload, encryptionEnabled: encryptionEnabled)
                 let response = try await bootstrapClient.claimPairing(
                     at: endpoint,
                     request: request,
-                    encryptionTrustKeyBase64: encryptionEnabled ? pairingKeyBase64 : nil
+                    encryptionTrustKeyBase64: nil
                 )
                 return PairingBootstrapAttempt(
                     endpoint: endpoint,
                     response: response,
-                    transport: .lan,
-                    encryptionEnabled: encryptionEnabled,
-                    encryptionTrustKeyBase64: encryptionEnabled ? pairingKeyBase64 : nil
+                    transport: .lan
                 )
             } catch let error as PairingServiceError {
                 PairingDebugLogger.error(
@@ -484,7 +445,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 stateResponse = try await usbBootstrapClient.fetchPairingState(
                     using: payload,
                     request: request,
-                    encryptionTrustKeyBase64: attempt.encryptionTrustKeyBase64
+                    encryptionTrustKeyBase64: nil
                 )
             case .lan:
                 PairingDebugLogger.debug(
@@ -493,7 +454,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 stateResponse = try await bootstrapClient.fetchPairingState(
                     at: attempt.endpoint,
                     request: request,
-                    encryptionTrustKeyBase64: attempt.encryptionTrustKeyBase64
+                    encryptionTrustKeyBase64: nil
                 )
             }
             PairingDebugLogger.debug(
@@ -525,62 +486,33 @@ struct DesktopBootstrapPairingService: PairingService {
         return Data(digest).base64URLEncodedString()
     }
 
-    private func negotiatePairingEncryptionOverLAN(
-        payload: PairingQRCodePayload,
-        endpoint: URL,
-        request: PairingClaimRequest
-    ) async throws -> Bool {
-        do {
-            let response = try await bootstrapClient.exchangePairingCapabilities(
-                at: endpoint,
-                request: PairingCapabilityExchangeRequest(
-                    sessionID: request.sessionID,
-                    oneTimePasscode: payload.strictSecurityEnabled ? nil : request.oneTimePasscode,
-                    platform: request.platform,
-                    capabilities: [MobilePayloadEncryptionProtocol.capabilityName: 1]
-                )
-            )
-            if response.status != .accepted {
-                return false
+    private func applyPostPairingCapabilitiesIfNeeded(
+        _ desktop: TrustedDesktopRecord
+    ) async throws -> TrustedDesktopRecord {
+        guard let capabilityExchangeClient else {
+            if desktop.strictSecurityEnabled {
+                throw PairingServiceError.rejected(message: Self.strictSecurityPairingFailureMessage)
             }
-            return (response.capabilities[MobilePayloadEncryptionProtocol.capabilityName] ?? 0) == 1
-        } catch {
-            return false
+            return desktop
         }
-    }
-
-    private func negotiatePairingEncryptionOverUSB(
-        payload: PairingQRCodePayload,
-        request: PairingClaimRequest,
-        usbBootstrapClient: PairingUSBBootstrapClient
-    ) async throws -> Bool {
+        var updatedDesktop = desktop
         do {
-            let response = try await usbBootstrapClient.exchangePairingCapabilities(
-                using: payload,
-                request: PairingCapabilityExchangeRequest(
-                    sessionID: request.sessionID,
-                    oneTimePasscode: payload.strictSecurityEnabled ? nil : request.oneTimePasscode,
-                    platform: request.platform,
-                    capabilities: [MobilePayloadEncryptionProtocol.capabilityName: 1]
-                )
+            let response = try await capabilityExchangeClient.exchangeCapabilities(
+                [MobileTransferCapabilities.encryption: 1],
+                desktop: desktop
             )
-            if response.status != .accepted {
-                return false
+            updatedDesktop.encryptionEnabled =
+                (response.capabilities?[MobileTransferCapabilities.encryption] ?? 0) == 1
+            if updatedDesktop.strictSecurityEnabled, !updatedDesktop.encryptionEnabled {
+                throw PairingServiceError.rejected(message: Self.strictSecurityPairingFailureMessage)
             }
-            return (response.capabilities[MobilePayloadEncryptionProtocol.capabilityName] ?? 0) == 1
+            return updatedDesktop
         } catch {
-            return false
+            if desktop.strictSecurityEnabled {
+                throw PairingServiceError.rejected(message: Self.strictSecurityPairingFailureMessage)
+            }
+            return desktop
         }
-    }
-
-    private func requireEncryptedPairingIfNeeded(
-        payload: PairingQRCodePayload,
-        encryptionEnabled: Bool
-    ) throws {
-        guard payload.strictSecurityEnabled, !encryptionEnabled else {
-            return
-        }
-        throw PairingServiceError.rejected(message: Self.strictSecurityPairingFailureMessage)
     }
 
 }
@@ -590,8 +522,6 @@ private struct PairingBootstrapAttempt {
     let endpoint: URL
     let response: PairingClaimResponse
     let transport: TransferTransport
-    let encryptionEnabled: Bool
-    let encryptionTrustKeyBase64: String?
 }
 
 private enum PairingDebugLogger {
@@ -628,17 +558,6 @@ private extension URL {
         components.fragment = nil
         return components.url
     }
-
-    var pairingCapabilityExchangeURL: URL? {
-        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-        components.path = PairingCapabilityExchangeProtocol.exchangePath
-        components.query = nil
-        components.fragment = nil
-        return components.url
-    }
-
     var isLikelyLocalNetworkEndpoint: Bool {
         guard let host else {
             return false

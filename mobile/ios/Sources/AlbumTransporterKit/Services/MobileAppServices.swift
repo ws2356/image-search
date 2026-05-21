@@ -112,10 +112,6 @@ enum PairingError: Error, Equatable, Sendable {
 
 protocol PairingBootstrapClient: Sendable {
     func primeInternetAccess() async
-    func exchangePairingCapabilities(
-        at endpoint: URL,
-        request: PairingCapabilityExchangeRequest
-    ) async throws -> PairingCapabilityExchangeResponse
     func claimPairing(
         at endpoint: URL,
         request: PairingClaimRequest,
@@ -129,10 +125,6 @@ protocol PairingBootstrapClient: Sendable {
 }
 
 protocol PairingUSBBootstrapClient: Sendable {
-    func exchangePairingCapabilities(
-        using payload: PairingQRCodePayload,
-        request: PairingCapabilityExchangeRequest
-    ) async throws -> PairingCapabilityExchangeResponse
     func claimPairing(
         using payload: PairingQRCodePayload,
         request: PairingClaimRequest,
@@ -399,28 +391,12 @@ enum PairingProtocol {
     static let schema = "dtis.mobile-pairing.v1"
 }
 
-enum PairingCapabilityExchangeProtocol {
-    static let schema = "dtis.mobile-pairing-capabilities.v1"
-    static let exchangePath = "/api/mobile/pairing/capabilities"
-}
-
 extension PairingService {
     func primeNetworkAccess() async {}
 }
 
 extension PairingBootstrapClient {
     func primeInternetAccess() async {}
-
-    func exchangePairingCapabilities(
-        at endpoint: URL,
-        request: PairingCapabilityExchangeRequest
-    ) async throws -> PairingCapabilityExchangeResponse {
-        _ = endpoint
-        _ = request
-        throw PairingServiceError.transport(
-            message: "Desktop pairing capability exchange is unavailable."
-        )
-    }
 
     func claimPairing(
         at endpoint: URL,
@@ -465,17 +441,6 @@ extension PairingBootstrapClient {
 }
 
 extension PairingUSBBootstrapClient {
-    func exchangePairingCapabilities(
-        using payload: PairingQRCodePayload,
-        request: PairingCapabilityExchangeRequest
-    ) async throws -> PairingCapabilityExchangeResponse {
-        _ = payload
-        _ = request
-        throw PairingServiceError.transport(
-            message: "Desktop USB pairing capability exchange is unavailable."
-        )
-    }
-
     func claimPairing(
         using payload: PairingQRCodePayload,
         request: PairingClaimRequest,
@@ -585,48 +550,9 @@ struct PairingStateRequest: Codable, Sendable {
     }
 }
 
-enum PairingCapabilityExchangeStatus: String, Codable, Sendable {
-    case accepted
-    case rejected
-}
-
 protocol PairingSchemaResponse: Sendable {
     var schema: String { get }
     var message: String { get }
-}
-
-struct PairingCapabilityExchangeRequest: Codable, Sendable {
-    var schema = PairingCapabilityExchangeProtocol.schema
-    var sessionID: String
-    var oneTimePasscode: String? = nil
-    var platform: String
-    var capabilities: [String: Int]
-
-    enum CodingKeys: String, CodingKey {
-        case schema
-        case sessionID = "sid"
-        case oneTimePasscode = "opt"
-        case platform
-        case capabilities
-    }
-}
-
-struct PairingCapabilityExchangeResponse: Codable, Sendable, PairingSchemaResponse {
-    var schema: String
-    var status: PairingCapabilityExchangeStatus
-    var message: String
-    var sessionID: String?
-    var platform: String?
-    var capabilities: [String: Int]
-
-    enum CodingKeys: String, CodingKey {
-        case schema
-        case status
-        case message
-        case sessionID = "sid"
-        case platform
-        case capabilities
-    }
 }
 
 struct PairingClaimResponse: Codable, Sendable, PairingSchemaResponse {

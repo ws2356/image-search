@@ -9,7 +9,6 @@ enum MobileTransportProtocol {
     static let authChallengeBodySchema = "dtis.mobile-pairing.v1"
     static let pairingClaimOperation = "pairing.claim"
     static let pairingStateOperation = "pairing.state"
-    static let pairingCapabilityExchangeOperation = "pairing.capabilities"
     static let capabilityExchangeOperation = "capabilities.exchange"
     static let updatePromptOperation = "update.prompt"
     static let transferStartOperation = "transfer.start"
@@ -964,20 +963,6 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
         self.runtime = runtime
         self.telemetryClient = telemetryClient
         self.responseTimeout = responseTimeout
-    }
-
-    func exchangePairingCapabilities(
-        using payload: PairingQRCodePayload,
-        request: PairingCapabilityExchangeRequest
-    ) async throws -> PairingCapabilityExchangeResponse {
-        try await sendPairingRequest(
-            using: payload,
-            operation: MobileTransportProtocol.pairingCapabilityExchangeOperation,
-            request: request,
-            bodySchema: PairingCapabilityExchangeProtocol.schema,
-            responseType: PairingCapabilityExchangeResponse.self,
-            expectedSchema: PairingCapabilityExchangeProtocol.schema
-        )
     }
 
     func claimPairing(

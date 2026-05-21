@@ -58,7 +58,6 @@ from dt_image_search.mobile.mobile_update_prompt_service import (
 )
 from dt_image_search.mobile.transport.contracts import (
     CAPABILITY_EXCHANGE_OPERATION,
-    PAIRING_CAPABILITY_EXCHANGE_OPERATION,
     PAIRING_CLAIM_OPERATION,
     PAIRING_STATE_OPERATION,
     TRANSFER_ASSET_OPERATION,
@@ -90,8 +89,6 @@ from dt_image_search.tools.dts_event_bus import default_bus
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
 PAIRING_CLAIM_PATH = "/api/mobile/pairing/claim"
 PAIRING_STATE_PATH = "/api/mobile/pairing/state"
-PAIRING_CAPABILITY_EXCHANGE_SCHEMA = "dtis.mobile-pairing-capabilities.v1"
-PAIRING_CAPABILITY_EXCHANGE_PATH = "/api/mobile/pairing/capabilities"
 PAIRING_TRANSPORT_LAN = "lan"
 PAIRING_TRANSPORT_USB = "usb"
 MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT = "mobile_app_foreground_state_changed"
@@ -623,59 +620,6 @@ class MobilePairingService:
                 payload["device_uuid"] = device_uuid
             return 200, payload
 
-    def handle_pairing_capability_exchange_request(
-        self,
-        request_payload: dict[str, object],
-    ) -> tuple[int, dict[str, object]]:
-        required_fields = ("schema", "sid", "platform")
-        for field_name in required_fields:
-            field_value = request_payload.get(field_name)
-            if not isinstance(field_value, str) or not field_value.strip():
-                return 400, _pairing_capability_exchange_response(
-                    status="rejected",
-                    message=(
-                        "The pairing capability exchange request is missing the required "
-                        f"field '{field_name}'."
-                    ),
-                    capabilities={},
-                )
-        schema = str(request_payload["schema"]).strip()
-        if schema != PAIRING_CAPABILITY_EXCHANGE_SCHEMA:
-            return 400, _pairing_capability_exchange_response(
-                status="rejected",
-                message="The pairing capability exchange request schema version is unsupported.",
-                capabilities={},
-            )
-        sid = str(request_payload["sid"]).strip()
-        platform = str(request_payload["platform"]).strip()
-        try:
-            requested_platform = MobilePlatform(platform)
-        except ValueError:
-            return 400, _pairing_capability_exchange_response(
-                status="rejected",
-                message="The pairing capability exchange request platform is unsupported.",
-                capabilities={},
-            )
-
-        with self._lock:
-            active_session = self._active_session
-            if active_session is None or active_session.session_id != sid:
-                return 404, _pairing_capability_exchange_response(
-                    status="rejected",
-                    message="There is no active desktop pairing session.",
-                    sid=sid,
-                    platform=requested_platform.value,
-                    capabilities={},
-                )
-
-        return 200, _pairing_capability_exchange_response(
-            status="accepted",
-            message="Desktop completed pairing capability exchange.",
-            sid=sid,
-            platform=requested_platform.value,
-            capabilities={MOBILE_ENCRYPTION_CAPABILITY: 1} if is_encryption_enabled() else {},
-        )
-
     def _complete_pairing_acceptance(
         self,
         *,
@@ -974,10 +918,6 @@ class MobilePairingService:
     def _register_transport_routes(self) -> None:
         self._transport_router.register(PAIRING_CLAIM_OPERATION, self._dispatch_pairing_claim_operation)
         self._transport_router.register(PAIRING_STATE_OPERATION, self._dispatch_pairing_state_operation)
-        self._transport_router.register(
-            PAIRING_CAPABILITY_EXCHANGE_OPERATION,
-            self._dispatch_pairing_capability_exchange_operation,
-        )
         self._transport_router.register(CAPABILITY_EXCHANGE_OPERATION, self._dispatch_capability_exchange_operation)
         self._transport_router.register(UPDATE_PROMPT_OPERATION, self._dispatch_update_prompt_operation)
         self._transport_router.register(TRANSFER_START_OPERATION, self._dispatch_transfer_start_operation)
@@ -1050,26 +990,6 @@ class MobilePairingService:
             trust_key_b64=encryption_trust_key_b64,
             session_id=self._extract_pairing_session_id(decrypted_pairing_payload),
             platform=self._extract_pairing_platform(decrypted_pairing_payload),
-        )
-        return MobileTransportResponse(status_code=status_code, payload=response_payload)
-
-    def _dispatch_pairing_capability_exchange_operation(
-        self,
-        request: MobileTransportRequest,
-    ) -> MobileTransportResponse:
-        if not isinstance(request.payload, dict):
-            return MobileTransportResponse(
-                status_code=400,
-                payload=_pairing_capability_exchange_response(
-                    status="rejected",
-                    message=(
-                        "Desktop requires JSON object payloads for pairing capability exchange requests."
-                    ),
-                    capabilities={},
-                ),
-            )
-        status_code, response_payload = self.handle_pairing_capability_exchange_request(
-            request.payload
         )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
@@ -1548,8 +1468,6 @@ class MobilePairingService:
             format_pairing_endpoint_url=_format_pairing_endpoint_url,
             pairing_claim_path=PAIRING_CLAIM_PATH,
             pairing_state_path=PAIRING_STATE_PATH,
-            pairing_capability_exchange_path=PAIRING_CAPABILITY_EXCHANGE_PATH,
-            pairing_capability_exchange_schema=PAIRING_CAPABILITY_EXCHANGE_SCHEMA,
             pairing_protocol_schema=PAIRING_PROTOCOL_SCHEMA,
             pairing_rejected_status=MobileBackupState.PENDING_PAIRING.value,
             transfer_schema=MOBILE_TRANSFER_SCHEMA,
@@ -1688,28 +1606,6 @@ def _json_rejected_response(
         status_code=status_code,
         payload=payload,
     )
-
-
-def _pairing_capability_exchange_response(
-    *,
-    status: str,
-    message: str,
-    sid: str | None = None,
-    platform: str | None = None,
-    capabilities: dict[str, int] | None = None,
-) -> dict[str, object]:
-    response_payload: dict[str, object] = {
-        "schema": PAIRING_CAPABILITY_EXCHANGE_SCHEMA,
-        "status": status,
-        "message": message,
-        "capabilities": dict(capabilities or {}),
-    }
-    if sid:
-        response_payload["sid"] = sid
-    if platform:
-        response_payload["platform"] = platform
-    return response_payload
-
 
 def _resolve_advertised_hosts(configured_host: str | None) -> tuple[str, ...]:
     if configured_host:

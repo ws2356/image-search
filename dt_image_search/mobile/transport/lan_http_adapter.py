@@ -26,7 +26,6 @@ from dt_image_search.mobile.mobile_payload_encryption import (
 )
 from dt_image_search.mobile.transport.contracts import (
     CAPABILITY_EXCHANGE_OPERATION,
-    PAIRING_CAPABILITY_EXCHANGE_OPERATION,
     PAIRING_CLAIM_OPERATION,
     PAIRING_STATE_OPERATION,
     TRANSFER_ASSET_OPERATION,
@@ -72,8 +71,6 @@ class LanHttpTransportAdapter:
         format_pairing_endpoint_url: Callable[[str, int], str],
         pairing_claim_path: str,
         pairing_state_path: str,
-        pairing_capability_exchange_path: str,
-        pairing_capability_exchange_schema: str,
         pairing_protocol_schema: str,
         pairing_rejected_status: str,
         transfer_schema: str,
@@ -96,8 +93,6 @@ class LanHttpTransportAdapter:
         self._format_pairing_endpoint_url = format_pairing_endpoint_url
         self._pairing_claim_path = pairing_claim_path
         self._pairing_state_path = pairing_state_path
-        self._pairing_capability_exchange_path = pairing_capability_exchange_path
-        self._pairing_capability_exchange_schema = pairing_capability_exchange_schema
         self._pairing_protocol_schema = pairing_protocol_schema
         self._pairing_rejected_status = pairing_rejected_status
         self._transfer_schema = transfer_schema
@@ -214,20 +209,6 @@ class LanHttpTransportAdapter:
                         if request_payload is None:
                             return
                         self._dispatch_operation(PAIRING_STATE_OPERATION, request_payload)
-                        return
-
-                    if parsed_path.path == adapter._pairing_capability_exchange_path:
-                        request_payload = self._read_json_payload(
-                            schema=adapter._pairing_capability_exchange_schema,
-                            status="rejected",
-                            parse_error_message="Desktop could not parse the pairing capability exchange JSON payload.",
-                            object_error_message=(
-                                "Desktop requires JSON object payloads for pairing capability exchange requests."
-                            ),
-                        )
-                        if request_payload is None:
-                            return
-                        self._dispatch_operation(PAIRING_CAPABILITY_EXCHANGE_OPERATION, request_payload)
                         return
 
                     if parsed_path.path == adapter._transfer_start_path:
