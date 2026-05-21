@@ -790,6 +790,7 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
     var usbSuggestedPort: Int? = nil
     var pairedAt: Date
     var encryptionEnabled: Bool = false
+    var strictSecurityEnabled: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case desktopDeviceID
@@ -803,6 +804,7 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
         case usbSuggestedPort
         case pairedAt
         case encryptionEnabled
+        case strictSecurityEnabled
     }
 
     init(
@@ -816,7 +818,8 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
         usbOneTimePasscode: String? = nil,
         usbSuggestedPort: Int? = nil,
         pairedAt: Date,
-        encryptionEnabled: Bool = false
+        encryptionEnabled: Bool = false,
+        strictSecurityEnabled: Bool = false
     ) {
         self.desktopDeviceID = desktopDeviceID
         self.desktopName = desktopName
@@ -829,6 +832,7 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
         self.usbSuggestedPort = usbSuggestedPort
         self.pairedAt = pairedAt
         self.encryptionEnabled = encryptionEnabled
+        self.strictSecurityEnabled = strictSecurityEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -844,6 +848,7 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
         usbSuggestedPort = try container.decodeIfPresent(Int.self, forKey: .usbSuggestedPort)
         pairedAt = try container.decode(Date.self, forKey: .pairedAt)
         encryptionEnabled = try container.decodeIfPresent(Bool.self, forKey: .encryptionEnabled) ?? false
+        strictSecurityEnabled = try container.decodeIfPresent(Bool.self, forKey: .strictSecurityEnabled) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -859,6 +864,7 @@ struct TrustedDesktopRecord: Codable, Equatable, Sendable {
         try container.encodeIfPresent(usbSuggestedPort, forKey: .usbSuggestedPort)
         try container.encode(pairedAt, forKey: .pairedAt)
         try container.encode(encryptionEnabled, forKey: .encryptionEnabled)
+        try container.encode(strictSecurityEnabled, forKey: .strictSecurityEnabled)
     }
 }
 

@@ -64,6 +64,61 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertTrue(payload.strictSecurityEnabled)
     }
 
+    func test_desktop_bootstrap_pairing_service_rejects_plaintext_fallback_when_strict_security_is_enabled() async {
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: CapabilityAwarePairingBootstrapClient(
+                capabilityResponse: PairingCapabilityExchangeResponse(
+                    schema: PairingCapabilityExchangeProtocol.schema,
+                    status: .accepted,
+                    message: "Desktop completed pairing capability exchange.",
+                    sessionID: "pairing-demo-001",
+                    platform: "ios",
+                    capabilities: [:]
+                ),
+                claimResponse: PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .accepted,
+                    message: "Pairing accepted for Alice iPhone.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: "desktop-device-001",
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: 1,
+                    folderPath: "/Users/demo/Alice iPhone",
+                    transport: "lan",
+                    pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    serverNonce: "server-nonce-001"
+                )
+            ),
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentity(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: InMemoryTrustedDesktopStore()
+        )
+        let payload = PairingQRCodePayload(
+            schemaVersion: 2,
+            endpointTargets: ["127.0.0.1:38933"],
+            sessionID: "pairing-demo-001",
+            oneTimePasscode: "482913",
+            suggestedUSBPort: 50211,
+            strictSecurityEnabled: true
+        )
+
+        let result = await service.startPairing(using: payload)
+
+        XCTAssertEqual(
+            requirePairingFailure(result),
+            .rejected(
+                message: "The desktop does not support encrypted transport. Update the desktop app and try again."
+            )
+        )
+    }
+
     func test_desktop_bootstrap_pairing_service_persists_trusted_desktop_record() async {
         let trustedDesktopStore = InMemoryTrustedDesktopStore()
         let service = DesktopBootstrapPairingService(
@@ -557,6 +612,31 @@ private actor PollingPairingBootstrapClient: PairingBootstrapClient {
 
     func stateRequestCount() -> Int {
         observedStateRequestCount
+    }
+}
+
+private struct CapabilityAwarePairingBootstrapClient: PairingBootstrapClient {
+    let capabilityResponse: PairingCapabilityExchangeResponse
+    let claimResponse: PairingClaimResponse
+
+    func exchangePairingCapabilities(
+        at endpoint: URL,
+        request: PairingCapabilityExchangeRequest
+    ) async throws -> PairingCapabilityExchangeResponse {
+        XCTAssertEqual(endpoint.absoluteString, "http://127.0.0.1:38933/api/mobile/pairing/claim")
+        XCTAssertEqual(request.sessionID, "pairing-demo-001")
+        return capabilityResponse
+    }
+
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest,
+        encryptionTrustKeyBase64: String?
+    ) async throws -> PairingClaimResponse {
+        _ = endpoint
+        _ = request
+        _ = encryptionTrustKeyBase64
+        return claimResponse
     }
 }
 

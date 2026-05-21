@@ -255,6 +255,8 @@ struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
 
 struct DesktopBootstrapPairingService: PairingService {
     private static let pairingStatePollIntervalNanoseconds: UInt64 = 2_000_000_000
+    private static let strictSecurityPairingFailureMessage =
+        "The desktop does not support encrypted transport. Update the desktop app and try again."
 
     let bootstrapClient: PairingBootstrapClient
     let usbBootstrapClient: PairingUSBBootstrapClient?
@@ -345,7 +347,8 @@ struct DesktopBootstrapPairingService: PairingService {
                 usbOneTimePasscode: payload.oneTimePasscode,
                 usbSuggestedPort: payload.suggestedUSBPort,
                 pairedAt: pairedAt,
-                encryptionEnabled: attempt.encryptionEnabled
+                encryptionEnabled: attempt.encryptionEnabled,
+                strictSecurityEnabled: payload.strictSecurityEnabled
             )
             await trustedDesktopStore.saveTrustedDesktop(trustedRecord)
 
@@ -386,6 +389,7 @@ struct DesktopBootstrapPairingService: PairingService {
                     request: request,
                     usbBootstrapClient: usbBootstrapClient
                 )
+                try requireEncryptedPairingIfNeeded(payload: payload, encryptionEnabled: encryptionEnabled)
                 let response = try await usbBootstrapClient.claimPairing(
                     using: payload,
                     request: request,
@@ -427,6 +431,7 @@ struct DesktopBootstrapPairingService: PairingService {
                     endpoint: endpoint,
                     request: request
                 )
+                try requireEncryptedPairingIfNeeded(payload: payload, encryptionEnabled: encryptionEnabled)
                 let response = try await bootstrapClient.claimPairing(
                     at: endpoint,
                     request: request,
@@ -566,6 +571,16 @@ struct DesktopBootstrapPairingService: PairingService {
         } catch {
             return false
         }
+    }
+
+    private func requireEncryptedPairingIfNeeded(
+        payload: PairingQRCodePayload,
+        encryptionEnabled: Bool
+    ) throws {
+        guard payload.strictSecurityEnabled, !encryptionEnabled else {
+            return
+        }
+        throw PairingServiceError.rejected(message: Self.strictSecurityPairingFailureMessage)
     }
 
 }

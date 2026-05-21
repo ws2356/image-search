@@ -2462,6 +2462,8 @@ actor PhotoLibraryTransferService: TransferService {
     private static let assetFetchBatchSize = 100
     private static let lanUploadConcurrencyMax = 3
     private static let usbUploadConcurrencyMax = 2
+    private static let strictSecurityTransferFailureMessage =
+        "The desktop does not support encrypted transport. Update the desktop app and try again."
     private let assetSource: TransferAssetSource
     private let transferClient: MobileTransferClient
     private let transportResolver: (any TransferTransportResolving)?
@@ -2788,7 +2790,7 @@ actor PhotoLibraryTransferService: TransferService {
                 return await finalizingTransferRun(pausedSnapshot)
             }
 
-            trustedDesktop = await negotiateTransferEncryptionCapabilityIfNeeded(
+            trustedDesktop = try await negotiateTransferEncryptionCapabilityIfNeeded(
                 trustedDesktop
             )
 
@@ -2965,8 +2967,11 @@ actor PhotoLibraryTransferService: TransferService {
 
     private func negotiateTransferEncryptionCapabilityIfNeeded(
         _ desktop: TrustedDesktopRecord
-    ) async -> TrustedDesktopRecord {
+    ) async throws -> TrustedDesktopRecord {
         guard let capabilityClient = transferClient as? any MobileCapabilityExchangeClient else {
+            if desktop.strictSecurityEnabled {
+                throw TransferClientError.transport(message: Self.strictSecurityTransferFailureMessage)
+            }
             return desktop
         }
         var updatedDesktop = desktop
@@ -2976,12 +2981,18 @@ actor PhotoLibraryTransferService: TransferService {
                 desktop: desktop
             )
             let encryptionEnabled = (response.capabilities?[MobileTransferCapabilities.encryption] ?? 0) == 1
+            if updatedDesktop.strictSecurityEnabled, !encryptionEnabled {
+                throw TransferClientError.transport(message: Self.strictSecurityTransferFailureMessage)
+            }
             if updatedDesktop.encryptionEnabled != encryptionEnabled {
                 updatedDesktop.encryptionEnabled = encryptionEnabled
                 await trustedDesktopStore.saveTrustedDesktop(updatedDesktop)
             }
             return updatedDesktop
         } catch {
+            if updatedDesktop.strictSecurityEnabled {
+                throw TransferClientError.transport(message: Self.strictSecurityTransferFailureMessage)
+            }
             if updatedDesktop.encryptionEnabled {
                 updatedDesktop.encryptionEnabled = false
                 await trustedDesktopStore.saveTrustedDesktop(updatedDesktop)
