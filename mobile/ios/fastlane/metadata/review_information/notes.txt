@@ -1,1 +1,5 @@
+Prerequisite:
+1. A macOS device with AuSearch (the companion app) installed is required.
+2. macOS and iOS device must be in the same Wi-Fi or connected via a USB cable.
 
+Download AuSearch (the companion pc side app) here - "https://aurora.boldman.net/".
