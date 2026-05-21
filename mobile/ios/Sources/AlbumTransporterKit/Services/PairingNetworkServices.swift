@@ -426,9 +426,6 @@ struct DesktopBootstrapPairingService: PairingService {
                     endpoint: endpoint,
                     request: request
                 )
-                PairingDebugLogger.debug(
-                    "LAN pairing claim completed session_id=\(payload.sessionID) endpoint=\(endpoint.absoluteString) backup_state=\(response.backupState.rawValue)"
-                )
                 let response = try await bootstrapClient.claimPairing(
                     at: endpoint,
                     request: request,

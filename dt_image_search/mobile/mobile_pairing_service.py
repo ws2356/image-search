@@ -84,6 +84,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
 )
 from dt_image_search.build_flavor import get_build_type
 from dt_image_search.model.dts_db import create_db_conn
+from dt_image_search.model.feature_flags import is_encryption_enabled
 from dt_image_search.tools.dts_event_bus import default_bus
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
@@ -184,7 +185,7 @@ class MobilePairingService:
         self._transfer_service = MobileTransferService(ctx)
         self._capability_exchange_service = MobileCapabilityExchangeService(
             ctx,
-            desktop_capability_flags={MOBILE_ENCRYPTION_CAPABILITY: 1},
+            desktop_capability_flags={MOBILE_ENCRYPTION_CAPABILITY: 1} if is_encryption_enabled() else {},
         )
         self._update_prompt_service = MobileUpdatePromptService(ctx)
         self._pairing_result = MobilePairingResult(
@@ -681,7 +682,7 @@ class MobilePairingService:
             message="Desktop completed pairing capability exchange.",
             sid=sid,
             platform=requested_platform.value,
-            capabilities={MOBILE_ENCRYPTION_CAPABILITY: 1},
+            capabilities={MOBILE_ENCRYPTION_CAPABILITY: 1} if is_encryption_enabled() else {},
         )
 
     def _complete_pairing_acceptance(

@@ -55,6 +55,16 @@ def is_mobile_folder_feature_enabled(default: bool = True) -> bool:
     return default
 
 
+def is_encryption_feature_enabled(default: bool = True) -> bool:
+    config = get_config()
+    encryption_config = config.get("encryption")
+    if isinstance(encryption_config, dict) and "enabled" in encryption_config:
+        return _as_bool(encryption_config.get("enabled"), default)
+    if "encryption.enabled" in config:
+        return _as_bool(config.get("encryption.enabled"), default)
+    return default
+
+
 def _as_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
         return value

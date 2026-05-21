@@ -141,7 +141,43 @@ class TestFeatureFlags(unittest.TestCase):
         self.assertTrue(feature_flags._extract_mobile_folder_enabled({"mobile_folder": {"enabled": "true"}}))
         self.assertFalse(feature_flags._extract_mobile_folder_enabled({"mobile_folder": {"enabled": "false"}}))
 
-    def test_extract_desktop_root_trace_sample_rate_reads_only_supported_schema(self):
+    def test_extract_encryption_enabled_supports_bool_and_string_values(self):
+        self.assertTrue(feature_flags._extract_encryption_enabled({"encryption": {"enabled": True}}))
+        self.assertTrue(feature_flags._extract_encryption_enabled({"encryption": {"enabled": "true"}}))
+        self.assertFalse(feature_flags._extract_encryption_enabled({"encryption": {"enabled": "false"}}))
+        self.assertIsNone(feature_flags._extract_encryption_enabled({"other_flag": {"enabled": True}}))
+
+    def test_is_encryption_enabled_falls_back_to_config_when_no_cache(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value=None),
+            patch.object(feature_flags, "is_encryption_feature_enabled", return_value=True),
+        ):
+            self.assertTrue(store.is_encryption_enabled())
+
+    def test_is_encryption_enabled_prefers_cached_remote_payload_over_config(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value={"encryption": {"enabled": False}}),
+            patch.object(feature_flags, "is_encryption_feature_enabled", return_value=True) as config_mock,
+        ):
+            self.assertFalse(store.is_encryption_enabled())
+
+        config_mock.assert_not_called()
+
+    def test_refresh_worker_updates_encryption_flag_from_remote_payload(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(
+                feature_flags,
+                "_fetch_feature_flags_payload",
+                return_value={"mobile_folder": {"enabled": True}, "encryption": {"enabled": False}},
+            ),
+            patch.object(feature_flags, "_save_cached_feature_flags_payload"),
+        ):
+            store._refresh_worker()
+
+        self.assertFalse(store.is_encryption_enabled())
         payload = {"desktop": {"telemetry": {"root_trace_sample_rate": 0.25}}}
         self.assertEqual(feature_flags._extract_desktop_root_trace_sample_rate(payload), 0.25)
         self.assertIsNone(feature_flags._extract_desktop_root_trace_sample_rate({"desktop": {"root_trace_sample_rate": 0.25}}))

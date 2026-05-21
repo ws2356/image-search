@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from dt_image_search.model.dts_config import is_mobile_folder_feature_enabled
+from dt_image_search.model.dts_config import is_mobile_folder_feature_enabled, is_encryption_feature_enabled
 
 _FEATURE_FLAGS_ENDPOINT = "https://api.boldman.net/image-search/features"
 _FEATURE_FLAGS_TIMEOUT_SECONDS = 10
@@ -25,6 +25,7 @@ class _FeatureFlagStore:
     def __init__(self):
         self._lock = threading.RLock()
         self._mobile_folder_enabled: bool | None = None
+        self._encryption_enabled: bool | None = None
         self._desktop_root_trace_sample_rate: float | None = None
         self.refresh_thread = None
 
@@ -44,6 +45,20 @@ class _FeatureFlagStore:
 
             self._mobile_folder_enabled = is_mobile_folder_feature_enabled()
             return self._mobile_folder_enabled
+
+    def is_encryption_enabled(self) -> bool:
+        with self._lock:
+            if self._encryption_enabled is not None:
+                return self._encryption_enabled
+
+            cached_payload = _load_cached_feature_flags_payload()
+            cached_enabled = _extract_encryption_enabled(cached_payload) if cached_payload is not None else None
+            if cached_enabled is not None:
+                self._encryption_enabled = cached_enabled
+                return self._encryption_enabled
+
+            self._encryption_enabled = is_encryption_feature_enabled()
+            return self._encryption_enabled
 
     def desktop_root_trace_sample_rate(self) -> float:
         with self._lock:
@@ -80,15 +95,20 @@ class _FeatureFlagStore:
             if remote_enabled is None:
                 _log_feature_flags("warning", "FeatureFlags: remote payload missing mobile_folder.enabled.")
                 return
+            remote_encryption_enabled = _extract_encryption_enabled(payload)
             remote_sample_rate = _extract_desktop_root_trace_sample_rate(payload)
             with self._lock:
                 # Only update the in-memory flag if it hasn't been set yet.
                 # This is to ensure consistent reading of the flag within a single app session, even if remote refreshes happen mid-session.
                 if self._mobile_folder_enabled is None:
                     self._mobile_folder_enabled = remote_enabled
+                if self._encryption_enabled is None and remote_encryption_enabled is not None:
+                    self._encryption_enabled = remote_encryption_enabled
                 if self._desktop_root_trace_sample_rate is None and remote_sample_rate is not None:
                     self._desktop_root_trace_sample_rate = remote_sample_rate
             _log_feature_flags("info", f"FeatureFlags: remote mobile_folder.enabled={remote_enabled}.")
+            if remote_encryption_enabled is not None:
+                _log_feature_flags("info", f"FeatureFlags: remote encryption.enabled={remote_encryption_enabled}.")
             if remote_sample_rate is not None:
                 _log_feature_flags(
                     "info",
@@ -241,6 +261,15 @@ def _extract_mobile_folder_enabled(payload: dict) -> bool | None:
     return _to_bool(mobile_folder_payload.get("enabled"))
 
 
+def _extract_encryption_enabled(payload: dict) -> bool | None:
+    encryption_payload = payload.get("encryption")
+    if not isinstance(encryption_payload, dict):
+        return None
+    if "enabled" not in encryption_payload:
+        return None
+    return _to_bool(encryption_payload.get("enabled"))
+
+
 def _extract_desktop_root_trace_sample_rate(payload: dict) -> float | None:
     desktop_payload = payload.get("desktop")
     if not isinstance(desktop_payload, dict):
@@ -298,6 +327,10 @@ def initialize_feature_flags() -> None:
 
 def is_mobile_folder_enabled() -> bool:
     return _feature_flag_store.is_mobile_folder_enabled()
+
+
+def is_encryption_enabled() -> bool:
+    return _feature_flag_store.is_encryption_enabled()
 
 
 def get_desktop_root_trace_sample_rate() -> float:

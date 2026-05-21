@@ -56,6 +56,23 @@ class TestDtsConfig(unittest.TestCase):
             self.assertFalse(dts_config.is_mobile_folder_feature_enabled(default=False))
             self.assertTrue(dts_config.is_mobile_folder_feature_enabled(default=True))
 
+    def test_encryption_feature_flag_defaults_to_true(self):
+        with patch.object(dts_config, "get_config", return_value={}):
+            self.assertTrue(dts_config.is_encryption_feature_enabled(default=True))
+
+    def test_encryption_feature_flag_reads_nested_config_value(self):
+        with patch.object(dts_config, "get_config", return_value={"encryption": {"enabled": False}}):
+            self.assertFalse(dts_config.is_encryption_feature_enabled(default=True))
+
+    def test_encryption_feature_flag_reads_dotted_config_value(self):
+        with patch.object(dts_config, "get_config", return_value={"encryption.enabled": "false"}):
+            self.assertFalse(dts_config.is_encryption_feature_enabled(default=True))
+
+    def test_encryption_feature_flag_respects_default_for_unrecognized_value(self):
+        with patch.object(dts_config, "get_config", return_value={"encryption": {"enabled": "maybe"}}):
+            self.assertFalse(dts_config.is_encryption_feature_enabled(default=False))
+            self.assertTrue(dts_config.is_encryption_feature_enabled(default=True))
+
 
 if __name__ == "__main__":
     unittest.main()
