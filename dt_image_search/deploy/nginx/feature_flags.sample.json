@@ -2,6 +2,9 @@
   "mobile_folder": {
     "enabled": true
   },
+  "strict_security": {
+    "enabled": false
+  },
   "desktop": {
     "telemetry": {
       "root_trace_sample_rate": 0.1
