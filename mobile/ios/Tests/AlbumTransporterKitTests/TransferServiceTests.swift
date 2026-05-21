@@ -302,6 +302,58 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertNil(startedAssetCount)
     }
 
+    func test_photo_library_transfer_service_allows_plaintext_fallback_when_strict_security_is_disabled() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                strictSecurityEnabled: false
+            )
+        )
+        let transferClient = RecordingMobileTransferClient(
+            capabilityExchangeResult: .success(
+                CapabilityExchangeResponse(
+                    schema: CapabilityExchangeProtocol.schema,
+                    status: .accepted,
+                    message: "Desktop completed capability exchange.",
+                    sessionID: "pairing-demo-001",
+                    deviceUUID: "ios-device-001",
+                    capabilities: [:]
+                )
+            )
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(
+                descriptors: [
+                    TransferAssetDescriptor(
+                        assetID: "ph://asset-001",
+                        assetVersion: "v1",
+                        filename: "IMG_0001.JPG",
+                        mediaType: "image",
+                        createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                        updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                    ),
+                ]
+            ),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let startedAssetCount = await transferClient.startedAssetCount()
+
+        XCTAssertEqual(snapshot.phase, .transferring)
+        XCTAssertEqual(snapshot.transferredCount, 1)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(startedAssetCount, 1)
+    }
+
     func test_photo_library_transfer_service_uses_resolved_transport_for_progress() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(

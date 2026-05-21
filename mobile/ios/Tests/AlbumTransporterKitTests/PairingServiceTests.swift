@@ -52,6 +52,20 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertEqual(payload["platform"] as? String, "ios")
     }
 
+    func test_pairing_capability_exchange_request_includes_opt_when_provided() throws {
+        let request = PairingCapabilityExchangeRequest(
+            sessionID: "pairing-demo-001",
+            oneTimePasscode: "482913",
+            platform: "ios",
+            capabilities: ["encryption": 1]
+        )
+
+        let encoded = try JSONEncoder.pairingEncoder.encode(request)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+
+        XCTAssertEqual(payload["opt"] as? String, "482913")
+    }
+
     func test_url_query_qr_decoder_marks_strict_security_when_sec_is_enabled() {
         let result = URLQueryQRCodePayloadDecoder().decode(
             scannedValue: "https://dl.boldman.net?v=2&ept=127.0.0.1:38933&sid=pairing-demo-001&opt=482913&usp=50211&sec=1"
@@ -117,6 +131,61 @@ final class PairingServiceTests: XCTestCase {
                 message: "The desktop does not support encrypted transport. Update the desktop app and try again."
             )
         )
+    }
+
+    func test_desktop_bootstrap_pairing_service_allows_plaintext_fallback_when_strict_security_is_disabled() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: CapabilityAwarePairingBootstrapClient(
+                capabilityResponse: PairingCapabilityExchangeResponse(
+                    schema: PairingCapabilityExchangeProtocol.schema,
+                    status: .accepted,
+                    message: "Desktop completed pairing capability exchange.",
+                    sessionID: "pairing-demo-001",
+                    platform: "ios",
+                    capabilities: [:]
+                ),
+                claimResponse: PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .accepted,
+                    message: "Pairing accepted for Alice iPhone.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: "desktop-device-001",
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: 1,
+                    folderPath: "/Users/demo/Alice iPhone",
+                    transport: "lan",
+                    pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    serverNonce: "server-nonce-001"
+                )
+            ),
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentity(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+        let payload = PairingQRCodePayload(
+            schemaVersion: 2,
+            endpointTargets: ["127.0.0.1:38933"],
+            sessionID: "pairing-demo-001",
+            oneTimePasscode: "482913",
+            suggestedUSBPort: 50211,
+            strictSecurityEnabled: false
+        )
+
+        let result = await service.startPairing(using: payload)
+        let response = requirePairingSuccess(result)
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+
+        XCTAssertEqual(response.sessionID, "pairing-demo-001")
+        XCTAssertFalse(trustedDesktop?.encryptionEnabled ?? true)
+        XCTAssertFalse(trustedDesktop?.strictSecurityEnabled ?? true)
     }
 
     func test_desktop_bootstrap_pairing_service_persists_trusted_desktop_record() async {
