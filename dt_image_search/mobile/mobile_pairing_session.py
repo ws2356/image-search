@@ -60,6 +60,7 @@ class MobilePairingToken:
     suggested_usb_port: int
     payload: str
     endpoint_targets: tuple[str, ...]
+    strict_security_enabled: bool
     expires_at: datetime
     refresh_generation: int
     deep_link_url: str
@@ -95,6 +96,7 @@ class MobilePairingSessionDraft:
         destination_parent: str,
         desktop_endpoint_url: str | None = None,
         desktop_endpoint_urls: list[str] | tuple[str, ...] | None = None,
+        strict_security_enabled: bool = False,
         now: datetime | None = None,
     ) -> "MobilePairingSessionDraft":
         current_time = _utc_now(now)
@@ -113,6 +115,7 @@ class MobilePairingSessionDraft:
                 session_id=session.session_id,
                 desktop_endpoint_urls=session.desktop_endpoint_urls,
                 platform=platform,
+                strict_security_enabled=strict_security_enabled,
                 refresh_generation=0,
                 now=current_time,
             )
@@ -127,6 +130,7 @@ class MobilePairingSessionDraft:
             session_id=self.session_id,
             desktop_endpoint_urls=self.desktop_endpoint_urls,
             platform=platform,
+            strict_security_enabled=current_token.strict_security_enabled,
             refresh_generation=current_token.refresh_generation + 1,
             now=now,
         )
@@ -141,6 +145,7 @@ def _new_pairing_token(
     session_id: str,
     desktop_endpoint_urls: tuple[str, ...],
     platform: MobilePlatform,
+    strict_security_enabled: bool,
     refresh_generation: int,
     now: datetime | None = None,
 ) -> MobilePairingToken:
@@ -152,15 +157,16 @@ def _new_pairing_token(
         USB_SUGGESTED_PORT_MAX - USB_SUGGESTED_PORT_MIN + 1
     )
     expires_at = current_time + PAIRING_TOKEN_TTL
-    payload_query = urlencode(
-        {
-            "v": str(PAIRING_QR_SCHEMA_VERSION),
-            "ept": ",".join(endpoint_targets),
-            "sid": session_id,
-            "opt": one_time_passcode,
-            "usp": str(suggested_usb_port),
-        }
-    )
+    payload_fields = {
+        "v": str(PAIRING_QR_SCHEMA_VERSION),
+        "ept": ",".join(endpoint_targets),
+        "sid": session_id,
+        "opt": one_time_passcode,
+        "usp": str(suggested_usb_port),
+    }
+    if strict_security_enabled:
+        payload_fields["sec"] = "1"
+    payload_query = urlencode(payload_fields)
     payload = urlunsplit(("https", PAIRING_QR_HOST, "", payload_query, ""))
     return MobilePairingToken(
         platform=platform,
@@ -168,6 +174,7 @@ def _new_pairing_token(
         suggested_usb_port=suggested_usb_port,
         payload=payload,
         endpoint_targets=endpoint_targets,
+        strict_security_enabled=strict_security_enabled,
         expires_at=expires_at,
         refresh_generation=refresh_generation,
         deep_link_url=metadata["deep_link_url"],

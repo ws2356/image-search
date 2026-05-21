@@ -416,17 +416,15 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(response_payload["backup_state"], "pending_pairing")
         self.assertIn("Desktop failed while processing the pairing request.", response_payload["message"])
 
-    def test_live_pairing_capability_exchange_endpoint_advertises_encryption(self):
+    def test_live_pairing_capability_exchange_endpoint_accepts_plaintext_request_without_opt(self):
         now = datetime.now(timezone.utc)
         session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
-        token = session.token_for(MobilePlatform.IOS)
 
         capability_status, capability_payload = self._post_json_request(
             path=PAIRING_CAPABILITY_EXCHANGE_PATH,
             payload={
                 "schema": PAIRING_CAPABILITY_EXCHANGE_SCHEMA,
                 "sid": session.session_id,
-                "opt": token.one_time_passcode,
                 "platform": "ios",
                 "capabilities": {
                     "encryption": 1,

@@ -370,6 +370,8 @@ def is_encryption_enabled() -> bool:
     return _feature_flag_store.is_encryption_enabled()
 
 
+# If enabled:
+# 1. mobile app remove redundant opt field in capability exchange requests
 def is_strict_security_enabled() -> bool:
     return _feature_flag_store.is_strict_security_enabled()
 

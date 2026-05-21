@@ -36,6 +36,34 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertNil(normalizedDesktopDisplayName(nil))
     }
 
+    func test_pairing_capability_exchange_request_omits_opt_when_not_provided() throws {
+        let request = PairingCapabilityExchangeRequest(
+            sessionID: "pairing-demo-001",
+            oneTimePasscode: nil,
+            platform: "ios",
+            capabilities: ["encryption": 1]
+        )
+
+        let encoded = try JSONEncoder.pairingEncoder.encode(request)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+
+        XCTAssertEqual(payload["sid"] as? String, "pairing-demo-001")
+        XCTAssertNil(payload["opt"])
+        XCTAssertEqual(payload["platform"] as? String, "ios")
+    }
+
+    func test_url_query_qr_decoder_marks_strict_security_when_sec_is_enabled() {
+        let result = URLQueryQRCodePayloadDecoder().decode(
+            scannedValue: "https://dl.boldman.net?v=2&ept=127.0.0.1:38933&sid=pairing-demo-001&opt=482913&usp=50211&sec=1"
+        )
+
+        guard case .success(let payload) = result else {
+            return XCTFail("Expected QR payload to decode successfully.")
+        }
+
+        XCTAssertTrue(payload.strictSecurityEnabled)
+    }
+
     func test_desktop_bootstrap_pairing_service_persists_trusted_desktop_record() async {
         let trustedDesktopStore = InMemoryTrustedDesktopStore()
         let service = DesktopBootstrapPairingService(

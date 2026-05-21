@@ -598,7 +598,7 @@ protocol PairingSchemaResponse: Sendable {
 struct PairingCapabilityExchangeRequest: Codable, Sendable {
     var schema = PairingCapabilityExchangeProtocol.schema
     var sessionID: String
-    var oneTimePasscode: String
+    var oneTimePasscode: String? = nil
     var platform: String
     var capabilities: [String: Int]
 
@@ -997,6 +997,7 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
         if schemaVersion >= 2, suggestedUSBPort == nil {
             return .failure(.missingField("usp"))
         }
+        let strictSecurityEnabled = item(named: "sec") == "1"
 
         return .success(
             PairingQRCodePayload(
@@ -1004,7 +1005,8 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
                 endpointTargets: endpointTargets,
                 sessionID: sessionID,
                 oneTimePasscode: oneTimePasscode,
-                suggestedUSBPort: suggestedUSBPort
+                suggestedUSBPort: suggestedUSBPort,
+                strictSecurityEnabled: strictSecurityEnabled
             )
         )
     }

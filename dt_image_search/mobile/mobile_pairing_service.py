@@ -84,7 +84,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
 )
 from dt_image_search.build_flavor import get_build_type
 from dt_image_search.model.dts_db import create_db_conn
-from dt_image_search.model.feature_flags import is_encryption_enabled
+from dt_image_search.model.feature_flags import is_encryption_enabled, is_strict_security_enabled
 from dt_image_search.tools.dts_event_bus import default_bus
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
@@ -228,6 +228,7 @@ class MobilePairingService:
             self._active_session = MobilePairingSessionDraft.create(
                 destination_parent=destination_parent,
                 desktop_endpoint_urls=self.endpoint_urls,
+                strict_security_enabled=is_strict_security_enabled(),
                 now=now,
             )
             self._active_backup_again_context = backup_again_context
@@ -626,7 +627,7 @@ class MobilePairingService:
         self,
         request_payload: dict[str, object],
     ) -> tuple[int, dict[str, object]]:
-        required_fields = ("schema", "sid", "opt", "platform")
+        required_fields = ("schema", "sid", "platform")
         for field_name in required_fields:
             field_value = request_payload.get(field_name)
             if not isinstance(field_value, str) or not field_value.strip():
@@ -646,7 +647,6 @@ class MobilePairingService:
                 capabilities={},
             )
         sid = str(request_payload["sid"]).strip()
-        opt = str(request_payload["opt"]).strip()
         platform = str(request_payload["platform"]).strip()
         try:
             requested_platform = MobilePlatform(platform)
@@ -663,15 +663,6 @@ class MobilePairingService:
                 return 404, _pairing_capability_exchange_response(
                     status="rejected",
                     message="There is no active desktop pairing session.",
-                    sid=sid,
-                    platform=requested_platform.value,
-                    capabilities={},
-                )
-            token = active_session.token_for(requested_platform)
-            if token.one_time_passcode != opt:
-                return 403, _pairing_capability_exchange_response(
-                    status="rejected",
-                    message="Desktop rejected the pairing capability exchange request.",
                     sid=sid,
                     platform=requested_platform.value,
                     capabilities={},

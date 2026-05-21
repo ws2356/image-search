@@ -423,6 +423,7 @@ struct DesktopBootstrapPairingService: PairingService {
                     "Attempting LAN pairing claim session_id=\(payload.sessionID) endpoint=\(endpoint.absoluteString)"
                 )
                 let encryptionEnabled = try await negotiatePairingEncryptionOverLAN(
+                    payload: payload,
                     endpoint: endpoint,
                     request: request
                 )
@@ -520,6 +521,7 @@ struct DesktopBootstrapPairingService: PairingService {
     }
 
     private func negotiatePairingEncryptionOverLAN(
+        payload: PairingQRCodePayload,
         endpoint: URL,
         request: PairingClaimRequest
     ) async throws -> Bool {
@@ -528,7 +530,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 at: endpoint,
                 request: PairingCapabilityExchangeRequest(
                     sessionID: request.sessionID,
-                    oneTimePasscode: request.oneTimePasscode,
+                    oneTimePasscode: payload.strictSecurityEnabled ? nil : request.oneTimePasscode,
                     platform: request.platform,
                     capabilities: [MobilePayloadEncryptionProtocol.capabilityName: 1]
                 )
@@ -552,7 +554,7 @@ struct DesktopBootstrapPairingService: PairingService {
                 using: payload,
                 request: PairingCapabilityExchangeRequest(
                     sessionID: request.sessionID,
-                    oneTimePasscode: request.oneTimePasscode,
+                    oneTimePasscode: payload.strictSecurityEnabled ? nil : request.oneTimePasscode,
                     platform: request.platform,
                     capabilities: [MobilePayloadEncryptionProtocol.capabilityName: 1]
                 )
