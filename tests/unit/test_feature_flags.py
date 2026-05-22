@@ -254,6 +254,61 @@ class TestFeatureFlags(unittest.TestCase):
         with patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value=None):
             self.assertEqual(store.desktop_root_trace_sample_rate(), 0.1)
 
+    def test_extract_version_flag_supports_expected_format(self):
+        payload = {"version": {"min": "2.3.4", "required": True}}
+        self.assertEqual(
+            feature_flags._extract_version_flag(payload),
+            feature_flags.DesktopVersionFlag(min_version="2.3.4", required=True),
+        )
+
+    def test_extract_version_flag_returns_none_for_invalid_payload(self):
+        self.assertIsNone(feature_flags._extract_version_flag({"version": {"min": "beta", "required": True}}))
+        self.assertIsNone(feature_flags._extract_version_flag({"version": {"min": "2.3.4"}}))
+        self.assertIsNone(feature_flags._extract_version_flag({"other_feature": {"enabled": True}}))
+
+    def test_version_update_requirement_returns_none_when_current_version_meets_minimum(self):
+        with patch.object(
+            feature_flags,
+            "get_version_feature_flag",
+            return_value=feature_flags.DesktopVersionFlag(min_version="2.3.4", required=True),
+        ):
+            self.assertIsNone(feature_flags.get_version_update_requirement("2.3.4"))
+            self.assertIsNone(feature_flags.get_version_update_requirement("2.4"))
+
+    def test_version_update_requirement_returns_flag_when_current_version_is_older(self):
+        version_flag = feature_flags.DesktopVersionFlag(min_version="2.3.4", required=False)
+        with patch.object(feature_flags, "get_version_feature_flag", return_value=version_flag):
+            self.assertEqual(feature_flags.get_version_update_requirement("2.3"), version_flag)
+
+    def test_version_flag_prefers_cached_remote_payload(self):
+        store = feature_flags._FeatureFlagStore()
+        with patch.object(
+            feature_flags,
+            "_load_cached_feature_flags_payload",
+            return_value={"version": {"min": "2.3.4", "required": False}},
+        ):
+            self.assertEqual(
+                store.version_flag(),
+                feature_flags.DesktopVersionFlag(min_version="2.3.4", required=False),
+            )
+
+    def test_refresh_worker_updates_version_flag_from_remote_payload(self):
+        store = feature_flags._FeatureFlagStore()
+        payload = {
+            "mobile_folder": {"enabled": True},
+            "version": {"min": "2.3.4", "required": True},
+        }
+        with (
+            patch.object(feature_flags, "_fetch_feature_flags_payload", return_value=payload),
+            patch.object(feature_flags, "_save_cached_feature_flags_payload"),
+        ):
+            store._refresh_worker()
+
+        self.assertEqual(
+            store.version_flag(),
+            feature_flags.DesktopVersionFlag(min_version="2.3.4", required=True),
+        )
+
     def test_fetch_feature_flags_retries_temporary_url_errors(self):
         success_response = _FakeResponse(b'{"mobile_folder": {"enabled": true}}')
         with (

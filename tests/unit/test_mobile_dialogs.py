@@ -14,6 +14,7 @@ from dt_image_search.mobile.mobile_pairing_service import (
     PairingResultState,
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobilePlatform
+from dt_image_search.view.dts_update_prompt_dialog import UpdatePromptDialog, default_update_destination
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -85,6 +86,26 @@ class TestMobilePairingDialog(unittest.TestCase):
             self._dialog.reject()
 
         self.assertEqual(self._dialog.result(), int(QDialog.DialogCode.Rejected))
+
+
+class TestUpdatePromptDialog(unittest.TestCase):
+    def test_default_update_destination_uses_aurora_on_macos(self):
+        self.assertEqual(default_update_destination("darwin"), "https://aurora.boldman.net")
+
+    def test_default_update_destination_uses_windows_store_on_windows(self):
+        self.assertEqual(
+            default_update_destination("win32"),
+            "https://apps.microsoft.com/detail/9n5n8gvnrzdn",
+        )
+
+    def test_update_prompt_dialog_uses_platform_default_destination_when_missing(self):
+        with patch(
+            "dt_image_search.view.dts_update_prompt_dialog.default_update_destination",
+            return_value="https://aurora.boldman.net",
+        ):
+            dialog = UpdatePromptDialog(is_required=True, update_destination=None)
+            self.addCleanup(dialog.close)
+            self.assertEqual(dialog._update_destination, "https://aurora.boldman.net")
 
 
 if __name__ == "__main__":

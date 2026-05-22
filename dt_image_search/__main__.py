@@ -43,7 +43,12 @@ QCoreApplication.setApplicationName(_app_display_name)
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache
-from dt_image_search.model.feature_flags import initialize_feature_flags, is_mobile_folder_enabled
+from dt_image_search.model.feature_flags import (
+    DesktopVersionFlag,
+    get_version_update_requirement,
+    initialize_feature_flags,
+    is_mobile_folder_enabled,
+)
 from dt_image_search.model.dts_fs import get_app_data_path
 ctx = get_context()
 setup_model_cache(ctx=ctx)
@@ -108,6 +113,47 @@ def _load_application_version() -> str:
     if isinstance(short_version, str):
         return short_version.strip()
     return ""
+
+
+def _build_startup_update_prompt_body(version_flag: DesktopVersionFlag) -> str:
+    if version_flag.required:
+        return (
+            f"AuSearch {version_flag.min_version} or later is required to continue. "
+            "Update now to keep using the app."
+        )
+    return (
+        f"AuSearch {version_flag.min_version} or later is available. "
+        "Update now to use the latest features."
+    )
+
+
+def maybe_show_startup_update_prompt(window: "MainWindow", *, current_version: str | None = None) -> None:
+    from dt_image_search.telemetry.telemetry_client import log
+
+    resolved_current_version = (
+        current_version
+        if isinstance(current_version, str)
+        else QCoreApplication.applicationVersion()
+    )
+    normalized_current_version = resolved_current_version.strip() if isinstance(resolved_current_version, str) else ""
+    if not normalized_current_version:
+        return
+    version_flag = get_version_update_requirement(normalized_current_version)
+    if version_flag is None:
+        return
+    log(
+        "info",
+        message=(
+            "MainWindow/startup_update_prompt: showing launch update prompt "
+            f"current_version={normalized_current_version} "
+            f"minimum_version={version_flag.min_version} required={version_flag.required}"
+        ),
+    )
+    window.show_update_prompt_signal.emit(
+        version_flag.required,
+        _build_startup_update_prompt_body(version_flag),
+        "",
+    )
 
 
 def _activation_server_name(ctx: BMContext) -> str:
@@ -813,6 +859,7 @@ def main():
     qInstallMessageHandler(qt_message_handler)
 
     window.show()
+    QTimer.singleShot(0, lambda: maybe_show_startup_update_prompt(window))
     sys.exit(app.exec())
 
 if __name__ == '__main__':
