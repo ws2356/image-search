@@ -39,14 +39,16 @@ class TestMobilePairingSession(unittest.TestCase):
 
         payload_components = urlsplit(android_token.payload)
         payload_query = parse_qs(payload_components.query)
+        payload_fragment = parse_qs(payload_components.fragment)
 
         self.assertEqual(payload_components.scheme, "https")
         self.assertEqual(payload_components.netloc, "dl.boldman.net")
         self.assertEqual(payload_query["v"][0], "2")
         self.assertEqual(payload_query["ept"][0], "192.168.50.12:38933,10.0.0.5:38933")
         self.assertEqual(payload_query["sid"][0], session.session_id)
-        self.assertEqual(payload_query["opt"][0], android_token.one_time_passcode)
         self.assertEqual(payload_query["usp"][0], str(android_token.suggested_usb_port))
+        self.assertEqual(payload_fragment["opt"][0], android_token.one_time_passcode)
+        self.assertNotIn("opt", payload_query)
         self.assertNotIn("sec", payload_query)
         self.assertGreaterEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MIN)
         self.assertLessEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MAX)

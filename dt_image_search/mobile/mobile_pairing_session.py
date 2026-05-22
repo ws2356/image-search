@@ -161,13 +161,13 @@ def _new_pairing_token(
         "v": str(PAIRING_QR_SCHEMA_VERSION),
         "ept": ",".join(endpoint_targets),
         "sid": session_id,
-        "opt": one_time_passcode,
         "usp": str(suggested_usb_port),
     }
     if strict_security_enabled:
         payload_fields["sec"] = "1"
     payload_query = urlencode(payload_fields)
-    payload = urlunsplit(("https", PAIRING_QR_HOST, "", payload_query, ""))
+    payload_fragment = urlencode({"opt": one_time_passcode})
+    payload = urlunsplit(("https", PAIRING_QR_HOST, "", payload_query, payload_fragment))
     return MobilePairingToken(
         platform=platform,
         one_time_passcode=one_time_passcode,

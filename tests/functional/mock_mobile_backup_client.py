@@ -364,6 +364,7 @@ class MockMobileBackupClient:
     def _parse_pairing_payload(self) -> dict[str, object]:
         payload_url = urlsplit(self._pairing_payload)
         query = parse_qs(payload_url.query)
+        fragment = parse_qs(payload_url.fragment)
         endpoint_targets = [
             endpoint_target
             for endpoint_target in query.get("ept", [""])[0].split(",")
@@ -371,7 +372,7 @@ class MockMobileBackupClient:
         ]
         return {
             "sid": _first_query_value(query, "sid"),
-            "opt": _first_query_value(query, "opt"),
+            "opt": _first_payload_value(fragment, query, "opt"),
             "bootstrap_urls": tuple(f"http://{endpoint_target}{PAIRING_CLAIM_PATH}" for endpoint_target in endpoint_targets),
         }
 
@@ -412,6 +413,17 @@ def _first_query_value(query: dict[str, list[str]], key: str) -> str:
     if not values or not values[0]:
         raise RuntimeError(f"The pairing payload is missing '{key}'.")
     return values[0]
+
+
+def _first_payload_value(
+    fragment: dict[str, list[str]],
+    query: dict[str, list[str]],
+    key: str,
+) -> str:
+    fragment_values = fragment.get(key)
+    if fragment_values and fragment_values[0]:
+        return fragment_values[0]
+    return _first_query_value(query, key)
 
 
 def _require_string(payload: dict[str, object], key: str) -> str:
