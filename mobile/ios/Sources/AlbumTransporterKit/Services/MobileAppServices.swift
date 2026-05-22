@@ -830,9 +830,14 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
         }
 
         let queryItems = components.queryItems ?? []
+        let fragmentItems = fragmentQueryItems(from: components.fragment)
 
         func item(named name: String) -> String? {
             queryItems.first(where: { $0.name == name })?.value
+        }
+
+        func fragmentItem(named name: String) -> String? {
+            fragmentItems.first(where: { $0.name == name })?.value
         }
 
         guard let versionString = item(named: "v"),
@@ -865,7 +870,7 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
             return .failure(.missingField("sid"))
         }
 
-        guard let oneTimePasscode = item(named: "opt") else {
+        guard let oneTimePasscode = fragmentItem(named: "opt") ?? item(named: "opt") else {
             return .failure(.missingField("opt"))
         }
 
@@ -891,5 +896,14 @@ struct URLQueryQRCodePayloadDecoder: QRCodePayloadDecoding {
                 strictSecurityEnabled: strictSecurityEnabled
             )
         )
+    }
+
+    private func fragmentQueryItems(from fragment: String?) -> [URLQueryItem] {
+        guard let fragment, !fragment.isEmpty,
+              let fragmentComponents = URLComponents(string: "https://dl.boldman.net?\(fragment)")
+        else {
+            return []
+        }
+        return fragmentComponents.queryItems ?? []
     }
 }

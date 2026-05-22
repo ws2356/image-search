@@ -1032,7 +1032,29 @@ final class MobileAppModelTests: XCTestCase {
         XCTAssertEqual(completedSnapshot?.transferredCount, 10)
     }
 
-    func test_qr_payload_decoder_uses_url_query_format() {
+    func test_qr_payload_decoder_uses_fragment_opt_format() {
+        let decoder = URLQueryQRCodePayloadDecoder()
+        let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=2&ept=desktop.local:38933,192.168.50.17:38933&sid=pairing-demo-123&usp=50211#opt=482913")
+
+        guard case .success(let decoded) = result else {
+            return XCTFail("Expected successful payload decoding")
+        }
+
+        XCTAssertEqual(decoded.schemaVersion, 2)
+        XCTAssertEqual(decoded.endpointTargets, ["desktop.local:38933", "192.168.50.17:38933"])
+        XCTAssertEqual(decoded.sessionID, "pairing-demo-123")
+        XCTAssertEqual(decoded.oneTimePasscode, "482913")
+        XCTAssertEqual(decoded.suggestedUSBPort, 50211)
+        XCTAssertEqual(
+            decoded.bootstrapURLs.map(\.absoluteString),
+            [
+                "http://desktop.local:38933/api/mobile/pairing/claim",
+                "http://192.168.50.17:38933/api/mobile/pairing/claim",
+            ]
+        )
+    }
+
+    func test_qr_payload_decoder_falls_back_to_query_opt_format() {
         let decoder = URLQueryQRCodePayloadDecoder()
         let result = decoder.decode(scannedValue: "https://dl.boldman.net?v=2&ept=desktop.local:38933,192.168.50.17:38933&sid=pairing-demo-123&opt=482913&usp=50211")
 
@@ -1052,6 +1074,19 @@ final class MobileAppModelTests: XCTestCase {
                 "http://192.168.50.17:38933/api/mobile/pairing/claim",
             ]
         )
+    }
+
+    func test_qr_payload_decoder_prefers_fragment_opt_when_both_are_present() {
+        let decoder = URLQueryQRCodePayloadDecoder()
+        let result = decoder.decode(
+            scannedValue: "https://dl.boldman.net?v=2&ept=desktop.local:38933&sid=pairing-demo-123&opt=111111&usp=50211#opt=222222"
+        )
+
+        guard case .success(let decoded) = result else {
+            return XCTFail("Expected successful payload decoding")
+        }
+
+        XCTAssertEqual(decoded.oneTimePasscode, "222222")
     }
 
     func test_qr_payload_decoder_keeps_v1_backward_compatibility() {

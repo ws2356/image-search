@@ -157,7 +157,6 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
             URLQueryItem(name: "v", value: String(demo.schemaVersion)),
             URLQueryItem(name: "ept", value: demo.endpointTargets.joined(separator: ",")),
             URLQueryItem(name: "sid", value: demo.sessionID),
-            URLQueryItem(name: "opt", value: demo.oneTimePasscode),
         ]
         if let suggestedUSBPort = demo.suggestedUSBPort {
             queryItems.append(URLQueryItem(name: "usp", value: String(suggestedUSBPort)))
@@ -166,6 +165,7 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
             queryItems.append(URLQueryItem(name: "sec", value: "1"))
         }
         components.queryItems = queryItems
+        components.fragment = "opt=\(demo.oneTimePasscode)"
         return components.string ?? "https://dl.boldman.net"
     }
 
