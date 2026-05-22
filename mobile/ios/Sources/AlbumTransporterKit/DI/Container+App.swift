@@ -76,6 +76,16 @@ extension Container {
             .singleton
     }
 
+    var appUpdateChecker: Factory<AppUpdateChecking> {
+        self { URLSessionAppUpdateChecker() }
+            .singleton
+    }
+
+    var appVersionProvider: Factory<AppVersionProviding> {
+        self { BundleAppVersionProvider() }
+            .singleton
+    }
+
     var transferService: Factory<TransferService> {
         self {
             PhotoLibraryTransferService(
@@ -132,6 +142,8 @@ extension Container {
                 pairingService: self.pairingService(),
                 permissionService: self.permissionService(),
                 transferService: self.transferService(),
+                appUpdateChecker: self.appUpdateChecker(),
+                appVersionProvider: self.appVersionProvider(),
                 telemetryService: self.telemetryService(),
                 telemetryContextProvider: self.telemetryContextProvider()
             )

@@ -1,0 +1,6 @@
+{
+  "version": {
+    "min": "6.6.6",
+    "required": true
+  }
+}

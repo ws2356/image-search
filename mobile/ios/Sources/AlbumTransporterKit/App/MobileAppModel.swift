@@ -9,17 +9,22 @@ final class MobileAppModel: ObservableObject {
     }
 
     @Published var isShowingIncomingLinkReplacementConfirmation = false
+    @Published private(set) var activeUpdatePrompt: AppUpdatePrompt?
 
     private var hasLoaded = false
     private var hasFinishedLoad = false
+    private var hasScheduledLaunchUpdateCheck = false
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
     private let universalLinkHost = "dl.boldman.net"
+    private static let appStoreURL = URL(string: "https://apps.apple.com/app/id6764228721")!
     let backupSessionProvider: BackupSessionProviding
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
     let pairingService: PairingService
     let permissionService: PermissionService
     let transferService: TransferService
+    private let appUpdateChecker: AppUpdateChecking
+    private let appVersionProvider: AppVersionProviding
     private let telemetryContextProvider: TelemetryContextProvider
     private let telemetryService: TelemetryService
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
@@ -33,6 +38,8 @@ final class MobileAppModel: ObservableObject {
         pairingService: PairingService,
         permissionService: PermissionService,
         transferService: TransferService,
+        appUpdateChecker: AppUpdateChecking,
+        appVersionProvider: AppVersionProviding,
         telemetryService: TelemetryService,
         telemetryContextProvider: TelemetryContextProvider
     ) {
@@ -41,6 +48,8 @@ final class MobileAppModel: ObservableObject {
         self.pairingService = pairingService
         self.permissionService = permissionService
         self.transferService = transferService
+        self.appUpdateChecker = appUpdateChecker
+        self.appVersionProvider = appVersionProvider
         self.telemetryContextProvider = telemetryContextProvider
         self.telemetryService = telemetryService
         self.backupSessionObserver = backupSessionProvider.currentBackupSessionPublisher
@@ -298,6 +307,7 @@ final class MobileAppModel: ObservableObject {
             await pairingService.primeNetworkAccess()
         }
         recordTelemetry(.appLaunched)
+        scheduleLaunchUpdateCheckIfNeeded()
     }
 
     func openScanFlow() async {
@@ -491,6 +501,25 @@ final class MobileAppModel: ObservableObject {
         await permissionService.setRemoveAfterBackupEnabled(false)
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
+    }
+
+    func dismissUpdatePrompt() {
+        guard let activeUpdatePrompt, !activeUpdatePrompt.required else {
+            return
+        }
+        recordInteraction(name: "update_prompt_dismissed", location: "update_prompt")
+        self.activeUpdatePrompt = nil
+    }
+
+    func updateDestinationForActivePrompt() -> URL? {
+        guard let activeUpdatePrompt else {
+            return nil
+        }
+        recordInteraction(name: "update_prompt_update_tapped", location: "update_prompt")
+        if !activeUpdatePrompt.required {
+            self.activeUpdatePrompt = nil
+        }
+        return activeUpdatePrompt.appStoreURL
     }
 
     private func presentErrorSummary(title: String, message: String) {
@@ -871,6 +900,68 @@ final class MobileAppModel: ObservableObject {
         }
         let fallbackTransport = await transferService.currentTransport() ?? .lan
         return .empty(transport: fallbackTransport)
+    }
+
+    private func scheduleLaunchUpdateCheckIfNeeded() {
+        guard !hasScheduledLaunchUpdateCheck else {
+            return
+        }
+        hasScheduledLaunchUpdateCheck = true
+
+        Task { [weak self] in
+            await self?.checkForLaunchUpdatePrompt()
+        }
+    }
+
+    private func checkForLaunchUpdatePrompt() async {
+        guard let currentVersion = appVersionProvider.currentVersion(),
+              !currentVersion.isEmpty
+        else {
+            recordDiagnosticCheckpoint(
+                area: "app_update_check_skipped",
+                attributes: [
+                    "app.update_check_reason": .string("missing_current_version")
+                ]
+            )
+            return
+        }
+
+        do {
+            let requirement = try await appUpdateChecker.fetchVersionRequirement()
+            guard let prompt = requirement.promptIfNeeded(
+                currentVersion: currentVersion,
+                appStoreURL: Self.appStoreURL
+            ) else {
+                recordDiagnosticCheckpoint(
+                    area: "app_update_not_needed",
+                    attributes: [
+                        "app.current_version": .string(currentVersion),
+                        "app.minimum_supported_version": .string(requirement.minimumVersion),
+                        "app.update_required": .bool(requirement.required)
+                    ]
+                )
+                return
+            }
+
+            activeUpdatePrompt = prompt
+            recordDialogView(name: prompt.required ? "required_update_prompt" : "optional_update_prompt")
+            recordDiagnosticCheckpoint(
+                area: "app_update_prompt_presented",
+                attributes: [
+                    "app.current_version": .string(currentVersion),
+                    "app.minimum_supported_version": .string(prompt.minimumVersion),
+                    "app.update_required": .bool(prompt.required)
+                ]
+            )
+        } catch {
+            recordDiagnosticCheckpoint(
+                area: "app_update_check_failed",
+                attributes: [
+                    "app.current_version": .string(currentVersion),
+                    "app.update_error": .string(String(describing: error))
+                ]
+            )
+        }
     }
 
 }

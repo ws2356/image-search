@@ -287,6 +287,8 @@ final class MobileAppModelTests: XCTestCase {
         pairingService: PairingService,
         permissionService: PermissionService,
         transferService: TransferService,
+        appUpdateChecker: AppUpdateChecking = StaticAppUpdateChecker(),
+        appVersionProvider: AppVersionProviding = StaticAppVersionProvider(),
         telemetryClient: TelemetryClient,
         telemetryService: TelemetryService? = nil,
         telemetryContextProvider: TelemetryContextProvider? = nil
@@ -305,6 +307,8 @@ final class MobileAppModelTests: XCTestCase {
             pairingService: pairingService,
             permissionService: permissionService,
             transferService: transferService,
+            appUpdateChecker: appUpdateChecker,
+            appVersionProvider: appVersionProvider,
             telemetryService: resolvedTelemetryService,
             telemetryContextProvider: resolvedTelemetryContextProvider
         )
@@ -405,7 +409,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.load()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
-        let diagnosticRecord = await telemetryClient.latestRecord(for: .diagnosticCheckpoint)
+        let diagnosticRecord = await telemetryClient.latestDiagnosticRecord(area: "app_load_completed")
         XCTAssertEqual(diagnosticRecord?.attributes["diagnostic.area"], .string("app_load_completed"))
         XCTAssertEqual(diagnosticRecord?.attributes["backup.session_present"], .bool(true))
         XCTAssertEqual(diagnosticRecord?.attributes["backup.session_status"], .string("transferCompleted"))
@@ -428,6 +432,185 @@ final class MobileAppModelTests: XCTestCase {
 
         let recoveryCallCount = await transferService.foregroundRecoveryCallCount()
         XCTAssertEqual(recoveryCallCount, 0)
+    }
+
+    func test_load_presents_required_update_prompt_when_current_version_is_below_minimum() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: StaticAppUpdateChecker(
+                requirement: AppUpdateVersionRequirement(minimumVersion: "2.3.4", required: true)
+            ),
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(
+            model.activeUpdatePrompt,
+            AppUpdatePrompt(
+                minimumVersion: "2.3.4",
+                required: true,
+                appStoreURL: URL(string: "https://apps.apple.com/app/id6764228721")!
+            )
+        )
+    }
+
+    func test_optional_update_prompt_can_be_dismissed() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: StaticAppUpdateChecker(
+                requirement: AppUpdateVersionRequirement(minimumVersion: "2.3.4", required: false)
+            ),
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(model.activeUpdatePrompt?.required, false)
+
+        model.dismissUpdatePrompt()
+
+        XCTAssertNil(model.activeUpdatePrompt)
+    }
+
+    func test_required_update_prompt_is_not_dismissible() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: StaticAppUpdateChecker(
+                requirement: AppUpdateVersionRequirement(minimumVersion: "2.3.4", required: true)
+            ),
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        let originalPrompt = model.activeUpdatePrompt
+
+        model.dismissUpdatePrompt()
+
+        XCTAssertEqual(model.activeUpdatePrompt, originalPrompt)
+    }
+
+    func test_load_skips_update_prompt_when_current_version_meets_minimum() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: StaticAppUpdateChecker(
+                requirement: AppUpdateVersionRequirement(minimumVersion: "1.0.0", required: true)
+            ),
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertNil(model.activeUpdatePrompt)
+    }
+
+    func test_load_skips_update_prompt_when_update_check_fails() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: FailingAppUpdateChecker(),
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertNil(model.activeUpdatePrompt)
+    }
+
+    func test_load_checks_for_update_only_once() async {
+        let appUpdateChecker = CountingAppUpdateChecker()
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: appUpdateChecker,
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let callCount = await appUpdateChecker.callCount()
+        XCTAssertEqual(callCount, 1)
+    }
+
+    func test_update_destination_dismisses_optional_prompt_after_tap() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: StaticAppUpdateChecker(
+                requirement: AppUpdateVersionRequirement(minimumVersion: "2.3.4", required: false)
+            ),
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let destination = model.updateDestinationForActivePrompt()
+
+        XCTAssertEqual(destination, URL(string: "https://apps.apple.com/app/id6764228721")!)
+        XCTAssertNil(model.activeUpdatePrompt)
+    }
+
+    func test_update_destination_keeps_required_prompt_visible_after_tap() async {
+        let model = makeModel(
+            stateStore: InMemoryAppStateStore(snapshot: .firstLaunch),
+            qrCodePayloadDecoder: StaticQRCodePayloadDecoder(),
+            pairingService: StaticPairingService(),
+            permissionService: StaticPermissionService(summary: .demo),
+            transferService: StaticTransferService(),
+            appUpdateChecker: StaticAppUpdateChecker(
+                requirement: AppUpdateVersionRequirement(minimumVersion: "2.3.4", required: true)
+            ),
+            appVersionProvider: StaticAppVersionProvider(version: "1.0"),
+            telemetryClient: RecordingTelemetryClient()
+        )
+
+        await model.load()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        let originalPrompt = model.activeUpdatePrompt
+        let destination = model.updateDestinationForActivePrompt()
+
+        XCTAssertEqual(destination, URL(string: "https://apps.apple.com/app/id6764228721")!)
+        XCTAssertEqual(model.activeUpdatePrompt, originalPrompt)
     }
 
     func test_error_page_result_success_restarts_scan_and_cancel_returns_home() async {
@@ -1467,6 +1650,49 @@ private struct StaticQRCodePayloadDecoder: QRCodePayloadDecoding {
     }
 }
 
+private struct StaticAppUpdateChecker: AppUpdateChecking {
+    let requirement: AppUpdateVersionRequirement?
+
+    init(requirement: AppUpdateVersionRequirement? = nil) {
+        self.requirement = requirement
+    }
+
+    func fetchVersionRequirement() async throws -> AppUpdateVersionRequirement {
+        requirement ?? AppUpdateVersionRequirement(minimumVersion: "1.0", required: false)
+    }
+}
+
+private struct FailingAppUpdateChecker: AppUpdateChecking {
+    func fetchVersionRequirement() async throws -> AppUpdateVersionRequirement {
+        throw AppUpdateCheckError.invalidPayload
+    }
+}
+
+private actor CountingAppUpdateChecker: AppUpdateChecking {
+    private var calls = 0
+
+    func fetchVersionRequirement() async throws -> AppUpdateVersionRequirement {
+        calls += 1
+        return AppUpdateVersionRequirement(minimumVersion: "1.0", required: false)
+    }
+
+    func callCount() -> Int {
+        calls
+    }
+}
+
+private struct StaticAppVersionProvider: AppVersionProviding {
+    let version: String?
+
+    init(version: String? = "1.0") {
+        self.version = version
+    }
+
+    func currentVersion() -> String? {
+        version
+    }
+}
+
 private struct FailingQRCodePayloadDecoder: QRCodePayloadDecoding {
     let error: QRCodePayloadDecoderError
 
@@ -1553,6 +1779,13 @@ private actor RecordingTelemetryClient: TelemetryClient {
 
     func latestRecord(for event: MobileTelemetryEvent) -> RecordedTelemetry? {
         records.last(where: { $0.event == event })
+    }
+
+    func latestDiagnosticRecord(area: String) -> RecordedTelemetry? {
+        records.last {
+            $0.event == .diagnosticCheckpoint
+                && $0.attributes["diagnostic.area"] == .string(area)
+        }
     }
 }
 

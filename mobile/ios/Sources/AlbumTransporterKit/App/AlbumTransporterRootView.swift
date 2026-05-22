@@ -6,6 +6,7 @@ import UIKit
 @MainActor
 public struct AlbumTransporterRootView: View {
     private let container: Container
+    @Environment(\.openURL) private var openURL
     @StateObject private var model: MobileAppModel
     @StateObject private var homeViewModel: HomePageViewModel
     @StateObject private var pairingViewModel: PairingPageViewModel
@@ -97,6 +98,25 @@ public struct AlbumTransporterRootView: View {
                     await model.handleIncomingUniversalLink(url)
                 }
             }
+            .alert(
+                model.activeUpdatePrompt?.title ?? "",
+                isPresented: isShowingUpdatePrompt,
+                presenting: model.activeUpdatePrompt
+            ) { prompt in
+                Button("Update") {
+                    guard let destination = model.updateDestinationForActivePrompt() else {
+                        return
+                    }
+                    openURL(destination)
+                }
+                if !prompt.required {
+                    Button("Later", role: .cancel) {
+                        model.dismissUpdatePrompt()
+                    }
+                }
+            } message: { prompt in
+                Text(prompt.message)
+            }
     }
 
     @ViewBuilder
@@ -171,6 +191,17 @@ public struct AlbumTransporterRootView: View {
             ],
             startPoint: .top,
             endPoint: .bottom
+        )
+    }
+
+    private var isShowingUpdatePrompt: Binding<Bool> {
+        Binding(
+            get: { model.activeUpdatePrompt != nil },
+            set: { isPresented in
+                if !isPresented {
+                    model.dismissUpdatePrompt()
+                }
+            }
         )
     }
 }
