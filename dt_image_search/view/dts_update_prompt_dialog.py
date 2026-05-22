@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sys
+import threading
 
 from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QCloseEvent, QDesktopServices
@@ -31,6 +33,18 @@ def default_update_destination(platform: str | None = None) -> str:
 
 
 DEFAULT_UPDATE_DESTINATION = default_update_destination()
+
+
+def exit_application_process() -> None:
+    app = QApplication.instance()
+    if app is None:
+        os._exit(0)
+        return
+
+    fallback_timer = threading.Timer(0.25, os._exit, args=(0,))
+    fallback_timer.daemon = True
+    fallback_timer.start()
+    app.quit()
 
 
 class UpdatePromptDialog(QDialog):
@@ -107,11 +121,15 @@ class UpdatePromptDialog(QDialog):
             )
             return
 
-        if not self._is_required:
-            self.accept()
+        exit_application_process()
 
     def _on_cancel_clicked(self) -> None:
         self.reject()
+
+    def reject(self) -> None:
+        if self._is_required:
+            return
+        super().reject()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._is_required:

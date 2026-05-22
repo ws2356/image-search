@@ -14,7 +14,11 @@ from dt_image_search.mobile.mobile_pairing_service import (
     PairingResultState,
 )
 from dt_image_search.mobile.mobile_pairing_session import MobilePairingSessionDraft, MobilePlatform
-from dt_image_search.view.dts_update_prompt_dialog import UpdatePromptDialog, default_update_destination
+from dt_image_search.view.dts_update_prompt_dialog import (
+    UpdatePromptDialog,
+    default_update_destination,
+    exit_application_process,
+)
 
 _APP = QApplication.instance() or QApplication([])
 
@@ -106,6 +110,47 @@ class TestUpdatePromptDialog(unittest.TestCase):
             dialog = UpdatePromptDialog(is_required=True, update_destination=None)
             self.addCleanup(dialog.close)
             self.assertEqual(dialog._update_destination, "https://aurora.boldman.net")
+
+    def test_required_update_prompt_reject_is_ignored(self):
+        dialog = UpdatePromptDialog(is_required=True)
+        self.addCleanup(dialog.close)
+
+        dialog.reject()
+
+        self.assertEqual(dialog.result(), 0)
+
+    def test_optional_update_prompt_reject_closes_dialog(self):
+        dialog = UpdatePromptDialog(is_required=False)
+        self.addCleanup(dialog.close)
+
+        dialog.reject()
+
+        self.assertEqual(dialog.result(), int(QDialog.DialogCode.Rejected))
+
+    def test_update_click_quits_app_after_opening_destination(self):
+        dialog = UpdatePromptDialog(is_required=True, update_destination="https://aurora.boldman.net")
+        self.addCleanup(dialog.close)
+        with (
+            patch("dt_image_search.view.dts_update_prompt_dialog.QDesktopServices.openUrl", return_value=True) as open_mock,
+            patch("dt_image_search.view.dts_update_prompt_dialog.exit_application_process") as exit_process_mock,
+        ):
+            dialog._on_update_clicked()
+
+        open_mock.assert_called_once()
+        exit_process_mock.assert_called_once()
+
+    def test_exit_application_process_quits_app_and_schedules_forced_exit(self):
+        with (
+            patch("dt_image_search.view.dts_update_prompt_dialog.threading.Timer") as timer_mock,
+            patch.object(QApplication.instance(), "quit") as quit_mock,
+        ):
+            exit_timer = timer_mock.return_value
+            exit_application_process()
+
+        timer_mock.assert_called_once()
+        self.assertTrue(exit_timer.daemon)
+        exit_timer.start.assert_called_once()
+        quit_mock.assert_called_once()
 
 
 if __name__ == "__main__":
