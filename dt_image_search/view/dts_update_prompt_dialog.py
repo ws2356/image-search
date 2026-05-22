@@ -121,7 +121,10 @@ class UpdatePromptDialog(QDialog):
             )
             return
 
-        exit_application_process()
+        if self._is_required:
+            exit_application_process()
+            return
+        self.accept()
 
     def _on_cancel_clicked(self) -> None:
         self.reject()

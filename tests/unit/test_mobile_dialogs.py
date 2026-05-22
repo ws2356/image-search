@@ -127,7 +127,7 @@ class TestUpdatePromptDialog(unittest.TestCase):
 
         self.assertEqual(dialog.result(), int(QDialog.DialogCode.Rejected))
 
-    def test_update_click_quits_app_after_opening_destination(self):
+    def test_required_update_click_quits_app_after_opening_destination(self):
         dialog = UpdatePromptDialog(is_required=True, update_destination="https://aurora.boldman.net")
         self.addCleanup(dialog.close)
         with (
@@ -138,6 +138,19 @@ class TestUpdatePromptDialog(unittest.TestCase):
 
         open_mock.assert_called_once()
         exit_process_mock.assert_called_once()
+
+    def test_optional_update_click_accepts_without_exiting_process(self):
+        dialog = UpdatePromptDialog(is_required=False, update_destination="https://aurora.boldman.net")
+        self.addCleanup(dialog.close)
+        with (
+            patch("dt_image_search.view.dts_update_prompt_dialog.QDesktopServices.openUrl", return_value=True) as open_mock,
+            patch("dt_image_search.view.dts_update_prompt_dialog.exit_application_process") as exit_process_mock,
+        ):
+            dialog._on_update_clicked()
+
+        open_mock.assert_called_once()
+        exit_process_mock.assert_not_called()
+        self.assertEqual(dialog.result(), int(QDialog.DialogCode.Accepted))
 
     def test_exit_application_process_quits_app_and_schedules_forced_exit(self):
         with (
