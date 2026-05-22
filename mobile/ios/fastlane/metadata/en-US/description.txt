@@ -1,19 +1,20 @@
-Back up full-quality iPhone photos and videos straight to your PC - no cloud upload required.
+Back up full-quality photos and videos to your computer with no cloud upload required.
 
-AuBackup pairs with AuSearch on your desktop in seconds using a QR code, then moves your library locally over Wi-Fi or USB whenever you are ready to back up.
+AuBackup pairs with AuSearch on your desktop in seconds using a QR code, then keeps your library local over Wi-Fi or USB and ready for natural-language search on desktop.
 
 Why people use AuBackup:
-- Back up directly from iPhone to your PC
-- Keep photos and videos in full quality
+- Move photos and videos directly to your computer
+- Keep full quality and metadata intact
 - Pair quickly with a desktop QR code
 - Use Wi-Fi for convenience or USB for faster transfers
 - Keep your library off third-party cloud storage
+- Search your backed-up library using natural language in AuSearch on desktop
 
 How it works:
-1. Open AuSearch on your PC and add a Mobile Folder.
+1. Open AuSearch on your computer and add a Mobile Folder.
 2. Scan the QR code in AuBackup.
 3. Choose Wi-Fi or USB and start backing up your library.
 
-Built for people who want a simpler, more private way to keep iPhone memories safe on a PC.
+Built for people who want a simpler, more private way to protect memories locally and find them later with natural-language search on desktop.
 
-Download AuBackup and start your next photo backup in minutes.
+Download AuBackup and start your next backup in minutes.

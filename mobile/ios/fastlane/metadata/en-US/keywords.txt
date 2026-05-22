@@ -1,1 +1,1 @@
-video,transfer,local,private,secure,album,desktop,offline,wireless,cable,sync,gallery,folder,direct
+transfer,desktop,pc,local,private,secure,offline,wireless,cable,sync,folder,search,find,direct,copy
