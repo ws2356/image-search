@@ -184,14 +184,6 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     private func applySnapshotIfNewer(_ newSnapshot: TransferSnapshot) {
-        let currentSnapshot = snapshot
-        guard
-            newSnapshot.totalCount != currentSnapshot.totalCount
-                || newSnapshot.transferredCount >= currentSnapshot.transferredCount
-        else {
-            recordSnapshotDiagnosticIfNeeded(area: "transfer_snapshot_rejected", snapshot: newSnapshot)
-            return
-        }
         snapshot = newSnapshot
         recordSnapshotDiagnosticIfNeeded(area: "transfer_snapshot_applied", snapshot: newSnapshot)
     }

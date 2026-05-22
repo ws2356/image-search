@@ -2740,8 +2740,14 @@ actor PhotoLibraryTransferService: TransferService {
         totalPreparedTransferBytes = 0
         processedPreparedTransferBytes = 0
         nonSkippedTransferredBytesForSpeed = 0
+        transferRunStartedAtUptimeSeconds = nil
+        lastProcessedItemProgressAt = nil
+        lastBytesWithoutItemProgressDiagnosticAt = nil
 
-        guard var trustedDesktop = await trustedDesktopStore.loadTrustedDesktop() else {
+        let loadedTrustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+        currentSnapshot = await resetSnapshotForNewTransfer(desktop: loadedTrustedDesktop)
+
+        guard var trustedDesktop = loadedTrustedDesktop else {
             let failedSnapshot = TransferSnapshot(
                 transferredCount: 0,
                 totalCount: 0,
@@ -2963,6 +2969,15 @@ actor PhotoLibraryTransferService: TransferService {
         lastProcessedItemProgressAt = nil
         lastBytesWithoutItemProgressDiagnosticAt = nil
         return snapshot
+    }
+
+    private func resetSnapshotForNewTransfer(desktop: TrustedDesktopRecord?) async -> TransferSnapshot {
+        guard let desktop else {
+            return TransferSnapshot.empty()
+        }
+        let resolvedTransport = await resolvedTransport(for: desktop)
+        let initialSnapshot = TransferSnapshot.empty(transport: resolvedTransport)
+        return await applyingLiveTransports(to: initialSnapshot, desktop: desktop)
     }
 
     private func negotiateTransferEncryptionCapabilityIfNeeded(

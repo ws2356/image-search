@@ -423,6 +423,55 @@ final class TransferServiceTests: XCTestCase {
         XCTAssertEqual(refreshedSnapshot?.liveTransports, [.usb, .lan])
     }
 
+    func test_photo_library_transfer_service_resets_progress_snapshot_when_new_transfer_starts() async throws {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                )
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient(startDelayNanoseconds: 250_000_000)
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        _ = await service.startTransfer(progress: { _ in })
+        _ = await service.completeTransfer()
+
+        let secondTransferTask = Task {
+            await service.startTransfer(progress: { _ in })
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let inFlightSnapshot = await service.progressSnapshot()
+        _ = await secondTransferTask.value
+
+        XCTAssertEqual(inFlightSnapshot?.transferredCount, 0)
+        XCTAssertEqual(inFlightSnapshot?.totalCount, 0)
+        XCTAssertEqual(inFlightSnapshot?.failedCount, 0)
+        XCTAssertEqual(inFlightSnapshot?.phase, .preparing)
+        XCTAssertNil(inFlightSnapshot?.failureMessage)
+    }
+
     func test_photo_library_transfer_service_reports_usb_alive_through_adaptive_transfer_client() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
