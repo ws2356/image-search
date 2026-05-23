@@ -5,6 +5,7 @@
   "dependencies": {
     "expo": "~56.0.3",
     "expo-constants": "~56.0.14",
+    "expo-dev-client": "~56.0.15",
     "expo-font": "~56.0.5",
     "expo-linking": "~56.0.11",
     "expo-router": "~56.2.5",
@@ -25,9 +26,13 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "dev": "expo start --dev-client",
+    "prebuild": "expo prebuild",
+    "run:android": "expo run:android",
+    "run:ios": "expo run:ios",
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "private": true
