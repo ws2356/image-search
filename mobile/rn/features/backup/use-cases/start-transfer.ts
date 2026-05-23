@@ -9,6 +9,7 @@ import {
 } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
+import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import {
   begin_transfer_runtime_session,
@@ -45,10 +46,7 @@ function build_initial_snapshot(now: Date): TransferProgressSnapshot {
 export async function startTransfer(
   deps: StartTransferDeps = {
     apply_command: apply_backup_command,
-    trust_proof_signer: {
-      derive_trust_proof: async (input) =>
-        `stub_trust_proof:${input.purpose}:${input.schema}:${input.session_id}:${input.device_uuid}`,
-    },
+    trust_proof_signer: new DefaultTrustProofSigner(),
     capability_exchange_service: new HttpCapabilityExchangeService(),
     transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
   }
