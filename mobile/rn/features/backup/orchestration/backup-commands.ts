@@ -1,11 +1,13 @@
 import type {
-  ErrorSummary,
   PairingQRCodePayload,
   PairingSessionSummary,
-  PreflightResult,
+} from '@/features/backup/pairing/models';
+import type { PreflightResult } from '@/features/backup/preflight/models';
+import type { ErrorSummary } from '@/features/backup/shared/models';
+import type {
   TransferProgressSnapshot,
   TransferResult,
-} from '@/features/backup/domain/models';
+} from '@/features/backup/transfer/models';
 
 export type BackupCommand =
   | { type: 'openScanFlow' }

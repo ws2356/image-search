@@ -2,15 +2,17 @@ import { create } from 'zustand';
 
 import type {
   BackupSessionState,
-  ErrorSummary,
   LocalDeviceIdentitySummary,
-  PairingSessionSummary,
-  PermissionSummary,
-  TransferProgressSnapshot,
-  TrustedDesktopSummary,
-} from '@/features/backup/domain/models';
-import { DEFAULT_HOME_SUMMARY, DEFAULT_PERMISSION_SUMMARY } from '@/features/backup/domain/models';
+} from '@/features/backup/session/models';
+import { DEFAULT_HOME_SUMMARY } from '@/features/backup/session/models';
 import type { BackupRoutePhase } from '@/features/backup/domain/route-phase';
+import type { PairingSessionSummary, TrustedDesktopSummary } from '@/features/backup/pairing/models';
+import {
+  DEFAULT_PERMISSION_SUMMARY,
+  type PermissionSummary,
+} from '@/features/backup/preflight/models';
+import type { ErrorSummary } from '@/features/backup/shared/models';
+import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 
 interface BackupSessionStoreState {
   session: BackupSessionState;
