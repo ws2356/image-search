@@ -17,6 +17,12 @@ function parse_required_query_param(url: URL, key: 'v' | 'ept' | 'sid' | 'opt' |
   return value && value.length > 0 ? value : null;
 }
 
+function parse_fragment_search_params(url: URL): URLSearchParams {
+  const raw_hash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+  const fragment_query = raw_hash.includes('?') ? raw_hash.split('?').pop() ?? '' : raw_hash;
+  return new URLSearchParams(fragment_query);
+}
+
 export function decode_pairing_link(link: string): PairingLinkDecodeResult {
   let parsed: URL;
   try {
@@ -28,7 +34,10 @@ export function decode_pairing_link(link: string): PairingLinkDecodeResult {
   const version = parse_required_query_param(parsed, 'v');
   const endpoint_targets_raw = parse_required_query_param(parsed, 'ept');
   const session_id = parse_required_query_param(parsed, 'sid');
-  const one_time_passcode = parse_required_query_param(parsed, 'opt');
+  const fragment_search_params = parse_fragment_search_params(parsed);
+  const fragment_opt = fragment_search_params.get('opt')?.trim();
+  const query_opt = parse_required_query_param(parsed, 'opt');
+  const one_time_passcode = fragment_opt && fragment_opt.length > 0 ? fragment_opt : query_opt;
   const suggested_usb_port_raw = parse_required_query_param(parsed, 'usp');
   const strict_security = parsed.searchParams.get('sec')?.trim();
   if (!version || !endpoint_targets_raw || !session_id || !one_time_passcode || !suggested_usb_port_raw) {
