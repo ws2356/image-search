@@ -1,5 +1,5 @@
-import type { BackupCommand } from '@/src/features/backup/orchestration/backup-commands';
-import { useBackupSessionStore } from '@/src/features/backup/store/backup-session-store';
+import type { BackupCommand } from '@/features/backup/orchestration/backup-commands';
+import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 
 export interface BackupFlowOrchestrator {
   execute: (command: BackupCommand) => Promise<void>;

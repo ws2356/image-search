@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import type { PairingQRCodePayload } from '@/src/features/backup/domain/models';
+import type { PairingQRCodePayload } from '@/features/backup/domain/models';
 
 export interface IncomingLinkReplacementState {
   isVisible: boolean;

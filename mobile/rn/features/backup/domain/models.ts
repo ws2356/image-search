@@ -5,8 +5,8 @@ import {
   TransferFailureReason,
   TransferPipelineStage,
   TransferTransport,
-} from '@/src/features/backup/domain/enums';
-import type { BackupRoutePhase } from '@/src/features/backup/domain/route-phase';
+} from '@/features/backup/domain/enums';
+import type { BackupRoutePhase } from '@/features/backup/domain/route-phase';
 
 export interface ErrorSummary {
   title: string;

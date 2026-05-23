@@ -4,7 +4,7 @@ import React from 'react';
 import {
   createBackupFlowOrchestrator,
   type BackupFlowOrchestrator,
-} from '@/src/features/backup/orchestration/backup-flow-orchestrator';
+} from '@/features/backup/orchestration/backup-flow-orchestrator';
 
 export type AppRuntimeMode = 'native-capable';
 

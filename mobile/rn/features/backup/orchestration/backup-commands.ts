@@ -5,7 +5,7 @@ import type {
   PreflightResult,
   TransferProgressSnapshot,
   TransferResult,
-} from '@/src/features/backup/domain/models';
+} from '@/features/backup/domain/models';
 
 export type BackupCommand =
   | { type: 'openScanFlow' }

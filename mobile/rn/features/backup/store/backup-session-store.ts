@@ -8,9 +8,9 @@ import type {
   PermissionSummary,
   TransferProgressSnapshot,
   TrustedDesktopSummary,
-} from '@/src/features/backup/domain/models';
-import { DEFAULT_HOME_SUMMARY, DEFAULT_PERMISSION_SUMMARY } from '@/src/features/backup/domain/models';
-import type { BackupRoutePhase } from '@/src/features/backup/domain/route-phase';
+} from '@/features/backup/domain/models';
+import { DEFAULT_HOME_SUMMARY, DEFAULT_PERMISSION_SUMMARY } from '@/features/backup/domain/models';
+import type { BackupRoutePhase } from '@/features/backup/domain/route-phase';
 
 interface BackupSessionStoreState {
   session: BackupSessionState;
