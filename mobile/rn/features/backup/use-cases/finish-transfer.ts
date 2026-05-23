@@ -1,11 +1,20 @@
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
+import {
+  end_transfer_runtime_session,
+  get_default_transfer_runtime_wiring,
+  type TransferRuntimeWiring,
+} from '@/infrastructure/platform/transfer-runtime-wiring';
 
 export interface FinishTransferDeps {
   apply_command: typeof apply_backup_command;
+  transfer_runtime_wiring: TransferRuntimeWiring;
 }
 
 export async function finishTransfer(
-  deps: FinishTransferDeps = { apply_command: apply_backup_command }
+  deps: FinishTransferDeps = {
+    apply_command: apply_backup_command,
+    transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
+  }
 ): Promise<void> {
   await deps.apply_command({
     type: 'transferResolved',
@@ -15,4 +24,5 @@ export async function finishTransfer(
     },
   });
   await deps.apply_command({ type: 'completeTransfer' });
+  await end_transfer_runtime_session(deps.transfer_runtime_wiring);
 }

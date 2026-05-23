@@ -3,10 +3,16 @@ import { apply_backup_command } from '@/features/backup/state/backup-flow-transi
 import { TransferTransport, TransferPipelineStage } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
+import {
+  begin_transfer_runtime_session,
+  get_default_transfer_runtime_wiring,
+  type TransferRuntimeWiring,
+} from '@/infrastructure/platform/transfer-runtime-wiring';
 
 export interface StartTransferDeps {
   apply_command: typeof apply_backup_command;
   trust_proof_signer: TrustProofSigner;
+  transfer_runtime_wiring: TransferRuntimeWiring;
 }
 
 function build_initial_snapshot(now: Date): TransferProgressSnapshot {
@@ -35,9 +41,11 @@ export async function startTransfer(
       derive_trust_proof: async (input) =>
         `stub_trust_proof:${input.purpose}:${input.schema}:${input.session_id}:${input.device_uuid}`,
     },
+    transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
   }
 ): Promise<void> {
   assert_transfer_not_live_in_phase4('startTransfer');
+  await begin_transfer_runtime_session(deps.transfer_runtime_wiring);
   await deps.trust_proof_signer.derive_trust_proof({
     purpose: 'transfer.start',
     schema: 'dtis.mobile-transfer.v1',
