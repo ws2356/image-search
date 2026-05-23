@@ -1,7 +1,14 @@
 import { assert_transfer_not_live_in_phase4 } from '@/features/backup/services/phase-scope';
+import type { CapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
+import { HttpCapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
-import { TransferTransport, TransferPipelineStage } from '@/features/backup/transfer/enums';
+import {
+  TransferFailureReason,
+  TransferTransport,
+  TransferPipelineStage,
+} from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
+import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import {
   begin_transfer_runtime_session,
@@ -12,6 +19,7 @@ import {
 export interface StartTransferDeps {
   apply_command: typeof apply_backup_command;
   trust_proof_signer: TrustProofSigner;
+  capability_exchange_service: CapabilityExchangeService;
   transfer_runtime_wiring: TransferRuntimeWiring;
 }
 
@@ -41,10 +49,56 @@ export async function startTransfer(
       derive_trust_proof: async (input) =>
         `stub_trust_proof:${input.purpose}:${input.schema}:${input.session_id}:${input.device_uuid}`,
     },
+    capability_exchange_service: new HttpCapabilityExchangeService(),
     transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
   }
 ): Promise<void> {
   assert_transfer_not_live_in_phase4('startTransfer');
+  const session = useBackupSessionStore.getState().session;
+  if (!session.pairingSession?.sessionId || !session.pairingSession.endpointBaseUrl) {
+    await deps.apply_command({
+      type: 'transferResolved',
+      result: {
+        kind: 'failure',
+        reason: TransferFailureReason.Unknown,
+        error: {
+          title: 'Transfer unavailable',
+          message: 'Pairing session is missing. Pair a desktop first.',
+        },
+      },
+    });
+    return;
+  }
+  const device_uuid = session.localDeviceIdentity?.deviceUuid ?? 'rn-device-placeholder';
+  const trust_proof = await deps.trust_proof_signer.derive_trust_proof({
+    purpose: 'capabilities.exchange',
+    schema: 'dtis.mobile-capabilities.v1',
+    session_id: session.pairingSession.sessionId,
+    device_uuid,
+  });
+  const exchange = await deps.capability_exchange_service.exchange({
+    endpoint_base_url: session.pairingSession.endpointBaseUrl,
+    session_id: session.pairingSession.sessionId,
+    device_uuid,
+    trust_proof,
+    capabilities: {
+      encrypted_payload_v1: 1,
+    },
+  });
+  if (exchange.status !== 'accepted') {
+    await deps.apply_command({
+      type: 'transferResolved',
+      result: {
+        kind: 'failure',
+        reason: TransferFailureReason.Unknown,
+        error: {
+          title: 'Capability exchange rejected',
+          message: exchange.message,
+        },
+      },
+    });
+    return;
+  }
   await begin_transfer_runtime_session(deps.transfer_runtime_wiring);
   await deps.trust_proof_signer.derive_trust_proof({
     purpose: 'transfer.start',
