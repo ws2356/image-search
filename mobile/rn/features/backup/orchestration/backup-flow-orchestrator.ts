@@ -1,4 +1,5 @@
 import type { BackupCommand } from '@/features/backup/orchestration/backup-commands';
+import { persist_pairing_success } from '@/features/backup/services/pairing-persistence-service';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 
 export interface BackupFlowOrchestrator {
@@ -67,6 +68,11 @@ async function executeImpl(command: BackupCommand): Promise<void> {
     case 'submitPairingPayload':
       return submitPairingPayloadImpl(command);
     case 'pairingCompleted':
+      {
+        const persisted = await persist_pairing_success(command.session, store.session.localDeviceIdentity);
+        store.setTrustedDesktop(persisted.trusted_desktop);
+        store.setLocalDeviceIdentity(persisted.local_device_identity);
+      }
       store.setPairingSession(command.session);
       store.setRoutePhase('permissions');
       return;
