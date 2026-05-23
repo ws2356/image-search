@@ -1,5 +1,6 @@
 import type { BackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
 import { createBackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
+import { assert_transfer_not_live_in_phase4 } from '@/features/backup/services/phase-scope';
 import { TransferTransport, TransferPipelineStage } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
@@ -37,6 +38,7 @@ export async function startTransfer(
     },
   }
 ): Promise<void> {
+  assert_transfer_not_live_in_phase4('startTransfer');
   await deps.trust_proof_signer.derive_trust_proof({
     purpose: 'transfer.start',
     schema: 'dtis.mobile-transfer.v1',
