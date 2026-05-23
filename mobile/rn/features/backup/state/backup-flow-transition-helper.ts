@@ -1,4 +1,4 @@
-import type { BackupCommand } from '@/features/backup/orchestration/backup-commands';
+import type { BackupCommand } from '@/features/backup/state/backup-commands';
 import { persist_pairing_success } from '@/features/backup/services/pairing-persistence-service';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 
