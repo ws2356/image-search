@@ -1,8 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { createBackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
 import { PairingService } from '@/features/backup/services/pairing-service';
+import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 
 export interface PairingScreenController {
   pairing_status_label: string;
@@ -13,7 +13,6 @@ export interface PairingScreenController {
 
 export function usePairingScreenController(): PairingScreenController {
   const router = useRouter();
-  const orchestrator = useMemo(() => createBackupFlowOrchestrator(), []);
   const params = useLocalSearchParams<{
     session_id?: string;
     device_uuid?: string;
@@ -44,7 +43,7 @@ export function usePairingScreenController(): PairingScreenController {
         set_pairing_status_label(response.message || `Pairing status: ${response.status}`);
         switch (response.status) {
           case 'accepted':
-            await orchestrator.execute({
+            await apply_backup_command({
               type: 'pairingCompleted',
               session: {
                 sessionId: response.session_id ?? session_id,
@@ -59,7 +58,7 @@ export function usePairingScreenController(): PairingScreenController {
           case 'expired':
           case 'pairing_mismatched':
           case 'pairing_stopped':
-            await orchestrator.execute({
+            await apply_backup_command({
               type: 'pairingFailed',
               error: {
                 title: 'Pairing failed',
@@ -91,7 +90,6 @@ export function usePairingScreenController(): PairingScreenController {
     };
   }, [
     live_pairing_enabled,
-    orchestrator,
     params.device_uuid,
     params.endpoint_base_url,
     params.session_id,

@@ -1,12 +1,11 @@
-import type { BackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
-import { createBackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
 import { assert_transfer_not_live_in_phase4 } from '@/features/backup/services/phase-scope';
+import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { TransferTransport, TransferPipelineStage } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 
 export interface StartTransferDeps {
-  orchestrator: BackupFlowOrchestrator;
+  apply_command: typeof apply_backup_command;
   trust_proof_signer: TrustProofSigner;
 }
 
@@ -31,7 +30,7 @@ function build_initial_snapshot(now: Date): TransferProgressSnapshot {
 
 export async function startTransfer(
   deps: StartTransferDeps = {
-    orchestrator: createBackupFlowOrchestrator(),
+    apply_command: apply_backup_command,
     trust_proof_signer: {
       derive_trust_proof: async (input) =>
         `stub_trust_proof:${input.purpose}:${input.schema}:${input.session_id}:${input.device_uuid}`,
@@ -45,8 +44,8 @@ export async function startTransfer(
     session_id: 'pending-session',
     device_uuid: 'pending-device',
   });
-  await deps.orchestrator.startTransfer();
-  await deps.orchestrator.execute({
+  await deps.apply_command({ type: 'startTransfer' });
+  await deps.apply_command({
     type: 'transferSnapshotUpdated',
     snapshot: build_initial_snapshot(new Date()),
   });

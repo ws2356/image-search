@@ -1,16 +1,10 @@
 import type { ReactNode } from 'react';
 import React from 'react';
 
-import {
-  createBackupFlowOrchestrator,
-  type BackupFlowOrchestrator,
-} from '@/features/backup/orchestration/backup-flow-orchestrator';
-
 export type AppRuntimeMode = 'native-capable';
 
 export interface AppServices {
   runtimeMode: AppRuntimeMode;
-  backupFlowOrchestrator: BackupFlowOrchestrator;
 }
 
 const AppServicesContext = React.createContext<AppServices | null>(null);
@@ -18,7 +12,6 @@ const AppServicesContext = React.createContext<AppServices | null>(null);
 function createAppServices(): AppServices {
   return {
     runtimeMode: 'native-capable',
-    backupFlowOrchestrator: createBackupFlowOrchestrator(),
   };
 }
 

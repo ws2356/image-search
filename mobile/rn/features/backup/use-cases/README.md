@@ -8,6 +8,7 @@ Use-cases keep UI components thin and move business actions into reusable functi
 
 - UI (`screens/`, `hooks/`) says **what user wants to do**
 - Use-case says **how that action runs in app logic**
+- Transition helper (`state/backup-flow-transition-helper.ts`) applies flow-state mutations
 - Infrastructure ports (`infrastructure/*`) do external I/O
 
 This gives cleaner tests, easier refactors, and less duplicated flow logic.
@@ -32,5 +33,4 @@ This gives cleaner tests, easier refactors, and less duplicated flow logic.
 
 ## Typical call path
 
-`Screen` -> `Hook controller` -> `Use-case` -> `Orchestrator/Ports` -> `Store updates`
-
+`Screen` -> `Hook controller` -> `Use-case` -> `Transition helper + Ports` -> `Store updates`

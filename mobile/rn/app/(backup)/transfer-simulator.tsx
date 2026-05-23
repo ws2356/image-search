@@ -2,13 +2,11 @@ import { useRouter } from 'expo-router';
 import { Pressable, ScrollView } from 'react-native';
 
 import { Text } from '@/components/Themed';
-import { createBackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
+import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { TransferPipelineStage, TransferTransport } from '@/features/backup/transfer/enums';
 
-const orchestrator = createBackupFlowOrchestrator();
-
 async function push_snapshot(stage: TransferPipelineStage, transferred: number, failed: number) {
-  await orchestrator.execute({
+  await apply_backup_command({
     type: 'transferSnapshotUpdated',
     snapshot: {
       pipelineStage: stage,

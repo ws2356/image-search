@@ -1,12 +1,11 @@
-import type { BackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
-import { createBackupFlowOrchestrator } from '@/features/backup/orchestration/backup-flow-orchestrator';
+import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 
 export interface StopTransferDeps {
-  orchestrator: BackupFlowOrchestrator;
+  apply_command: typeof apply_backup_command;
 }
 
 export async function stopTransfer(
-  deps: StopTransferDeps = { orchestrator: createBackupFlowOrchestrator() }
+  deps: StopTransferDeps = { apply_command: apply_backup_command }
 ): Promise<void> {
-  await deps.orchestrator.stopTransfer();
+  await deps.apply_command({ type: 'stopTransfer' });
 }
