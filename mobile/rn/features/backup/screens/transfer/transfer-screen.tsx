@@ -23,6 +23,9 @@ export function TransferScreen() {
       <Text selectable onPress={controller.open_incoming_link_replacement}>
         Open incoming-link replacement modal placeholder
       </Text>
+      <Text selectable onPress={controller.open_transfer_simulator}>
+        Open transfer snapshot simulator
+      </Text>
     </ScrollView>
   );
 }

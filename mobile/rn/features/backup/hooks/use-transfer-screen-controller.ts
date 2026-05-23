@@ -4,6 +4,7 @@ export interface TransferScreenController {
   go_completed: () => void;
   go_error: () => void;
   open_incoming_link_replacement: () => void;
+  open_transfer_simulator: () => void;
 }
 
 export function useTransferScreenController(): TransferScreenController {
@@ -12,5 +13,6 @@ export function useTransferScreenController(): TransferScreenController {
     go_completed: () => router.push('/completed'),
     go_error: () => router.push('/error'),
     open_incoming_link_replacement: () => router.push('/incoming-link-replacement'),
+    open_transfer_simulator: () => router.push('/transfer-simulator'),
   };
 }

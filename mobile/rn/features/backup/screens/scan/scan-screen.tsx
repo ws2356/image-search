@@ -17,6 +17,9 @@ export function ScanScreen() {
       <Text selectable onPress={controller.continue_to_pairing}>
         Continue to Pairing placeholder
       </Text>
+      <Text selectable onPress={controller.open_manual_payload_entry}>
+        Enter payload manually
+      </Text>
       <Text selectable onPress={controller.return_home}>
         Return Home
       </Text>
