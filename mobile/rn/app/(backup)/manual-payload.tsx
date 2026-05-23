@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, TextInput } from 'react-native';
 
 import { Text } from '@/components/Themed';
+import { PairingService } from '@/features/backup/services/pairing-service';
 import { parse_pairing_link_payload } from '@/features/backup/use-cases/process-incoming-link';
-import { submitScannedPayload } from '@/features/backup/use-cases/submit-scanned-payload';
 
 export default function ManualPayloadRoute() {
   const router = useRouter();
@@ -17,9 +17,46 @@ export default function ManualPayloadRoute() {
       setError('Invalid payload. Expected query params: v,ept,sid,opt,usp.');
       return;
     }
-    setError(null);
-    await submitScannedPayload(payload);
-    router.push('/pair');
+    const endpoint_target = payload.endpointTargets[0];
+    if (!endpoint_target) {
+      setError('Payload does not contain any endpoint target.');
+      return;
+    }
+    const endpoint_base_url = endpoint_target.startsWith('http://') || endpoint_target.startsWith('https://')
+      ? endpoint_target
+      : `http://${endpoint_target}`;
+    const pairing_service = new PairingService(endpoint_base_url);
+    const identity = {
+      device_uuid: 'rn-device-placeholder',
+      device_name: 'AuBackup RN',
+      platform: 'android' as const,
+    };
+
+    try {
+      const response = await pairing_service.claim_pairing(payload, identity);
+      if (
+        response.status === 'rejected' ||
+        response.status === 'expired' ||
+        response.status === 'pairing_mismatched' ||
+        response.status === 'pairing_stopped'
+      ) {
+        router.replace('/error');
+        return;
+      }
+
+      setError(null);
+      router.push({
+        pathname: '/pair',
+        params: {
+          session_id: response.session_id ?? payload.sessionId,
+          device_uuid: response.device_uuid ?? identity.device_uuid,
+          endpoint_base_url,
+        },
+      });
+    } catch (claim_error) {
+      const message = claim_error instanceof Error ? claim_error.message : 'Pairing claim failed.';
+      setError(message);
+    }
   };
 
   return (

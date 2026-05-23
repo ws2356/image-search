@@ -12,7 +12,9 @@ export function PairingScreen() {
         Pairing
       </Text>
       <Text selectable style={{ lineHeight: 22 }}>
-        Pairing service wiring is introduced after Phase 3 shell implementation.
+        {controller.live_pairing_enabled
+          ? controller.pairing_status_label
+          : 'Live pairing params are missing. Use manual payload entry from Scan as fallback.'}
       </Text>
       <Text selectable onPress={controller.continue_to_permissions}>
         Continue to Permissions placeholder
