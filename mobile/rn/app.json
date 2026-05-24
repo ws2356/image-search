@@ -30,6 +30,13 @@
       "expo-dev-client",
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow AuBackup to access your camera",
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

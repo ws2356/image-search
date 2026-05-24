@@ -16,7 +16,6 @@ This gives cleaner tests, easier refactors, and less duplicated flow logic.
 ## Current files
 
 - `process-incoming-link.ts`: parse/accept incoming pairing link payload
-- `submit-scanned-payload.ts`: dispatch scanned/manual payload into flow
 - `run-preflight.ts`: execute preflight checks before transfer
 - `start-transfer.ts`: start transfer flow and seed initial snapshot
 - `stop-transfer.ts`: request transfer stop path
