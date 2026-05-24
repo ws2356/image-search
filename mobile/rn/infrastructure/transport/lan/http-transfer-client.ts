@@ -23,8 +23,9 @@ export interface HttpTransferClient {
   existence(request: Omit<TransferAssetExistenceRequest, 'schema'>): Promise<TransferResponse>;
   asset(
     metadata: TransferAssetMetadata,
-    content: Uint8Array,
-    stream_state: 'start' | 'chunk' | 'complete'
+    request_id: string,
+    stream_state: 'start' | 'chunk' | 'complete',
+    content?: Uint8Array
   ): Promise<TransferResponse>;
   complete(request: Omit<TransferCompleteRequest, 'schema'>): Promise<TransferResponse>;
 }
@@ -64,22 +65,29 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
 
   async asset(
     metadata: TransferAssetMetadata,
-    content: Uint8Array,
-    stream_state: 'start' | 'chunk' | 'complete'
+    request_id: string,
+    stream_state: 'start' | 'chunk' | 'complete',
+    content?: Uint8Array
   ): Promise<TransferResponse> {
+    const url = new URL(join_base_and_path(this.base_url, MOBILE_TRANSFER_ASSET_PATH));
+    url.searchParams.set('request_id', request_id);
+    url.searchParams.set('stream_state', stream_state);
+    const chunk_body = stream_state === 'chunk' ? new Uint8Array(content ?? new Uint8Array()).buffer : null;
     const response = await this.fetch_impl(
-      `${join_base_and_path(this.base_url, MOBILE_TRANSFER_ASSET_PATH)}?stream_state=${stream_state}`,
+      url.toString(),
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...metadata,
-          content_base64:
-            typeof globalThis.btoa === 'function'
-              ? globalThis.btoa(String.fromCharCode(...content))
-              : encodeURIComponent(Array.from(content).join(',')),
-          content_length: content.length,
-        }),
+        headers:
+          stream_state === 'chunk'
+            ? { 'content-type': 'application/octet-stream' }
+            : { 'content-type': 'application/json' },
+        body:
+          chunk_body ??
+          JSON.stringify({
+            ...metadata,
+            stream_state,
+            request_id,
+          }),
       }
     );
     return this.parse_response(response, 'Transfer asset request failed.');

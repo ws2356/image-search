@@ -67,12 +67,28 @@ export async function startTransfer(
     });
     return;
   }
-  const device_uuid = session.localDeviceIdentity?.deviceUuid ?? 'rn-device-placeholder';
+  const device_uuid = session.localDeviceIdentity?.deviceUuid;
+  const trust_key_b64 = session.pairingSession.trustKeyB64;
+  if (!device_uuid || !trust_key_b64) {
+    await deps.apply_command({
+      type: 'transferResolved',
+      result: {
+        kind: 'failure',
+        reason: TransferFailureReason.Unknown,
+        error: {
+          title: 'Transfer unavailable',
+          message: 'Pairing data is incomplete. Pair this desktop again before starting transfer.',
+        },
+      },
+    });
+    return;
+  }
   const trust_proof = await deps.trust_proof_signer.derive_trust_proof({
     purpose: 'capabilities.exchange',
     schema: 'dtis.mobile-capabilities.v1',
     session_id: session.pairingSession.sessionId,
     device_uuid,
+    trust_key_b64,
   });
   const exchange = await deps.capability_exchange_service.exchange({
     endpoint_base_url: session.pairingSession.endpointBaseUrl,
@@ -98,12 +114,6 @@ export async function startTransfer(
     return;
   }
   await begin_transfer_runtime_session(deps.transfer_runtime_wiring);
-  await deps.trust_proof_signer.derive_trust_proof({
-    purpose: 'transfer.start',
-    schema: 'dtis.mobile-transfer.v1',
-    session_id: 'pending-session',
-    device_uuid: 'pending-device',
-  });
   await deps.apply_command({ type: 'startTransfer' });
   await deps.apply_command({
     type: 'transferSnapshotUpdated',

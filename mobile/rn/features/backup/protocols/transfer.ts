@@ -69,10 +69,13 @@ export interface TransferResponse {
   schema: typeof MOBILE_TRANSFER_SCHEMA;
   status: 'accepted' | 'checked' | 'stored' | 'skipped' | 'completed' | 'rejected';
   message: string;
+  request_id?: string;
   session_id?: string;
   device_uuid?: string;
   total_assets?: number;
   matches?: TransferMatchItem[];
   transferred_count?: number;
   failed_count?: number;
+  local_relative_path?: string;
+  failure_code?: string;
 }

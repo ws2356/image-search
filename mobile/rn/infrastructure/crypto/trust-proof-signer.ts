@@ -1,4 +1,7 @@
 import type { TrustProofInput } from '@/features/backup/protocols/trust';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 export interface TrustProofSigner {
   derive_trust_proof(input: TrustProofInput): Promise<string>;
@@ -11,13 +14,12 @@ function to_base64_url(input: string): string {
   return encodeURIComponent(input).replace(/%/g, '_');
 }
 
-function hash_seed(seed: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+function bytes_to_binary(bytes: Uint8Array): string {
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
   }
-  return Math.abs(hash >>> 0).toString(16);
+  return binary;
 }
 
 export class DefaultTrustProofSigner implements TrustProofSigner {
@@ -29,6 +31,7 @@ export class DefaultTrustProofSigner implements TrustProofSigner {
       input.session_id,
       input.device_uuid,
     ].join('\n');
-    return to_base64_url(`trust_proof:${hash_seed(material)}`);
+    const digest = hmac(sha256, utf8ToBytes(input.trust_key_b64), utf8ToBytes(material));
+    return to_base64_url(bytes_to_binary(digest));
   }
 }

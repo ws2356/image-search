@@ -33,18 +33,24 @@ export interface PairingStateRequest {
 
 export interface PairingResponse {
   schema: typeof PAIRING_PROTOCOL_SCHEMA;
-  status:
-    | 'accepted'
-    | 'waiting'
+  backup_state:
+    | 'pending_pairing'
+    | 'pairing_completed'
     | 'pairing_mismatched'
     | 'pairing_stopped'
-    | 'rejected'
-    | 'expired';
+    | 'pairing_expired'
+    | 'transfer_in_progress'
+    | 'transfer_stopped'
+    | 'transfer_completed'
+    | 'transfer_failed';
   message: string;
   session_id?: string;
   device_uuid?: string;
-  device_name?: string;
+  desktop_name?: string;
+  desktop_device_id?: string;
+  folder_id?: number;
   folder_path?: string;
   transport?: PairingTransport;
   capabilities?: Record<string, 0 | 1>;
+  paired_at?: string;
 }

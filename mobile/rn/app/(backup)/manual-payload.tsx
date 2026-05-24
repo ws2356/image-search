@@ -35,10 +35,9 @@ export default function ManualPayloadRoute() {
     try {
       const response = await pairing_service.claim_pairing(payload, identity);
       if (
-        response.status === 'rejected' ||
-        response.status === 'expired' ||
-        response.status === 'pairing_mismatched' ||
-        response.status === 'pairing_stopped'
+        response.backup_state === 'pairing_mismatched' ||
+        response.backup_state === 'pairing_stopped' ||
+        response.backup_state === 'pairing_expired'
       ) {
         router.replace('/error');
         return;
@@ -51,6 +50,7 @@ export default function ManualPayloadRoute() {
           session_id: response.session_id ?? payload.sessionId,
           device_uuid: response.device_uuid ?? identity.device_uuid,
           endpoint_base_url,
+          one_time_passcode: payload.oneTimePasscode,
         },
       });
     } catch (claim_error) {

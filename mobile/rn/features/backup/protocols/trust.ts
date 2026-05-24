@@ -13,8 +13,7 @@ export interface TrustProofInput {
   schema: string;
   session_id: string;
   device_uuid: string;
-}
-
-export interface TrustProofDeriveInput extends TrustProofInput {
   trust_key_b64: string;
 }
+
+export type TrustProofDeriveInput = TrustProofInput;

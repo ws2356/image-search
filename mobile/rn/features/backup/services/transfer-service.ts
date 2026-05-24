@@ -16,6 +16,7 @@ export interface TransferServiceContext {
   endpoint_base_url: string;
   session_id: string;
   device_uuid: string;
+  trust_key_b64: string;
 }
 
 export interface TransferServiceDeps {
@@ -61,15 +62,10 @@ export class TransferService {
 
   async upload_asset(
     metadata: Omit<TransferAssetMetadata, 'schema' | 'session_id' | 'device_uuid' | 'trust_proof'>,
-    content: Uint8Array,
-    stream_state: 'start' | 'chunk' | 'complete'
+    content: Uint8Array
   ): Promise<TransferResponse> {
-    const trust_proof = await this.deps.trust_proof_signer.derive_trust_proof({
-      purpose: 'transfer.asset',
-      schema: MOBILE_TRANSFER_SCHEMA,
-      session_id: this.context.session_id,
-      device_uuid: this.context.device_uuid,
-    });
+    const request_id = metadata.asset_id;
+    const trust_proof = await this.build_transfer_trust_proof('transfer.asset');
     const full_metadata: TransferAssetMetadata = {
       schema: MOBILE_TRANSFER_SCHEMA,
       session_id: this.context.session_id,
@@ -77,7 +73,11 @@ export class TransferService {
       trust_proof,
       ...metadata,
     };
-    return this.deps.transfer_client.asset(full_metadata, content, stream_state);
+    await this.deps.transfer_client.asset(full_metadata, request_id, 'start');
+    if (content.length > 0) {
+      await this.deps.transfer_client.asset(full_metadata, request_id, 'chunk', content);
+    }
+    return this.deps.transfer_client.asset(full_metadata, request_id, 'complete');
   }
 
   async complete(transferred_count: number, failed_count: number): Promise<TransferResponse> {
@@ -100,6 +100,7 @@ export class TransferService {
       schema: MOBILE_TRANSFER_SCHEMA,
       session_id: this.context.session_id,
       device_uuid: this.context.device_uuid,
+      trust_key_b64: this.context.trust_key_b64,
     });
   }
 }

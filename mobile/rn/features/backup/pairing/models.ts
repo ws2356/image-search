@@ -15,6 +15,7 @@ export interface PairingSessionSummary {
   desktopName: string | null;
   endpointBaseUrl: string | null;
   pairingCompletedAt: string | null;
+  trustKeyB64: string | null;
 }
 
 export interface TrustedDesktopSummary {

@@ -1,8 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
+import { DefaultPairingKeyDeriver } from '@/infrastructure/crypto/pairing-key-deriver';
 import { PairingService } from '@/features/backup/services/pairing-service';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
+import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 
 export interface PairingScreenController {
   pairing_status_label: string;
@@ -17,6 +20,8 @@ export function usePairingScreenController(): PairingScreenController {
     session_id?: string;
     device_uuid?: string;
     endpoint_base_url?: string;
+    one_time_passcode?: string;
+    trust_key_b64?: string;
   }>();
   const [pairing_status_label, set_pairing_status_label] = useState(
     'Pairing session awaiting network state updates.'
@@ -31,6 +36,25 @@ export function usePairingScreenController(): PairingScreenController {
     const session_id = params.session_id as string;
     const device_uuid = params.device_uuid as string;
     const endpoint_base_url = params.endpoint_base_url as string;
+    const one_time_passcode = params.one_time_passcode as string | undefined;
+    const resolve_trust_key_b64 = async () => {
+      const provided_trust_key = params.trust_key_b64 as string | undefined;
+      if (provided_trust_key && provided_trust_key.length > 0) {
+        return provided_trust_key;
+      }
+      if (!one_time_passcode) {
+        return null;
+      }
+
+      const platform = useBackupSessionStore.getState().session.localDeviceIdentity?.platform
+        ?? (Platform.OS === 'ios' ? 'ios' : 'android');
+      const pairing_key_deriver = new DefaultPairingKeyDeriver();
+      return pairing_key_deriver.derive_pairing_key_b64({
+        session_id,
+        one_time_passcode,
+        platform,
+      });
+    };
     const pairing_service = new PairingService(endpoint_base_url);
     let cancelled = false;
 
@@ -40,29 +64,37 @@ export function usePairingScreenController(): PairingScreenController {
         if (cancelled) {
           return;
         }
-        set_pairing_status_label(response.message || `Pairing status: ${response.status}`);
-        switch (response.status) {
-          case 'accepted':
+        set_pairing_status_label(response.message || `Pairing status: ${response.backup_state}`);
+        switch (response.backup_state) {
+          case 'pairing_completed':
+            const trustKeyB64 = await resolve_trust_key_b64();
+            if (cancelled) {
+              return;
+            }
+            if (!trustKeyB64) {
+              set_pairing_status_label('Pairing completed, but trust key derivation failed.');
+              return;
+            }
             await apply_backup_command({
               type: 'pairingCompleted',
               session: {
                 sessionId: response.session_id ?? session_id,
-                desktopName: response.device_name ?? null,
+                desktopName: response.desktop_name ?? null,
                 endpointBaseUrl: endpoint_base_url,
                 pairingCompletedAt: new Date().toISOString(),
+                trustKeyB64,
               },
             });
             router.replace('/permissions');
             return;
-          case 'rejected':
-          case 'expired':
+          case 'pairing_expired':
           case 'pairing_mismatched':
           case 'pairing_stopped':
             await apply_backup_command({
               type: 'pairingFailed',
               error: {
                 title: 'Pairing failed',
-                message: response.message || `Pairing failed with status ${response.status}.`,
+                message: response.message || `Pairing failed with state ${response.backup_state}.`,
               },
             });
             router.replace('/error');
@@ -93,6 +125,8 @@ export function usePairingScreenController(): PairingScreenController {
     params.device_uuid,
     params.endpoint_base_url,
     params.session_id,
+    params.one_time_passcode,
+    params.trust_key_b64,
     router,
   ]);
 
