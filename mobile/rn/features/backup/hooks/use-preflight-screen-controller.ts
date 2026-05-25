@@ -41,14 +41,17 @@ export function usePreflightScreenController(): PreflightScreenController {
   const load_preflight_state = useCallback(async () => {
     try {
       set_error_message(null);
+      console.log('[Preflight] Loading preflight state');
       const next_summary = await runPreflight({
         apply_command: apply_backup_command,
         preflight_service,
       });
+      console.log('[Preflight] Loaded', { mediaScope: next_summary.mediaScope, isCharging: next_summary.isCharging });
       set_summary(next_summary);
       set_phase(resolve_next_phase(next_summary));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to run preflight checks.';
+      console.log('[Preflight] Error', message);
       set_error_message(message);
       set_phase('failed');
     }

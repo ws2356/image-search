@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import { useTransferStore } from '@/features/backup/store/transfer-store';
 import { finishTransfer } from '@/features/backup/use-cases/finish-transfer';
+import { startTransfer } from '@/features/backup/use-cases/start-transfer';
 import { stopTransfer } from '@/features/backup/use-cases/stop-transfer';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { create_default_app_awake_policy } from '@/infrastructure/system/app-awake-policy';
@@ -25,6 +26,7 @@ export function useTransferScreenController(): TransferScreenController {
   const transfer_error = useTransferStore((state) => state.last_error);
   const set_running = useTransferStore((state) => state.set_running);
   const set_last_error = useTransferStore((state) => state.set_last_error);
+  const start_attempted_ref = useRef(false);
 
   useEffect(() => {
     void app_awake_policy.set_awake_enabled(transfer_running);
@@ -32,6 +34,24 @@ export function useTransferScreenController(): TransferScreenController {
       void app_awake_policy.set_awake_enabled(false);
     };
   }, [app_awake_policy, transfer_running]);
+
+  useEffect(() => {
+    if (start_attempted_ref.current) {
+      return;
+    }
+    start_attempted_ref.current = true;
+    set_last_error(null);
+    set_running(true);
+    void (async () => {
+      try {
+        await startTransfer();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to start transfer.';
+        set_running(false);
+        set_last_error(message);
+      }
+    })();
+  }, [set_last_error, set_running]);
 
   return {
     transfer_running,

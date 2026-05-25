@@ -1,4 +1,5 @@
 import { assert_transfer_not_live_in_phase4 } from '@/features/backup/services/phase-scope';
+import { TransferService } from '@/features/backup/services/transfer-service';
 import type { CapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { HttpCapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
@@ -113,6 +114,13 @@ export async function startTransfer(
     });
     return;
   }
+  const transfer_service = new TransferService({
+    endpoint_base_url: session.pairingSession.endpointBaseUrl,
+    session_id: session.pairingSession.sessionId,
+    device_uuid,
+    trust_key_b64,
+  });
+  await transfer_service.start(0);
   await begin_transfer_runtime_session(deps.transfer_runtime_wiring);
   await deps.apply_command({ type: 'startTransfer' });
   await deps.apply_command({

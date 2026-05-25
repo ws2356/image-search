@@ -19,7 +19,13 @@ export function ScanScreen() {
     }
     scanned_ref.current = true;
     await controller.handle_barcode_scanned(data);
+    // Do not reset scanned_ref here — keep guard up after attempt.
+    // It is reset when the user explicitly retries (via retry_scan below).
+  };
+
+  const retry_scan = () => {
     scanned_ref.current = false;
+    controller.clear_scan_error?.();
   };
 
   return (
@@ -51,9 +57,18 @@ export function ScanScreen() {
         </Pressable>
       )}
       {controller.scan_error ? (
-        <Text selectable style={{ color: '#cc0000' }}>
-          {controller.scan_error}
-        </Text>
+        <View style={{ gap: 8 }}>
+          <Text selectable style={{ color: '#cc0000' }}>
+            {controller.scan_error}
+          </Text>
+          <Pressable
+            onPress={retry_scan}
+            style={{ borderRadius: 8, backgroundColor: '#0a84ff', paddingVertical: 10, paddingHorizontal: 14 }}>
+            <Text selectable style={{ color: '#fff', fontWeight: '600' }}>
+              Try Again
+            </Text>
+          </Pressable>
+        </View>
       ) : null}
       {controller.is_claiming ? <Text selectable>Claiming pairing session...</Text> : null}
       <Text selectable onPress={controller.return_home}>

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Platform } from 'react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PairingQRCodePayload } from '@/features/backup/pairing/models';
 import { PairingService } from '@/features/backup/services/pairing-service';
@@ -16,6 +16,7 @@ export interface ScanScreenController {
   is_claiming: boolean;
   scan_error: string | null;
   handle_barcode_scanned: (data: string) => Promise<void>;
+  clear_scan_error: () => void;
   return_home: () => void;
 }
 
@@ -24,6 +25,7 @@ export function useScanScreenController(): ScanScreenController {
   const qr_scanner_port = useMemo(() => new ExpoCameraQrScannerPort(), []);
   const [camera_permission_granted, set_camera_permission_granted] = useState(false);
   const [is_claiming, set_is_claiming] = useState(false);
+  const is_claiming_ref = useRef(false);
   const [scan_error, set_scan_error] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,45 +62,49 @@ export function useScanScreenController(): ScanScreenController {
 
   const handle_barcode_scanned = useCallback(
     async (data: string) => {
-      if (is_claiming) {
+      if (is_claiming_ref.current) {
         return;
       }
-
-      const decoded = decode_pairing_link(data);
-      if (!decoded.ok) {
-        set_scan_error(decoded.message);
-        return;
-      }
-
-      const payload: PairingQRCodePayload = decoded.payload;
-      const endpoint_target = payload.endpointTargets[0];
-      if (!endpoint_target) {
-        set_scan_error('Pairing QR did not include a desktop endpoint.');
-        return;
-      }
-
-      const endpoint_base_url =
-        endpoint_target.startsWith('http://') || endpoint_target.startsWith('https://')
-          ? endpoint_target
-          : `http://${endpoint_target}`;
-
-      const identity = resolve_identity();
-      const pairing_key_deriver = new DefaultPairingKeyDeriver();
-      const trust_key_b64 = await pairing_key_deriver.derive_pairing_key_b64({
-        session_id: payload.sessionId,
-        one_time_passcode: payload.oneTimePasscode,
-        platform: identity.platform,
-      });
-      const pairing_service = new PairingService(endpoint_base_url);
-
+      is_claiming_ref.current = true;
       set_is_claiming(true);
       set_scan_error(null);
+
       try {
+        const decoded = decode_pairing_link(data);
+        if (!decoded.ok) {
+          set_scan_error(decoded.message);
+          return;
+        }
+        console.log('[Scan] Decoded QR', { sessionId: decoded.payload.sessionId, opt: decoded.payload.oneTimePasscode });
+
+        const payload: PairingQRCodePayload = decoded.payload;
+        const endpoint_target = payload.endpointTargets[0];
+        if (!endpoint_target) {
+          set_scan_error('Pairing QR did not include a desktop endpoint.');
+          return;
+        }
+
+        const endpoint_base_url =
+          endpoint_target.startsWith('http://') || endpoint_target.startsWith('https://')
+            ? endpoint_target
+            : `http://${endpoint_target}`;
+
+        const identity = resolve_identity();
+        console.log('[Scan] Starting pairing claim', { session_id: payload.sessionId, endpoint_base_url });
+        const pairing_key_deriver = new DefaultPairingKeyDeriver();
+        const trust_key_b64 = await pairing_key_deriver.derive_pairing_key_b64({
+          session_id: payload.sessionId,
+          one_time_passcode: payload.oneTimePasscode,
+          platform: identity.platform,
+        });
+        const pairing_service = new PairingService(endpoint_base_url);
+
         const response = await pairing_service.claim_pairing(payload, {
           device_uuid: identity.deviceUuid,
           device_name: identity.deviceName,
           platform: identity.platform,
         });
+        console.log('[Scan] claim_pairing response', { backup_state: response.backup_state, session_id: response.session_id });
         if (
           response.backup_state === 'pairing_mismatched' ||
           response.backup_state === 'pairing_stopped' ||
@@ -118,14 +124,17 @@ export function useScanScreenController(): ScanScreenController {
             trust_key_b64,
           },
         });
+        console.log('[Scan] Navigated to /pair');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Pairing claim failed.';
+        console.log('[Scan] claim_pairing error', message);
         set_scan_error(message);
       } finally {
+        is_claiming_ref.current = false;
         set_is_claiming(false);
       }
     },
-    [is_claiming, resolve_identity, router]
+    [resolve_identity, router]
   );
 
   return {
@@ -137,6 +146,10 @@ export function useScanScreenController(): ScanScreenController {
     is_claiming,
     scan_error,
     handle_barcode_scanned,
+    clear_scan_error: () => {
+      set_scan_error(null);
+      is_claiming_ref.current = false;
+    },
     return_home: () => router.push('/'),
   };
 }

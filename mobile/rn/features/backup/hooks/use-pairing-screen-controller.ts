@@ -64,6 +64,7 @@ export function usePairingScreenController(): PairingScreenController {
         if (cancelled) {
           return;
         }
+        console.log('[Pair] poll response', { backup_state: response.backup_state });
         set_pairing_status_label(response.message || `Pairing status: ${response.backup_state}`);
         switch (response.backup_state) {
           case 'pairing_completed':
@@ -75,6 +76,7 @@ export function usePairingScreenController(): PairingScreenController {
               set_pairing_status_label('Pairing completed, but trust key derivation failed.');
               return;
             }
+            console.log('[Pair] pairing_completed — applying command and navigating to /permissions');
             await apply_backup_command({
               type: 'pairingCompleted',
               session: {
@@ -107,6 +109,7 @@ export function usePairingScreenController(): PairingScreenController {
           return;
         }
         const message = poll_error instanceof Error ? poll_error.message : 'Pairing state polling failed.';
+        console.log('[Pair] poll error', message);
         set_pairing_status_label(message);
       }
     };
