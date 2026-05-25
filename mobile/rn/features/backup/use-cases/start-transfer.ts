@@ -202,12 +202,28 @@ export async function startTransfer(
         transferred_assets += 1;
       } else {
         try {
-          const content = await deps.transfer_asset_source.read_asset_content(asset.asset_id);
-          bytes_uploaded += content.length;
-          await transfer_service.upload_asset(asset.metadata, content);
+          const declared_size =
+            typeof asset.metadata.file_size_bytes === 'number' && asset.metadata.file_size_bytes > 0
+              ? asset.metadata.file_size_bytes
+              : undefined;
+          await transfer_service.upload_asset_chunked(
+            asset.metadata,
+            (offset, length) => deps.transfer_asset_source.read_asset_chunk(asset.asset_id, offset, length),
+            declared_size
+          );
+          if (typeof declared_size === 'number') {
+            bytes_uploaded += declared_size;
+          }
           transferred_assets += 1;
-        } catch {
+        } catch (error) {
           failed_assets += 1;
+          const message = error instanceof Error ? error.message : 'Unknown upload error.';
+          console.log('[Transfer][AssetFailure]', {
+            asset_id: asset.asset_id,
+            message,
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+          throw new Error(`Failed uploading asset ${asset.asset_id}: ${message}`);
         }
       }
 

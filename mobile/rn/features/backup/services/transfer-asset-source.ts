@@ -8,6 +8,7 @@ import {
 export interface TransferAssetSource {
   enumerate_normalized(batch_size: number): Promise<NormalizedTransferAsset[]>;
   read_asset_content(asset_id: string): Promise<Uint8Array>;
+  read_asset_chunk_blob(asset_id: string, offset: number, length: number): Promise<Blob>;
   read_asset_chunk(asset_id: string, offset: number, length: number): Promise<Uint8Array>;
 }
 
@@ -70,5 +71,9 @@ export class DefaultTransferAssetSource implements TransferAssetSource {
 
   async read_asset_chunk(asset_id: string, offset: number, length: number): Promise<Uint8Array> {
     return this.media_library_gateway.read_asset_content_chunk(asset_id, offset, length);
+  }
+
+  async read_asset_chunk_blob(asset_id: string, offset: number, length: number): Promise<Blob> {
+    return this.media_library_gateway.read_asset_content_blob_chunk(asset_id, offset, length);
   }
 }

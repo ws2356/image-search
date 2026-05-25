@@ -25,7 +25,7 @@ export interface HttpTransferClient {
     metadata: TransferAssetMetadata,
     request_id: string,
     stream_state: 'start' | 'chunk' | 'complete',
-    content?: Uint8Array
+    content?: Blob | Uint8Array
   ): Promise<TransferResponse>;
   complete(request: Omit<TransferCompleteRequest, 'schema'>): Promise<TransferResponse>;
 }
@@ -37,6 +37,15 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
   constructor(base_url: string, fetch_impl: FetchLike = fetch) {
     this.base_url = base_url;
     this.fetch_impl = fetch_impl;
+  }
+
+  private is_blob_like(value: unknown): value is Blob {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { size?: unknown }).size === 'number' &&
+      typeof (value as { arrayBuffer?: unknown }).arrayBuffer === 'function'
+    );
   }
 
   async start(request: Omit<TransferSessionRequest, 'schema'>): Promise<TransferResponse> {
@@ -67,12 +76,25 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
     metadata: TransferAssetMetadata,
     request_id: string,
     stream_state: 'start' | 'chunk' | 'complete',
-    content?: Uint8Array
+    content?: Blob | Uint8Array
   ): Promise<TransferResponse> {
     const url = new URL(join_base_and_path(this.base_url, MOBILE_TRANSFER_ASSET_PATH));
     url.searchParams.set('request_id', request_id);
     url.searchParams.set('stream_state', stream_state);
-    const chunk_body = stream_state === 'chunk' ? new Uint8Array(content ?? new Uint8Array()).buffer : null;
+    if (stream_state === 'chunk') {
+      if (content == null) {
+        throw new Error('Transfer asset request failed: missing chunk content.');
+      }
+      if (!(content instanceof Uint8Array) && !this.is_blob_like(content)) {
+        throw new Error('Transfer asset request failed: unsupported chunk content type.');
+      }
+      console.log('[Transfer][HttpChunk]', {
+        request_id,
+        content_size: content instanceof Uint8Array ? content.length : content.size,
+        content_ctor: (content as unknown as { constructor?: { name?: string } }).constructor?.name ?? 'unknown',
+      });
+      return this.post_chunk_with_xhr(url.toString(), content);
+    }
     const response = await this.fetch_impl(
       url.toString(),
       {
@@ -82,7 +104,6 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
             ? { 'content-type': 'application/octet-stream' }
             : { 'content-type': 'application/json' },
         body:
-          chunk_body ??
           JSON.stringify({
             ...metadata,
             stream_state,
@@ -91,6 +112,34 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
       }
     );
     return this.parse_response(response, 'Transfer asset request failed.');
+  }
+
+  private async post_chunk_with_xhr(url: string, content: Blob | Uint8Array): Promise<TransferResponse> {
+    return new Promise<TransferResponse>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('POST', url);
+      request.setRequestHeader('content-type', 'application/octet-stream');
+      request.onreadystatechange = () => {
+        if (request.readyState !== XMLHttpRequest.DONE) {
+          return;
+        }
+        const raw_response = request.responseText || '';
+        let payload: TransferResponse;
+        try {
+          payload = JSON.parse(raw_response) as TransferResponse;
+        } catch {
+          reject(new Error(`Transfer asset request failed. Status=${request.status}. Raw=${raw_response}`));
+          return;
+        }
+        if (request.status >= 200 && request.status < 300) {
+          resolve(payload);
+          return;
+        }
+        reject(new Error(payload.message || `Transfer asset request failed. Status=${request.status}.`));
+      };
+      request.onerror = () => reject(new Error('Transfer asset request failed due to a network transport error.'));
+      request.send(content as unknown as BodyInit);
+    });
   }
 
   async complete(request: Omit<TransferCompleteRequest, 'schema'>): Promise<TransferResponse> {

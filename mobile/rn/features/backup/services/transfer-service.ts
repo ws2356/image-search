@@ -64,6 +64,19 @@ export class TransferService {
     metadata: Omit<TransferAssetMetadata, 'schema' | 'session_id' | 'device_uuid' | 'trust_proof'>,
     content: Uint8Array
   ): Promise<TransferResponse> {
+    return this.upload_asset_chunked(
+      metadata,
+      async (offset: number, length: number) => content.slice(offset, offset + length),
+      content.length
+    );
+  }
+
+  async upload_asset_chunked(
+    metadata: Omit<TransferAssetMetadata, 'schema' | 'session_id' | 'device_uuid' | 'trust_proof'>,
+    read_chunk: (offset: number, length: number) => Promise<Blob | Uint8Array>,
+    total_size_bytes?: number,
+    chunk_size_bytes = 256 * 1024
+  ): Promise<TransferResponse> {
     const request_id = metadata.asset_id;
     const trust_proof = await this.build_transfer_trust_proof('transfer.asset');
     const full_metadata: TransferAssetMetadata = {
@@ -74,8 +87,22 @@ export class TransferService {
       ...metadata,
     };
     await this.deps.transfer_client.asset(full_metadata, request_id, 'start');
-    if (content.length > 0) {
-      await this.deps.transfer_client.asset(full_metadata, request_id, 'chunk', content);
+
+    let offset = 0;
+    while (true) {
+      if (typeof total_size_bytes === 'number' && total_size_bytes >= 0 && offset >= total_size_bytes) {
+        break;
+      }
+      const remaining =
+        typeof total_size_bytes === 'number' && total_size_bytes >= 0 ? total_size_bytes - offset : chunk_size_bytes;
+      const next_length = Math.max(0, Math.min(chunk_size_bytes, remaining));
+      const chunk = await read_chunk(offset, next_length);
+      const chunk_length = chunk instanceof Uint8Array ? chunk.length : chunk.size;
+      if (chunk_length === 0) {
+        break;
+      }
+      await this.deps.transfer_client.asset(full_metadata, request_id, 'chunk', chunk);
+      offset += chunk_length;
     }
     return this.deps.transfer_client.asset(full_metadata, request_id, 'complete');
   }
