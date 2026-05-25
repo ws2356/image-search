@@ -1,15 +1,17 @@
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { IncomingLinkReplacementDialog } from '@/features/backup/components/incoming-link-replacement-dialog';
 import { UpdatePromptDialog } from '@/features/backup/components/update-prompt-dialog';
+import { processIncomingLink } from '@/features/backup/use-cases/process-incoming-link';
 import { useBackupUiStore } from '@/features/backup/store/backup-ui-store';
 import { AppServicesProvider } from '@/infrastructure/di/app-services-provider';
+import { ExpoIncomingLinkPort } from '@/infrastructure/linking/incoming-link-port';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -47,6 +49,8 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const router = useRouter();
+  const incoming_link_port = useMemo(() => new ExpoIncomingLinkPort(), []);
   const colorScheme = useColorScheme();
   const incomingLinkReplacement = useBackupUiStore((state) => state.incomingLinkReplacement);
   const updatePrompt = useBackupUiStore((state) => state.updatePrompt);
@@ -57,7 +61,34 @@ function RootLayoutNav() {
     if (updatePrompt.upgradeUrl) {
       void Linking.openURL(updatePrompt.upgradeUrl);
     }
+    if (!updatePrompt.isRequired) {
+      hideUpdatePrompt();
+    }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const handle_link = async (url: string) => {
+      const result = await processIncomingLink(url);
+      if (!cancelled && result.accepted) {
+        router.replace('/scan');
+      }
+    };
+
+    void incoming_link_port.get_initial_url().then((url) => {
+      if (cancelled || !url) {
+        return;
+      }
+      void handle_link(url);
+    });
+    const unsubscribe = incoming_link_port.subscribe((url) => {
+      void handle_link(url);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [incoming_link_port, router]);
 
   return (
     <AppServicesProvider>
@@ -69,7 +100,10 @@ function RootLayoutNav() {
         <IncomingLinkReplacementDialog
           state={incomingLinkReplacement}
           on_keep_current={hideIncomingLinkReplacement}
-          on_replace_incoming={hideIncomingLinkReplacement}
+          on_replace_incoming={() => {
+            hideIncomingLinkReplacement();
+            router.replace('/scan');
+          }}
         />
         <UpdatePromptDialog state={updatePrompt} on_dismiss={hideUpdatePrompt} on_upgrade={openUpdateLink} />
       </ThemeProvider>
