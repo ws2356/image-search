@@ -45,13 +45,15 @@ export function useTransferScreenController(): TransferScreenController {
     void (async () => {
       try {
         await startTransfer();
+        set_running(false);
+        router.replace('/completed');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to start transfer.';
         set_running(false);
         set_last_error(message);
       }
     })();
-  }, [set_last_error, set_running]);
+  }, [router, set_last_error, set_running]);
 
   return {
     transfer_running,
