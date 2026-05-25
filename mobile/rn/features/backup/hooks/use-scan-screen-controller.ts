@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
-import { useCameraPermissions } from 'expo-camera';
 import { Platform } from 'react-native';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { PairingQRCodePayload } from '@/features/backup/pairing/models';
 import { PairingService } from '@/features/backup/services/pairing-service';
@@ -9,6 +8,7 @@ import { decode_pairing_link } from '@/features/backup/services/pairing-link-dec
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import type { LocalDeviceIdentitySummary } from '@/features/backup/session/models';
 import { DefaultPairingKeyDeriver } from '@/infrastructure/crypto/pairing-key-deriver';
+import { ExpoCameraQrScannerPort } from '@/infrastructure/system/qr-scanner-port';
 
 export interface ScanScreenController {
   camera_permission_granted: boolean;
@@ -21,11 +21,24 @@ export interface ScanScreenController {
 
 export function useScanScreenController(): ScanScreenController {
   const router = useRouter();
-  const [permission, requestPermission] = useCameraPermissions();
+  const qr_scanner_port = useMemo(() => new ExpoCameraQrScannerPort(), []);
+  const [camera_permission_granted, set_camera_permission_granted] = useState(false);
   const [is_claiming, set_is_claiming] = useState(false);
   const [scan_error, set_scan_error] = useState<string | null>(null);
 
-  const camera_permission_granted = permission?.granted ?? false;
+  useEffect(() => {
+    let cancelled = false;
+    const load_permission = async () => {
+      const snapshot = await qr_scanner_port.get_permission_snapshot();
+      if (!cancelled) {
+        set_camera_permission_granted(snapshot.granted);
+      }
+    };
+    void load_permission();
+    return () => {
+      cancelled = true;
+    };
+  }, [qr_scanner_port]);
 
   const resolve_identity = useCallback(() => {
     const store = useBackupSessionStore.getState();
@@ -118,7 +131,8 @@ export function useScanScreenController(): ScanScreenController {
   return {
     camera_permission_granted,
     request_camera_permission: async () => {
-      await requestPermission();
+      const snapshot = await qr_scanner_port.request_permission();
+      set_camera_permission_granted(snapshot.granted);
     },
     is_claiming,
     scan_error,

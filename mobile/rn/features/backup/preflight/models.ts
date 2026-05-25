@@ -4,6 +4,8 @@ import type { ErrorSummary } from '@/features/backup/shared/models';
 export interface PermissionSummary {
   mediaScope: PermissionScope;
   batteryPercentage: number | null;
+  isCharging: boolean;
+  lowBatteryWarningNeeded: boolean;
   removeAfterBackupEnabled: boolean;
 }
 
@@ -22,5 +24,7 @@ export type PreflightResult = PreflightResultSuccess | PreflightResultFailure;
 export const DEFAULT_PERMISSION_SUMMARY: PermissionSummary = {
   mediaScope: PermissionScope.Full,
   batteryPercentage: null,
+  isCharging: false,
+  lowBatteryWarningNeeded: false,
   removeAfterBackupEnabled: false,
 };
