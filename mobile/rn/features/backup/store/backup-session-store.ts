@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type {
   BackupSessionState,
+  HomeSummary,
   LocalDeviceIdentitySummary,
 } from '@/features/backup/session/models';
 import { DEFAULT_HOME_SUMMARY } from '@/features/backup/session/models';
@@ -17,6 +18,7 @@ import type { TransferProgressSnapshot } from '@/features/backup/transfer/models
 interface BackupSessionStoreState {
   session: BackupSessionState;
   setRoutePhase: (routePhase: BackupRoutePhase) => void;
+  setHomeSummary: (summary: Partial<HomeSummary>) => void;
   setPermissionSummary: (summary: PermissionSummary) => void;
   setPairingSession: (session: PairingSessionSummary | null) => void;
   setTrustedDesktop: (desktop: TrustedDesktopSummary | null) => void;
@@ -44,6 +46,16 @@ export const useBackupSessionStore = create<BackupSessionStoreState>((set) => ({
       session: {
         ...state.session,
         routePhase,
+      },
+    })),
+  setHomeSummary: (partial) =>
+    set((state) => ({
+      session: {
+        ...state.session,
+        homeSummary: {
+          ...state.session.homeSummary,
+          ...partial,
+        },
       },
     })),
   setPermissionSummary: (summary) =>
