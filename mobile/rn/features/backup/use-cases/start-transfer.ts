@@ -8,6 +8,12 @@ import { TransferFailureReason, TransferPipelineStage, TransferTransport } from 
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import type { TransferAssetSignature } from '@/features/backup/protocols/transfer';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
+import {
+  begin_transfer_abort_controller,
+  end_transfer_abort_controller,
+  is_transfer_abort_error,
+  transfer_abort_error,
+} from '@/features/backup/transfer/transfer-abort-controller';
 import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import {
@@ -70,6 +76,13 @@ export async function startTransfer(
   }
 ): Promise<void> {
   assert_transfer_not_live_in_phase4('startTransfer');
+  const transfer_abort_controller = begin_transfer_abort_controller();
+  const transfer_abort_signal = transfer_abort_controller.signal;
+  const throw_if_transfer_stopped = () => {
+    if (transfer_abort_signal.aborted) {
+      throw transfer_abort_error();
+    }
+  };
   const session = useBackupSessionStore.getState().session;
   if (!session.pairingSession?.sessionId || !session.pairingSession.endpointBaseUrl) {
     await deps.apply_command({
@@ -109,6 +122,7 @@ export async function startTransfer(
   let runtime_started = false;
 
   try {
+    throw_if_transfer_stopped();
     const trust_proof = await deps.trust_proof_signer.derive_trust_proof({
       purpose: 'capabilities.exchange',
       schema: 'dtis.mobile-capabilities.v1',
@@ -128,6 +142,7 @@ export async function startTransfer(
     if (exchange.status !== 'accepted') {
       throw new Error(exchange.message || 'Capability exchange rejected.');
     }
+    throw_if_transfer_stopped();
 
     const transfer_service = new TransferService({
       endpoint_base_url,
@@ -136,8 +151,10 @@ export async function startTransfer(
       trust_key_b64,
     });
     const assets = await deps.transfer_asset_source.enumerate_normalized(5000);
+    throw_if_transfer_stopped();
     const total_assets = assets.length;
-    await transfer_service.start(total_assets);
+    await transfer_service.start(total_assets, transfer_abort_signal);
+    throw_if_transfer_stopped();
     await begin_transfer_runtime_session(deps.transfer_runtime_wiring);
     runtime_started = true;
     await deps.apply_command({ type: 'startTransfer' });
@@ -172,7 +189,8 @@ export async function startTransfer(
 
     const matched_asset_ids = new Set<string>();
     if (signatures.length > 0) {
-      const existence = await transfer_service.check_existence(signatures);
+      const existence = await transfer_service.check_existence(signatures, transfer_abort_signal);
+      throw_if_transfer_stopped();
       for (const match of existence.matches ?? []) {
         matched_asset_ids.add(match.asset_id);
       }
@@ -198,6 +216,7 @@ export async function startTransfer(
     });
 
     for (const asset of assets) {
+      throw_if_transfer_stopped();
       if (matched_asset_ids.has(asset.asset_id)) {
         transferred_assets += 1;
       } else {
@@ -212,7 +231,8 @@ export async function startTransfer(
               asset.metadata,
               async (_offset, length) => chunk_reader.read_chunk(length),
               declared_size,
-              1024 * 1024
+              1024 * 1024,
+              transfer_abort_signal
             );
           } finally {
             chunk_reader.close();
@@ -257,12 +277,16 @@ export async function startTransfer(
       }),
     });
 
-    await transfer_service.complete(transferred_assets, failed_assets);
+    await transfer_service.complete(transferred_assets, failed_assets, transfer_abort_signal);
+    throw_if_transfer_stopped();
     await end_transfer_runtime_session(deps.transfer_runtime_wiring);
     runtime_started = false;
   } catch (error) {
     if (runtime_started) {
       await end_transfer_runtime_session(deps.transfer_runtime_wiring);
+    }
+    if (transfer_abort_signal.aborted || is_transfer_abort_error(error)) {
+      return;
     }
     const message = error instanceof Error ? error.message : 'Transfer failed unexpectedly.';
     await deps.apply_command({
@@ -277,5 +301,7 @@ export async function startTransfer(
       },
     });
     throw error;
+  } finally {
+    end_transfer_abort_controller(transfer_abort_controller);
   }
 }

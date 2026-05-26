@@ -36,7 +36,7 @@ export class TransferService {
     };
   }
 
-  async start(total_assets: number): Promise<TransferResponse> {
+  async start(total_assets: number, abort_signal?: AbortSignal): Promise<TransferResponse> {
     const trust_proof = await this.build_transfer_trust_proof('transfer.start');
     const request: Omit<TransferSessionRequest, 'schema'> = {
       session_id: this.context.session_id,
@@ -46,10 +46,10 @@ export class TransferService {
       transferred_count: 0,
       failed_count: 0,
     };
-    return this.deps.transfer_client.start(request);
+    return this.deps.transfer_client.start(request, abort_signal);
   }
 
-  async check_existence(assets: TransferAssetSignature[]): Promise<TransferResponse> {
+  async check_existence(assets: TransferAssetSignature[], abort_signal?: AbortSignal): Promise<TransferResponse> {
     const trust_proof = await this.build_transfer_trust_proof('transfer.existence');
     const request: Omit<TransferAssetExistenceRequest, 'schema'> = {
       session_id: this.context.session_id,
@@ -57,7 +57,7 @@ export class TransferService {
       trust_proof,
       assets,
     };
-    return this.deps.transfer_client.existence(request);
+    return this.deps.transfer_client.existence(request, abort_signal);
   }
 
   async upload_asset(
@@ -75,7 +75,8 @@ export class TransferService {
     metadata: Omit<TransferAssetMetadata, 'schema' | 'session_id' | 'device_uuid' | 'trust_proof'>,
     read_chunk: (offset: number, length: number) => Promise<Blob | Uint8Array>,
     total_size_bytes?: number,
-    chunk_size_bytes = 256 * 1024
+    chunk_size_bytes = 256 * 1024,
+    abort_signal?: AbortSignal
   ): Promise<TransferResponse> {
     const request_id = metadata.asset_id;
     const trust_proof = await this.build_transfer_trust_proof('transfer.asset');
@@ -86,10 +87,13 @@ export class TransferService {
       trust_proof,
       ...metadata,
     };
-    await this.deps.transfer_client.asset(full_metadata, request_id, 'start');
+    await this.deps.transfer_client.asset(full_metadata, request_id, 'start', undefined, abort_signal);
 
     let offset = 0;
     while (true) {
+      if (abort_signal?.aborted) {
+        throw new Error('Transfer stopped by user.');
+      }
       if (typeof total_size_bytes === 'number' && total_size_bytes >= 0 && offset >= total_size_bytes) {
         break;
       }
@@ -101,13 +105,16 @@ export class TransferService {
       if (chunk_length === 0) {
         break;
       }
-      await this.deps.transfer_client.asset(full_metadata, request_id, 'chunk', chunk);
+      await this.deps.transfer_client.asset(full_metadata, request_id, 'chunk', chunk, abort_signal);
       offset += chunk_length;
     }
-    return this.deps.transfer_client.asset(full_metadata, request_id, 'complete');
+    if (abort_signal?.aborted) {
+      throw new Error('Transfer stopped by user.');
+    }
+    return this.deps.transfer_client.asset(full_metadata, request_id, 'complete', undefined, abort_signal);
   }
 
-  async complete(transferred_count: number, failed_count: number): Promise<TransferResponse> {
+  async complete(transferred_count: number, failed_count: number, abort_signal?: AbortSignal): Promise<TransferResponse> {
     const trust_proof = await this.build_transfer_trust_proof('transfer.complete');
     const request: Omit<TransferCompleteRequest, 'schema'> = {
       session_id: this.context.session_id,
@@ -116,7 +123,7 @@ export class TransferService {
       transferred_count,
       failed_count,
     };
-    return this.deps.transfer_client.complete(request);
+    return this.deps.transfer_client.complete(request, abort_signal);
   }
 
   private async build_transfer_trust_proof(

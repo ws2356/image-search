@@ -19,15 +19,16 @@ function join_base_and_path(base_url: string, path: string): string {
 }
 
 export interface HttpTransferClient {
-  start(request: Omit<TransferSessionRequest, 'schema'>): Promise<TransferResponse>;
-  existence(request: Omit<TransferAssetExistenceRequest, 'schema'>): Promise<TransferResponse>;
+  start(request: Omit<TransferSessionRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse>;
+  existence(request: Omit<TransferAssetExistenceRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse>;
   asset(
     metadata: TransferAssetMetadata,
     request_id: string,
     stream_state: 'start' | 'chunk' | 'complete',
-    content?: Blob | Uint8Array
+    content?: Blob | Uint8Array,
+    abort_signal?: AbortSignal
   ): Promise<TransferResponse>;
-  complete(request: Omit<TransferCompleteRequest, 'schema'>): Promise<TransferResponse>;
+  complete(request: Omit<TransferCompleteRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse>;
 }
 
 export class DefaultHttpTransferClient implements HttpTransferClient {
@@ -48,9 +49,10 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
     );
   }
 
-  async start(request: Omit<TransferSessionRequest, 'schema'>): Promise<TransferResponse> {
+  async start(request: Omit<TransferSessionRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse> {
     const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_START_PATH), {
       method: 'POST',
+      signal: abort_signal,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         schema: MOBILE_TRANSFER_SCHEMA,
@@ -60,9 +62,13 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
     return this.parse_response(response, 'Transfer start request failed.');
   }
 
-  async existence(request: Omit<TransferAssetExistenceRequest, 'schema'>): Promise<TransferResponse> {
+  async existence(
+    request: Omit<TransferAssetExistenceRequest, 'schema'>,
+    abort_signal?: AbortSignal
+  ): Promise<TransferResponse> {
     const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_EXISTENCE_PATH), {
       method: 'POST',
+      signal: abort_signal,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         schema: MOBILE_TRANSFER_SCHEMA,
@@ -76,7 +82,8 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
     metadata: TransferAssetMetadata,
     request_id: string,
     stream_state: 'start' | 'chunk' | 'complete',
-    content?: Blob | Uint8Array
+    content?: Blob | Uint8Array,
+    abort_signal?: AbortSignal
   ): Promise<TransferResponse> {
     const url = new URL(join_base_and_path(this.base_url, MOBILE_TRANSFER_ASSET_PATH));
     url.searchParams.set('request_id', request_id);
@@ -88,12 +95,13 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
       if (!(content instanceof Uint8Array) && !this.is_blob_like(content)) {
         throw new Error('Transfer asset request failed: unsupported chunk content type.');
       }
-      return this.post_chunk_with_xhr(url.toString(), content);
+      return this.post_chunk_with_xhr(url.toString(), content, abort_signal);
     }
     const response = await this.fetch_impl(
       url.toString(),
       {
         method: 'POST',
+        signal: abort_signal,
         headers:
           stream_state === 'chunk'
             ? { 'content-type': 'application/octet-stream' }
@@ -109,15 +117,29 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
     return this.parse_response(response, 'Transfer asset request failed.');
   }
 
-  private async post_chunk_with_xhr(url: string, content: Blob | Uint8Array): Promise<TransferResponse> {
+  private async post_chunk_with_xhr(
+    url: string,
+    content: Blob | Uint8Array,
+    abort_signal?: AbortSignal
+  ): Promise<TransferResponse> {
     return new Promise<TransferResponse>((resolve, reject) => {
       const request = new XMLHttpRequest();
+      if (abort_signal?.aborted) {
+        reject(new Error('Transfer stopped by user.'));
+        return;
+      }
       request.open('POST', url);
       request.setRequestHeader('content-type', 'application/octet-stream');
+      const on_abort = () => {
+        request.abort();
+        reject(new Error('Transfer stopped by user.'));
+      };
+      abort_signal?.addEventListener('abort', on_abort, { once: true });
       request.onreadystatechange = () => {
         if (request.readyState !== XMLHttpRequest.DONE) {
           return;
         }
+        abort_signal?.removeEventListener('abort', on_abort);
         const raw_response = request.responseText || '';
         let payload: TransferResponse;
         try {
@@ -132,14 +154,18 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
         }
         reject(new Error(payload.message || `Transfer asset request failed. Status=${request.status}.`));
       };
-      request.onerror = () => reject(new Error('Transfer asset request failed due to a network transport error.'));
+      request.onerror = () => {
+        abort_signal?.removeEventListener('abort', on_abort);
+        reject(new Error('Transfer asset request failed due to a network transport error.'));
+      };
       request.send(content as unknown as BodyInit);
     });
   }
 
-  async complete(request: Omit<TransferCompleteRequest, 'schema'>): Promise<TransferResponse> {
+  async complete(request: Omit<TransferCompleteRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse> {
     const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_COMPLETE_PATH), {
       method: 'POST',
+      signal: abort_signal,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         schema: MOBILE_TRANSFER_SCHEMA,

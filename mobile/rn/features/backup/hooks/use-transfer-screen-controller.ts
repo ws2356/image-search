@@ -9,6 +9,10 @@ import { apply_backup_command } from '@/features/backup/state/backup-flow-transi
 import { create_default_app_awake_policy } from '@/infrastructure/system/app-awake-policy';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import { PermissionScope } from '@/features/backup/preflight/enums';
+import {
+  is_transfer_abort_error,
+} from '@/features/backup/transfer/transfer-abort-controller';
+import { returnHome } from '@/features/backup/use-cases/return-home';
 
 export interface TransferScreenController {
   transfer_running: boolean;
@@ -53,6 +57,10 @@ export function useTransferScreenController(): TransferScreenController {
         set_running(false);
         router.replace('/completed');
       } catch (error) {
+        if (is_transfer_abort_error(error)) {
+          set_running(false);
+          return;
+        }
         const message = error instanceof Error ? error.message : 'Failed to start transfer.';
         set_running(false);
         set_last_error(message);
@@ -69,7 +77,9 @@ export function useTransferScreenController(): TransferScreenController {
       try {
         await stopTransfer();
         set_running(false);
-        router.push('/');
+        set_last_error(null);
+        await returnHome();
+        router.replace('/');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to stop transfer.';
         set_last_error(message);
