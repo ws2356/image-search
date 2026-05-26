@@ -5,13 +5,6 @@ import { TransferPipelineStage } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import { Pressable, ScrollView, Text, View } from '@/src/tw';
 
-const STAGE_LABELS: Record<TransferPipelineStage, string> = {
-  [TransferPipelineStage.Enumerating]: 'Scanning library…',
-  [TransferPipelineStage.ExistingCheck]: 'Checking existing files…',
-  [TransferPipelineStage.Transferring]: 'Transferring…',
-  [TransferPipelineStage.Completing]: 'Finishing up…',
-};
-
 export function TransferScreen() {
   const controller = useTransferScreenController();
   const snapshot = controller.transfer_snapshot;
@@ -100,7 +93,6 @@ function TransferProgressRing({ snapshot }: { snapshot: TransferProgressSnapshot
   const progress = total > 0 ? Math.min(1, sent / total) : 0;
   const progress_percent = Math.round(progress * 100);
   const speed_text = format_speed(snapshot?.bytesPerSecond ?? 0);
-  const stage_label = snapshot ? (STAGE_LABELS[snapshot.pipelineStage] ?? snapshot.pipelineStage) : 'Preparing…';
 
   return (
     <View className="items-center gap-3">
@@ -130,9 +122,6 @@ function TransferProgressRing({ snapshot }: { snapshot: TransferProgressSnapshot
           </Text>
         </View>
       </View>
-      <Text selectable className="text-subhead text-app-text">
-        {stage_label}
-      </Text>
     </View>
   );
 }
