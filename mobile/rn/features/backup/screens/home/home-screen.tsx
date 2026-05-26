@@ -1,8 +1,6 @@
-import { Pressable, ScrollView, View } from 'react-native';
-
-import { Text } from '@/components/Themed';
 import { useHomeScreenController } from '@/features/backup/hooks/use-home-screen-controller';
 import { PermissionScope } from '@/features/backup/preflight/enums';
+import { Pressable, ScrollView, Text, View } from '@/src/tw';
 
 const SETUP_STEPS = [
   {
@@ -31,7 +29,9 @@ export function HomeScreen() {
   const controller = useHomeScreenController();
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingVertical: 16 }}>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerClassName="py-4">
       {controller.has_session_history ? (
         <ReturningHomeContent controller={controller} />
       ) : (
@@ -43,12 +43,15 @@ export function HomeScreen() {
 
 function FirstTimeHomeContent({ controller }: { controller: ReturnType<typeof useHomeScreenController> }) {
   return (
-    <View style={{ gap: 24, paddingHorizontal: 20 }}>
+    <View className="gap-6 px-5">
       <HomeHeroSection />
       <HomeSetupSection />
       <HomePrimaryActionButton onPress={controller.start_backup} />
       {controller.permission_scope !== PermissionScope.Full && (
-        <HomeWarningBanner title="Backup may be incomplete" message={permission_warning_detail(controller.permission_scope)} />
+        <HomeWarningBanner
+          title="Backup may be incomplete"
+          message={permission_warning_detail(controller.permission_scope)}
+        />
       )}
     </View>
   );
@@ -59,19 +62,16 @@ function ReturningHomeContent({ controller }: { controller: ReturnType<typeof us
     <View>
       <Text
         selectable
-        style={{
-          fontSize: 34,
-          fontWeight: '700',
-          color: '#1C1C1E',
-          letterSpacing: -0.5,
-          paddingHorizontal: 20,
-          paddingTop: 4,
-        }}>
+        className="text-largetitle font-bold text-app-text tracking-tight px-5 pt-1">
         {controller.desktop_name ?? ''}
       </Text>
-      <View style={{ gap: 12, paddingHorizontal: 20, paddingTop: 16 }}>
-        {controller.interruption_warning ? <HomeInterruptionBanner message={controller.interruption_warning} /> : null}
-        {controller.last_backup_description ? <HomeStatsCard last_backup_description={controller.last_backup_description} /> : null}
+      <View className="gap-3 px-5 pt-4">
+        {controller.interruption_warning
+          ? <HomeInterruptionBanner message={controller.interruption_warning} />
+          : null}
+        {controller.last_backup_description
+          ? <HomeStatsCard last_backup_description={controller.last_backup_description} />
+          : null}
         <HomePrimaryActionButton onPress={controller.start_backup} />
         <HomeUSBHintBanner />
         {controller.permission_scope !== PermissionScope.Full && (
@@ -87,25 +87,18 @@ function ReturningHomeContent({ controller }: { controller: ReturnType<typeof us
 
 function HomeHeroSection() {
   return (
-    <View style={{ alignItems: 'center', gap: 12, paddingTop: 8 }}>
-      <View
-        style={{
-          width: 88,
-          height: 88,
-          borderRadius: 22,
-          backgroundColor: '#0A84FF',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-        <Text selectable style={{ color: '#fff', fontSize: 40 }}>
-          🖼️
-        </Text>
+    <View className="items-center gap-3 pt-2">
+      {/* App icon */}
+      <View className="w-22 h-22 rounded-[22px] bg-app-brand items-center justify-center">
+        <Text selectable className="text-[40px]">🖼️</Text>
       </View>
-      <Text selectable style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E' }}>
+
+      <Text selectable className="text-[26px] font-bold text-app-text">
         AuBackup
       </Text>
-      <Text selectable style={{ fontSize: 14, color: '#6E6E73', textAlign: 'center', lineHeight: 20 }}>
-        Back up your photos & videos to your PC securely over Wi-Fi or USB or both
+
+      <Text selectable className="text-footnote text-app-text-2 text-center leading-5">
+        Back up your photos &amp; videos to your PC securely over Wi-Fi or USB or both
       </Text>
     </View>
   );
@@ -113,45 +106,43 @@ function HomeHeroSection() {
 
 function HomeSetupSection() {
   return (
-    <View style={{ gap: 6 }}>
-      <Text selectable style={{ fontSize: 13, fontWeight: '600', color: '#6E6E73', letterSpacing: 0.5 }}>
+    <View className="gap-1.5">
+      <Text selectable className="text-footnote font-semibold text-app-text-2 tracking-wide">
         START ON YOUR PC FIRST
       </Text>
-      <View style={{ backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden' }}>
+
+      <View className="bg-app-surface-card rounded-[14px] overflow-hidden">
         {SETUP_STEPS.map((step, index) => (
           <View key={step.id}>
-            <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 13 }}>
-              <View
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: '#007AFF',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                <Text selectable style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>
+            <View className="flex-row gap-3 px-4 py-3.5">
+              {/* Step badge */}
+              <View className="w-7 h-7 rounded-full bg-app-brand items-center justify-center shrink-0">
+                <Text selectable className="text-app-brand-text text-footnote font-bold">
                   {step.number}
                 </Text>
               </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text selectable style={{ fontSize: 15, fontWeight: '600', color: '#1C1C1E' }}>
+
+              <View className="flex-1 gap-[3px]">
+                <Text selectable className="text-subhead font-semibold text-app-text">
                   {step.title}
                 </Text>
                 {'detailLink' in step ? (
-                  <Text selectable style={{ fontSize: 13, color: '#6E6E73', lineHeight: 18 }}>
-                    <Text style={{ color: '#6E6E73' }}>{step.detailPrefix}</Text>
-                    <Text style={{ color: '#007AFF' }}>{step.detailLink}</Text>
-                    <Text style={{ color: '#6E6E73' }}>{step.detailSuffix}</Text>
+                  <Text selectable className="text-footnote text-app-text-2 leading-[18px]">
+                    <Text className="text-app-text-2">{step.detailPrefix}</Text>
+                    <Text className="text-app-brand">{step.detailLink}</Text>
+                    <Text className="text-app-text-2">{step.detailSuffix}</Text>
                   </Text>
                 ) : (
-                  <Text selectable style={{ fontSize: 13, color: '#6E6E73', lineHeight: 18 }}>
+                  <Text selectable className="text-footnote text-app-text-2 leading-[18px]">
                     {step.detail}
                   </Text>
                 )}
               </View>
             </View>
-            {index < SETUP_STEPS.length - 1 ? <View style={{ marginLeft: 56, height: 1, backgroundColor: '#E5E5EA' }} /> : null}
+
+            {index < SETUP_STEPS.length - 1
+              ? <View className="ml-14 h-px bg-app-separator" />
+              : null}
           </View>
         ))}
       </View>
@@ -161,11 +152,11 @@ function HomeSetupSection() {
 
 function HomeStatsCard({ last_backup_description }: { last_backup_description: string }) {
   return (
-    <View style={{ backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, gap: 2 }}>
-      <Text selectable style={{ fontSize: 17, color: '#1C1C1E' }}>
+    <View className="bg-app-surface-card rounded-[14px] px-4 py-3.5 gap-0.5">
+      <Text selectable className="text-body text-app-text">
         Last backup
       </Text>
-      <Text selectable style={{ fontSize: 14, color: '#6E6E73' }}>
+      <Text selectable className="text-footnote text-app-text-2">
         {last_backup_description}
       </Text>
     </View>
@@ -174,11 +165,11 @@ function HomeStatsCard({ last_backup_description }: { last_backup_description: s
 
 function HomeInterruptionBanner({ message }: { message: string }) {
   return (
-    <View style={{ backgroundColor: '#FFF3CD', borderRadius: 12, padding: 12, gap: 3 }}>
-      <Text selectable style={{ fontSize: 14, fontWeight: '600', color: '#1C1C1E' }}>
+    <View className="bg-app-warning-bg rounded-banner p-3 gap-[3px]">
+      <Text selectable className="text-footnote font-semibold text-app-warning-text">
         ⚠️ Backup was interrupted
       </Text>
-      <Text selectable style={{ fontSize: 13, color: '#555555', lineHeight: 18 }}>
+      <Text selectable className="text-footnote text-app-warning-text leading-[18px]">
         {message}
       </Text>
     </View>
@@ -187,8 +178,8 @@ function HomeInterruptionBanner({ message }: { message: string }) {
 
 function HomeUSBHintBanner() {
   return (
-    <View style={{ backgroundColor: '#EEF2FF', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 }}>
-      <Text selectable style={{ fontSize: 13, color: '#3B5FC0', lineHeight: 18 }}>
+    <View className="bg-app-info-bg rounded-chip px-3.5 py-2.5">
+      <Text selectable className="text-footnote text-app-info-text leading-[18px]">
         USB backups can be up to 5× faster than Wi-Fi. Plug in anytime—AuBackup will switch to USB automatically.
       </Text>
     </View>
@@ -197,11 +188,11 @@ function HomeUSBHintBanner() {
 
 function HomeWarningBanner({ title, message }: { title: string; message: string }) {
   return (
-    <View style={{ backgroundColor: '#FFF3CD', borderRadius: 12, padding: 14, gap: 4 }}>
-      <Text selectable style={{ fontSize: 14, fontWeight: '600', color: '#1C1C1E' }}>
+    <View className="bg-app-warning-bg rounded-banner p-3.5 gap-1">
+      <Text selectable className="text-footnote font-semibold text-app-warning-text">
         ⚠️ {title}
       </Text>
-      <Text selectable style={{ fontSize: 13, color: '#6E6E73', lineHeight: 18 }}>
+      <Text selectable className="text-footnote text-app-text-2 leading-[18px]">
         {message}
       </Text>
     </View>
@@ -212,14 +203,8 @@ function HomePrimaryActionButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      style={{
-        borderRadius: 14,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        backgroundColor: '#0A84FF',
-        alignItems: 'center',
-      }}>
-      <Text selectable style={{ color: '#fff', fontWeight: '600', fontSize: 17 }}>
+      className="rounded-[14px] px-4 py-4 bg-app-brand items-center">
+      <Text selectable className="text-app-brand-text font-semibold text-body">
         Scan QR Code
       </Text>
     </Pressable>

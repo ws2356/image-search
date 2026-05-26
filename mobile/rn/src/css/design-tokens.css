@@ -1,0 +1,75 @@
+/*
+ * App-level design tokens built on top of SF semantic colors.
+ * Use these tokens in components instead of raw SF or hex values —
+ * they encode intent (brand, warning, info) rather than raw system names.
+ */
+
+:root {
+  /* ── Brand ────────────────────────────────────────────────────────────── */
+  --app-brand:        var(--sf-blue);
+  --app-brand-text:   rgb(255 255 255);
+
+  /* ── Surface hierarchy ────────────────────────────────────────────────── */
+  --app-surface:      var(--sf-bg);        /* primary screen background    */
+  --app-surface-2:    var(--sf-bg-2);      /* grouped / secondary surface  */
+  --app-surface-card: var(--sf-bg-3);      /* card / elevated surface      */
+
+  /* ── Text hierarchy ───────────────────────────────────────────────────── */
+  --app-text:         var(--sf-text);
+  --app-text-2:       var(--sf-text-2);
+  --app-text-3:       var(--sf-text-3);
+
+  /* ── Status: warning ─────────────────────────────────────────────────── */
+  --app-warning-bg:   light-dark(rgb(255 243 205), rgb(66 50 10));
+  --app-warning-text: light-dark(rgb(28 28 30),    rgb(255 214 10));
+
+  /* ── Status: info ────────────────────────────────────────────────────── */
+  --app-info-bg:      light-dark(rgb(238 242 255), rgb(16 26 66));
+  --app-info-text:    light-dark(rgb(59 95 192),   rgb(138 158 255));
+
+  /* ── Separator ───────────────────────────────────────────────────────── */
+  --app-separator:    var(--sf-separator-opaque);
+}
+
+/* ── Register as Tailwind theme colors ───────────────────────────────────── */
+@layer theme {
+  @theme {
+    --color-app-brand:        var(--app-brand);
+    --color-app-brand-text:   var(--app-brand-text);
+
+    --color-app-surface:      var(--app-surface);
+    --color-app-surface-2:    var(--app-surface-2);
+    --color-app-surface-card: var(--app-surface-card);
+
+    --color-app-text:         var(--app-text);
+    --color-app-text-2:       var(--app-text-2);
+    --color-app-text-3:       var(--app-text-3);
+
+    --color-app-warning-bg:   var(--app-warning-bg);
+    --color-app-warning-text: var(--app-warning-text);
+
+    --color-app-info-bg:      var(--app-info-bg);
+    --color-app-info-text:    var(--app-info-text);
+
+    --color-app-separator:    var(--app-separator);
+
+    /* ── Typography scale (matches iOS HIG) ──────────────────────────── */
+    --text-caption2: 11px;
+    --text-caption1: 12px;
+    --text-footnote: 13px;
+    --text-subhead:  15px;
+    --text-callout:  16px;
+    --text-body:     17px;
+    --text-headline: 17px;
+    --text-title3:   20px;
+    --text-title2:   22px;
+    --text-title1:   28px;
+    --text-largetitle: 34px;
+
+    /* ── Custom border-radius ────────────────────────────────────────── */
+    --radius-card: 14px;
+    --radius-badge: 14px;
+    --radius-banner: 12px;
+    --radius-chip: 10px;
+  }
+}

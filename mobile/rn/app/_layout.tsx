@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo } from 'react';
 import 'react-native-reanimated';
+import '@/src/global.css';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { IncomingLinkReplacementDialog } from '@/features/backup/components/incoming-link-replacement-dialog';
