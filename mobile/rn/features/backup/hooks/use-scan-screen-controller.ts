@@ -12,6 +12,7 @@ import { ExpoCameraQrScannerPort } from '@/infrastructure/system/qr-scanner-port
 
 export interface ScanScreenController {
   camera_permission_granted: boolean;
+  camera_permission_can_ask_again: boolean;
   request_camera_permission: () => Promise<void>;
   is_claiming: boolean;
   scan_error: string | null;
@@ -24,6 +25,7 @@ export function useScanScreenController(): ScanScreenController {
   const router = useRouter();
   const qr_scanner_port = useMemo(() => new ExpoCameraQrScannerPort(), []);
   const [camera_permission_granted, set_camera_permission_granted] = useState(false);
+  const [camera_permission_can_ask_again, set_camera_permission_can_ask_again] = useState(true);
   const [is_claiming, set_is_claiming] = useState(false);
   const is_claiming_ref = useRef(false);
   const [scan_error, set_scan_error] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export function useScanScreenController(): ScanScreenController {
       const snapshot = await qr_scanner_port.get_permission_snapshot();
       if (!cancelled) {
         set_camera_permission_granted(snapshot.granted);
+        set_camera_permission_can_ask_again(snapshot.canAskAgain);
       }
     };
     void load_permission();
@@ -139,9 +142,11 @@ export function useScanScreenController(): ScanScreenController {
 
   return {
     camera_permission_granted,
+    camera_permission_can_ask_again,
     request_camera_permission: async () => {
       const snapshot = await qr_scanner_port.request_permission();
       set_camera_permission_granted(snapshot.granted);
+      set_camera_permission_can_ask_again(snapshot.canAskAgain);
     },
     is_claiming,
     scan_error,
