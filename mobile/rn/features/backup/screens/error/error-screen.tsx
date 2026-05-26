@@ -1,7 +1,5 @@
-import { Pressable, ScrollView, View } from 'react-native';
-
-import { Text } from '@/components/Themed';
 import { useErrorScreenController } from '@/features/backup/hooks/use-error-screen-controller';
+import { Pressable, ScrollView, Text, View } from '@/src/tw';
 
 export function ErrorScreen() {
   const controller = useErrorScreenController();
@@ -9,53 +7,41 @@ export function ErrorScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 20, gap: 20 }}>
-      <View style={{ alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      contentContainerClassName="px-5 py-4 gap-6">
+      <View className="items-center gap-3.5">
         <View
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: 36,
-            backgroundColor: '#FF453A',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-          <Text selectable style={{ fontSize: 32, color: '#fff' }}>
+          className="w-22 h-22 rounded-[22px] items-center justify-center"
+          style={{ backgroundColor: '#FF453A' }}>
+          <Text selectable style={{ fontSize: 34, color: '#FFFFFF' }}>
             ⚠
           </Text>
         </View>
-        <Text selectable style={{ fontSize: 28, fontWeight: '700', color: '#1C1C1E', textAlign: 'center' }}>
+        <Text selectable className="text-[28px] font-bold text-app-text text-center">
           {controller.error_title}
         </Text>
-        <Text selectable style={{ fontSize: 15, color: '#6E6E73', textAlign: 'center', lineHeight: 22 }}>
+        <Text selectable className="text-subhead text-app-text-2 text-center leading-[22px]">
           {controller.error_message}
         </Text>
       </View>
 
       <Pressable
         onPress={controller.retry_scan}
-        style={{
-          borderRadius: 14,
-          paddingHorizontal: 16,
-          paddingVertical: 16,
-          backgroundColor: '#0A84FF',
-          alignItems: 'center',
-        }}>
-        <Text selectable style={{ color: '#ffffff', fontWeight: '600', fontSize: 17 }}>
-          ↺  Try Again
+        className="rounded-[14px] px-4 py-4 bg-app-brand items-center flex-row justify-center gap-1.5">
+        <Text selectable className="text-app-brand-text text-body font-semibold">
+          ↺
+        </Text>
+        <Text selectable className="text-app-brand-text text-body font-semibold">
+          Try Again
         </Text>
       </Pressable>
 
       <Pressable
         onPress={controller.return_home}
-        style={{
-          borderRadius: 14,
-          paddingHorizontal: 16,
-          paddingVertical: 16,
-          backgroundColor: '#F2F2F7',
-          alignItems: 'center',
-        }}>
-        <Text selectable style={{ color: '#1C1C1E', fontWeight: '600', fontSize: 17 }}>
+        className="rounded-[14px] px-4 py-4 bg-app-surface-2 items-center flex-row justify-center gap-1.5">
+        <Text selectable className="text-body font-semibold text-app-text">
+          🏠
+        </Text>
+        <Text selectable className="text-body font-semibold text-app-text">
           Back to Home
         </Text>
       </Pressable>
