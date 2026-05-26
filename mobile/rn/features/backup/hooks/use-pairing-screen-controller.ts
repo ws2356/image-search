@@ -10,6 +10,8 @@ import { apply_backup_command } from '@/features/backup/state/backup-flow-transi
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import type { LocalDeviceIdentitySummary } from '@/features/backup/session/models';
 
+const PAIRING_MISMATCH_TIMEOUT_MS = 15 * 60 * 1000;
+
 export interface PairingScreenController {
   pairing_status_label: string;
   live_pairing_enabled: boolean;
@@ -54,6 +56,7 @@ export function usePairingScreenController(): PairingScreenController {
     let cancelled = false;
     let has_finished = false;
     let poll_timer: ReturnType<typeof setInterval> | null = null;
+    let mismatch_started_at_ms: number | null = null;
 
     const finish = () => {
       has_finished = true;
@@ -109,7 +112,6 @@ export function usePairingScreenController(): PairingScreenController {
 
     const is_pairing_failure_state = (backup_state: string) =>
       backup_state === 'pairing_expired'
-      || backup_state === 'pairing_mismatched'
       || backup_state === 'pairing_stopped';
 
     const run_pairing = async () => {
@@ -149,6 +151,28 @@ export function usePairingScreenController(): PairingScreenController {
         if (cancelled || has_finished) {
           return true;
         }
+        if (response.backup_state !== 'pairing_mismatched') {
+          mismatch_started_at_ms = null;
+        }
+
+        if (response.backup_state === 'pairing_mismatched') {
+          if (mismatch_started_at_ms == null) {
+            mismatch_started_at_ms = Date.now();
+          }
+          const elapsed_ms = Date.now() - mismatch_started_at_ms;
+          if (elapsed_ms >= PAIRING_MISMATCH_TIMEOUT_MS) {
+            await fail_pairing(
+              'Pairing mismatch was not resolved on desktop within 15 minutes. Please restart pairing.'
+            );
+            return true;
+          }
+          set_pairing_status_label(
+            response.message
+            || 'Pairing mismatch detected on desktop. Waiting for desktop to resolve mismatch…'
+          );
+          return false;
+        }
+
         set_pairing_status_label(response.message || `Pairing status: ${response.backup_state}`);
         if (response.backup_state === 'pairing_completed') {
           await complete_pairing(
