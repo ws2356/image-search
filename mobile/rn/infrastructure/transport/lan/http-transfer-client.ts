@@ -88,11 +88,6 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
       if (!(content instanceof Uint8Array) && !this.is_blob_like(content)) {
         throw new Error('Transfer asset request failed: unsupported chunk content type.');
       }
-      console.log('[Transfer][HttpChunk]', {
-        request_id,
-        content_size: content instanceof Uint8Array ? content.length : content.size,
-        content_ctor: (content as unknown as { constructor?: { name?: string } }).constructor?.name ?? 'unknown',
-      });
       return this.post_chunk_with_xhr(url.toString(), content);
     }
     const response = await this.fetch_impl(

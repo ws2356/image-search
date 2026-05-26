@@ -16,9 +16,12 @@ export interface MediaAssetDescriptor {
 
 export interface MediaLibraryGateway {
   enumerate_transfer_candidates(batch_size: number): Promise<MediaAssetDescriptor[]>;
-  read_asset_content(asset_id: string): Promise<Uint8Array>;
-  read_asset_content_blob_chunk(asset_id: string, offset: number, length: number): Promise<Blob>;
-  read_asset_content_chunk(asset_id: string, offset: number, length: number): Promise<Uint8Array>;
+  open_asset_chunk_reader(asset_id: string, offset?: number): Promise<MediaAssetChunkReader>;
+}
+
+export interface MediaAssetChunkReader {
+  read_chunk(length: number): Uint8Array;
+  close(): void;
 }
 
 function media_type_to_string(media_type: MediaLibrary.MediaType | string | undefined): string | undefined {
@@ -37,15 +40,6 @@ function to_iso_from_millis(millis: number | undefined): string | undefined {
   }
   const epoch_millis = millis < 10_000_000_000 ? millis * 1000 : millis;
   return new Date(epoch_millis).toISOString();
-}
-
-async function fetch_asset_bytes(asset_uri: string): Promise<Uint8Array> {
-  const response = await fetch(asset_uri);
-  if (!response.ok) {
-    throw new Error(`Failed to read media content from ${asset_uri}.`);
-  }
-  const buffer = await response.arrayBuffer();
-  return new Uint8Array(buffer);
 }
 
 export class ExpoMediaLibraryGateway implements MediaLibraryGateway {
@@ -115,59 +109,25 @@ export class ExpoMediaLibraryGateway implements MediaLibraryGateway {
     return descriptors;
   }
 
-  async read_asset_content(asset_id: string): Promise<Uint8Array> {
+  async open_asset_chunk_reader(asset_id: string, offset = 0): Promise<MediaAssetChunkReader> {
     const uri = await this.resolve_asset_uri(asset_id);
-    return fetch_asset_bytes(uri);
-  }
-
-  async read_asset_content_chunk(asset_id: string, offset: number, length: number): Promise<Uint8Array> {
-    const uri = await this.resolve_asset_uri(asset_id);
-    const file = new File(uri);
-    const safe_offset = Math.max(0, offset);
-    const safe_end = Math.max(safe_offset, safe_offset + Math.max(0, length));
-    const read_length = Math.max(0, safe_end - safe_offset);
     try {
+      const file = new File(uri);
       const handle = file.open(FileMode.ReadOnly);
-      try {
-        handle.offset = safe_offset;
-        const chunk = handle.readBytes(read_length);
-        console.log('[Transfer][MediaChunk]', {
-          asset_id,
-          uri_scheme: uri.split(':', 1)[0] ?? 'unknown',
-          offset: safe_offset,
-          end: safe_end,
-          chunk_size: chunk.length,
-          chunk_ctor: (chunk as unknown as { constructor?: { name?: string } }).constructor?.name ?? 'unknown',
-        });
-        return chunk;
-      } finally {
-        handle.close();
-      }
+      handle.offset = Math.max(0, offset);
+      return {
+        read_chunk: (length: number) => {
+          const safe_length = Math.max(0, length);
+          return handle.readBytes(safe_length);
+        },
+        close: () => handle.close(),
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed creating media chunk for asset ${asset_id} (uri=${uri}, offset=${safe_offset}, end=${safe_end}): ${message}`
-      );
+      throw new Error(`Failed opening media chunk reader for asset ${asset_id} (uri=${uri}): ${message}`);
     }
   }
 
-  async read_asset_content_blob_chunk(asset_id: string, offset: number, length: number): Promise<Blob> {
-    const chunk = await this.read_asset_content_chunk(asset_id, offset, length);
-    try {
-      return new Blob([chunk]);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.log('[Transfer][MediaChunk]', {
-        asset_id,
-        offset,
-        end: offset + length,
-        chunk_size: chunk.length,
-        chunk_ctor: (chunk as unknown as { constructor?: { name?: string } }).constructor?.name ?? 'unknown',
-        blob_wrap_error: message,
-      });
-      throw new Error(`Failed wrapping media chunk into Blob for asset ${asset_id}: ${message}`);
-    }
-  }
 }
 
 export class StubMediaLibraryGateway implements MediaLibraryGateway {
@@ -175,17 +135,13 @@ export class StubMediaLibraryGateway implements MediaLibraryGateway {
     return [];
   }
 
-  async read_asset_content(asset_id: string): Promise<Uint8Array> {
-    throw new Error(`Media library stub cannot load content for asset_id=${asset_id}.`);
+  async open_asset_chunk_reader(_asset_id: string, _offset = 0): Promise<MediaAssetChunkReader> {
+    return {
+      read_chunk: (_length: number) => new Uint8Array(),
+      close: () => {},
+    };
   }
 
-  async read_asset_content_chunk(_asset_id: string, _offset: number, _length: number): Promise<Uint8Array> {
-    return new Uint8Array();
-  }
-
-  async read_asset_content_blob_chunk(_asset_id: string, _offset: number, _length: number): Promise<Blob> {
-    return new Blob();
-  }
 }
 
 export function create_default_media_library_gateway(): MediaLibraryGateway {

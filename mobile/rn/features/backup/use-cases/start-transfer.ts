@@ -206,11 +206,17 @@ export async function startTransfer(
             typeof asset.metadata.file_size_bytes === 'number' && asset.metadata.file_size_bytes > 0
               ? asset.metadata.file_size_bytes
               : undefined;
-          await transfer_service.upload_asset_chunked(
-            asset.metadata,
-            (offset, length) => deps.transfer_asset_source.read_asset_chunk(asset.asset_id, offset, length),
-            declared_size
-          );
+          const chunk_reader = await deps.transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
+          try {
+            await transfer_service.upload_asset_chunked(
+              asset.metadata,
+              async (_offset, length) => chunk_reader.read_chunk(length),
+              declared_size,
+              1024 * 1024
+            );
+          } finally {
+            chunk_reader.close();
+          }
           if (typeof declared_size === 'number') {
             bytes_uploaded += declared_size;
           }
@@ -218,11 +224,6 @@ export async function startTransfer(
         } catch (error) {
           failed_assets += 1;
           const message = error instanceof Error ? error.message : 'Unknown upload error.';
-          console.log('[Transfer][AssetFailure]', {
-            asset_id: asset.asset_id,
-            message,
-            stack: error instanceof Error ? error.stack : undefined,
-          });
           throw new Error(`Failed uploading asset ${asset.asset_id}: ${message}`);
         }
       }
