@@ -1,28 +1,17 @@
 /* Entry point for the design system.
  * Import this file once in the app root (_layout.tsx).
+ *
+ * NOTE: tailwindcss/preflight.css is intentionally excluded — it targets
+ * browser/web resets (font-variation-settings, box-sizing, etc.) that are
+ * not applicable in React Native and cause lightningcss parse errors.
  */
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/theme.css";
 @import "tailwindcss/utilities.css";
 
 @import "./css/sf.css";
 @import "./css/design-tokens.css";
 
-/* ── Platform-specific font families ─────────────────────────────────────── */
-@media android {
-  :root {
-    --font-mono:    monospace;
-    --font-rounded: normal;
-    --font-serif:   serif;
-    --font-sans:    normal;
-  }
-}
-
-@media ios {
-  :root {
-    --font-mono:    ui-monospace;
-    --font-serif:   ui-serif;
-    --font-sans:    system-ui;
-    --font-rounded: ui-rounded;
-  }
-}
+/* ── React Native compatibility fixes ────────────────────────────────────── */
+/* Tailwind v4 uses calc(infinity * 1px) for rounded-full, which lightningcss
+ * (used by react-native-css) can't parse. Use rounded-circle from design
+ * tokens instead of rounded-full in all React Native components. */

@@ -2,74 +2,57 @@
  * App-level design tokens built on top of SF semantic colors.
  * Use these tokens in components instead of raw SF or hex values —
  * they encode intent (brand, warning, info) rather than raw system names.
+ *
+ * react-native-css/lightningcss currently crashes on @theme token aliases
+ * that use var(--foo). Keep app tokens as concrete values.
  */
-
-:root {
-  /* ── Brand ────────────────────────────────────────────────────────────── */
-  --app-brand:        var(--sf-blue);
-  --app-brand-text:   rgb(255 255 255);
-
-  /* ── Surface hierarchy ────────────────────────────────────────────────── */
-  --app-surface:      var(--sf-bg);        /* primary screen background    */
-  --app-surface-2:    var(--sf-bg-2);      /* grouped / secondary surface  */
-  --app-surface-card: var(--sf-bg-3);      /* card / elevated surface      */
-
-  /* ── Text hierarchy ───────────────────────────────────────────────────── */
-  --app-text:         var(--sf-text);
-  --app-text-2:       var(--sf-text-2);
-  --app-text-3:       var(--sf-text-3);
-
-  /* ── Status: warning ─────────────────────────────────────────────────── */
-  --app-warning-bg:   light-dark(rgb(255 243 205), rgb(66 50 10));
-  --app-warning-text: light-dark(rgb(28 28 30),    rgb(255 214 10));
-
-  /* ── Status: info ────────────────────────────────────────────────────── */
-  --app-info-bg:      light-dark(rgb(238 242 255), rgb(16 26 66));
-  --app-info-text:    light-dark(rgb(59 95 192),   rgb(138 158 255));
-
-  /* ── Separator ───────────────────────────────────────────────────────── */
-  --app-separator:    var(--sf-separator-opaque);
-}
 
 /* ── Register as Tailwind theme colors ───────────────────────────────────── */
 @layer theme {
   @theme {
-    --color-app-brand:        var(--app-brand);
-    --color-app-brand-text:   var(--app-brand-text);
+    /* ── Brand ──────────────────────────────────────────────────────────── */
+    --color-app-brand:        rgb(0 122 255);
+    --color-app-brand-text:   rgb(255 255 255);
 
-    --color-app-surface:      var(--app-surface);
-    --color-app-surface-2:    var(--app-surface-2);
-    --color-app-surface-card: var(--app-surface-card);
+    /* ── Surface hierarchy ───────────────────────────────────────────────── */
+    --color-app-surface:      rgb(255 255 255);
+    --color-app-surface-2:    rgb(242 242 247);
+    --color-app-surface-card: rgb(255 255 255);
 
-    --color-app-text:         var(--app-text);
-    --color-app-text-2:       var(--app-text-2);
-    --color-app-text-3:       var(--app-text-3);
+    /* ── Text hierarchy ──────────────────────────────────────────────────── */
+    --color-app-text:         rgb(0 0 0);
+    --color-app-text-2:       rgb(60 60 67 / 0.6);
+    --color-app-text-3:       rgb(60 60 67 / 0.3);
 
-    --color-app-warning-bg:   var(--app-warning-bg);
-    --color-app-warning-text: var(--app-warning-text);
+    /* ── Status: warning ─────────────────────────────────────────────────── */
+    --color-app-warning-bg:   light-dark(rgb(255 243 205), rgb(66 50 10));
+    --color-app-warning-text: light-dark(rgb(28 28 30),    rgb(255 214 10));
 
-    --color-app-info-bg:      var(--app-info-bg);
-    --color-app-info-text:    var(--app-info-text);
+    /* ── Status: info ────────────────────────────────────────────────────── */
+    --color-app-info-bg:      light-dark(rgb(238 242 255), rgb(16 26 66));
+    --color-app-info-text:    light-dark(rgb(59 95 192),   rgb(138 158 255));
 
-    --color-app-separator:    var(--app-separator);
+    /* ── Separator ───────────────────────────────────────────────────────── */
+    --color-app-separator:    rgb(198 198 200);
 
-    /* ── Typography scale (matches iOS HIG) ──────────────────────────── */
-    --text-caption2: 11px;
-    --text-caption1: 12px;
-    --text-footnote: 13px;
-    --text-subhead:  15px;
-    --text-callout:  16px;
-    --text-body:     17px;
-    --text-headline: 17px;
-    --text-title3:   20px;
-    --text-title2:   22px;
-    --text-title1:   28px;
+    /* ── Typography scale (matches iOS HIG) ──────────────────────────────── */
+    --text-caption2:   11px;
+    --text-caption1:   12px;
+    --text-footnote:   13px;
+    --text-subhead:    15px;
+    --text-callout:    16px;
+    --text-body:       17px;
+    --text-headline:   17px;
+    --text-title3:     20px;
+    --text-title2:     22px;
+    --text-title1:     28px;
     --text-largetitle: 34px;
 
-    /* ── Custom border-radius ────────────────────────────────────────── */
-    --radius-card: 14px;
-    --radius-badge: 14px;
+    /* ── Custom border-radius ────────────────────────────────────────────── */
+    --radius-circle: 9999px;
+    --radius-card:   14px;
+    --radius-badge:  14px;
     --radius-banner: 12px;
-    --radius-chip: 10px;
+    --radius-chip:   10px;
   }
 }

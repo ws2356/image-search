@@ -116,7 +116,7 @@ function HomeSetupSection() {
           <View key={step.id}>
             <View className="flex-row gap-3 px-4 py-3.5">
               {/* Step badge */}
-              <View className="w-7 h-7 rounded-full bg-app-brand items-center justify-center shrink-0">
+              <View className="w-7 h-7 rounded-circle bg-app-brand items-center justify-center shrink-0">
                 <Text selectable className="text-app-brand-text text-footnote font-bold">
                   {step.number}
                 </Text>
