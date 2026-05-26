@@ -8,11 +8,13 @@ import { stopTransfer } from '@/features/backup/use-cases/stop-transfer';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { create_default_app_awake_policy } from '@/infrastructure/system/app-awake-policy';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
+import { PermissionScope } from '@/features/backup/preflight/enums';
 
 export interface TransferScreenController {
   transfer_running: boolean;
   transfer_error: string | null;
   transfer_snapshot: TransferProgressSnapshot | null;
+  is_incomplete_library: boolean;
   confirm_stop: () => Promise<void>;
   recover_transfer: () => Promise<void>;
   complete_transfer: () => Promise<void>;
@@ -22,6 +24,9 @@ export function useTransferScreenController(): TransferScreenController {
   const router = useRouter();
   const app_awake_policy = useMemo(create_default_app_awake_policy, []);
   const transfer_snapshot = useBackupSessionStore((state) => state.session.transferSnapshot);
+  const is_incomplete_library = useBackupSessionStore(
+    (state) => state.session.permissionSummary.mediaScope !== PermissionScope.Full
+  );
   const transfer_running = useTransferStore((state) => state.is_running);
   const transfer_error = useTransferStore((state) => state.last_error);
   const set_running = useTransferStore((state) => state.set_running);
@@ -59,6 +64,7 @@ export function useTransferScreenController(): TransferScreenController {
     transfer_running,
     transfer_error,
     transfer_snapshot,
+    is_incomplete_library,
     confirm_stop: async () => {
       try {
         await stopTransfer();
