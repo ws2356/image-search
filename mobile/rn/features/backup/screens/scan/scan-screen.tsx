@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { CameraView, type BarcodeScanningResult } from 'expo-camera';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { ActivityIndicator, Linking, useWindowDimensions } from 'react-native';
+import { Linking, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useScanScreenController } from '@/features/backup/hooks/use-scan-screen-controller';
@@ -33,19 +33,12 @@ export function ScanScreen() {
     scanned_ref.current = false;
   }, []);
 
-  const on_barcode_scanned = async ({ data }: BarcodeScanningResult) => {
-    if (scanned_ref.current || controller.is_claiming) {
+  const on_barcode_scanned = ({ data }: BarcodeScanningResult) => {
+    if (scanned_ref.current) {
       return;
     }
     scanned_ref.current = true;
-    await controller.handle_barcode_scanned(data);
-    // Do not reset scanned_ref here — keep guard up after attempt.
-    // It is reset when the user explicitly retries (via retry_scan below).
-  };
-
-  const retry_scan = () => {
-    scanned_ref.current = false;
-    controller.clear_scan_error?.();
+    controller.handle_barcode_scanned(data);
   };
 
   const open_settings = () => {
@@ -53,7 +46,7 @@ export function ScanScreen() {
   };
 
   const show_camera = controller.camera_permission_granted;
-  const show_permission_panel = !show_camera && !controller.scan_error && !controller.is_claiming;
+  const show_permission_panel = !show_camera;
 
   return (
     <View className="flex-1 bg-black">
@@ -181,29 +174,6 @@ export function ScanScreen() {
         </StatusPanel>
       ) : null}
 
-      {controller.is_claiming ? (
-        <StatusPanel>
-          <ActivityIndicator color="#FFFFFF" />
-          <Text selectable className="text-subhead font-semibold text-white text-center">
-            Claiming pairing session…
-          </Text>
-        </StatusPanel>
-      ) : null}
-
-      {controller.scan_error ? (
-        <StatusPanel>
-          <Text selectable className="text-footnote text-white text-center leading-5">
-            {controller.scan_error}
-          </Text>
-          <Pressable
-            onPress={retry_scan}
-            className="rounded-[14px] px-4 py-3 bg-app-brand items-center">
-            <Text selectable className="text-app-brand-text font-semibold text-subhead">
-              Try Again
-            </Text>
-          </Pressable>
-        </StatusPanel>
-      ) : null}
     </View>
   );
 }

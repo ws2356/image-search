@@ -1,11 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { DefaultPairingKeyDeriver } from '@/infrastructure/crypto/pairing-key-deriver';
+import type { PairingQRCodePayload } from '@/features/backup/pairing/models';
 import { PairingService } from '@/features/backup/services/pairing-service';
+import { decode_pairing_link } from '@/features/backup/services/pairing-link-decoder';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
+import type { LocalDeviceIdentitySummary } from '@/features/backup/session/models';
 
 export interface PairingScreenController {
   pairing_status_label: string;
@@ -17,121 +20,202 @@ export interface PairingScreenController {
 export function usePairingScreenController(): PairingScreenController {
   const router = useRouter();
   const params = useLocalSearchParams<{
-    session_id?: string;
-    device_uuid?: string;
-    endpoint_base_url?: string;
-    one_time_passcode?: string;
-    trust_key_b64?: string;
+    qr_payload?: string;
   }>();
+  const qr_payload = typeof params.qr_payload === 'string' ? params.qr_payload.trim() : '';
   const [pairing_status_label, set_pairing_status_label] = useState(
-    'Pairing session awaiting network state updates.'
+    'Validating the QR payload and preparing a secure session.'
   );
-  const live_pairing_enabled = Boolean(params.session_id && params.device_uuid && params.endpoint_base_url);
+  const live_pairing_enabled = qr_payload.length > 0;
+
+  const resolve_identity = useCallback(() => {
+    const store = useBackupSessionStore.getState();
+    const current_identity = store.session.localDeviceIdentity;
+    if (current_identity) {
+      return current_identity;
+    }
+
+    const platform: LocalDeviceIdentitySummary['platform'] = Platform.OS === 'ios' ? 'ios' : 'android';
+    const new_identity: LocalDeviceIdentitySummary = {
+      deviceUuid: `mobile-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
+      deviceName: 'AuBackup RN',
+      platform,
+      updatedAt: new Date().toISOString(),
+    };
+    store.setLocalDeviceIdentity(new_identity);
+    return new_identity;
+  }, []);
 
   useEffect(() => {
     if (!live_pairing_enabled) {
       return;
     }
 
-    const session_id = params.session_id as string;
-    const device_uuid = params.device_uuid as string;
-    const endpoint_base_url = params.endpoint_base_url as string;
-    const one_time_passcode = params.one_time_passcode as string | undefined;
-    const resolve_trust_key_b64 = async () => {
-      const provided_trust_key = params.trust_key_b64 as string | undefined;
-      if (provided_trust_key && provided_trust_key.length > 0) {
-        return provided_trust_key;
-      }
-      if (!one_time_passcode) {
-        return null;
-      }
-
-      const platform = useBackupSessionStore.getState().session.localDeviceIdentity?.platform
-        ?? (Platform.OS === 'ios' ? 'ios' : 'android');
-      const pairing_key_deriver = new DefaultPairingKeyDeriver();
-      return pairing_key_deriver.derive_pairing_key_b64({
-        session_id,
-        one_time_passcode,
-        platform,
-      });
-    };
-    const pairing_service = new PairingService(endpoint_base_url);
     let cancelled = false;
+    let has_finished = false;
+    let poll_timer: ReturnType<typeof setInterval> | null = null;
 
-    const poll = async () => {
-      try {
-        const response = await pairing_service.get_pairing_state(session_id, device_uuid);
-        if (cancelled) {
-          return;
-        }
-        console.log('[Pair] poll response', { backup_state: response.backup_state });
-        set_pairing_status_label(response.message || `Pairing status: ${response.backup_state}`);
-        switch (response.backup_state) {
-          case 'pairing_completed':
-            const trustKeyB64 = await resolve_trust_key_b64();
-            if (cancelled) {
-              return;
-            }
-            if (!trustKeyB64) {
-              set_pairing_status_label('Pairing completed, but trust key derivation failed.');
-              return;
-            }
-            console.log('[Pair] pairing_completed — applying command and navigating to /permissions');
-            await apply_backup_command({
-              type: 'pairingCompleted',
-              session: {
-                sessionId: response.session_id ?? session_id,
-                desktopName: response.desktop_name ?? null,
-                endpointBaseUrl: endpoint_base_url,
-                pairingCompletedAt: new Date().toISOString(),
-                trustKeyB64,
-              },
-            });
-            router.replace('/permissions');
-            return;
-          case 'pairing_expired':
-          case 'pairing_mismatched':
-          case 'pairing_stopped':
-            await apply_backup_command({
-              type: 'pairingFailed',
-              error: {
-                title: 'Pairing failed',
-                message: response.message || `Pairing failed with state ${response.backup_state}.`,
-              },
-            });
-            router.replace('/error');
-            return;
-          default:
-            return;
-        }
-      } catch (poll_error) {
-        if (cancelled) {
-          return;
-        }
-        const message = poll_error instanceof Error ? poll_error.message : 'Pairing state polling failed.';
-        console.log('[Pair] poll error', message);
-        set_pairing_status_label(message);
+    const finish = () => {
+      has_finished = true;
+      if (poll_timer) {
+        clearInterval(poll_timer);
+        poll_timer = null;
       }
     };
 
-    void poll();
-    const interval = setInterval(() => {
+    const fail_pairing = async (message: string) => {
+      if (cancelled || has_finished) {
+        return;
+      }
+      finish();
+      set_pairing_status_label(message);
+      await apply_backup_command({
+        type: 'pairingFailed',
+        error: {
+          title: 'Pairing failed',
+          message,
+        },
+      });
+      if (!cancelled) {
+        router.replace('/error');
+      }
+    };
+
+    const complete_pairing = async (
+      response_session_id: string | null | undefined,
+      response_desktop_name: string | null | undefined,
+      endpoint_base_url: string,
+      fallback_session_id: string,
+      trust_key_b64: string
+    ) => {
+      if (cancelled || has_finished) {
+        return;
+      }
+      finish();
+      await apply_backup_command({
+        type: 'pairingCompleted',
+        session: {
+          sessionId: response_session_id ?? fallback_session_id,
+          desktopName: response_desktop_name ?? null,
+          endpointBaseUrl: endpoint_base_url,
+          pairingCompletedAt: new Date().toISOString(),
+          trustKeyB64: trust_key_b64,
+        },
+      });
+      if (!cancelled) {
+        router.replace('/permissions');
+      }
+    };
+
+    const is_pairing_failure_state = (backup_state: string) =>
+      backup_state === 'pairing_expired'
+      || backup_state === 'pairing_mismatched'
+      || backup_state === 'pairing_stopped';
+
+    const run_pairing = async () => {
+      set_pairing_status_label('Validating QR payload…');
+      const decoded = decode_pairing_link(qr_payload);
+      if (!decoded.ok) {
+        await fail_pairing(decoded.message);
+        return;
+      }
+
+      const payload: PairingQRCodePayload = decoded.payload;
+      const endpoint_target = payload.endpointTargets[0];
+      if (!endpoint_target) {
+        await fail_pairing('Pairing QR did not include a desktop endpoint.');
+        return;
+      }
+      const endpoint_base_url =
+        endpoint_target.startsWith('http://') || endpoint_target.startsWith('https://')
+          ? endpoint_target
+          : `http://${endpoint_target}`;
+
+      const identity = resolve_identity();
+      const pairing_key_deriver = new DefaultPairingKeyDeriver();
+      const trust_key_b64 = await pairing_key_deriver.derive_pairing_key_b64({
+        session_id: payload.sessionId,
+        one_time_passcode: payload.oneTimePasscode,
+        platform: identity.platform,
+      });
+      if (cancelled || has_finished) {
+        return;
+      }
+
+      const pairing_service = new PairingService(endpoint_base_url);
+      const session_id = payload.sessionId;
+
+      const handle_response = async (response: Awaited<ReturnType<PairingService['get_pairing_state']>>) => {
+        if (cancelled || has_finished) {
+          return true;
+        }
+        set_pairing_status_label(response.message || `Pairing status: ${response.backup_state}`);
+        if (response.backup_state === 'pairing_completed') {
+          await complete_pairing(
+            response.session_id,
+            response.desktop_name,
+            endpoint_base_url,
+            session_id,
+            trust_key_b64
+          );
+          return true;
+        }
+        if (is_pairing_failure_state(response.backup_state)) {
+          await fail_pairing(response.message || `Pairing failed with state ${response.backup_state}.`);
+          return true;
+        }
+        return false;
+      };
+
+      try {
+        set_pairing_status_label('Reaching desktop…');
+        const claim_response = await pairing_service.claim_pairing(payload, {
+          device_uuid: identity.deviceUuid,
+          device_name: identity.deviceName,
+          platform: identity.platform,
+        });
+        if (await handle_response(claim_response)) {
+          return;
+        }
+      } catch (claim_error) {
+        const message = claim_error instanceof Error ? claim_error.message : 'Pairing request failed.';
+        await fail_pairing(message);
+        return;
+      }
+
+      set_pairing_status_label('Desktop reached. Verifying trust material…');
+      const poll = async () => {
+        if (cancelled || has_finished) {
+          return;
+        }
+        try {
+          const response = await pairing_service.get_pairing_state(session_id, identity.deviceUuid);
+          const done = await handle_response(response);
+          if (done) {
+            finish();
+          }
+        } catch (poll_error) {
+          const message = poll_error instanceof Error ? poll_error.message : 'Pairing state polling failed.';
+          await fail_pairing(message);
+        }
+      };
+
       void poll();
-    }, 2000);
+      poll_timer = setInterval(() => {
+        void poll();
+      }, 2000);
+    };
+
+    void run_pairing().catch(async (error) => {
+      const message = error instanceof Error ? error.message : 'Pairing request failed.';
+      await fail_pairing(message);
+    });
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      finish();
     };
-  }, [
-    live_pairing_enabled,
-    params.device_uuid,
-    params.endpoint_base_url,
-    params.session_id,
-    params.one_time_passcode,
-    params.trust_key_b64,
-    router,
-  ]);
+  }, [live_pairing_enabled, qr_payload, resolve_identity, router]);
 
   return {
     pairing_status_label,
