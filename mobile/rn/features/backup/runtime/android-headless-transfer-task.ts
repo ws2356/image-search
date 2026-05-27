@@ -16,8 +16,6 @@ import {
 } from '@/infrastructure/platform/android-transfer-service';
 import { get_default_transfer_runtime_wiring } from '@/infrastructure/platform/transfer-runtime-wiring';
 
-const STOP_REQUEST_POLL_INTERVAL_MS = 250;
-
 async function apply_headless_transfer_command(command: BackupCommand): Promise<void> {
   await apply_backup_command(command);
   if (command.type === 'transferSnapshotUpdated') {
@@ -45,15 +43,13 @@ export async function run_android_headless_transfer_task(
   await publish_android_transfer_state({ status: 'running' });
 
   const abort_controller = new AbortController();
-  const stop_request_interval = setInterval(() => {
-    if (is_android_transfer_stop_requested()) {
-      abort_controller.abort();
-    }
-  }, STOP_REQUEST_POLL_INTERVAL_MS);
 
   try {
     await startTransfer(
-      { abort_controller },
+      {
+        abort_controller,
+        should_abort: is_android_transfer_stop_requested,
+      },
       {
         apply_command: apply_headless_transfer_command,
         trust_proof_signer: new DefaultTrustProofSigner(),
@@ -73,7 +69,6 @@ export async function run_android_headless_transfer_task(
     await publish_android_transfer_state({ status: 'failed', errorMessage: message });
     throw error;
   } finally {
-    clearInterval(stop_request_interval);
     await clear_android_transfer_stop_request();
   }
 }

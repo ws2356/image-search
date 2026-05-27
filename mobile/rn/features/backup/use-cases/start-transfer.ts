@@ -33,6 +33,7 @@ export interface StartTransferDeps {
 
 export interface StartTransferOptions {
   abort_controller: AbortController;
+  should_abort?: () => boolean;
 }
 
 const TRANSFER_EXISTENCE_BATCH_SIZE = 15;
@@ -74,11 +75,16 @@ function build_snapshot(input: {
   };
 }
 
-async function compute_asset_sha1(asset_id: string, transfer_asset_source: TransferAssetSource): Promise<string> {
+async function compute_asset_sha1(
+  asset_id: string,
+  transfer_asset_source: TransferAssetSource,
+  throw_if_transfer_stopped?: () => void
+): Promise<string> {
   const chunk_reader = await transfer_asset_source.open_asset_chunk_reader(asset_id, 0);
   const hasher = QuickCrypto.createHash('sha1');
   try {
     while (true) {
+      throw_if_transfer_stopped?.();
       const chunk = chunk_reader.read_chunk(1024 * 1024);
       if (chunk.length === 0) {
         break;
@@ -141,6 +147,9 @@ export async function startTransfer(
   let runtime_started = false;
   const transfer_abort_signal = options.abort_controller.signal;
   const throw_if_transfer_stopped = () => {
+    if (options.should_abort?.()) {
+      options.abort_controller.abort();
+    }
     if (transfer_abort_signal.aborted) {
       throw create_transfer_abort_error();
     }
@@ -242,12 +251,17 @@ export async function startTransfer(
     ): Promise<TransferAssetSignature[]> => {
       const candidates: TransferAssetSignature[] = [];
       for (const asset of batch_assets) {
+        throw_if_transfer_stopped();
         const has_asset_version = supports_asset_version_existence && typeof asset.metadata.asset_version === 'string';
         const has_legacy_signature_shape =
           typeof asset.dedupe_signature.file_size_bytes === 'number' && asset.dedupe_signature.created_at != null;
         let content_sha1 = asset.dedupe_signature.content_sha1;
         if (!has_asset_version && content_sha1 == null && has_legacy_signature_shape) {
-          content_sha1 = await compute_asset_sha1(asset.asset_id, deps.transfer_asset_source);
+          content_sha1 = await compute_asset_sha1(
+            asset.asset_id,
+            deps.transfer_asset_source,
+            throw_if_transfer_stopped
+          );
           asset.dedupe_signature.content_sha1 = content_sha1;
           asset.metadata.sha1 = content_sha1;
         }
@@ -274,7 +288,10 @@ export async function startTransfer(
         try {
           await transfer_service.upload_asset_chunked(
             asset.metadata,
-            async (_offset, length) => chunk_reader.read_chunk(length),
+            async (_offset, length) => {
+              throw_if_transfer_stopped();
+              return chunk_reader.read_chunk(length);
+            },
             typeof asset.metadata.file_size === 'number' && asset.metadata.file_size > 0
               ? asset.metadata.file_size
               : undefined,

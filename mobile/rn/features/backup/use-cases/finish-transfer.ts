@@ -1,4 +1,6 @@
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
+import { build_home_summary_from_session } from '@/features/backup/session/home-summary';
+import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import {
   end_transfer_runtime_session,
   get_default_transfer_runtime_wiring,
@@ -16,7 +18,9 @@ export async function finishTransfer(
     transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
   }
 ): Promise<void> {
-  await deps.apply_command({
+const store = useBackupSessionStore.getState();
+store.setHomeSummary(build_home_summary_from_session(store.session, { interruption_warning: null }));
+await deps.apply_command({
     type: 'transferResolved',
     result: {
       kind: 'success',

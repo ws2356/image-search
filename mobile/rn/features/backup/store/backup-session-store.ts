@@ -42,6 +42,7 @@ const INITIAL_BACKUP_SESSION_STATE: BackupSessionState = {
 function build_reset_session_state(previous_session: BackupSessionState): BackupSessionState {
   return {
     ...INITIAL_BACKUP_SESSION_STATE,
+    homeSummary: previous_session.homeSummary,
     trustedDesktop: previous_session.trustedDesktop,
     localDeviceIdentity: previous_session.localDeviceIdentity,
   };
