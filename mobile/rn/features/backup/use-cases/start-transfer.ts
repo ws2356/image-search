@@ -47,18 +47,25 @@ function build_snapshot(input: {
   failed_assets: number;
   active_asset_id: string | null;
   bytes_uploaded: number;
+  sha1_elapsed_ms: number;
+  sha1_measured_assets: number;
   started_at_ms: number;
 }): TransferProgressSnapshot {
   const elapsed_seconds = Math.max(1, (Date.now() - input.started_at_ms) / 1000);
   const remaining_assets = Math.max(
-    0,
-    input.total_assets - input.transferred_assets - input.matched_assets - input.failed_assets
+   0,
+   input.total_assets - input.transferred_assets - input.matched_assets - input.failed_assets
   );
   const bytes_per_second = input.bytes_uploaded > 0 ? input.bytes_uploaded / elapsed_seconds : null;
-  const estimated_seconds_remaining =
-    bytes_per_second && bytes_per_second > 0 && remaining_assets > 0
-      ? Math.ceil((remaining_assets * (input.bytes_uploaded / Math.max(1, input.transferred_assets))) / bytes_per_second)
-      : null;
+  const average_sha1_seconds_per_asset =
+   input.sha1_measured_assets > 0 ? input.sha1_elapsed_ms / 1000 / input.sha1_measured_assets : 0;
+  const estimated_sha1_seconds_remaining =
+   remaining_assets > 0 ? Math.ceil(remaining_assets * average_sha1_seconds_per_asset) : 0;
+  const estimated_transfer_seconds_remaining =
+   bytes_per_second && bytes_per_second > 0 && input.transferred_assets > 0 && remaining_assets > 0
+     ? Math.ceil((remaining_assets * (input.bytes_uploaded / input.transferred_assets)) / bytes_per_second)
+     : 0;
+  const estimated_seconds_remaining = estimated_sha1_seconds_remaining + estimated_transfer_seconds_remaining;
   return {
     pipelineStage: input.stage,
     transport: TransferTransport.Lan,
@@ -169,6 +176,8 @@ export async function startTransfer(
         failed_assets: 0,
         active_asset_id: null,
         bytes_uploaded: 0,
+        sha1_elapsed_ms: 0,
+        sha1_measured_assets: 0,
         started_at_ms,
       }),
     });
@@ -221,6 +230,8 @@ export async function startTransfer(
         failed_assets: 0,
         active_asset_id: null,
         bytes_uploaded: 0,
+        sha1_elapsed_ms: 0,
+        sha1_measured_assets: 0,
         started_at_ms,
       }),
     });
@@ -229,6 +240,8 @@ export async function startTransfer(
     let failed_assets = 0;
     let bytes_uploaded = 0;
     let matched_assets = 0;
+    let sha1_elapsed_ms = 0;
+    let sha1_measured_assets = 0;
 
     const publish_snapshot = async (
       stage: TransferPipelineStage,
@@ -244,6 +257,8 @@ export async function startTransfer(
           failed_assets,
           active_asset_id,
           bytes_uploaded,
+          sha1_elapsed_ms,
+          sha1_measured_assets,
           started_at_ms,
         }),
       });
@@ -260,11 +275,14 @@ export async function startTransfer(
           typeof asset.dedupe_signature.file_size_bytes === 'number' && asset.dedupe_signature.created_at != null;
         let content_sha1 = asset.dedupe_signature.content_sha1;
         if (!has_asset_version && content_sha1 == null && has_legacy_signature_shape) {
+          const sha1_started_at_ms = Date.now();
           content_sha1 = await compute_asset_sha1(
             asset.asset_id,
             deps.transfer_asset_source,
             throw_if_transfer_stopped
           );
+          sha1_elapsed_ms += Math.max(0, Date.now() - sha1_started_at_ms);
+          sha1_measured_assets += 1;
           asset.dedupe_signature.content_sha1 = content_sha1;
           asset.metadata.sha1 = content_sha1;
         }
@@ -288,6 +306,7 @@ export async function startTransfer(
       await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
       try {
         const chunk_reader = await deps.transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
+        let asset_bytes_uploaded = 0;
         let upload_response;
         try {
           upload_response = await transfer_service.upload_asset_chunked(
@@ -302,7 +321,7 @@ export async function startTransfer(
             1024 * 1024,
             transfer_abort_signal,
             async (chunk_length) => {
-              bytes_uploaded += chunk_length;
+              asset_bytes_uploaded += chunk_length;
               await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
             }
           );
@@ -314,6 +333,7 @@ export async function startTransfer(
           await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
           return;
         }
+        bytes_uploaded += asset_bytes_uploaded;
         transferred_assets += 1;
         await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
       } catch (error) {
@@ -376,6 +396,8 @@ export async function startTransfer(
         failed_assets,
         active_asset_id: null,
         bytes_uploaded,
+        sha1_elapsed_ms,
+        sha1_measured_assets,
         started_at_ms,
       }),
     });
