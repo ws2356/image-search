@@ -1,6 +1,6 @@
 {
   "name": "aubackup",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "1.0.0",
   "dependencies": {
     "@noble/hashes": "^2.2.0",

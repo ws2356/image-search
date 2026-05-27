@@ -1,6 +1,7 @@
 import { useTransferScreenController } from '@/features/backup/hooks/use-transfer-screen-controller';
 import { TransferPipelineStage } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
+import { Platform } from 'react-native';
 import { Pressable, ScrollView, Text, View } from '@/src/tw';
 
 export function TransferScreen() {
@@ -200,16 +201,22 @@ function format_speed(bytes_per_second: number): string {
 
 function guidance_message(snapshot: TransferProgressSnapshot | null): string {
   if (!snapshot) {
-    return 'Keep the app in the foreground while backup prepares.';
+    return Platform.OS === 'android'
+      ? 'Backup can continue in the background on Android while the persistent notification stays visible.'
+      : 'Keep the app in the foreground while backup prepares.';
   }
   if (snapshot.counts.failedAssets > 0) {
     return 'Some items failed so far. Let this run finish, then inspect desktop logs for per-item errors.';
   }
   if (snapshot.pipelineStage === TransferPipelineStage.Enumerating) {
-    return 'Keep the app in the foreground while the phone prepares the backup session.';
+    return Platform.OS === 'android'
+      ? 'Backup is preparing. You can background the app on Android once the persistent notification appears.'
+      : 'Keep the app in the foreground while the phone prepares the backup session.';
   }
   if (snapshot.transport === 'usb') {
     return 'USB is active for the fastest backup. Keep the phone unlocked and connected until transfer finishes.';
   }
-  return 'Keep the app in the foreground while items transfer over Wi-Fi. Plug in USB anytime for faster backup.';
+  return Platform.OS === 'android'
+    ? 'Backup can continue over Wi-Fi in the background on Android. Keep the persistent notification visible, or plug in USB anytime for faster backup.'
+    : 'Keep the app in the foreground while items transfer over Wi-Fi. Plug in USB anytime for faster backup.';
 }

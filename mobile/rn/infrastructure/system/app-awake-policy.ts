@@ -29,7 +29,7 @@ export class IosStubAppAwakePolicy implements AppAwakePolicy {
 
 export function create_default_app_awake_policy(): AppAwakePolicy {
   if (Platform.OS === 'android') {
-    return new AndroidKeepAwakePolicy();
+    return new NoopAppAwakePolicy();
   }
   if (Platform.OS === 'ios') {
     return new IosStubAppAwakePolicy();

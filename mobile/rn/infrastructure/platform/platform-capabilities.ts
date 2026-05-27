@@ -11,7 +11,7 @@ export function get_platform_capabilities(): PlatformCapabilities {
     return {
       platform: 'android',
       supports_usb_transport: false,
-      supports_background_transfer_policy: false,
+      supports_background_transfer_policy: true,
     };
   }
 
