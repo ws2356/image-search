@@ -164,17 +164,21 @@ export function usePairingScreenController(): PairingScreenController {
 
       const identity = resolve_identity();
       const pairing_key_deriver = new DefaultPairingKeyDeriver();
-      const trust_key_b64 = await pairing_key_deriver.derive_pairing_key_b64({
-        session_id: payload.sessionId,
-        one_time_passcode: payload.oneTimePasscode,
-        platform: identity.platform,
-      });
       if (cancelled || has_finished) {
         return;
       }
 
       const pairing_service = new PairingService(endpoint_base_url);
       const session_id = payload.sessionId;
+      const claim_platform: LocalDeviceIdentitySummary['platform'] = 'ios';
+      const resolved_trust_key_b64 = await pairing_key_deriver.derive_pairing_key_b64({
+        session_id: payload.sessionId,
+        one_time_passcode: payload.oneTimePasscode,
+        platform: claim_platform,
+      });
+      if (cancelled || has_finished) {
+        return;
+      }
 
       const handle_response = async (response: Awaited<ReturnType<PairingService['get_pairing_state']>>) => {
         if (cancelled || has_finished) {
@@ -209,7 +213,7 @@ export function usePairingScreenController(): PairingScreenController {
             response.desktop_name,
             endpoint_base_url,
             session_id,
-            trust_key_b64,
+            resolved_trust_key_b64,
             payload.strictSecurityEnabled
           );
           return true;
@@ -221,19 +225,20 @@ export function usePairingScreenController(): PairingScreenController {
         return false;
       };
 
+      set_pairing_status_label('Reaching desktop…');
+      let claim_response: Awaited<ReturnType<PairingService['claim_pairing']>>;
       try {
-        set_pairing_status_label('Reaching desktop…');
-        const claim_response = await pairing_service.claim_pairing(payload, {
+        claim_response = await pairing_service.claim_pairing(payload, {
           device_uuid: identity.deviceUuid,
           device_name: identity.deviceName,
-          platform: identity.platform,
+          platform: claim_platform,
         });
-        if (await handle_response(claim_response)) {
-          return;
-        }
       } catch (claim_error) {
-        const message = claim_error instanceof Error ? claim_error.message : 'Pairing request failed.';
-        await fail_pairing(message);
+        const claim_error_message = claim_error instanceof Error ? claim_error.message : 'Pairing request failed.';
+        await fail_pairing(claim_error_message);
+        return;
+      }
+      if (await handle_response(claim_response)) {
         return;
       }
 
