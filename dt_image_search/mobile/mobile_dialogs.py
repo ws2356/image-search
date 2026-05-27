@@ -689,34 +689,6 @@ class MobilePairingDialog(QDialog):
         subtitle.setStyleSheet("color: #666666; font-size: 13px;")
         layout.addWidget(subtitle)
 
-        # Platform toggle row
-        platform_row = QHBoxLayout()
-        platform_row.setSpacing(0)
-        platform_row.addStretch()
-        self._platform_toggle_ios = QPushButton("iOS")
-        self._platform_toggle_android = QPushButton("Android")
-        for btn in (self._platform_toggle_ios, self._platform_toggle_android):
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setFixedHeight(30)
-            btn.setMinimumWidth(90)
-        self._platform_toggle_ios.setStyleSheet(
-            "QPushButton { background:#007AFF; color:#fff; border:1px solid #007AFF;"
-            " border-radius:6px 0 0 6px; font-size:13px; font-weight:600; padding:0 14px; }"
-            "QPushButton:hover { background:#0066d6; }"
-        )
-        self._platform_toggle_android.setStyleSheet(
-            "QPushButton { background:#f3f4f6; color:#374151; border:1px solid #d1d5db;"
-            " border-radius:0 6px 6px 0; font-size:13px; padding:0 14px; }"
-            "QPushButton:hover { background:#e5e7eb; }"
-        )
-        self._platform_toggle_ios.clicked.connect(lambda: self._switch_platform(MobilePlatform.IOS))
-        self._platform_toggle_android.clicked.connect(lambda: self._switch_platform(MobilePlatform.ANDROID))
-        platform_row.addWidget(self._platform_toggle_ios)
-        platform_row.addWidget(self._platform_toggle_android)
-        platform_row.addStretch()
-        layout.addLayout(platform_row)
-
-        self._active_platform = MobilePlatform.IOS
         qr_row = QHBoxLayout()
         qr_row.setSpacing(0)
         qr_row.addStretch()
@@ -802,29 +774,6 @@ class MobilePairingDialog(QDialog):
     @property
     def pairing_session(self) -> MobilePairingSessionDraft:
         return self._pairing_session
-
-    def _switch_platform(self, platform: MobilePlatform) -> None:
-        self._active_platform = platform
-        token = self._pairing_session.token_for(platform)
-        self.qr_card._platform = platform
-        self.qr_card.set_token(token)
-        ios_active = platform == MobilePlatform.IOS
-        self._platform_toggle_ios.setStyleSheet(
-            "QPushButton { background:%s; color:%s; border:1px solid %s;"
-            " border-radius:6px 0 0 6px; font-size:13px; font-weight:600; padding:0 14px; }"
-            "QPushButton:hover { background:%s; }" % (
-                ("#007AFF", "#fff", "#007AFF", "#0066d6") if ios_active else
-                ("#f3f4f6", "#374151", "#d1d5db", "#e5e7eb")
-            )
-        )
-        self._platform_toggle_android.setStyleSheet(
-            "QPushButton { background:%s; color:%s; border:1px solid %s;"
-            " border-radius:0 6px 6px 0; font-size:13px; %s padding:0 14px; }"
-            "QPushButton:hover { background:%s; }" % (
-                ("#3dba5f", "#fff", "#3dba5f", "font-weight:600;", "#2fa34f") if not ios_active else
-                ("#f3f4f6", "#374151", "#d1d5db", "", "#e5e7eb")
-            )
-        )
 
     def _update_clock(self) -> None:
         now = datetime.now(self._pairing_session.created_at.tzinfo)

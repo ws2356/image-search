@@ -446,17 +446,6 @@ class MobilePairingService:
                     )
 
                 if request_payload["opt"] != token.one_time_passcode:
-                    _log(
-                        "warning",
-                        message=(
-                            f"MobilePairingService/handle_pairing_request: OTP mismatch for platform={requested_platform.value} "
-                            f"received={request_payload['opt']!r} expected={token.one_time_passcode!r}"
-                        ),
-                        attributes=_pairing_telemetry_attributes(
-                            session_id=active_session.session_id,
-                            platform=requested_platform.value,
-                        ),
-                    )
                     return _response(
                         status_code=403,
                         state=PairingResultState.REJECTED,
