@@ -125,24 +125,29 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
     )
 
     val snapshot = snapshotJson?.let(::parseSnapshot)
+    val counts = snapshot?.optJSONObject("counts")
+    val transferredCount = counts?.optInt("transferredAssets", 0) ?: 0
+    val matchedCount = counts?.optInt("matchedAssets", 0) ?: 0
+    val failedCount = counts?.optInt("failedAssets", 0) ?: 0
+    val totalCount = counts?.optInt("totalAssets", 0) ?: 0
+    val processedCount = (transferredCount + matchedCount + failedCount).coerceAtMost(totalCount)
     val title = statusText
-      ?: snapshot?.let {
-        val transferredCount = it.optJSONObject("counts")?.optInt("transferredAssets", 0) ?: 0
-        val totalCount = it.optJSONObject("counts")?.optInt("totalAssets", 0) ?: 0
-        "Backing up $transferredCount / $totalCount items"
-      }
       ?: "Backing up in background"
     val text = snapshot?.let {
-      val counts = it.optJSONObject("counts")
-      val matchedCount = counts?.optInt("matchedAssets", 0) ?: 0
-      val failedCount = counts?.optInt("failedAssets", 0) ?: 0
       val speedMbPerSecond = (it.optDouble("bytesPerSecond", 0.0) / (1024.0 * 1024.0))
-      "Skipped $matchedCount • Failed $failedCount • ${"%.2f".format(speedMbPerSecond)} MB/s"
-    } ?: "AuBackup keeps the current transfer alive while the app is backgrounded."
+      "Sent $transferredCount • Skipped $matchedCount • Failed $failedCount • ${"%.2f".format(speedMbPerSecond)} MB/s"
+    }
+      ?: "AuBackup keeps the current transfer alive while the app is backgrounded."
+    val subText = snapshot?.takeIf { totalCount > 0 }?.let {
+      "$processedCount / $totalCount processed"
+    }
+      ?: "Backing up in background"
 
     val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
       .setContentTitle(title)
       .setContentText(text)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+      .setSubText(subText)
       .setSmallIcon(R.mipmap.ic_launcher)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
@@ -151,11 +156,8 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
       .setContentIntent(contentIntent)
 
     if (snapshot != null) {
-      val counts = snapshot.optJSONObject("counts")
-      val totalCount = counts?.optInt("totalAssets", 0) ?: 0
-      val transferredCount = counts?.optInt("transferredAssets", 0) ?: 0
       if (totalCount > 0) {
-        builder.setProgress(totalCount, transferredCount.coerceAtMost(totalCount), false)
+        builder.setProgress(totalCount, processedCount, false)
       }
     }
 
