@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useBackupExitGuard } from '@/features/backup/hooks/use-backup-exit-guard';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
@@ -26,10 +26,11 @@ export interface TransferScreenController {
   complete_transfer: () => Promise<void>;
 }
 
+const TRANSFER_SCREEN_SNAPSHOT_INTERVAL_MS = 1000;
+
 export function useTransferScreenController(): TransferScreenController {
   const router = useRouter();
   const app_awake_policy = useMemo(create_default_app_awake_policy, []);
-  const transfer_snapshot = useBackupSessionStore((state) => state.session.transferSnapshot);
   const is_incomplete_library = useBackupSessionStore(
     (state) => state.session.permissionSummary.mediaScope !== PermissionScope.Full
   );
@@ -39,6 +40,64 @@ export function useTransferScreenController(): TransferScreenController {
   const set_last_error = useTransferStore((state) => state.set_last_error);
   const start_attempted_ref = useRef(false);
   const transfer_abort_controller_ref = useRef<AbortController | null>(null);
+  const transfer_snapshot_timeout_ref = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest_transfer_snapshot_ref = useRef<TransferProgressSnapshot | null>(
+    useBackupSessionStore.getState().session.transferSnapshot
+  );
+  const last_transfer_snapshot_flush_at_ref = useRef(0);
+  const [transfer_snapshot, set_transfer_snapshot] = useState<TransferProgressSnapshot | null>(
+    latest_transfer_snapshot_ref.current
+  );
+
+  useEffect(() => {
+    const flush_transfer_snapshot = (snapshot: TransferProgressSnapshot | null) => {
+      latest_transfer_snapshot_ref.current = snapshot;
+      last_transfer_snapshot_flush_at_ref.current = Date.now();
+      set_transfer_snapshot(snapshot);
+    };
+
+    const clear_pending_transfer_snapshot = () => {
+      if (transfer_snapshot_timeout_ref.current != null) {
+        clearTimeout(transfer_snapshot_timeout_ref.current);
+        transfer_snapshot_timeout_ref.current = null;
+      }
+    };
+
+    const schedule_transfer_snapshot_flush = () => {
+      if (transfer_snapshot_timeout_ref.current != null) {
+        return;
+      }
+      const elapsed_ms = Date.now() - last_transfer_snapshot_flush_at_ref.current;
+      const delay_ms = Math.max(0, TRANSFER_SCREEN_SNAPSHOT_INTERVAL_MS - elapsed_ms);
+      transfer_snapshot_timeout_ref.current = setTimeout(() => {
+        transfer_snapshot_timeout_ref.current = null;
+        flush_transfer_snapshot(latest_transfer_snapshot_ref.current);
+      }, delay_ms);
+    };
+
+    const unsubscribe = useBackupSessionStore.subscribe((state, previous_state) => {
+      const next_snapshot = state.session.transferSnapshot;
+      if (next_snapshot === previous_state.session.transferSnapshot) {
+        return;
+      }
+      latest_transfer_snapshot_ref.current = next_snapshot;
+      const elapsed_ms = Date.now() - last_transfer_snapshot_flush_at_ref.current;
+      if (
+        last_transfer_snapshot_flush_at_ref.current === 0 ||
+        elapsed_ms >= TRANSFER_SCREEN_SNAPSHOT_INTERVAL_MS
+      ) {
+        clear_pending_transfer_snapshot();
+        flush_transfer_snapshot(next_snapshot);
+        return;
+      }
+      schedule_transfer_snapshot_flush();
+    });
+
+    return () => {
+      unsubscribe();
+      clear_pending_transfer_snapshot();
+    };
+  }, []);
 
   async function stop_and_return_home(): Promise<void> {
     try {
