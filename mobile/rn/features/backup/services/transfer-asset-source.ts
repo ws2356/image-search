@@ -39,8 +39,8 @@ function normalize_asset_descriptor(asset: MediaAssetDescriptor): NormalizedTran
     metadata: {
       asset_id: asset.asset_id,
       asset_version: asset.asset_version,
-      content_sha1: asset.content_sha1,
-      file_size_bytes: asset.file_size_bytes,
+      sha1: asset.content_sha1,
+      file_size: asset.file_size_bytes,
       filename: asset.filename,
       media_type: normalize_media_type(asset.media_type),
       created_at: asset.created_at,

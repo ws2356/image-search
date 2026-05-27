@@ -1,10 +1,13 @@
 import { useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useBackupExitGuard } from '@/features/backup/hooks/use-backup-exit-guard';
 import { PreflightFailureReason, PermissionScope } from '@/features/backup/preflight/enums';
 import type { PermissionSummary } from '@/features/backup/preflight/models';
 import { create_default_preflight_service } from '@/features/backup/services/preflight-service';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
+import { returnHome } from '@/features/backup/use-cases/return-home';
 import { runPreflight } from '@/features/backup/use-cases/run-preflight';
 
 export type PreflightPromptPhase = 'loading' | 'media' | 'low-battery' | 'remove-after-backup' | 'failed';
@@ -27,6 +30,26 @@ export function usePreflightScreenController(): PreflightScreenController {
   const [phase, set_phase] = useState<PreflightPromptPhase>('loading');
   const [summary, set_summary] = useState<PermissionSummary | null>(null);
   const [error_message, set_error_message] = useState<string | null>(null);
+  const navigate_without_exit_prompt = useBackupExitGuard(() => {
+    Alert.alert(
+      'Leave backup setup?',
+      'This will stop preflight and return to the backup home screen.',
+      [
+        { text: 'Keep Setting Up', style: 'cancel' },
+        {
+          text: 'Leave Setup',
+          style: 'destructive',
+          onPress: () => {
+            void returnHome().then(() => {
+              navigate_without_exit_prompt(() => {
+                router.replace('/');
+              });
+            });
+          },
+        },
+      ]
+    );
+  });
 
   const resolve_next_phase = useCallback((current_summary: PermissionSummary): PreflightPromptPhase => {
     if (current_summary.mediaScope !== PermissionScope.Full) {
@@ -97,15 +120,38 @@ export function usePreflightScreenController(): PreflightScreenController {
           },
         },
       });
-      router.replace('/error');
+      navigate_without_exit_prompt(() => {
+        router.replace('/error');
+      });
     },
     choose_remove_after_backup: async (enabled: boolean) => {
       await preflight_service.set_remove_after_backup_enabled(enabled);
       const refreshed = await preflight_service.load_permission_summary();
       set_summary(refreshed);
       await apply_backup_command({ type: 'preflightResolved', result: { kind: 'success' } });
-      router.replace('/transfer');
+      navigate_without_exit_prompt(() => {
+        router.replace('/transfer');
+      });
     },
-    return_home: () => router.push('/'),
+    return_home: () => {
+      Alert.alert(
+        'Leave backup setup?',
+        'This will stop preflight and return to the backup home screen.',
+        [
+          { text: 'Keep Setting Up', style: 'cancel' },
+          {
+            text: 'Leave Setup',
+            style: 'destructive',
+            onPress: () => {
+              void returnHome().then(() => {
+                navigate_without_exit_prompt(() => {
+                  router.replace('/');
+                });
+              });
+            },
+          },
+        ]
+      );
+    },
   };
 }

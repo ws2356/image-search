@@ -1,5 +1,3 @@
-import { Alert } from 'react-native';
-
 import { useTransferScreenController } from '@/features/backup/hooks/use-transfer-screen-controller';
 import { TransferPipelineStage } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
@@ -8,21 +6,6 @@ import { Pressable, ScrollView, Text, View } from '@/src/tw';
 export function TransferScreen() {
   const controller = useTransferScreenController();
   const snapshot = controller.transfer_snapshot;
-
-  function handle_stop_pressed() {
-    Alert.alert(
-      'Stop backup?',
-      'The desktop may continue indexing items that already transferred before the stop request.',
-      [
-        { text: 'Keep Backing Up', style: 'cancel' },
-        {
-          text: 'Stop Sending More Items',
-          style: 'destructive',
-          onPress: () => void controller.confirm_stop(),
-        },
-      ]
-    );
-  }
 
   return (
     <ScrollView
@@ -59,7 +42,7 @@ export function TransferScreen() {
       ) : null}
 
       <Pressable
-        onPress={handle_stop_pressed}
+        onPress={controller.confirm_stop}
         className="rounded-[14px] px-4 py-4 items-center bg-app-surface-2">
         <Text selectable className="text-body font-semibold" style={{ color: '#FF453A' }}>
           Stop Backup

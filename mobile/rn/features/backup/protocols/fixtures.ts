@@ -65,8 +65,8 @@ export const FIXTURE_TRANSFER_EXISTENCE_REQUEST: TransferAssetExistenceRequest =
   assets: [
     {
       asset_id: 'asset-1',
-      content_sha1: 'deadbeef',
-      file_size_bytes: 1024,
+      sha1: 'deadbeef',
+      file_size: 1024,
       created_at: '2026-01-01T00:00:00Z',
     },
   ],

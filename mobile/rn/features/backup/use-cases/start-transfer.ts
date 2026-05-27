@@ -9,11 +9,9 @@ import type { TransferProgressSnapshot } from '@/features/backup/transfer/models
 import type { TransferAssetSignature } from '@/features/backup/protocols/transfer';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import {
-  begin_transfer_abort_controller,
-  end_transfer_abort_controller,
+  create_transfer_abort_error,
   is_transfer_abort_error,
-  transfer_abort_error,
-} from '@/features/backup/transfer/transfer-abort-controller';
+} from '@/features/backup/transfer/transfer-abort';
 import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import {
@@ -29,6 +27,10 @@ export interface StartTransferDeps {
   capability_exchange_service: CapabilityExchangeService;
   transfer_runtime_wiring: TransferRuntimeWiring;
   transfer_asset_source: TransferAssetSource;
+}
+
+export interface StartTransferOptions {
+  abort_controller: AbortController;
 }
 
 function build_snapshot(input: {
@@ -67,6 +69,7 @@ function build_snapshot(input: {
 }
 
 export async function startTransfer(
+  options: StartTransferOptions,
   deps: StartTransferDeps = {
     apply_command: apply_backup_command,
     trust_proof_signer: new DefaultTrustProofSigner(),
@@ -76,13 +79,6 @@ export async function startTransfer(
   }
 ): Promise<void> {
   assert_transfer_not_live_in_phase4('startTransfer');
-  const transfer_abort_controller = begin_transfer_abort_controller();
-  const transfer_abort_signal = transfer_abort_controller.signal;
-  const throw_if_transfer_stopped = () => {
-    if (transfer_abort_signal.aborted) {
-      throw transfer_abort_error();
-    }
-  };
   const session = useBackupSessionStore.getState().session;
   if (!session.pairingSession?.sessionId || !session.pairingSession.endpointBaseUrl) {
     await deps.apply_command({
@@ -120,6 +116,12 @@ export async function startTransfer(
   const endpoint_base_url = session.pairingSession.endpointBaseUrl;
   const started_at_ms = Date.now();
   let runtime_started = false;
+  const transfer_abort_signal = options.abort_controller.signal;
+  const throw_if_transfer_stopped = () => {
+    if (transfer_abort_signal.aborted) {
+      throw create_transfer_abort_error();
+    }
+  };
 
   try {
     throw_if_transfer_stopped();
@@ -182,8 +184,8 @@ export async function startTransfer(
       )
       .map((asset) => ({
         asset_id: asset.asset_id,
-        content_sha1: asset.dedupe_signature.content_sha1 as string,
-        file_size_bytes: asset.dedupe_signature.file_size_bytes as number,
+        sha1: asset.dedupe_signature.content_sha1 as string,
+        file_size: asset.dedupe_signature.file_size_bytes as number,
         created_at: asset.dedupe_signature.created_at as string,
       }));
 
@@ -222,8 +224,8 @@ export async function startTransfer(
       } else {
         try {
           const declared_size =
-            typeof asset.metadata.file_size_bytes === 'number' && asset.metadata.file_size_bytes > 0
-              ? asset.metadata.file_size_bytes
+            typeof asset.metadata.file_size === 'number' && asset.metadata.file_size > 0
+              ? asset.metadata.file_size
               : undefined;
           const chunk_reader = await deps.transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
           try {
@@ -286,7 +288,7 @@ export async function startTransfer(
       await end_transfer_runtime_session(deps.transfer_runtime_wiring);
     }
     if (transfer_abort_signal.aborted || is_transfer_abort_error(error)) {
-      return;
+      throw create_transfer_abort_error();
     }
     const message = error instanceof Error ? error.message : 'Transfer failed unexpectedly.';
     await deps.apply_command({
@@ -301,7 +303,5 @@ export async function startTransfer(
       },
     });
     throw error;
-  } finally {
-    end_transfer_abort_controller(transfer_abort_controller);
   }
 }

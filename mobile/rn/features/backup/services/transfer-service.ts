@@ -114,7 +114,12 @@ export class TransferService {
     return this.deps.transfer_client.asset(full_metadata, request_id, 'complete', undefined, abort_signal);
   }
 
-  async complete(transferred_count: number, failed_count: number, abort_signal?: AbortSignal): Promise<TransferResponse> {
+  async complete(
+    transferred_count: number,
+    failed_count: number,
+    abort_signal?: AbortSignal,
+    interruption_reason?: string
+  ): Promise<TransferResponse> {
     const trust_proof = await this.build_transfer_trust_proof('transfer.complete');
     const request: Omit<TransferCompleteRequest, 'schema'> = {
       session_id: this.context.session_id,
@@ -122,6 +127,7 @@ export class TransferService {
       trust_proof,
       transferred_count,
       failed_count,
+      interruption_reason,
     };
     return this.deps.transfer_client.complete(request, abort_signal);
   }

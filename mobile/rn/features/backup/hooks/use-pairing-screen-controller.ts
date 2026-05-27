@@ -1,14 +1,16 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
 import { DefaultPairingKeyDeriver } from '@/infrastructure/crypto/pairing-key-deriver';
 import type { PairingQRCodePayload } from '@/features/backup/pairing/models';
+import { useBackupExitGuard } from '@/features/backup/hooks/use-backup-exit-guard';
 import { PairingService } from '@/features/backup/services/pairing-service';
 import { decode_pairing_link } from '@/features/backup/services/pairing-link-decoder';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import type { LocalDeviceIdentitySummary } from '@/features/backup/session/models';
+import { returnHome } from '@/features/backup/use-cases/return-home';
 
 const PAIRING_MISMATCH_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -29,6 +31,26 @@ export function usePairingScreenController(): PairingScreenController {
     'Validating the QR payload and preparing a secure session.'
   );
   const live_pairing_enabled = qr_payload.length > 0;
+  const navigate_without_exit_prompt = useBackupExitGuard(() => {
+    Alert.alert(
+      'Cancel pairing?',
+      'This will stop waiting for the desktop and return to the backup home screen.',
+      [
+        { text: 'Keep Pairing', style: 'cancel' },
+        {
+          text: 'Cancel Pairing',
+          style: 'destructive',
+          onPress: () => {
+            void returnHome().then(() => {
+              navigate_without_exit_prompt(() => {
+                router.replace('/');
+              });
+            });
+          },
+        },
+      ]
+    );
+  });
 
   const resolve_identity = useCallback(() => {
     const store = useBackupSessionStore.getState();
@@ -80,7 +102,9 @@ export function usePairingScreenController(): PairingScreenController {
         },
       });
       if (!cancelled) {
-        router.replace('/error');
+        navigate_without_exit_prompt(() => {
+          router.replace('/error');
+        });
       }
     };
 
@@ -106,7 +130,9 @@ export function usePairingScreenController(): PairingScreenController {
         },
       });
       if (!cancelled) {
-        router.replace('/permissions');
+        navigate_without_exit_prompt(() => {
+          router.replace('/permissions');
+        });
       }
     };
 
@@ -239,12 +265,31 @@ export function usePairingScreenController(): PairingScreenController {
       cancelled = true;
       finish();
     };
-  }, [live_pairing_enabled, qr_payload, resolve_identity, router]);
+  }, [live_pairing_enabled, navigate_without_exit_prompt, qr_payload, resolve_identity, router]);
 
   return {
     pairing_status_label,
     live_pairing_enabled,
     continue_to_permissions: () => router.push('/permissions'),
-    return_home: () => router.push('/'),
+    return_home: () => {
+      Alert.alert(
+        'Cancel pairing?',
+        'This will stop waiting for the desktop and return to the backup home screen.',
+        [
+          { text: 'Keep Pairing', style: 'cancel' },
+          {
+            text: 'Cancel Pairing',
+            style: 'destructive',
+            onPress: () => {
+              void returnHome().then(() => {
+                navigate_without_exit_prompt(() => {
+                  router.replace('/');
+                });
+              });
+            },
+          },
+        ]
+      );
+    },
   };
 }
