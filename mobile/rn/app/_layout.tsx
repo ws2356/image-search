@@ -55,6 +55,14 @@ export default function RootLayout() {
         if (store.session.localDeviceIdentity == null && persisted.local_device_identity != null) {
           store.setLocalDeviceIdentity(persisted.local_device_identity);
         }
+        if (
+          persisted.home_summary != null &&
+          store.session.homeSummary.desktopName == null &&
+          store.session.homeSummary.lastBackupDescription == null &&
+          store.session.homeSummary.interruptionWarning == null
+        ) {
+          store.setHomeSummary(persisted.home_summary);
+        }
         set_persistence_loaded(true);
       })
       .catch((load_error: unknown) => {

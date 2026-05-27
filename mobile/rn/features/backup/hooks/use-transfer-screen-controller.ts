@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useBackupExitGuard } from '@/features/backup/hooks/use-backup-exit-guard';
 import { PermissionScope } from '@/features/backup/preflight/enums';
+import { persist_home_summary } from '@/features/backup/services/pairing-persistence-service';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { build_home_summary_from_session } from '@/features/backup/session/home-summary';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
@@ -107,12 +108,12 @@ export function useTransferScreenController(): TransferScreenController {
         android_stop_requested_ref.current = false;
         set_last_error(null);
         const store = useBackupSessionStore.getState();
-        store.setHomeSummary(
-          build_home_summary_from_session(store.session, {
-            interruption_warning: 'Backup was stopped before completion.',
-            last_backup_prefix: 'Stopped after ',
-          })
-        );
+        const home_summary = build_home_summary_from_session(store.session, {
+          interruption_warning: 'Backup was stopped before completion.',
+          last_backup_prefix: 'Stopped after ',
+        });
+        store.setHomeSummary(home_summary);
+        await persist_home_summary(home_summary);
         await clear_android_transfer_session_state();
         await returnHome();
         navigate_without_exit_prompt(() => {

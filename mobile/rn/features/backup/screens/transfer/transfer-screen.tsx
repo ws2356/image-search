@@ -74,7 +74,10 @@ function TransferTransportBadge({ snapshot }: { snapshot: TransferProgressSnapsh
 function TransferProgressRing({ snapshot }: { snapshot: TransferProgressSnapshot | null }) {
   const total = snapshot?.counts.totalAssets ?? 0;
   const sent = snapshot?.counts.transferredAssets ?? 0;
-  const progress = total > 0 ? Math.min(1, sent / total) : 0;
+  const skipped = snapshot?.counts.matchedAssets ?? 0;
+  const failed = snapshot?.counts.failedAssets ?? 0;
+  const processed = sent + skipped + failed;
+  const progress = total > 0 ? Math.min(1, processed / total) : 0;
   const progress_percent = Math.round(progress * 100);
   const speed_text = format_speed(snapshot?.bytesPerSecond ?? 0);
 
@@ -112,9 +115,10 @@ function TransferProgressRing({ snapshot }: { snapshot: TransferProgressSnapshot
 
 function TransferStatsCard({ snapshot }: { snapshot: TransferProgressSnapshot | null }) {
   const sent = snapshot?.counts.transferredAssets ?? 0;
+  const skipped = snapshot?.counts.matchedAssets ?? 0;
   const failed = snapshot?.counts.failedAssets ?? 0;
   const total = snapshot?.counts.totalAssets ?? 0;
-  const remaining = Math.max(0, total - sent - failed);
+  const remaining = Math.max(0, total - sent - skipped - failed);
 
   return (
     <View

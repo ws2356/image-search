@@ -1,4 +1,4 @@
-import type { BackupSessionState, HomeSummary } from '@/features/backup/session/models';
+import { DEFAULT_HOME_SUMMARY, type BackupSessionState, type HomeSummary } from '@/features/backup/session/models';
 
 function format_backup_duration(started_at: string, last_updated_at: string): string | null {
   const started_at_ms = Date.parse(started_at);
@@ -39,8 +39,9 @@ export function build_home_summary_from_session(
   options: { interruption_warning: string | null; last_backup_prefix?: string } = {
     interruption_warning: null,
   }
-): Partial<HomeSummary> {
+): HomeSummary {
   return {
+    ...DEFAULT_HOME_SUMMARY,
     desktopName: session.trustedDesktop?.desktopName ?? session.pairingSession?.desktopName ?? session.homeSummary.desktopName,
     lastBackupDescription: build_last_backup_description(session, {
       prefix: options.last_backup_prefix,

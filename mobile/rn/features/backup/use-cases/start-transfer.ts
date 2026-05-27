@@ -50,7 +50,10 @@ function build_snapshot(input: {
   started_at_ms: number;
 }): TransferProgressSnapshot {
   const elapsed_seconds = Math.max(1, (Date.now() - input.started_at_ms) / 1000);
-  const remaining_assets = Math.max(0, input.total_assets - input.transferred_assets - input.failed_assets);
+  const remaining_assets = Math.max(
+    0,
+    input.total_assets - input.transferred_assets - input.matched_assets - input.failed_assets
+  );
   const bytes_per_second = input.bytes_uploaded > 0 ? input.bytes_uploaded / elapsed_seconds : null;
   const estimated_seconds_remaining =
     bytes_per_second && bytes_per_second > 0 && remaining_assets > 0
@@ -285,8 +288,9 @@ export async function startTransfer(
       await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
       try {
         const chunk_reader = await deps.transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
+        let upload_response;
         try {
-          await transfer_service.upload_asset_chunked(
+          upload_response = await transfer_service.upload_asset_chunked(
             asset.metadata,
             async (_offset, length) => {
               throw_if_transfer_stopped();
@@ -304,6 +308,11 @@ export async function startTransfer(
           );
         } finally {
           chunk_reader.close();
+        }
+        if (upload_response?.status === 'skipped') {
+          matched_assets += 1;
+          await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
+          return;
         }
         transferred_assets += 1;
         await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
@@ -348,7 +357,6 @@ export async function startTransfer(
       }
       if (matched_asset_ids.size > 0) {
         matched_assets += matched_asset_ids.size;
-        transferred_assets += matched_asset_ids.size;
       }
       await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
       const ready_assets = batch_assets.filter((asset) => !matched_asset_ids.has(asset.asset_id));

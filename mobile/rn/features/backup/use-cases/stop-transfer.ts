@@ -2,6 +2,7 @@ import {
   MOBILE_TRANSFER_INTERRUPTION_REASON_STOPPED_BY_USER,
 } from '@/features/backup/protocols/transfer';
 import { TransferService } from '@/features/backup/services/transfer-service';
+import { persist_home_summary } from '@/features/backup/services/pairing-persistence-service';
 import { build_home_summary_from_session } from '@/features/backup/session/home-summary';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import {
@@ -52,12 +53,12 @@ export async function stopTransfer(
       notify_error = error instanceof Error ? error : new Error('Failed to notify desktop about stop request.');
     }
   }
-  useBackupSessionStore.getState().setHomeSummary(
-    build_home_summary_from_session(session, {
-      interruption_warning: 'Backup was stopped before completion.',
-      last_backup_prefix: 'Stopped after ',
-    })
-  );
+  const home_summary = build_home_summary_from_session(session, {
+    interruption_warning: 'Backup was stopped before completion.',
+    last_backup_prefix: 'Stopped after ',
+  });
+  useBackupSessionStore.getState().setHomeSummary(home_summary);
+  await persist_home_summary(home_summary);
   await end_transfer_runtime_session(deps.transfer_runtime_wiring);
   if (notify_error) {
     throw notify_error;

@@ -1,4 +1,5 @@
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
+import { persist_home_summary } from '@/features/backup/services/pairing-persistence-service';
 import { build_home_summary_from_session } from '@/features/backup/session/home-summary';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import {
@@ -19,7 +20,9 @@ export async function finishTransfer(
   }
 ): Promise<void> {
 const store = useBackupSessionStore.getState();
-store.setHomeSummary(build_home_summary_from_session(store.session, { interruption_warning: null }));
+const home_summary = build_home_summary_from_session(store.session, { interruption_warning: null });
+store.setHomeSummary(home_summary);
+await persist_home_summary(home_summary);
 await deps.apply_command({
     type: 'transferResolved',
     result: {
