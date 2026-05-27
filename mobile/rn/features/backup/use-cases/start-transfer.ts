@@ -4,7 +4,10 @@ import { TransferService } from '@/features/backup/services/transfer-service';
 import type { CapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { HttpCapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { DefaultTransferAssetSource, type TransferAssetSource } from '@/features/backup/services/transfer-asset-source';
-import { TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY } from '@/features/backup/protocols/capabilities';
+import {
+  TRANSFER_ENCRYPTION_CAPABILITY,
+  TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY,
+} from '@/features/backup/protocols/capabilities';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { TransferFailureReason, TransferPipelineStage, TransferTransport } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
@@ -38,6 +41,14 @@ export interface StartTransferOptions {
 
 const TRANSFER_EXISTENCE_BATCH_SIZE = 15;
 const TRANSFER_CONCURRENT_UPLOAD_LIMIT = 5;
+const CAPABILITY_EXCHANGE_MAX_ATTEMPTS = 3;
+const CAPABILITY_EXCHANGE_RETRY_DELAY_MS = 500;
+
+function delay(duration_ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, duration_ms);
+  });
+}
 
 function build_snapshot(input: {
   stage: TransferPipelineStage;
@@ -119,7 +130,8 @@ export async function startTransfer(
 ): Promise<void> {
   assert_transfer_not_live_in_phase4('startTransfer');
   const session = useBackupSessionStore.getState().session;
-  if (!session.pairingSession?.sessionId || !session.pairingSession.endpointBaseUrl) {
+  const pairing_session = session.pairingSession;
+  if (!pairing_session?.sessionId || !pairing_session.endpointBaseUrl) {
     await deps.apply_command({
       type: 'transferResolved',
       result: {
@@ -135,7 +147,7 @@ export async function startTransfer(
   }
 
   const device_uuid = session.localDeviceIdentity?.deviceUuid;
-  const trust_key_b64 = session.pairingSession.trustKeyB64;
+  const trust_key_b64 = pairing_session.trustKeyB64;
   if (!device_uuid || !trust_key_b64) {
     await deps.apply_command({
       type: 'transferResolved',
@@ -151,8 +163,9 @@ export async function startTransfer(
     return;
   }
 
-  const session_id = session.pairingSession.sessionId;
-  const endpoint_base_url = session.pairingSession.endpointBaseUrl;
+  const session_id = pairing_session.sessionId;
+  const endpoint_base_url = pairing_session.endpointBaseUrl;
+  const strict_security_enabled = pairing_session.strictSecurityEnabled === true;
   const started_at_ms = Date.now();
   let runtime_started = false;
   const transfer_abort_signal = options.abort_controller.signal;
@@ -189,18 +202,44 @@ export async function startTransfer(
       device_uuid,
       trust_key_b64,
     });
-    const exchange = await deps.capability_exchange_service.exchange({
-      endpoint_base_url,
-      session_id,
-      device_uuid,
-      trust_proof,
-      capabilities: {
-        encrypted_payload_v1: 1,
-      },
-    });
+    let exchange_attempt = 0;
+    let exchange: Awaited<ReturnType<CapabilityExchangeService['exchange']>> | null = null;
+    let capability_exchange_error: Error | null = null;
+    while (exchange == null && exchange_attempt < CAPABILITY_EXCHANGE_MAX_ATTEMPTS) {
+      exchange_attempt += 1;
+      try {
+        exchange = await deps.capability_exchange_service.exchange({
+          endpoint_base_url,
+          session_id,
+          device_uuid,
+          trust_proof,
+          capabilities: {
+            [TRANSFER_ENCRYPTION_CAPABILITY]: 1,
+          },
+        });
+      } catch (error) {
+        capability_exchange_error = error instanceof Error ? error : new Error('Capability exchange failed.');
+        if (exchange_attempt < CAPABILITY_EXCHANGE_MAX_ATTEMPTS) {
+          throw_if_transfer_stopped();
+          await delay(CAPABILITY_EXCHANGE_RETRY_DELAY_MS);
+          continue;
+        }
+      }
+    }
+    if (exchange == null) {
+      throw capability_exchange_error ?? new Error('Capability exchange failed.');
+    }
     if (exchange.status !== 'accepted') {
       throw new Error(exchange.message || 'Capability exchange rejected.');
     }
+    const supports_transfer_encryption = exchange.capabilities[TRANSFER_ENCRYPTION_CAPABILITY] === 1;
+    if (strict_security_enabled && !supports_transfer_encryption) {
+      throw new Error('Desktop does not support encrypted transfer required by strict security.');
+    }
+    useBackupSessionStore.getState().setPairingSession({
+      ...pairing_session,
+      encryptionEnabled: supports_transfer_encryption,
+    });
     const supports_asset_version_existence =
       exchange.capabilities[TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY] === 1;
     throw_if_transfer_stopped();
@@ -210,6 +249,7 @@ export async function startTransfer(
       session_id,
       device_uuid,
       trust_key_b64,
+      encryption_enabled: supports_transfer_encryption,
     });
     const assets = await deps.transfer_asset_source.enumerate_normalized(5000);
     throw_if_transfer_stopped();

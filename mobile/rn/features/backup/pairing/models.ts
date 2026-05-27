@@ -16,6 +16,8 @@ export interface PairingSessionSummary {
   endpointBaseUrl: string | null;
   pairingCompletedAt: string | null;
   trustKeyB64: string | null;
+  strictSecurityEnabled: boolean;
+  encryptionEnabled: boolean;
 }
 
 export interface TrustedDesktopSummary {

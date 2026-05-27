@@ -10,6 +10,8 @@ import {
   type TransferResponse,
   type TransferSessionRequest,
 } from '@/features/backup/protocols/transfer';
+import type { PayloadCipher } from '@/infrastructure/crypto/payload-cipher';
+import { NoopPayloadCipher } from '@/infrastructure/crypto/payload-cipher';
 
 type FetchLike = typeof fetch;
 
@@ -34,10 +36,12 @@ export interface HttpTransferClient {
 export class DefaultHttpTransferClient implements HttpTransferClient {
   private readonly base_url: string;
   private readonly fetch_impl: FetchLike;
+  private readonly payload_cipher: PayloadCipher;
 
-  constructor(base_url: string, fetch_impl: FetchLike = fetch) {
+  constructor(base_url: string, fetch_impl: FetchLike = fetch, payload_cipher: PayloadCipher = new NoopPayloadCipher()) {
     this.base_url = base_url;
     this.fetch_impl = fetch_impl;
+    this.payload_cipher = payload_cipher;
   }
 
   private is_blob_like(value: unknown): value is Blob {
@@ -50,14 +54,15 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
   }
 
   async start(request: Omit<TransferSessionRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse> {
+    const payload = await this.payload_cipher.encrypt_json_payload({
+      schema: MOBILE_TRANSFER_SCHEMA,
+      ...request,
+    } satisfies TransferSessionRequest);
     const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_START_PATH), {
       method: 'POST',
       signal: abort_signal,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        schema: MOBILE_TRANSFER_SCHEMA,
-        ...request,
-      } satisfies TransferSessionRequest),
+      body: JSON.stringify(payload),
     });
     return this.parse_response(response, 'Transfer start request failed.');
   }
@@ -66,14 +71,15 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
     request: Omit<TransferAssetExistenceRequest, 'schema'>,
     abort_signal?: AbortSignal
   ): Promise<TransferResponse> {
+    const payload = await this.payload_cipher.encrypt_json_payload({
+      schema: MOBILE_TRANSFER_SCHEMA,
+      ...request,
+    } satisfies TransferAssetExistenceRequest);
     const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_EXISTENCE_PATH), {
       method: 'POST',
       signal: abort_signal,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        schema: MOBILE_TRANSFER_SCHEMA,
-        ...request,
-      } satisfies TransferAssetExistenceRequest),
+      body: JSON.stringify(payload),
     });
     return this.parse_response(response, 'Transfer existence request failed.');
   }
@@ -95,23 +101,22 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
       if (!(content instanceof Uint8Array) && !this.is_blob_like(content)) {
         throw new Error('Transfer asset request failed: unsupported chunk content type.');
       }
-      return this.post_chunk_with_xhr(url.toString(), content, abort_signal);
+      const encrypted_chunk = await this.payload_cipher.encrypt_binary_chunk(content);
+      return this.post_chunk_with_xhr(url.toString(), encrypted_chunk, abort_signal);
     }
+    const payload = await this.payload_cipher.encrypt_json_payload({
+      ...metadata,
+      stream_state,
+      request_id,
+    });
     const response = await this.fetch_impl(
       url.toString(),
       {
         method: 'POST',
         signal: abort_signal,
-        headers:
-          stream_state === 'chunk'
-            ? { 'content-type': 'application/octet-stream' }
-            : { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json' },
         body:
-          JSON.stringify({
-            ...metadata,
-            stream_state,
-            request_id,
-          }),
+          JSON.stringify(payload),
       }
     );
     return this.parse_response(response, 'Transfer asset request failed.');
@@ -141,18 +146,24 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
         }
         abort_signal?.removeEventListener('abort', on_abort);
         const raw_response = request.responseText || '';
-        let payload: TransferResponse;
+        let parsed_payload: object;
         try {
-          payload = JSON.parse(raw_response) as TransferResponse;
+          parsed_payload = JSON.parse(raw_response) as object;
         } catch {
           reject(new Error(`Transfer asset request failed. Status=${request.status}. Raw=${raw_response}`));
           return;
         }
-        if (request.status >= 200 && request.status < 300) {
-          resolve(payload);
-          return;
-        }
-        reject(new Error(payload.message || `Transfer asset request failed. Status=${request.status}.`));
+        this.payload_cipher.decrypt_json_payload(parsed_payload).then((decoded_payload) => {
+          const payload = decoded_payload as TransferResponse;
+          if (request.status >= 200 && request.status < 300) {
+            resolve(payload);
+            return;
+          }
+          reject(new Error(payload.message || `Transfer asset request failed. Status=${request.status}.`));
+        }).catch((error) => {
+          const message = error instanceof Error ? error.message : 'Transfer asset request failed: response decode error.';
+          reject(new Error(message));
+        });
       };
       request.onerror = () => {
         abort_signal?.removeEventListener('abort', on_abort);
@@ -163,20 +174,22 @@ export class DefaultHttpTransferClient implements HttpTransferClient {
   }
 
   async complete(request: Omit<TransferCompleteRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse> {
+    const payload = await this.payload_cipher.encrypt_json_payload({
+      schema: MOBILE_TRANSFER_SCHEMA,
+      ...request,
+    } satisfies TransferCompleteRequest);
     const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_COMPLETE_PATH), {
       method: 'POST',
       signal: abort_signal,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        schema: MOBILE_TRANSFER_SCHEMA,
-        ...request,
-      } satisfies TransferCompleteRequest),
+      body: JSON.stringify(payload),
     });
     return this.parse_response(response, 'Transfer complete request failed.');
   }
 
   private async parse_response(response: Response, fallback_message: string): Promise<TransferResponse> {
-    const payload = (await response.json()) as TransferResponse;
+    const decoded_payload = await this.payload_cipher.decrypt_json_payload((await response.json()) as object);
+    const payload = decoded_payload as TransferResponse;
     if (!response.ok) {
       throw new Error(payload.message || `${fallback_message} Status=${response.status}.`);
     }

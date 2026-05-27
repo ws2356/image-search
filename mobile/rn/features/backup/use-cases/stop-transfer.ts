@@ -29,6 +29,7 @@ export async function stopTransfer(
   const session_id = session.pairingSession?.sessionId;
   const endpoint_base_url = session.pairingSession?.endpointBaseUrl;
   const trust_key_b64 = session.pairingSession?.trustKeyB64;
+  const encryption_enabled = session.pairingSession?.encryptionEnabled === true;
   const device_uuid = session.localDeviceIdentity?.deviceUuid;
   const transferred_count = session.transferSnapshot?.counts.transferredAssets ?? 0;
   const failed_count = session.transferSnapshot?.counts.failedAssets ?? 0;
@@ -42,6 +43,7 @@ export async function stopTransfer(
         session_id,
         device_uuid,
         trust_key_b64,
+        encryption_enabled,
       });
       await transfer_service.complete(
         transferred_count,

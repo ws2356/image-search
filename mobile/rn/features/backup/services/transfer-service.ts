@@ -9,6 +9,7 @@ import type {
 } from '@/features/backup/protocols/transfer';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
+import { NoopPayloadCipher, TransferPayloadCipher } from '@/infrastructure/crypto/payload-cipher';
 import type { HttpTransferClient } from '@/infrastructure/transport/lan/http-transfer-client';
 import { DefaultHttpTransferClient } from '@/infrastructure/transport/lan/http-transfer-client';
 
@@ -17,6 +18,7 @@ export interface TransferServiceContext {
   session_id: string;
   device_uuid: string;
   trust_key_b64: string;
+  encryption_enabled?: boolean;
 }
 
 export interface TransferServiceDeps {
@@ -32,8 +34,11 @@ export class TransferService {
 
   constructor(context: TransferServiceContext, deps?: Partial<TransferServiceDeps>) {
     this.context = context;
+    const payload_cipher = context.encryption_enabled
+      ? new TransferPayloadCipher(context.trust_key_b64)
+      : new NoopPayloadCipher();
     this.deps = {
-      transfer_client: deps?.transfer_client ?? new DefaultHttpTransferClient(context.endpoint_base_url),
+      transfer_client: deps?.transfer_client ?? new DefaultHttpTransferClient(context.endpoint_base_url, fetch, payload_cipher),
       trust_proof_signer: deps?.trust_proof_signer ?? new DefaultTrustProofSigner(),
     };
   }

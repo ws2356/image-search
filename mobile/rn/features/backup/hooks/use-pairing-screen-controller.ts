@@ -113,7 +113,8 @@ export function usePairingScreenController(): PairingScreenController {
       response_desktop_name: string | null | undefined,
       endpoint_base_url: string,
       fallback_session_id: string,
-      trust_key_b64: string
+      trust_key_b64: string,
+      strict_security_enabled: boolean
     ) => {
       if (cancelled || has_finished) {
         return;
@@ -127,6 +128,8 @@ export function usePairingScreenController(): PairingScreenController {
           endpointBaseUrl: endpoint_base_url,
           pairingCompletedAt: new Date().toISOString(),
           trustKeyB64: trust_key_b64,
+          strictSecurityEnabled: strict_security_enabled,
+          encryptionEnabled: false,
         },
       });
       if (!cancelled) {
@@ -206,7 +209,8 @@ export function usePairingScreenController(): PairingScreenController {
             response.desktop_name,
             endpoint_base_url,
             session_id,
-            trust_key_b64
+            trust_key_b64,
+            payload.strictSecurityEnabled
           );
           return true;
         }

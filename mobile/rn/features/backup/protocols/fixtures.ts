@@ -27,7 +27,7 @@ export const FIXTURE_PAIRING_CLAIM_REQUEST: PairingClaimRequest = {
   device_name: 'Pixel 9',
   client_nonce: 'nonce-123',
   capabilities: {
-    encrypted_payload_v1: 1,
+    encryption: 1,
   },
 };
 
@@ -43,7 +43,7 @@ export const FIXTURE_CAPABILITY_EXCHANGE_REQUEST: CapabilityExchangeRequest = {
   device_uuid: 'device-123',
   trust_proof: 'proof-123',
   capabilities: {
-    encrypted_payload_v1: 1,
+    encryption: 1,
   },
 };
 
