@@ -21,6 +21,7 @@ export interface TransferProgressSnapshot {
   bytesUploaded: number;
   bytesPerSecond: number | null;
   estimatedSecondsRemaining: number | null;
+  startedAt: string;
   lastUpdatedAt: string;
 }
 

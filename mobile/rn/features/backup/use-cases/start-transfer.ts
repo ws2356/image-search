@@ -69,6 +69,7 @@ function build_snapshot(input: {
     bytesUploaded: input.bytes_uploaded,
     bytesPerSecond: bytes_per_second,
     estimatedSecondsRemaining: estimated_seconds_remaining,
+    startedAt: new Date(input.started_at_ms).toISOString(),
     lastUpdatedAt: new Date().toISOString(),
   };
 }

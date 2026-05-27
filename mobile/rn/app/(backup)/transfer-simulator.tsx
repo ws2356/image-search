@@ -22,6 +22,7 @@ async function push_snapshot(stage: TransferPipelineStage, transferred: number, 
       bytesUploaded: transferred * 1024 * 1024,
       bytesPerSecond: 512 * 1024,
       estimatedSecondsRemaining: Math.max(0, 50 - transferred),
+      startedAt: new Date(Date.now() - transferred * 1000).toISOString(),
       lastUpdatedAt: new Date().toISOString(),
     },
   });
