@@ -85,6 +85,18 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
     removeNotificationAndStop()
   }
 
+  fun showTerminalNotificationAndStop(stateJson: String, snapshotJson: String?) {
+    val notificationManager = getSystemService(NotificationManager::class.java)
+    notificationManager.notify(NOTIFICATION_ID, buildTerminalNotification(stateJson, snapshotJson))
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      stopForeground(STOP_FOREGROUND_DETACH)
+    } else {
+      @Suppress("DEPRECATION")
+      stopForeground(false)
+    }
+    stopSelf()
+  }
+
   private fun ensureNotificationChannel() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
       return
@@ -162,6 +174,46 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
     stopSelf()
   }
 
+  private fun buildTerminalNotification(stateJson: String, snapshotJson: String?): Notification {
+    val launchIntent = Intent(this, MainActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
+    val contentIntent = PendingIntent.getActivity(
+      this,
+      0,
+      launchIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val status = parseStatus(stateJson)
+    val errorMessage = parseErrorMessage(stateJson)
+    val snapshot = snapshotJson?.let(::parseSnapshot)
+    val counts = snapshot?.optJSONObject("counts")
+    val transferredCount = counts?.optInt("transferredAssets", 0) ?: 0
+    val matchedCount = counts?.optInt("matchedAssets", 0) ?: 0
+    val failedCount = counts?.optInt("failedAssets", 0) ?: 0
+
+    val title = when (status) {
+      "completed" -> "Backup completed"
+      "failed" -> "Backup failed"
+      else -> "Backup stopped"
+    }
+    val text = when (status) {
+      "completed" -> "Transferred $transferredCount • Skipped $matchedCount • Failed $failedCount"
+      "failed" -> errorMessage ?: "The background backup session ended with an error."
+      else -> "The backup session was stopped."
+    }
+
+    return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+      .setContentTitle(title)
+      .setContentText(text)
+      .setSmallIcon(R.mipmap.ic_launcher)
+      .setOngoing(false)
+      .setAutoCancel(true)
+      .setOnlyAlertOnce(true)
+      .setContentIntent(contentIntent)
+      .build()
+  }
+
   companion object {
     const val ACTION_START = "com.ausearch.aubackup.transfer.action.START"
     const val ACTION_REQUEST_STOP = "com.ausearch.aubackup.transfer.action.REQUEST_STOP"
@@ -230,7 +282,8 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
       latestStateJson = stateJson
       broadcastStateChanged()
       when (parseStatus(stateJson)) {
-        "completed", "failed", "stopped" -> serviceInstance?.finishAndStop()
+        "completed", "failed" -> serviceInstance?.showTerminalNotificationAndStop(stateJson, latestSnapshotJson)
+        "stopped" -> serviceInstance?.finishAndStop()
         "running" -> serviceInstance?.updateProgressNotification(latestSnapshotJson)
       }
     }
@@ -279,6 +332,17 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
         JSONObject(stateJson).optString("status", "idle")
       } catch (_: JSONException) {
         "idle"
+      }
+    }
+
+    private fun parseErrorMessage(stateJson: String?): String? {
+      if (stateJson == null) {
+        return null
+      }
+      return try {
+        JSONObject(stateJson).opt("errorMessage") as? String
+      } catch (_: JSONException) {
+        null
       }
     }
 
