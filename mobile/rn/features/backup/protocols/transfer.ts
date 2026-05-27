@@ -22,9 +22,10 @@ export interface TransferSessionRequest {
 
 export interface TransferAssetSignature {
   asset_id: string;
-  sha1: string;
-  file_size: number;
-  created_at: string;
+  asset_version?: string;
+  sha1?: string;
+  file_size?: number;
+  created_at?: string;
 }
 
 export interface TransferAssetExistenceRequest {

@@ -39,6 +39,14 @@ const INITIAL_BACKUP_SESSION_STATE: BackupSessionState = {
   latestError: null,
 };
 
+function build_reset_session_state(previous_session: BackupSessionState): BackupSessionState {
+  return {
+    ...INITIAL_BACKUP_SESSION_STATE,
+    trustedDesktop: previous_session.trustedDesktop,
+    localDeviceIdentity: previous_session.localDeviceIdentity,
+  };
+}
+
 export const useBackupSessionStore = create<BackupSessionStoreState>((set) => ({
   session: INITIAL_BACKUP_SESSION_STATE,
   setRoutePhase: (routePhase) =>
@@ -101,7 +109,7 @@ export const useBackupSessionStore = create<BackupSessionStoreState>((set) => ({
       },
     })),
   resetSession: () =>
-    set({
-      session: INITIAL_BACKUP_SESSION_STATE,
-    }),
+    set((state) => ({
+      session: build_reset_session_state(state.session),
+    })),
 }));

@@ -24,6 +24,8 @@ export interface TransferServiceDeps {
   trust_proof_signer: TrustProofSigner;
 }
 
+export type TransferChunkUploadedCallback = (chunk_length: number) => Promise<void> | void;
+
 export class TransferService {
   private readonly context: TransferServiceContext;
   private readonly deps: TransferServiceDeps;
@@ -76,7 +78,8 @@ export class TransferService {
     read_chunk: (offset: number, length: number) => Promise<Blob | Uint8Array>,
     total_size_bytes?: number,
     chunk_size_bytes = 256 * 1024,
-    abort_signal?: AbortSignal
+    abort_signal?: AbortSignal,
+    on_chunk_uploaded?: TransferChunkUploadedCallback
   ): Promise<TransferResponse> {
     const request_id = metadata.asset_id;
     const trust_proof = await this.build_transfer_trust_proof('transfer.asset');
@@ -107,6 +110,9 @@ export class TransferService {
       }
       await this.deps.transfer_client.asset(full_metadata, request_id, 'chunk', chunk, abort_signal);
       offset += chunk_length;
+      if (on_chunk_uploaded) {
+        await on_chunk_uploaded(chunk_length);
+      }
     }
     if (abort_signal?.aborted) {
       throw new Error('Transfer stopped by user.');

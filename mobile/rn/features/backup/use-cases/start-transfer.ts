@@ -1,8 +1,10 @@
+import QuickCrypto from 'react-native-quick-crypto';
 import { assert_transfer_not_live_in_phase4 } from '@/features/backup/services/phase-scope';
 import { TransferService } from '@/features/backup/services/transfer-service';
 import type { CapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { HttpCapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { DefaultTransferAssetSource, type TransferAssetSource } from '@/features/backup/services/transfer-asset-source';
+import { TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY } from '@/features/backup/protocols/capabilities';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { TransferFailureReason, TransferPipelineStage, TransferTransport } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
@@ -32,6 +34,9 @@ export interface StartTransferDeps {
 export interface StartTransferOptions {
   abort_controller: AbortController;
 }
+
+const TRANSFER_EXISTENCE_BATCH_SIZE = 15;
+const TRANSFER_CONCURRENT_UPLOAD_LIMIT = 5;
 
 function build_snapshot(input: {
   stage: TransferPipelineStage;
@@ -66,6 +71,23 @@ function build_snapshot(input: {
     estimatedSecondsRemaining: estimated_seconds_remaining,
     lastUpdatedAt: new Date().toISOString(),
   };
+}
+
+async function compute_asset_sha1(asset_id: string, transfer_asset_source: TransferAssetSource): Promise<string> {
+  const chunk_reader = await transfer_asset_source.open_asset_chunk_reader(asset_id, 0);
+  const hasher = QuickCrypto.createHash('sha1');
+  try {
+    while (true) {
+      const chunk = chunk_reader.read_chunk(1024 * 1024);
+      if (chunk.length === 0) {
+        break;
+      }
+      hasher.update(chunk);
+    }
+  } finally {
+    chunk_reader.close();
+  }
+  return hasher.digest('hex');
 }
 
 export async function startTransfer(
@@ -124,6 +146,19 @@ export async function startTransfer(
   };
 
   try {
+    await deps.apply_command({
+      type: 'transferSnapshotUpdated',
+      snapshot: build_snapshot({
+        stage: TransferPipelineStage.Enumerating,
+        total_assets: 0,
+        matched_assets: 0,
+        transferred_assets: 0,
+        failed_assets: 0,
+        active_asset_id: null,
+        bytes_uploaded: 0,
+        started_at_ms,
+      }),
+    });
     throw_if_transfer_stopped();
     const trust_proof = await deps.trust_proof_signer.derive_trust_proof({
       purpose: 'capabilities.exchange',
@@ -144,6 +179,8 @@ export async function startTransfer(
     if (exchange.status !== 'accepted') {
       throw new Error(exchange.message || 'Capability exchange rejected.');
     }
+    const supports_asset_version_existence =
+      exchange.capabilities[TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY] === 1;
     throw_if_transfer_stopped();
 
     const transfer_service = new TransferService({
@@ -175,94 +212,132 @@ export async function startTransfer(
       }),
     });
 
-    const signatures: TransferAssetSignature[] = assets
-      .filter(
-        (asset) =>
-          asset.dedupe_signature.content_sha1 &&
-          typeof asset.dedupe_signature.file_size_bytes === 'number' &&
-          asset.dedupe_signature.created_at
-      )
-      .map((asset) => ({
-        asset_id: asset.asset_id,
-        sha1: asset.dedupe_signature.content_sha1 as string,
-        file_size: asset.dedupe_signature.file_size_bytes as number,
-        created_at: asset.dedupe_signature.created_at as string,
-      }));
-
-    const matched_asset_ids = new Set<string>();
-    if (signatures.length > 0) {
-      const existence = await transfer_service.check_existence(signatures, transfer_abort_signal);
-      throw_if_transfer_stopped();
-      for (const match of existence.matches ?? []) {
-        matched_asset_ids.add(match.asset_id);
-      }
-    }
-
     let transferred_assets = 0;
     let failed_assets = 0;
     let bytes_uploaded = 0;
-    const matched_assets = matched_asset_ids.size;
+    let matched_assets = 0;
 
-    await deps.apply_command({
-      type: 'transferSnapshotUpdated',
-      snapshot: build_snapshot({
-        stage: TransferPipelineStage.ExistingCheck,
-        total_assets,
-        matched_assets,
-        transferred_assets,
-        failed_assets,
-        active_asset_id: null,
-        bytes_uploaded,
-        started_at_ms,
-      }),
-    });
-
-    for (const asset of assets) {
-      throw_if_transfer_stopped();
-      if (matched_asset_ids.has(asset.asset_id)) {
-        transferred_assets += 1;
-      } else {
-        try {
-          const declared_size =
-            typeof asset.metadata.file_size === 'number' && asset.metadata.file_size > 0
-              ? asset.metadata.file_size
-              : undefined;
-          const chunk_reader = await deps.transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
-          try {
-            await transfer_service.upload_asset_chunked(
-              asset.metadata,
-              async (_offset, length) => chunk_reader.read_chunk(length),
-              declared_size,
-              1024 * 1024,
-              transfer_abort_signal
-            );
-          } finally {
-            chunk_reader.close();
-          }
-          if (typeof declared_size === 'number') {
-            bytes_uploaded += declared_size;
-          }
-          transferred_assets += 1;
-        } catch (error) {
-          failed_assets += 1;
-          const message = error instanceof Error ? error.message : 'Unknown upload error.';
-          throw new Error(`Failed uploading asset ${asset.asset_id}: ${message}`);
-        }
-      }
-
+    const publish_snapshot = async (
+      stage: TransferPipelineStage,
+      active_asset_id: string | null
+    ): Promise<void> => {
       await deps.apply_command({
         type: 'transferSnapshotUpdated',
         snapshot: build_snapshot({
-          stage: TransferPipelineStage.Transferring,
+          stage,
           total_assets,
           matched_assets,
           transferred_assets,
           failed_assets,
-          active_asset_id: asset.asset_id,
+          active_asset_id,
           bytes_uploaded,
           started_at_ms,
         }),
       });
+    };
+
+    const build_existence_candidates = async (
+      batch_assets: typeof assets
+    ): Promise<TransferAssetSignature[]> => {
+      const candidates: TransferAssetSignature[] = [];
+      for (const asset of batch_assets) {
+        const has_asset_version = supports_asset_version_existence && typeof asset.metadata.asset_version === 'string';
+        const has_legacy_signature_shape =
+          typeof asset.dedupe_signature.file_size_bytes === 'number' && asset.dedupe_signature.created_at != null;
+        let content_sha1 = asset.dedupe_signature.content_sha1;
+        if (!has_asset_version && content_sha1 == null && has_legacy_signature_shape) {
+          content_sha1 = await compute_asset_sha1(asset.asset_id, deps.transfer_asset_source);
+          asset.dedupe_signature.content_sha1 = content_sha1;
+          asset.metadata.sha1 = content_sha1;
+        }
+        const has_legacy_signature = content_sha1 != null && has_legacy_signature_shape;
+        if (!has_asset_version && !has_legacy_signature) {
+          continue;
+        }
+        candidates.push({
+          asset_id: asset.asset_id,
+          asset_version: has_asset_version ? asset.metadata.asset_version : undefined,
+          sha1: content_sha1 ?? undefined,
+          file_size: asset.dedupe_signature.file_size_bytes ?? undefined,
+          created_at: asset.dedupe_signature.created_at ?? undefined,
+        });
+      }
+      return candidates;
+    };
+
+    const upload_asset = async (asset: (typeof assets)[number]): Promise<void> => {
+      throw_if_transfer_stopped();
+      await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
+      try {
+        const chunk_reader = await deps.transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
+        try {
+          await transfer_service.upload_asset_chunked(
+            asset.metadata,
+            async (_offset, length) => chunk_reader.read_chunk(length),
+            typeof asset.metadata.file_size === 'number' && asset.metadata.file_size > 0
+              ? asset.metadata.file_size
+              : undefined,
+            1024 * 1024,
+            transfer_abort_signal,
+            async (chunk_length) => {
+              bytes_uploaded += chunk_length;
+              await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
+            }
+          );
+        } finally {
+          chunk_reader.close();
+        }
+        transferred_assets += 1;
+        await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
+      } catch (error) {
+        failed_assets += 1;
+        const message = error instanceof Error ? error.message : 'Unknown upload error.';
+        throw new Error(`Failed uploading asset ${asset.asset_id}: ${message}`);
+      }
+    };
+
+    const upload_ready_assets = async (ready_assets: typeof assets): Promise<void> => {
+      let next_ready_index = 0;
+      let upload_error: Error | null = null;
+      const worker_count = Math.min(TRANSFER_CONCURRENT_UPLOAD_LIMIT, ready_assets.length);
+      const workers = Array.from({ length: worker_count }, async () => {
+        while (next_ready_index < ready_assets.length && upload_error == null) {
+          const asset = ready_assets[next_ready_index];
+          next_ready_index += 1;
+          await upload_asset(asset).catch((error) => {
+            upload_error = error instanceof Error ? error : new Error('Unknown upload error.');
+          });
+        }
+      });
+      await Promise.all(workers);
+      if (upload_error) {
+        throw upload_error;
+      }
+    };
+
+    for (let batch_start = 0; batch_start < assets.length; batch_start += TRANSFER_EXISTENCE_BATCH_SIZE) {
+      throw_if_transfer_stopped();
+      const batch_assets = assets.slice(batch_start, batch_start + TRANSFER_EXISTENCE_BATCH_SIZE);
+      const existence_candidates = await build_existence_candidates(batch_assets);
+      const matched_asset_ids = new Set<string>();
+      await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
+      if (existence_candidates.length > 0) {
+        const existence = await transfer_service.check_existence(existence_candidates, transfer_abort_signal);
+        throw_if_transfer_stopped();
+        for (const match of existence.matches ?? []) {
+          matched_asset_ids.add(match.asset_id);
+        }
+      }
+      if (matched_asset_ids.size > 0) {
+        matched_assets += matched_asset_ids.size;
+        transferred_assets += matched_asset_ids.size;
+      }
+      await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
+      const ready_assets = batch_assets.filter((asset) => !matched_asset_ids.has(asset.asset_id));
+      if (ready_assets.length === 0) {
+        continue;
+      }
+      await upload_ready_assets(ready_assets);
     }
 
     await deps.apply_command({
