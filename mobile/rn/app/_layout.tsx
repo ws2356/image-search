@@ -2,14 +2,16 @@ import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import 'react-native-reanimated';
 import '@/src/global.css';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { IncomingLinkReplacementDialog } from '@/features/backup/components/incoming-link-replacement-dialog';
 import { UpdatePromptDialog } from '@/features/backup/components/update-prompt-dialog';
+import { load_persisted_pairing_state } from '@/features/backup/services/pairing-persistence-service';
 import { processIncomingLink } from '@/features/backup/use-cases/process-incoming-link';
+import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import { useBackupUiStore } from '@/features/backup/store/backup-ui-store';
 import { AppServicesProvider } from '@/infrastructure/di/app-services-provider';
 import { ExpoIncomingLinkPort } from '@/infrastructure/linking/incoming-link-port';
@@ -30,6 +32,8 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const [persistence_loaded, set_persistence_loaded] = useState(false);
+  const [persistence_error, set_persistence_error] = useState<Error | null>(null);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
@@ -37,12 +41,48 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    let cancelled = false;
+
+    void load_persisted_pairing_state()
+      .then((persisted) => {
+        if (cancelled) {
+          return;
+        }
+        const store = useBackupSessionStore.getState();
+        if (store.session.trustedDesktop == null && persisted.trusted_desktop != null) {
+          store.setTrustedDesktop(persisted.trusted_desktop);
+        }
+        if (store.session.localDeviceIdentity == null && persisted.local_device_identity != null) {
+          store.setLocalDeviceIdentity(persisted.local_device_identity);
+        }
+        set_persistence_loaded(true);
+      })
+      .catch((load_error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        set_persistence_error(
+          load_error instanceof Error
+            ? load_error
+            : new Error('Failed to load persisted backup pairing state.')
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loaded && persistence_loaded) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, persistence_loaded]);
 
-  if (!loaded) {
+  if (persistence_error) {
+    throw persistence_error;
+  }
+  if (!loaded || !persistence_loaded) {
     return null;
   }
 

@@ -1,20 +1,25 @@
 import type { PairingSessionSummary, TrustedDesktopSummary } from '@/features/backup/pairing/models';
 import type { LocalDeviceIdentitySummary } from '@/features/backup/session/models';
 import {
-  InMemoryLocalDeviceIdentityRepository,
+  AsyncStorageLocalDeviceIdentityRepository,
   type LocalDeviceIdentityRecord,
 } from '@/infrastructure/storage/local-device-identity-repository';
 import {
-  InMemoryTrustedDesktopRepository,
+  AsyncStorageTrustedDesktopRepository,
   type TrustedDesktopRecord,
 } from '@/infrastructure/storage/trusted-desktop-repository';
 
-const trusted_desktop_repository = new InMemoryTrustedDesktopRepository();
-const local_device_identity_repository = new InMemoryLocalDeviceIdentityRepository();
+const trusted_desktop_repository = new AsyncStorageTrustedDesktopRepository();
+const local_device_identity_repository = new AsyncStorageLocalDeviceIdentityRepository();
 
 export interface PairingPersistenceResult {
   trusted_desktop: TrustedDesktopSummary;
   local_device_identity: LocalDeviceIdentitySummary;
+}
+
+export interface PersistedPairingState {
+  trusted_desktop: TrustedDesktopSummary | null;
+  local_device_identity: LocalDeviceIdentitySummary | null;
 }
 
 function to_trusted_desktop_summary(record: TrustedDesktopRecord): TrustedDesktopSummary {
@@ -70,5 +75,17 @@ export async function persist_pairing_success(
   return {
     trusted_desktop: to_trusted_desktop_summary(trusted_record),
     local_device_identity: to_local_device_identity_summary(local_record),
+  };
+}
+
+export async function load_persisted_pairing_state(): Promise<PersistedPairingState> {
+  const [trusted_desktop, local_device_identity] = await Promise.all([
+    trusted_desktop_repository.get_latest(),
+    local_device_identity_repository.get_current(),
+  ]);
+
+  return {
+    trusted_desktop: trusted_desktop ? to_trusted_desktop_summary(trusted_desktop) : null,
+    local_device_identity: local_device_identity ? to_local_device_identity_summary(local_device_identity) : null,
   };
 }
