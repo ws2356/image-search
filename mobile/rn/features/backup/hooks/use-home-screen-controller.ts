@@ -31,6 +31,6 @@ export function useHomeScreenController(): HomeScreenController {
     permission_scope,
     interruption_warning,
     has_session_history,
-    start_backup: () => router.push('/scan'),
+    start_backup: () => router.replace('/scan'),
   };
 }

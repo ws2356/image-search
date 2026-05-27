@@ -131,7 +131,7 @@ export function useTransferScreenController(): TransferScreenController {
       set_last_error(null);
       set_running(false);
       navigate_without_exit_prompt(() => {
-        router.push('/scan');
+        router.replace('/scan');
       });
     },
     complete_transfer: async () => {
@@ -139,7 +139,7 @@ export function useTransferScreenController(): TransferScreenController {
         await finishTransfer();
         set_running(false);
         navigate_without_exit_prompt(() => {
-          router.push('/completed');
+          router.replace('/completed');
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to complete transfer.';

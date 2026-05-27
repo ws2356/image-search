@@ -270,7 +270,7 @@ export function usePairingScreenController(): PairingScreenController {
   return {
     pairing_status_label,
     live_pairing_enabled,
-    continue_to_permissions: () => router.push('/permissions'),
+    continue_to_permissions: () => router.replace('/permissions'),
     return_home: () => {
       Alert.alert(
         'Cancel pairing?',

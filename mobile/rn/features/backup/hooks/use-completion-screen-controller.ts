@@ -17,7 +17,7 @@ export function useCompletionScreenController(): CompletionScreenController {
     items_backed_up,
     duration_description: null,
     return_home: () => {
-      void returnHome().then(() => router.push('/'));
+      void returnHome().then(() => router.replace('/'));
     },
   };
 }

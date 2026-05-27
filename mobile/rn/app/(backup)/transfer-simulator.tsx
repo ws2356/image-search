@@ -41,7 +41,7 @@ export default function TransferSimulatorRoute() {
       <Pressable
         onPress={() => {
           void push_snapshot(TransferPipelineStage.Enumerating, 0, 0);
-          router.push('/transfer');
+          router.replace('/transfer');
         }}
         style={{ borderRadius: 10, backgroundColor: '#efefef', paddingVertical: 12, paddingHorizontal: 14 }}>
         <Text selectable>Simulate Enumerating</Text>
@@ -49,7 +49,7 @@ export default function TransferSimulatorRoute() {
       <Pressable
         onPress={() => {
           void push_snapshot(TransferPipelineStage.ExistingCheck, 5, 0);
-          router.push('/transfer');
+          router.replace('/transfer');
         }}
         style={{ borderRadius: 10, backgroundColor: '#efefef', paddingVertical: 12, paddingHorizontal: 14 }}>
         <Text selectable>Simulate Existing Check</Text>
@@ -57,7 +57,7 @@ export default function TransferSimulatorRoute() {
       <Pressable
         onPress={() => {
           void push_snapshot(TransferPipelineStage.Transferring, 24, 1);
-          router.push('/transfer');
+          router.replace('/transfer');
         }}
         style={{ borderRadius: 10, backgroundColor: '#efefef', paddingVertical: 12, paddingHorizontal: 14 }}>
         <Text selectable>Simulate Transferring</Text>
@@ -65,7 +65,7 @@ export default function TransferSimulatorRoute() {
       <Pressable
         onPress={() => {
           void push_snapshot(TransferPipelineStage.Completing, 50, 1);
-          router.push('/transfer');
+          router.replace('/transfer');
         }}
         style={{ borderRadius: 10, backgroundColor: '#efefef', paddingVertical: 12, paddingHorizontal: 14 }}>
         <Text selectable>Simulate Completing</Text>

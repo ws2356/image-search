@@ -18,10 +18,10 @@ export function useErrorScreenController(): ErrorScreenController {
     error_title: latest_error?.title ?? 'Something went wrong',
     error_message: latest_error?.message ?? 'An unexpected error occurred. You can try again or return home.',
     retry_scan: () => {
-      void apply_backup_command({ type: 'recoverFromError' }).then(() => router.push('/scan'));
+      void apply_backup_command({ type: 'recoverFromError' }).then(() => router.replace('/scan'));
     },
     return_home: () => {
-      void returnHome().then(() => router.push('/'));
+      void returnHome().then(() => router.replace('/'));
     },
   };
 }

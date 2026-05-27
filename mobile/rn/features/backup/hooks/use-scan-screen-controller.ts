@@ -42,7 +42,7 @@ export function useScanScreenController(): ScanScreenController {
       return;
     }
     has_navigated_ref.current = true;
-    router.push({
+    router.replace({
       pathname: '/pair',
       params: {
         qr_payload,
@@ -59,6 +59,6 @@ export function useScanScreenController(): ScanScreenController {
       set_camera_permission_can_ask_again(snapshot.canAskAgain);
     },
     handle_barcode_scanned,
-    return_home: () => router.push('/'),
+    return_home: () => router.replace('/'),
   };
 }
