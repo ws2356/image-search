@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BackHandler, Platform } from 'react-native';
 
 import { ExpoCameraQrScannerPort } from '@/infrastructure/system/qr-scanner-port';
 
@@ -50,6 +51,23 @@ export function useScanScreenController(): ScanScreenController {
     });
   }, [router]);
 
+  const return_home = useCallback(() => {
+    router.replace('/');
+  }, [router]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return undefined;
+    }
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      return_home();
+      return true;
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [return_home]);
+
   return {
     camera_permission_granted,
     camera_permission_can_ask_again,
@@ -59,6 +77,6 @@ export function useScanScreenController(): ScanScreenController {
       set_camera_permission_can_ask_again(snapshot.canAskAgain);
     },
     handle_barcode_scanned,
-    return_home: () => router.replace('/'),
+    return_home,
   };
 }
