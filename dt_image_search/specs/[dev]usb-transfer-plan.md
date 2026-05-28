@@ -17,6 +17,9 @@ Validate Android Open Accessory (AOA) transport viability on both macOS and Wind
 Each run writes:
 - `dt_image_search/mobile/transport/poc/runs/<timestamp>-<host_os>/metrics.json`
 
+Summary command:
+- `python -m dt_image_search.mobile.transport.poc.summarize_aoa_runs --runs-root dt_image_search/mobile/transport/poc/runs`
+
 ## Pass/Fail thresholds
 - Handshake p95: `<= 5000 ms`
 - Reconnect success rate: `>= 95%` over at least `20` cable replug cycles
@@ -34,6 +37,15 @@ Each run writes:
     "model": "string",
     "android_version": "string",
     "serial_hash": "sha256-hex"
+  },
+  "host_readiness": {
+    "host_os": "macos|windows",
+    "pyusb_imported": true,
+    "libusb_backend_available": true,
+    "device_enumeration_available": true,
+    "detected_usb_device_count": 1,
+    "recommended_actions": [],
+    "notes": []
   },
   "thresholds": {
     "handshake_p95_ms_max": 5000,

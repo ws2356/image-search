@@ -49,6 +49,7 @@ This plan defines deterministic implementation steps to add Android USB transpor
 | TASK-035 | Add automated POC smoke tests `tests/unit/test_android_aoa_poc_contract.py` that validate framing codec and host-side AOA state-machine transitions using mocks (no physical device required in CI). |  |  |
 | TASK-036 | Record POC integration findings and required production adjustments (threading model, timeout defaults, error mapping, cleanup semantics) directly into this plan’s Risks/Assumptions and Phase 1 task notes before Phase 1 execution. |  |  |
 | TASK-037 | Add POC instrumentation in `android_aoa_poc.py` and host runners to write per-run metrics JSON files into dedicated folder `dt_image_search/mobile/transport/poc/runs/<timestamp>-<host_os>/metrics.json` including handshake_ms, reconnect_success_count, reconnect_total_count, throughput_bytes_per_second, error events, and final threshold verdict. |  |  |
+| TASK-038 | Add metrics summarizer CLI `dt_image_search/mobile/transport/poc/summarize_aoa_runs.py` to print macOS/Windows side-by-side pass/fail status from `poc/runs/**/metrics.json` for threshold gate decisions. |  |  |
 
 #### Phase 0 `metrics.json` schema (deterministic)
 
@@ -63,6 +64,15 @@ This plan defines deterministic implementation steps to add Android USB transpor
     "model": "string",
     "android_version": "string",
     "serial_hash": "sha256-hex"
+  },
+  "host_readiness": {
+    "host_os": "macos|windows",
+    "pyusb_imported": true,
+    "libusb_backend_available": true,
+    "device_enumeration_available": true,
+    "detected_usb_device_count": 1,
+    "recommended_actions": [],
+    "notes": []
   },
   "thresholds": {
     "handshake_p95_ms_max": 5000,
@@ -206,6 +216,7 @@ This plan defines deterministic implementation steps to add Android USB transpor
 - **TEST-004**: Android manual functional matrix: pairing via QR + USB connected, USB disconnected during transfer, LAN fallback after USB failure, stop-transfer during USB upload, resume flow after reconnect.
 - **TEST-005**: Protocol compatibility validation: verify USB envelope fields and transfer binary frame structure match desktop adapter expectations (`dtis.mobile-transport.v1`, `request_id`, frame header sizes).
 - **TEST-006**: Phase 0 threshold validation from per-run metrics files in `dt_image_search/mobile/transport/poc/runs/`: handshake p95 <= 5000 ms, reconnect_success_rate >= 95% over at least 20 replug cycles, throughput >= 8 MB/s sustained over 30 seconds on both macOS and Windows.
+- **TEST-007**: Validate summarizer output with fixture runs using `tests/unit/test_android_aoa_poc_summary_cli.py`.
 
 ## 7. Risks & Assumptions
 

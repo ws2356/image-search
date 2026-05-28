@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from dt_image_search.mobile.transport.poc.android_aoa_poc import (
     AOA_POC_METRICS_SCHEMA,
     AOA_POC_REQUEST_ID_LENGTH,
+    AoaDetectedDevice,
+    AoaHostHooks,
     AoaPocHostState,
     AoaPocHostStateMachine,
     AoaPocMeasurements,
@@ -17,8 +19,56 @@ from dt_image_search.mobile.transport.poc.android_aoa_poc import (
     build_aoa_transport_frame,
     evaluate_thresholds,
     parse_aoa_transport_frame,
+    run_host_probe_aoa_poc,
     run_simulated_aoa_poc,
 )
+
+
+class _FakeHostHooks(AoaHostHooks):
+    def __init__(
+        self,
+        *,
+        accessory_ready: bool = True,
+        throughput_bytes_per_second: int | None = 9_500_000,
+        reconnect_success: int = 19,
+        reconnect_total: int = 20,
+    ) -> None:
+        self._accessory_ready = accessory_ready
+        self._throughput = throughput_bytes_per_second
+        self._reconnect_success = reconnect_success
+        self._reconnect_total = reconnect_total
+
+    def detect_devices(self) -> tuple[AoaDetectedDevice, ...]:
+        return (
+            AoaDetectedDevice(
+                id_vendor=0x18D1,
+                id_product=0x2D00,
+                bus=1,
+                address=2,
+                serial_hash="abc",
+                supports_aoa=True,
+                is_accessory_mode=self._accessory_ready,
+            ),
+        )
+
+    def ensure_accessory_mode(self, device: AoaDetectedDevice) -> bool:
+        return self._accessory_ready
+
+    def measure_transport_throughput_bytes_per_second(
+        self,
+        *,
+        device: AoaDetectedDevice,
+        sample_seconds: int,
+    ) -> int | None:
+        return self._throughput
+
+    def measure_reconnect_success(
+        self,
+        *,
+        device: AoaDetectedDevice,
+        min_cycles: int,
+    ) -> tuple[int, int]:
+        return self._reconnect_success, self._reconnect_total
 
 
 class TestAndroidAoaPocContract(unittest.TestCase):
@@ -80,11 +130,44 @@ class TestAndroidAoaPocContract(unittest.TestCase):
             payload = json.loads(metrics_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["schema"], AOA_POC_METRICS_SCHEMA)
             self.assertEqual(payload["host_os"], "macos")
+            self.assertIn("host_readiness", payload)
+            self.assertIn("pyusb_imported", payload["host_readiness"])
             self.assertIn("threshold_verdict", payload)
             self.assertIn("overall_pass", payload["threshold_verdict"])
             self.assertTrue(str(metrics_path).startswith(str(output_root)))
 
+    def test_run_host_probe_writes_metrics_file_with_host_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = Path(temp_dir) / "runs"
+            metrics_path = run_host_probe_aoa_poc(
+                host_os="windows",
+                output_root=output_root,
+                hooks=_FakeHostHooks(),
+            )
+
+            payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["schema"], AOA_POC_METRICS_SCHEMA)
+            self.assertEqual(payload["host_os"], "windows")
+            self.assertEqual(payload["errors"], [])
+            self.assertIn("host_readiness", payload)
+            self.assertIn("recommended_actions", payload["host_readiness"])
+            self.assertIn("throughput_bytes_per_second_avg", payload["measurements"])
+            self.assertIn("overall_pass", payload["threshold_verdict"])
+
+    def test_run_host_probe_records_error_when_accessory_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = Path(temp_dir) / "runs"
+            metrics_path = run_host_probe_aoa_poc(
+                host_os="macos",
+                output_root=output_root,
+                hooks=_FakeHostHooks(accessory_ready=False, throughput_bytes_per_second=None, reconnect_success=0, reconnect_total=20),
+            )
+
+            payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+            self.assertTrue(payload["errors"])
+            self.assertIn("host_readiness", payload)
+            self.assertFalse(payload["threshold_verdict"]["overall_pass"])
+
 
 if __name__ == "__main__":
     unittest.main()
-
