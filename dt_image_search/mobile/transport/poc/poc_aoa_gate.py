@@ -43,7 +43,7 @@ def evaluate_latest_host_gate(
 
     return (
         EXIT_OK,
-        "Gate passed: latest macOS and Windows runs both passed thresholds.",
+        f"Gate passed: latest run(s) for {', '.join(required_hosts)} passed thresholds.",
     )
 
 
@@ -56,6 +56,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default="dt_image_search/mobile/transport/poc/runs",
         help="Root folder that contains per-run metrics subfolders.",
     )
+    parser.add_argument(
+        "--required-hosts",
+        default="macos,windows",
+        help="Comma-separated host list to gate, e.g. 'macos,windows' or 'macos'.",
+    )
     return parser
 
 
@@ -63,7 +68,26 @@ def main() -> int:
     parser = _build_arg_parser()
     args = parser.parse_args()
     runs_root = Path(args.runs_root).expanduser().resolve()
-    exit_code, message = evaluate_latest_host_gate(runs_root=runs_root)
+    required_hosts = tuple(
+        host.strip().lower()
+        for host in str(args.required_hosts).split(",")
+        if host.strip()
+    )
+    invalid_hosts = [
+        host for host in required_hosts if host not in ("macos", "windows")
+    ]
+    if invalid_hosts:
+        raise ValueError(
+            f"Invalid --required-hosts values: {', '.join(invalid_hosts)}. "
+            "Allowed values are macos, windows."
+        )
+    if not required_hosts:
+        raise ValueError("--required-hosts must include at least one host.")
+
+    exit_code, message = evaluate_latest_host_gate(
+        runs_root=runs_root,
+        required_hosts=required_hosts,
+    )
     sys.stdout.write(message + "\n")
     log(
         "info",
@@ -75,6 +99,7 @@ def main() -> int:
             "backup.transport": "usb_aoa_poc",
             "backup.poc.gate.runs_root": runs_root.as_posix(),
             "backup.poc.gate.exit_code": exit_code,
+            "backup.poc.gate.required_hosts": ",".join(required_hosts),
         },
     )
     return exit_code
@@ -82,4 +107,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

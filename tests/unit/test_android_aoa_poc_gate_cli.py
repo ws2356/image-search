@@ -75,7 +75,19 @@ class TestAndroidAoaPocGateCli(unittest.TestCase):
             self.assertEqual(exit_code, EXIT_THRESHOLD_FAILED)
             self.assertIn("did not pass threshold", message)
 
+    def test_gate_can_target_single_required_host(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runs_root = Path(temp_dir)
+            _write_metrics(runs_root, "20260528T100000Z-macos", "macos", True)
+
+            exit_code, message = evaluate_latest_host_gate(
+                runs_root=runs_root,
+                required_hosts=("macos",),
+            )
+
+            self.assertEqual(exit_code, EXIT_OK)
+            self.assertIn("passed thresholds", message)
+
 
 if __name__ == "__main__":
     unittest.main()
-

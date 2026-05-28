@@ -25,6 +25,12 @@ Gate command:
   - exits `0` when latest macOS + latest Windows runs both pass
   - exits non-zero when host run is missing or latest run fails thresholds
 
+One-command pipeline:
+- macOS:
+  - `dt_image_search/scripts/poc_aoa_pipeline_macos.sh [host|simulate] [runs_root] [required_hosts]`
+- Windows:
+  - `powershell -File dt_image_search/scripts/poc_aoa_pipeline_windows.ps1 [host|simulate] [runs_root] [required_hosts]`
+
 ## Pass/Fail thresholds
 - Handshake p95: `<= 5000 ms`
 - Reconnect success rate: `>= 95%` over at least `20` cable replug cycles
