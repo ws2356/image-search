@@ -7,6 +7,7 @@
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WAKE_LOCK"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <uses-feature android:name="android.hardware.usb.accessory" android:required="false"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -31,6 +32,12 @@
         <data android:scheme="aubackup"/>
         <data android:scheme="exp+aubackup"/>
       </intent-filter>
+      <intent-filter>
+        <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"/>
+      </intent-filter>
+      <meta-data
+        android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
+        android:resource="@xml/aoa_poc_accessory_filter" />
     </activity>
     <service
       android:name=".transfer.BackupTransferForegroundService"

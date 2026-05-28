@@ -14,6 +14,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
 import com.ausearch.aubackup.transfer.BackupTransferServicePackage
+import com.ausearch.aubackup.usb.poc.AoaPocAccessoryRuntime
 
 class MainApplication : Application(), ReactApplication {
 
@@ -36,6 +37,12 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    AoaPocAccessoryRuntime.start(this)
+  }
+
+  override fun onTerminate() {
+    AoaPocAccessoryRuntime.stop()
+    super.onTerminate()
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {
