@@ -722,36 +722,67 @@ def run_host_probe_aoa_poc(
                     }
                 )
             else:
+                post_negotiation_devices = hooks.detect_devices()
+                active_device = next(
+                    (candidate for candidate in post_negotiation_devices if candidate.is_accessory_mode),
+                    selected_device,
+                )
+                device_info = {
+                    "model": (
+                        f"vid_{active_device.id_vendor:04x}:pid_{active_device.id_product:04x}"
+                    ),
+                    "android_version": "unknown",
+                    "serial_hash": active_device.serial_hash,
+                }
                 state_machine.on_accessory_ready()
                 state_machine.on_streaming_started()
-                throughput_sample = hooks.measure_transport_throughput_bytes_per_second(
-                    device=selected_device,
-                    sample_seconds=thresholds.throughput_sample_seconds,
-                )
-                if throughput_sample is None:
+                try:
+                    throughput_sample = hooks.measure_transport_throughput_bytes_per_second(
+                        device=active_device,
+                        sample_seconds=thresholds.throughput_sample_seconds,
+                    )
+                except (RuntimeError, OSError, ValueError) as exc:
                     errors.append(
                         {
                             "stage": "aoa_io",
-                            "code": "throughput_unavailable",
-                            "message": "Throughput measurement is unavailable for this host/device run.",
+                            "code": "throughput_probe_failed",
+                            "message": str(exc),
                         }
                     )
-                elif throughput_sample > 0:
-                    measurements.throughput_bytes_per_second_samples.append(throughput_sample)
                 else:
+                    if throughput_sample is None:
+                        errors.append(
+                            {
+                                "stage": "aoa_io",
+                                "code": "throughput_unavailable",
+                                "message": "Throughput measurement is unavailable for this host/device run.",
+                            }
+                        )
+                    elif throughput_sample > 0:
+                        measurements.throughput_bytes_per_second_samples.append(throughput_sample)
+                    else:
+                        errors.append(
+                            {
+                                "stage": "aoa_io",
+                                "code": "throughput_invalid",
+                                "message": "Throughput measurement returned a non-positive value.",
+                            }
+                        )
+                try:
+                    reconnect_success, reconnect_total = hooks.measure_reconnect_success(
+                        device=active_device,
+                        min_cycles=thresholds.reconnect_cycles_min,
+                    )
+                    measurements.reconnect_success_count = reconnect_success
+                    measurements.reconnect_total_count = reconnect_total
+                except (RuntimeError, OSError, ValueError) as exc:
                     errors.append(
                         {
-                            "stage": "aoa_io",
-                            "code": "throughput_invalid",
-                            "message": "Throughput measurement returned a non-positive value.",
+                            "stage": "reconnect",
+                            "code": "reconnect_probe_failed",
+                            "message": str(exc),
                         }
                     )
-                reconnect_success, reconnect_total = hooks.measure_reconnect_success(
-                    device=selected_device,
-                    min_cycles=thresholds.reconnect_cycles_min,
-                )
-                measurements.reconnect_success_count = reconnect_success
-                measurements.reconnect_total_count = reconnect_total
                 state_machine.on_streaming_completed()
     except (RuntimeError, OSError, ValueError) as exc:
         state_machine.on_failure()
