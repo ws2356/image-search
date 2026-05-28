@@ -20,6 +20,11 @@ Each run writes:
 Summary command:
 - `python -m dt_image_search.mobile.transport.poc.summarize_aoa_runs --runs-root dt_image_search/mobile/transport/poc/runs`
 
+Gate command:
+- `python -m dt_image_search.mobile.transport.poc.poc_aoa_gate --runs-root dt_image_search/mobile/transport/poc/runs`
+  - exits `0` when latest macOS + latest Windows runs both pass
+  - exits non-zero when host run is missing or latest run fails thresholds
+
 ## Pass/Fail thresholds
 - Handshake p95: `<= 5000 ms`
 - Reconnect success rate: `>= 95%` over at least `20` cable replug cycles

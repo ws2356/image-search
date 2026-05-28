@@ -66,6 +66,7 @@ unit_and_functional_tests=(
   tests/unit/test_mobile_usb_ws_adapter.py
   tests/unit/test_android_aoa_poc_contract.py
   tests/unit/test_android_aoa_poc_summary_cli.py
+  tests/unit/test_android_aoa_poc_gate_cli.py
   tests/unit/test_feature_flags.py
   tests/unit/test_pil_image_support.py
   tests/unit/test_fs_image_list_model.py
