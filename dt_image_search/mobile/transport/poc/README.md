@@ -64,12 +64,25 @@ Schema:
    ```bash
    brew install libusb
    ```
-4. On Windows, ensure a libusb-compatible backend is available (for example WinUSB/libusbK driver binding for the relevant USB interface).
-5. Ensure Python environment can import PyUSB:
-   ```bash
-   python -m pip install pyusb
-   ```
-6. Run host-mode POC:
+4. On Windows, configure a libusb-compatible backend for the **Android accessory interface**:
+   1. Install PyUSB:
+      ```powershell
+      python -m pip install pyusb
+      ```
+   2. Download and run **Zadig** (https://zadig.akeo.ie/) as Administrator.
+   3. In Zadig:
+      - enable **Options -> List All Devices**
+      - select the Android accessory interface (commonly shown with Google VID `18D1` and accessory PID `2D00`-`2D05`, or name containing “Accessory”)
+      - choose target driver **WinUSB** (recommended) or **libusbK**
+      - click **Replace Driver** / **Install Driver**
+   4. If your phone exposes multiple USB interfaces, bind only the accessory interface, not unrelated interfaces.
+   5. Reconnect USB cable and relaunch AuBackup app on the phone.
+   6. Run host probe again. In `metrics.json.host_readiness`, confirm:
+      - `pyusb_imported: true`
+      - `libusb_backend_available: true`
+      - `device_enumeration_available: true`
+   7. If you need to revert, use Windows Device Manager to restore the original driver for that interface.
+5. Run host-mode POC:
    - macOS:
      ```bash
      dt_image_search/scripts/poc_aoa_macos.sh host
@@ -78,14 +91,14 @@ Schema:
      ```powershell
      powershell -File dt_image_search/scripts/poc_aoa_windows.ps1 host
      ```
-7. Inspect latest `metrics.json` under:
+6. Inspect latest `metrics.json` under:
    - `dt_image_search/mobile/transport/poc/runs/<timestamp>-<host_os>/metrics.json`
-8. Summarize:
+7. Summarize:
    ```bash
    python -m dt_image_search.mobile.transport.poc.summarize_aoa_runs \
      --runs-root dt_image_search/mobile/transport/poc/runs
    ```
-9. Gate:
+8. Gate:
    - current host only during local iteration: `--required-hosts macos` or `--required-hosts windows`
    - both hosts for cross-platform readiness: `--required-hosts macos,windows`
 
