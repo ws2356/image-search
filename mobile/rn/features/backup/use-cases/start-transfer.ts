@@ -3,7 +3,11 @@ import { assert_transfer_not_live_in_phase4 } from '@/features/backup/services/p
 import { TransferService } from '@/features/backup/services/transfer-service';
 import type { CapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { HttpCapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
-import { DefaultTransferAssetSource, type TransferAssetSource } from '@/features/backup/services/transfer-asset-source';
+import {
+  DefaultTransferAssetSource,
+  type NormalizedTransferAsset,
+  type TransferAssetSource,
+} from '@/features/backup/services/transfer-asset-source';
 import {
   TRANSFER_ENCRYPTION_CAPABILITY,
   TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY,
@@ -41,6 +45,7 @@ export interface StartTransferOptions {
 
 const TRANSFER_EXISTENCE_BATCH_SIZE = 15;
 const TRANSFER_CONCURRENT_UPLOAD_LIMIT = 5;
+const TRANSFER_CONCURRENT_SHA1_LIMIT = 3;
 const CAPABILITY_EXCHANGE_MAX_ATTEMPTS = 3;
 const CAPABILITY_EXCHANGE_RETRY_DELAY_MS = 500;
 
@@ -48,6 +53,55 @@ function delay(duration_ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, duration_ms);
   });
+}
+
+class AsyncQueue<T> {
+  private readonly items: T[] = [];
+  private readonly waiters: Array<(item: T | undefined) => void> = [];
+  private closed = false;
+
+  push(item: T): void {
+    if (this.closed) {
+      return;
+    }
+    const waiter = this.waiters.shift();
+    if (waiter) {
+      waiter(item);
+      return;
+    }
+    this.items.push(item);
+  }
+
+  tryShift(): T | undefined {
+    if (this.items.length === 0) {
+      return undefined;
+    }
+    return this.items.shift();
+  }
+
+  async shift(): Promise<T | undefined> {
+    const immediate = this.tryShift();
+    if (immediate !== undefined) {
+      return immediate;
+    }
+    if (this.closed) {
+      return undefined;
+    }
+    return new Promise<T | undefined>((resolve) => {
+      this.waiters.push(resolve);
+    });
+  }
+
+  close(): void {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    while (this.waiters.length > 0) {
+      const waiter = this.waiters.shift();
+      waiter?.(undefined);
+    }
+  }
 }
 
 function build_snapshot(input: {
@@ -168,6 +222,7 @@ export async function startTransfer(
   const strict_security_enabled = pairing_session.strictSecurityEnabled === true;
   const started_at_ms = Date.now();
   let runtime_started = false;
+  let aborted_by_pipeline_error = false;
   const transfer_abort_signal = options.abort_controller.signal;
   const throw_if_transfer_stopped = () => {
     if (options.should_abort?.()) {
@@ -304,41 +359,37 @@ export async function startTransfer(
       });
     };
 
-    const build_existence_candidates = async (
-      batch_assets: typeof assets
-    ): Promise<TransferAssetSignature[]> => {
-      const candidates: TransferAssetSignature[] = [];
-      for (const asset of batch_assets) {
-        throw_if_transfer_stopped();
-        const has_asset_version = supports_asset_version_existence && typeof asset.metadata.asset_version === 'string';
-        const has_legacy_signature_shape =
-          typeof asset.dedupe_signature.file_size_bytes === 'number' && asset.dedupe_signature.created_at != null;
-        let content_sha1 = asset.dedupe_signature.content_sha1;
-        if (!has_asset_version && content_sha1 == null && has_legacy_signature_shape) {
-          const sha1_started_at_ms = Date.now();
-          content_sha1 = await compute_asset_sha1(
-            asset.asset_id,
-            deps.transfer_asset_source,
-            throw_if_transfer_stopped
-          );
-          sha1_elapsed_ms += Math.max(0, Date.now() - sha1_started_at_ms);
-          sha1_measured_assets += 1;
-          asset.dedupe_signature.content_sha1 = content_sha1;
-          asset.metadata.sha1 = content_sha1;
-        }
-        const has_legacy_signature = content_sha1 != null && has_legacy_signature_shape;
-        if (!has_asset_version && !has_legacy_signature) {
-          continue;
-        }
-        candidates.push({
-          asset_id: asset.asset_id,
-          asset_version: has_asset_version ? asset.metadata.asset_version : undefined,
-          sha1: content_sha1 ?? undefined,
-          file_size: asset.dedupe_signature.file_size_bytes ?? undefined,
-          created_at: asset.dedupe_signature.created_at ?? undefined,
-        });
+    const prepare_existence_candidate = async (
+      asset: NormalizedTransferAsset
+    ): Promise<TransferAssetSignature | null> => {
+      throw_if_transfer_stopped();
+      const has_asset_version = supports_asset_version_existence && typeof asset.metadata.asset_version === 'string';
+      const has_legacy_signature_shape =
+        typeof asset.dedupe_signature.file_size_bytes === 'number' && asset.dedupe_signature.created_at != null;
+      let content_sha1 = asset.dedupe_signature.content_sha1;
+      if (!has_asset_version && content_sha1 == null && has_legacy_signature_shape) {
+        const sha1_started_at_ms = Date.now();
+        content_sha1 = await compute_asset_sha1(
+          asset.asset_id,
+          deps.transfer_asset_source,
+          throw_if_transfer_stopped
+        );
+        sha1_elapsed_ms += Math.max(0, Date.now() - sha1_started_at_ms);
+        sha1_measured_assets += 1;
+        asset.dedupe_signature.content_sha1 = content_sha1;
+        asset.metadata.sha1 = content_sha1;
       }
-      return candidates;
+      const has_legacy_signature = content_sha1 != null && has_legacy_signature_shape;
+      if (!has_asset_version && !has_legacy_signature) {
+        return null;
+      }
+      return {
+        asset_id: asset.asset_id,
+        asset_version: has_asset_version ? asset.metadata.asset_version : undefined,
+        sha1: content_sha1 ?? undefined,
+        file_size: asset.dedupe_signature.file_size_bytes ?? undefined,
+        created_at: asset.dedupe_signature.created_at ?? undefined,
+      };
     };
 
     const upload_asset = async (asset: (typeof assets)[number]): Promise<void> => {
@@ -383,47 +434,119 @@ export async function startTransfer(
       }
     };
 
-    const upload_ready_assets = async (ready_assets: typeof assets): Promise<void> => {
-      let next_ready_index = 0;
-      let upload_error: Error | null = null;
-      const worker_count = Math.min(TRANSFER_CONCURRENT_UPLOAD_LIMIT, ready_assets.length);
-      const workers = Array.from({ length: worker_count }, async () => {
-        while (next_ready_index < ready_assets.length && upload_error == null) {
-          const asset = ready_assets[next_ready_index];
-          next_ready_index += 1;
-          await upload_asset(asset).catch((error) => {
-            upload_error = error instanceof Error ? error : new Error('Unknown upload error.');
-          });
-        }
-      });
-      await Promise.all(workers);
-      if (upload_error) {
-        throw upload_error;
+    type PreparedAssetWork = {
+      asset: NormalizedTransferAsset;
+      signature: TransferAssetSignature;
+    };
+    const prepared_asset_queue = new AsyncQueue<PreparedAssetWork>();
+    const upload_asset_queue = new AsyncQueue<NormalizedTransferAsset>();
+    let prepare_next_index = 0;
+    let pipeline_error: Error | null = null;
+
+    const fail_pipeline = (error: unknown): void => {
+      if (pipeline_error != null) {
+        return;
       }
+      pipeline_error = error instanceof Error ? error : new Error('Transfer pipeline failed unexpectedly.');
+      if (!transfer_abort_signal.aborted) {
+        aborted_by_pipeline_error = true;
+        options.abort_controller.abort();
+      }
+      prepared_asset_queue.close();
+      upload_asset_queue.close();
     };
 
-    for (let batch_start = 0; batch_start < assets.length; batch_start += TRANSFER_EXISTENCE_BATCH_SIZE) {
-      throw_if_transfer_stopped();
-      const batch_assets = assets.slice(batch_start, batch_start + TRANSFER_EXISTENCE_BATCH_SIZE);
-      const existence_candidates = await build_existence_candidates(batch_assets);
-      const matched_asset_ids = new Set<string>();
-      await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
-      if (existence_candidates.length > 0) {
-        const existence = await transfer_service.check_existence(existence_candidates, transfer_abort_signal);
+    const prepare_worker_count = Math.min(TRANSFER_CONCURRENT_SHA1_LIMIT, Math.max(1, assets.length));
+    const prepare_workers = Array.from({ length: prepare_worker_count }, async () => {
+      while (pipeline_error == null) {
         throw_if_transfer_stopped();
-        for (const match of existence.matches ?? []) {
-          matched_asset_ids.add(match.asset_id);
+        const current_index = prepare_next_index;
+        prepare_next_index += 1;
+        if (current_index >= assets.length) {
+          break;
+        }
+        const asset = assets[current_index];
+        try {
+          const signature = await prepare_existence_candidate(asset);
+          if (signature) {
+            prepared_asset_queue.push({ asset, signature });
+          } else {
+            upload_asset_queue.push(asset);
+          }
+        } catch (error) {
+          fail_pipeline(error);
         }
       }
-      if (matched_asset_ids.size > 0) {
-        matched_assets += matched_asset_ids.size;
+    });
+
+    const existence_worker = (async () => {
+      const pending: PreparedAssetWork[] = [];
+      while (pipeline_error == null) {
+        const next_prepared = await prepared_asset_queue.shift();
+        if (next_prepared !== undefined) {
+          pending.push(next_prepared);
+        }
+        let next_buffered = prepared_asset_queue.tryShift();
+        while (next_buffered !== undefined && pending.length < TRANSFER_EXISTENCE_BATCH_SIZE) {
+          pending.push(next_buffered);
+          next_buffered = prepared_asset_queue.tryShift();
+        }
+        if (pending.length === 0) {
+          if (next_prepared === undefined) {
+            break;
+          }
+          continue;
+        }
+        const batch = pending.splice(0, TRANSFER_EXISTENCE_BATCH_SIZE);
+        try {
+          await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
+          const existence = await transfer_service.check_existence(
+            batch.map((item) => item.signature),
+            transfer_abort_signal
+          );
+          throw_if_transfer_stopped();
+          const matched_asset_ids = new Set<string>();
+          for (const match of existence.matches ?? []) {
+            matched_asset_ids.add(match.asset_id);
+          }
+          if (matched_asset_ids.size > 0) {
+            matched_assets += matched_asset_ids.size;
+          }
+          for (const item of batch) {
+            if (!matched_asset_ids.has(item.asset.asset_id)) {
+              upload_asset_queue.push(item.asset);
+            }
+          }
+          await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
+        } catch (error) {
+          fail_pipeline(error);
+          break;
+        }
       }
-      await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
-      const ready_assets = batch_assets.filter((asset) => !matched_asset_ids.has(asset.asset_id));
-      if (ready_assets.length === 0) {
-        continue;
+      upload_asset_queue.close();
+    })();
+
+    const upload_worker_count = Math.min(TRANSFER_CONCURRENT_UPLOAD_LIMIT, Math.max(1, assets.length));
+    const upload_workers = Array.from({ length: upload_worker_count }, async () => {
+      while (pipeline_error == null) {
+        const next_asset = await upload_asset_queue.shift();
+        if (next_asset === undefined) {
+          break;
+        }
+        try {
+          await upload_asset(next_asset);
+        } catch (error) {
+          fail_pipeline(error);
+        }
       }
-      await upload_ready_assets(ready_assets);
+    });
+
+    await Promise.all(prepare_workers);
+    prepared_asset_queue.close();
+    await existence_worker;
+    await Promise.all(upload_workers);
+    if (pipeline_error) {
+      throw pipeline_error;
     }
 
     await deps.apply_command({
@@ -450,7 +573,7 @@ export async function startTransfer(
     if (runtime_started) {
       await end_transfer_runtime_session(deps.transfer_runtime_wiring);
     }
-    if (transfer_abort_signal.aborted || is_transfer_abort_error(error)) {
+    if (!aborted_by_pipeline_error && (transfer_abort_signal.aborted || is_transfer_abort_error(error))) {
       throw create_transfer_abort_error();
     }
     const message = error instanceof Error ? error.message : 'Transfer failed unexpectedly.';
