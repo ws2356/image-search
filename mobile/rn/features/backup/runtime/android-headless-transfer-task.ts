@@ -43,6 +43,18 @@ export async function run_android_headless_transfer_task(
   await publish_android_transfer_state({ status: 'running' });
 
   const abort_controller = new AbortController();
+  let stop_watch_timer: ReturnType<typeof setInterval> | null = null;
+  const clear_stop_watch_timer = () => {
+    if (stop_watch_timer != null) {
+      clearInterval(stop_watch_timer);
+      stop_watch_timer = null;
+    }
+  };
+  stop_watch_timer = setInterval(() => {
+    if (!abort_controller.signal.aborted && is_android_transfer_stop_requested()) {
+      abort_controller.abort();
+    }
+  }, 200);
 
   try {
     await startTransfer(
@@ -69,6 +81,7 @@ export async function run_android_headless_transfer_task(
     await publish_android_transfer_state({ status: 'failed', errorMessage: message });
     throw error;
   } finally {
+    clear_stop_watch_timer();
     await clear_android_transfer_stop_request();
   }
 }

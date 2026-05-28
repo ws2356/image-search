@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -20,6 +21,7 @@ class BackupTransferServiceModule(
 
   private val stateChangedReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
+      Log.d(LOG_TAG, "Received native transfer state broadcast.")
       emitStateChanged(
         stateJson = intent?.getStringExtra(BackupTransferForegroundService.EXTRA_STATE_JSON),
         snapshotJson = intent?.getStringExtra(BackupTransferForegroundService.EXTRA_SNAPSHOT_JSON)
@@ -31,12 +33,14 @@ class BackupTransferServiceModule(
 
   @ReactMethod
   fun startHeadlessTransferSession(taskPayloadJson: String, promise: Promise) {
+    Log.i(LOG_TAG, "JS requested headless transfer start.")
     BackupTransferForegroundService.start(reactApplicationContext, taskPayloadJson)
     promise.resolve(null)
   }
 
   @ReactMethod
   fun requestStopTransferSession(promise: Promise) {
+    Log.i(LOG_TAG, "JS requested transfer stop.")
     BackupTransferForegroundService.requestStop(reactApplicationContext)
     promise.resolve(null)
   }
@@ -94,12 +98,14 @@ class BackupTransferServiceModule(
       return
     }
     listenerCount += 1
+    Log.d(LOG_TAG, "Adding transfer listener. count=$listenerCount")
     registerReceiverIfNeeded()
   }
 
   @ReactMethod
   fun removeListeners(count: Int) {
     listenerCount = (listenerCount - count).coerceAtLeast(0)
+    Log.d(LOG_TAG, "Removing transfer listeners. count=$listenerCount")
     if (listenerCount == 0) {
       unregisterReceiverIfNeeded()
     }
@@ -114,6 +120,7 @@ class BackupTransferServiceModule(
     if (receiverRegistered) {
       return
     }
+    Log.d(LOG_TAG, "Registering transfer broadcast receiver.")
     ContextCompat.registerReceiver(
       reactApplicationContext,
       stateChangedReceiver,
@@ -127,6 +134,7 @@ class BackupTransferServiceModule(
     if (!receiverRegistered) {
       return
     }
+    Log.d(LOG_TAG, "Unregistering transfer broadcast receiver.")
     reactApplicationContext.unregisterReceiver(stateChangedReceiver)
     receiverRegistered = false
   }
@@ -151,5 +159,6 @@ class BackupTransferServiceModule(
 
   companion object {
     const val TRANSFER_SERVICE_STATE_EVENT = "BackupTransferServiceStateChanged"
+    private const val LOG_TAG = "AuBackupTransferModule"
   }
 }

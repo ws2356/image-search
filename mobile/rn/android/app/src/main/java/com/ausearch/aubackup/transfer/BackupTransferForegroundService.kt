@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.ausearch.aubackup.MainActivity
@@ -36,11 +37,20 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
     applicationContextRef = applicationContext
     when (intent?.action) {
       ACTION_REQUEST_STOP -> {
+        val currentStatus = parseStatus(latestStateJson)
         stopRequested = true
+        Log.i(LOG_TAG, "Received stop request. currentStatus=$currentStatus")
+        if (currentStatus != "running") {
+          latestStateJson = buildStateJson(status = "stopped", errorMessage = null)
+          broadcastStateChanged()
+          removeNotificationAndStop()
+          return START_NOT_STICKY
+        }
         updateProgressNotification(latestSnapshotJson, "Stopping backup…")
         return START_NOT_STICKY
       }
       ACTION_START -> {
+        Log.i(LOG_TAG, "Starting foreground backup service.")
         stopRequested = false
         latestSnapshotJson = null
         latestStateJson = buildStateJson(status = "running", errorMessage = null)
@@ -249,6 +259,7 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
 
     fun start(context: Context, taskPayloadJson: String) {
       applicationContextRef = context.applicationContext
+      Log.i(LOG_TAG, "Request to start headless transfer session.")
       val intent = Intent(context, BackupTransferForegroundService::class.java).apply {
         action = ACTION_START
         putExtra(EXTRA_TASK_PAYLOAD_JSON, taskPayloadJson)
@@ -259,6 +270,14 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
     fun requestStop(context: Context) {
       stopRequested = true
       applicationContextRef = context.applicationContext
+      val currentStatus = parseStatus(latestStateJson)
+      Log.i(LOG_TAG, "Request to stop transfer session. currentStatus=$currentStatus")
+      if (currentStatus != "running") {
+        latestStateJson = buildStateJson(status = "stopped", errorMessage = null)
+        broadcastStateChanged()
+        cancelNotification(context)
+        return
+      }
       val intent = Intent(context, BackupTransferForegroundService::class.java).apply {
         action = ACTION_REQUEST_STOP
       }
@@ -282,10 +301,19 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
     fun publishState(context: Context, stateJson: String) {
       applicationContextRef = context.applicationContext
       latestStateJson = stateJson
+      val status = parseStatus(stateJson)
+      Log.i(LOG_TAG, "Publishing transfer state status=$status stopRequested=$stopRequested")
+      if (stopRequested && status != "running" && status != "idle" && status != "stopped") {
+        Log.i(LOG_TAG, "Stop requested with terminal status=$status. Coercing to stopped.")
+        latestStateJson = buildStateJson(status = "stopped", errorMessage = null)
+        broadcastStateChanged()
+        serviceInstance?.finishAndStop() ?: cancelNotification(context)
+        return
+      }
       broadcastStateChanged()
-      when (parseStatus(stateJson)) {
+      when (status) {
         "completed", "failed" -> serviceInstance?.showTerminalNotificationAndStop(stateJson, latestSnapshotJson)
-        "stopped" -> serviceInstance?.finishAndStop()
+        "stopped" -> serviceInstance?.finishAndStop() ?: cancelNotification(context)
         "running" -> serviceInstance?.updateProgressNotification(latestSnapshotJson)
       }
     }
@@ -311,12 +339,18 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
 
     private fun broadcastStateChanged() {
       val context = applicationContextRef ?: return
+      Log.d(LOG_TAG, "Broadcasting state changed status=${parseStatus(latestStateJson)}")
       val intent = Intent(ACTION_STATE_CHANGED).apply {
         setPackage(context.packageName)
         putExtra(EXTRA_STATE_JSON, latestStateJson)
         putExtra(EXTRA_SNAPSHOT_JSON, latestSnapshotJson)
       }
       context.sendBroadcast(intent)
+    }
+
+    private fun cancelNotification(context: Context) {
+      val notificationManager = context.getSystemService(NotificationManager::class.java)
+      notificationManager.cancel(NOTIFICATION_ID)
     }
 
     private fun buildStateJson(status: String, errorMessage: String?): String {
@@ -355,5 +389,7 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
         null
       }
     }
+
+    private const val LOG_TAG = "AuBackupTransferService"
   }
 }
