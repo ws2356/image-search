@@ -10,7 +10,6 @@ import {
 } from '@/features/backup/services/transfer-asset-source';
 import {
   TRANSFER_ENCRYPTION_CAPABILITY,
-  TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY,
 } from '@/features/backup/protocols/capabilities';
 import { apply_backup_command } from '@/features/backup/state/backup-flow-transition-helper';
 import { TransferFailureReason, TransferPipelineStage, TransferTransport } from '@/features/backup/transfer/enums';
@@ -97,6 +96,11 @@ class AsyncQueue<T> {
       return;
     }
     this.closed = true;
+    while (this.waiters.length > 0 && this.items.length > 0) {
+      const waiter = this.waiters.shift();
+      const item = this.items.shift();
+      waiter?.(item);
+    }
     while (this.waiters.length > 0) {
       const waiter = this.waiters.shift();
       waiter?.(undefined);
@@ -157,6 +161,7 @@ async function compute_asset_sha1(
 ): Promise<string> {
   const chunk_reader = await transfer_asset_source.open_asset_chunk_reader(asset_id, 0);
   const hasher = QuickCrypto.createHash('sha1');
+  let processed_chunk_count = 0;
   try {
     while (true) {
       throw_if_transfer_stopped?.();
@@ -165,6 +170,10 @@ async function compute_asset_sha1(
         break;
       }
       hasher.update(chunk);
+      processed_chunk_count += 1;
+      if (processed_chunk_count % 4 === 0) {
+        await delay(0);
+      }
     }
   } finally {
     chunk_reader.close();
@@ -295,8 +304,6 @@ export async function startTransfer(
       ...pairing_session,
       encryptionEnabled: supports_transfer_encryption,
     });
-    const supports_asset_version_existence =
-      exchange.capabilities[TRANSFER_EXISTENCE_ASSET_VERSION_CAPABILITY] === 1;
     throw_if_transfer_stopped();
 
     const transfer_service = new TransferService({
@@ -363,11 +370,8 @@ export async function startTransfer(
       asset: NormalizedTransferAsset
     ): Promise<TransferAssetSignature | null> => {
       throw_if_transfer_stopped();
-      const has_asset_version = supports_asset_version_existence && typeof asset.metadata.asset_version === 'string';
-      const has_legacy_signature_shape =
-        typeof asset.dedupe_signature.file_size_bytes === 'number' && asset.dedupe_signature.created_at != null;
       let content_sha1 = asset.dedupe_signature.content_sha1;
-      if (!has_asset_version && content_sha1 == null && has_legacy_signature_shape) {
+      if (content_sha1 == null) {
         const sha1_started_at_ms = Date.now();
         content_sha1 = await compute_asset_sha1(
           asset.asset_id,
@@ -379,16 +383,21 @@ export async function startTransfer(
         asset.dedupe_signature.content_sha1 = content_sha1;
         asset.metadata.sha1 = content_sha1;
       }
-      const has_legacy_signature = content_sha1 != null && has_legacy_signature_shape;
-      if (!has_asset_version && !has_legacy_signature) {
+      if (content_sha1 == null) {
+        return null;
+      }
+      const file_size =
+        asset.dedupe_signature.file_size_bytes ??
+        (typeof asset.metadata.file_size === 'number' ? asset.metadata.file_size : null);
+      const created_at = asset.dedupe_signature.created_at ?? asset.metadata.created_at ?? asset.metadata.updated_at ?? null;
+      if (typeof file_size !== 'number' || created_at == null) {
         return null;
       }
       return {
         asset_id: asset.asset_id,
-        asset_version: has_asset_version ? asset.metadata.asset_version : undefined,
-        sha1: content_sha1 ?? undefined,
-        file_size: asset.dedupe_signature.file_size_bytes ?? undefined,
-        created_at: asset.dedupe_signature.created_at ?? undefined,
+        sha1: content_sha1,
+        file_size,
+        created_at,
       };
     };
 
@@ -469,7 +478,8 @@ export async function startTransfer(
         try {
           const signature = await prepare_existence_candidate(asset);
           if (signature) {
-            prepared_asset_queue.push({ asset, signature });
+            const prepared_work = { asset, signature };
+            prepared_asset_queue.push(prepared_work);
           } else {
             upload_asset_queue.push(asset);
           }
@@ -478,6 +488,28 @@ export async function startTransfer(
         }
       }
     });
+
+    const process_existence_batch = async (batch: PreparedAssetWork[]): Promise<void> => {
+      await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
+      const existence = await transfer_service.check_existence(
+        batch.map((item) => item.signature),
+        transfer_abort_signal
+      );
+      throw_if_transfer_stopped();
+      const matched_asset_ids = new Set<string>();
+      for (const match of existence.matches ?? []) {
+        matched_asset_ids.add(match.asset_id);
+      }
+      if (matched_asset_ids.size > 0) {
+        matched_assets += matched_asset_ids.size;
+      }
+      for (const item of batch) {
+        if (!matched_asset_ids.has(item.asset.asset_id)) {
+          upload_asset_queue.push(item.asset);
+        }
+      }
+      await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
+    };
 
     const existence_worker = (async () => {
       const pending: PreparedAssetWork[] = [];
@@ -499,31 +531,12 @@ export async function startTransfer(
         }
         const batch = pending.splice(0, TRANSFER_EXISTENCE_BATCH_SIZE);
         try {
-          await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
-          const existence = await transfer_service.check_existence(
-            batch.map((item) => item.signature),
-            transfer_abort_signal
-          );
-          throw_if_transfer_stopped();
-          const matched_asset_ids = new Set<string>();
-          for (const match of existence.matches ?? []) {
-            matched_asset_ids.add(match.asset_id);
-          }
-          if (matched_asset_ids.size > 0) {
-            matched_assets += matched_asset_ids.size;
-          }
-          for (const item of batch) {
-            if (!matched_asset_ids.has(item.asset.asset_id)) {
-              upload_asset_queue.push(item.asset);
-            }
-          }
-          await publish_snapshot(TransferPipelineStage.ExistingCheck, null);
+          await process_existence_batch(batch);
         } catch (error) {
           fail_pipeline(error);
           break;
         }
       }
-      upload_asset_queue.close();
     })();
 
     const upload_worker_count = Math.min(TRANSFER_CONCURRENT_UPLOAD_LIMIT, Math.max(1, assets.length));
@@ -544,6 +557,7 @@ export async function startTransfer(
     await Promise.all(prepare_workers);
     prepared_asset_queue.close();
     await existence_worker;
+    upload_asset_queue.close();
     await Promise.all(upload_workers);
     if (pipeline_error) {
       throw pipeline_error;
