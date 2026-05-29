@@ -4,12 +4,12 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 
-import torch
+# import torch
 import threading
 import time
 import typing
-import open_clip
-from torchvision import transforms
+# import open_clip
+# from torchvision import transforms
 import numpy as np
 import faiss
 import hf_xet
@@ -64,6 +64,7 @@ def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str
         return ret[:TOP_K]
 
 def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
+    import torch
     torch.set_grad_enabled(False)
     with torch.inference_mode():
         try:
@@ -234,6 +235,7 @@ def _cleanup_process_pool():
 
 @with_trace("_add_to_index")
 def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: typing.List[File]) -> bool:
+    import torch
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
     result = True
@@ -501,6 +503,8 @@ def _get_model():
 
 @with_trace("_preload_model")
 def _preload_model(ctx: BMContext):
+    import torch
+    import open_clip
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
     model_downloaded_event.wait()  # Wait for the model to be downloaded for cn market
