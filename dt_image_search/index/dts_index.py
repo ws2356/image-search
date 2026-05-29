@@ -73,7 +73,7 @@ def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
             return []
         _model, _, _tokenizer = _get_model()
         # --- Encode text query ---
-        text_tokens = _tokenizer([query_text]).to(_device)
+        text_tokens = _tokenizer([query_text]).to(_get_device())
         text_features = _model.encode_text(text_tokens)
         text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-10)
         text_vector = text_features.cpu().numpy().astype(np.float32)
@@ -273,7 +273,7 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
                 with torch.inference_mode():
                     # Move to GPU and process with model (this stays in main process)
                     # log("info", message=f"Getting features from batch {i}")
-                    batch_tensor = batch_tensor.to(_device)
+                    batch_tensor = batch_tensor.to(_get_device())
                     features = model.encode_image(batch_tensor)
                     features = features / features.norm(dim=-1, keepdim=True)
                     
@@ -473,7 +473,14 @@ def delete_folder(ctx: BMContext, folder_path: str):
             delete_files_by_folder_id(conn, folder.id)
 
 
-_device = "cuda" if torch.cuda.is_available() else "cpu"
+_device = None
+def _get_device():
+    import torch
+    global _device
+    if _device is None:
+        _device = "cuda" if torch.cuda.is_available() else "cpu"
+    return _device
+
 _model = None
 _preprocess = None
 _tokenizer = None
@@ -524,7 +531,7 @@ def _preload_model(ctx: BMContext):
             _tokenizer = open_clip.get_tokenizer(ctx.model_name)
             log("info", message=f"Attempt {_attempt + 1} tokenizer init")
 
-            _model = model.to(_device).eval()
+            _model = model.to(_get_device()).eval()
             log("info", message=f"Attempt {_attempt + 1} model eval")
 
             status_bar_messenger.show_status_message.emit("Model inited")
