@@ -1,8 +1,6 @@
 """
 Separate module for image processing workers to avoid GUI import issues.
 """
-import torch
-import open_clip
 from PIL import Image
 from dt_image_search.bm_context import BMContext
 from dt_image_search.telemetry.telemetry_client import log, with_trace
@@ -14,6 +12,7 @@ _MAX_EMBEDDING_IMAGE_DIM = 4096
 _worker_preprocess = None
 
 def _initialize_worker(ctx: BMContext):
+    import open_clip
     """Initialize worker process with preloaded model"""
     global _worker_preprocess
     # Load model once per worker process
@@ -28,6 +27,7 @@ def _initialize_worker(ctx: BMContext):
 
 @with_trace("process_image_batch")
 def process_image_batch(files):
+    import torch
     """Process a batch of images using the persistent worker's preloaded components"""
     global _worker_preprocess
     
