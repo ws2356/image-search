@@ -189,9 +189,9 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     private func refreshIdleTimerPolicy() async {
-        let usbTransportAlive = await transferService.isUSBTransportAlive()
+        let isCharging = await model.permissionService.loadPermissionSummary().isCharging
         let batteryLevel = batteryLevelProvider.currentBatteryLevel() ?? 0
-        idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER
+        idleTimerController.isIdleTimerDisabled = isCharging || batteryLevel > TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER
     }
 
     private func recordSnapshotDiagnosticIfNeeded(area: String, snapshot: TransferSnapshot) {

@@ -264,12 +264,18 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.isShowingStopConfirmation)
     }
 
-    func test_transfer_page_view_model_disables_idle_timer_when_usb_transport_is_alive() async {
+    func test_transfer_page_view_model_disables_idle_timer_when_charging() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         let idleTimerController = StubIdleTimerController()
         let batteryLevelProvider = StubBatteryLevelProvider(level: 0.5)
-        await model.transferServiceActor.setUSBTransportAlive(true)
+        await model.permissionServiceActor.setSummary(
+            PermissionSummary(
+                mediaScope: .full,
+                lowBatteryWarningNeeded: false,
+                isCharging: true
+            )
+        )
         let viewModel = TransferPageViewModel(
             model: model,
             telemetryService: telemetryService,
@@ -284,11 +290,18 @@ final class PageViewModelTests: XCTestCase {
         XCTAssertTrue(idleTimerController.isIdleTimerDisabled)
     }
 
-    func test_transfer_page_view_model_resets_idle_timer_when_usb_is_not_alive_and_battery_is_not_above_threshold() async {
+    func test_transfer_page_view_model_keeps_idle_timer_enabled_when_not_charging_and_battery_is_not_above_threshold() async {
         let telemetryService = StubTelemetryService()
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         let idleTimerController = StubIdleTimerController()
-        let batteryLevelProvider = StubBatteryLevelProvider(level: 0.99)
+        let batteryLevelProvider = StubBatteryLevelProvider(level: TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER)
+        await model.permissionServiceActor.setSummary(
+            PermissionSummary(
+                mediaScope: .full,
+                lowBatteryWarningNeeded: false,
+                isCharging: false
+            )
+        )
         let viewModel = TransferPageViewModel(
             model: model,
             telemetryService: telemetryService,
@@ -299,10 +312,32 @@ final class PageViewModelTests: XCTestCase {
         )
 
         await viewModel.loadFromViewLifecycle()
-        XCTAssertTrue(idleTimerController.isIdleTimerDisabled)
 
-        batteryLevelProvider.level = TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER / 2
-        await model.transferServiceActor.setUSBTransportAlive(false)
+        XCTAssertFalse(idleTimerController.isIdleTimerDisabled)
+    }
+
+    func test_transfer_page_view_model_does_not_disable_idle_timer_for_usb_only() async {
+        let telemetryService = StubTelemetryService()
+        let model = StubPageModel(telemetryServiceActor: telemetryService)
+        let idleTimerController = StubIdleTimerController()
+        let batteryLevelProvider = StubBatteryLevelProvider(level: 0.5)
+        await model.transferServiceActor.setUSBTransportAlive(true)
+        await model.permissionServiceActor.setSummary(
+            PermissionSummary(
+                mediaScope: .full,
+                lowBatteryWarningNeeded: false,
+                isCharging: false
+            )
+        )
+        let viewModel = TransferPageViewModel(
+            model: model,
+            telemetryService: telemetryService,
+            transportResolver: model.transferService,
+            idleTimerController: idleTimerController,
+            batteryLevelProvider: batteryLevelProvider,
+            pollingIntervalNanoseconds: 10_000_000
+        )
+
         await viewModel.loadFromViewLifecycle()
 
         XCTAssertFalse(idleTimerController.isIdleTimerDisabled)
@@ -652,6 +687,10 @@ private actor StubPermissionService: PermissionService {
 
     func loadCallCount() -> Int {
         loadPermissionSummaryCallCount
+    }
+
+    func setSummary(_ summary: PermissionSummary) {
+        self.summary = summary
     }
 
     func removeAfterBackupEnabled() async -> Bool {
