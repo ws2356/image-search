@@ -23,8 +23,15 @@ The system SHALL reject payload types outside text/image/video with a user-visib
 - **THEN** the extension shows an unsupported-type message and no instant-share session is created
 
 ### Requirement: Extension-safe preflight checks
-The system SHALL perform preflight validation for payload readability, size threshold policy, and required metadata before opening an instant-share session.
+The system SHALL perform preflight validation for payload readability and required metadata before opening an instant-share session.
 
 #### Scenario: Fail preflight for unreadable payload
 - **WHEN** the shared media handle cannot be opened by the extension sandbox
 - **THEN** the extension reports a preflight failure and terminates the instant-share attempt before session negotiation
+
+### Requirement: Large-media optimization deferred
+The system SHALL treat advanced optimization for very large media payloads as out of scope for this iteration and SHALL not require chunk-level or adaptive optimization logic for acceptance.
+
+#### Scenario: Accept baseline media transfer behavior
+- **WHEN** a valid media payload is shared in this iteration
+- **THEN** the system uses baseline transfer behavior without requiring large-media optimization features

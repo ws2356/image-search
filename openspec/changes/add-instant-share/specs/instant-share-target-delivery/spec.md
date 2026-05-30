@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
-### Requirement: Text to clipboard delivery
-The system SHALL deliver instant-share text payloads to the desktop clipboard by default and SHALL surface delivery completion status to the user.
+### Requirement: Clipboard delivery for text and images
+The system SHALL support delivering instant-share text and image payloads to the desktop clipboard and SHALL surface delivery completion status to the user.
 
 #### Scenario: Successful clipboard delivery
 - **WHEN** a text instant-share payload reaches the desktop delivery stage
 - **THEN** the system writes the exact text payload to clipboard and marks the session as delivered successfully
+
+#### Scenario: Successful image clipboard delivery
+- **WHEN** an image instant-share payload is configured for clipboard target and reaches the desktop delivery stage
+- **THEN** the system writes the image payload to clipboard and marks clipboard delivery as successful
 
 ### Requirement: Media to local file delivery
 The system SHALL deliver image and video payloads to a configured local directory using sanitized deterministic filenames that avoid collisions.
