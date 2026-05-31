@@ -94,6 +94,12 @@ Stakeholders:
 - Alternative considered: Full polished UX before flow validation.
 - Why not: Slows functional validation and increases rework risk if protocol behavior changes.
 
+10. Use session-id signature verification as the immediate client authentication layer.
+- Decision: Do not require mTLS in this phase. Require PC to sign session id with its private key on each HTTP request, and require mobile to verify the signature with exchanged trusted PC public key.
+- Rationale: This provides a simple and fast-to-implement client authentication mechanism using trust material we already exchange.
+- Alternative considered: Require mTLS for all trusted-direct traffic.
+- Why not: Higher implementation overhead for this phase; can be added later as a transport hardening step.
+
 ## Risks / Trade-offs
 
 - [Large payloads may take long time and appear stalled] -> Mitigation: Always show progress plus explicit user actions to continue waiting or abort.
@@ -101,6 +107,7 @@ Stakeholders:
 - [Clipboard writes can conflict with user clipboard usage] -> Mitigation: Restrict auto-clipboard to text payloads and display overwrite notice + optional preference to disable.
 - [Single-session model can delay subsequent shares] -> Mitigation: Show busy state and queue/retry guidance on sender.
 - [Cross-platform filesystem constraints] -> Mitigation: Normalize names, sanitize unsafe characters, enforce path boundary checks, and fallback naming.
+- [Session signature verification can be bypassed if headers are missing or key lookup fails open] -> Mitigation: Enforce fail-closed validation and explicit errors for missing/invalid signatures or missing trusted keys.
 
 ## Migration Plan
 

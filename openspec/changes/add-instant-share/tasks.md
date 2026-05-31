@@ -6,6 +6,8 @@
 - [ ] 1.2a Add/update unit tests for trust/negotiation state transitions and independence from backup-session paths.
 - [ ] 1.3 Add authenticated sender validation for instant-share initiation with explicit failure responses for untrusted requests.
 - [ ] 1.3a Add/update unit tests for trusted/untrusted sender validation outcomes.
+- [ ] 1.3b Implement session-id signature headers on PC requests and mobile-side verification using exchanged trusted public key.
+- [ ] 1.3c Add/update unit tests for missing signature, invalid signature, missing trusted key, and valid signature paths.
 - [ ] 1.4 Implement desktop background daemon BLE service with three characteristics: `DeviceName` (RO), `DeviceSignature` (RO), `ConnectionConfig` (WO).
 - [ ] 1.4a Add/update unit tests for BLE characteristic exposure and access mode enforcement.
 - [ ] 1.5 Implement session bootstrap via BLE `ConnectionConfig` write (session id + mobile port + mobile ip list).
