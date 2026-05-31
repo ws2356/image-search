@@ -1,32 +1,48 @@
 ## 1. Protocol and Session Foundations
 
 - [ ] 1.1 Implement dedicated instant-share protocol endpoints for discovery/trust/transfer with flow id, payload class, target intent, and correlation id metadata, following `openspec/changes/add-instant-share/api-spec.md`.
+- [ ] 1.1a Add/update unit tests for protocol endpoint request/response contracts and metadata validation.
 - [ ] 1.2 Implement instant-share trust and negotiation flow independent from QR backup pairing/session and backup capability-exchange endpoints.
+- [ ] 1.2a Add/update unit tests for trust/negotiation state transitions and independence from backup-session paths.
 - [ ] 1.3 Add authenticated sender validation for instant-share initiation with explicit failure responses for untrusted requests.
+- [ ] 1.3a Add/update unit tests for trusted/untrusted sender validation outcomes.
 - [ ] 1.4 Implement desktop background daemon BLE service with three characteristics: `DeviceName` (RO), `DeviceSignature` (RO), `ConnectionConfig` (WO).
+- [ ] 1.4a Add/update unit tests for BLE characteristic exposure and access mode enforcement.
 - [ ] 1.5 Implement session bootstrap via BLE `ConnectionConfig` write (session id + mobile port + mobile ip list).
+- [ ] 1.5a Add/update unit tests for `ConnectionConfig` parsing/validation and bootstrap error handling.
 - [ ] 1.6 Implement trust APIs as `/trust/handshake`, encrypted `/trust/apply`, and parallel long-poll `/trust/confirm` with key exchange completion.
+- [ ] 1.6a Add/update unit tests for trust API crypto envelope handling and confirm long-poll completion semantics.
 
 ## 2. iOS Share Extension Ingest
 
 - [ ] 2.1 Implement Share Extension payload extractor for text, image, video, and other file inputs with normalized envelope creation.
+- [ ] 2.1a Add/update unit tests for payload normalization across text/image/video/file inputs.
 - [ ] 2.2 Add extension preflight checks for payload readability and metadata completeness before negotiation starts.
+- [ ] 2.2a Add/update unit tests for preflight pass/fail conditions.
 - [ ] 2.3 Implement unsupported-type rejection UX and error reporting in extension flow.
+- [ ] 2.3a Add/update unit tests for unsupported-type rejection mapping and error payload construction.
 
 ## 3. Desktop Instant Receive Orchestration
 
 - [ ] 3.1 Implement desktop instant receive orchestrator under `dt_image_search/instant_sharing` that subscribes to incoming instant-share sessions and emits lifecycle events.
+- [ ] 3.1a Add/update unit tests for orchestrator subscription and lifecycle-event emission behavior.
 - [ ] 3.2 Wire orchestrator lifecycle states (`queued`, `negotiating`, `transferring`, `delivering`, `done|failed|timed_out`) onto event bus messages.
+- [ ] 3.2a Add/update unit tests for event bus state mapping and message payload schema.
 - [ ] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) click notification entry opens AuSearch.
 - [ ] 3.4 Run UX review and record final selection for runtime behavior.
 - [ ] 3.5 Implement minimum viable desktop receive UX behavior based on selected variant for rapid flow bring-up.
+- [ ] 3.5a Add/update unit tests for selected-variant branching logic where testable (non-visual controller logic).
 
 ## 4. Target Delivery Implementation
 
 - [ ] 4.1 Implement clipboard writer path for text payload delivery (clipboard only) with completion/failure signaling.
+- [ ] 4.1a Add/update unit tests for clipboard delivery success/failure signaling.
 - [ ] 4.2 Implement image dual-target delivery (clipboard or file) and video/other-file local-file-only delivery with sanitized deterministic filename generation and collision handling.
+- [ ] 4.2a Add/update unit tests for target selection rules, filename sanitization, and collision resolution.
 - [ ] 4.3 Enforce receive-directory boundary checks and reject unsafe path resolutions with explicit errors.
+- [ ] 4.3a Add/update unit tests for safe/unsafe path resolution cases.
 - [ ] 4.4 Set default local-file target path to user Downloads folder when no explicit directory is configured.
+- [ ] 4.4a Add/update unit tests for default directory fallback behavior.
 
 ## 5. Mobile and Desktop UI Delivery Phases
 
@@ -35,25 +51,33 @@
 - [ ] 5.3 Execute dedicated UI design and polish pass for mobile.
 - [ ] 5.4 Execute dedicated UI design and polish pass for desktop.
 - [ ] 5.5 Re-verify behavior parity after polish pass.
+- [ ] 5.6 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced during MVP and polish phases.
 
 ## 6. Reliability and Recovery
 
 - [ ] 6.1 Implement bounded retry with exponential backoff for transient negotiation/transfer failures.
+- [ ] 6.1a Add/update unit tests for retry limits, backoff intervals, and retryable error classification.
 - [ ] 6.2 Implement timeout thresholds and final state mapping for exhausted retry attempts.
+- [ ] 6.2a Add/update unit tests for timeout threshold handling and terminal-state mapping.
 - [ ] 6.3 Enforce single active instant-share session handling (reject/defer concurrent requests).
+- [ ] 6.3a Add/update unit tests for concurrent session rejection/deferral behavior.
 - [ ] 6.4 Add user-visible wait/abort controls for long transfers and surface user-aborted outcomes in desktop and iOS states.
+- [ ] 6.4a Add/update unit tests for wait/abort state transitions and user-aborted outcome propagation.
 
 ## 7. Telemetry and Observability
 
 - [ ] 7.1 Add span-first tracing for instant-share lifecycle with correlation id propagation across iOS and desktop components.
+- [ ] 7.1a Add/update unit tests for telemetry context propagation and required span attributes.
 - [ ] 7.2 Add key lifecycle events (session accepted, transfer start, delivery complete, failure reason) using standardized telemetry attributes.
+- [ ] 7.2a Add/update unit tests for lifecycle event emission and attribute completeness.
 - [ ] 7.3 Add sampling guardrails for high-volume transfer events to avoid telemetry overload.
+- [ ] 7.3a Add/update unit tests for telemetry sampling decision logic.
 
-## 8. Validation and Testing
+## 8. Integration and Functional Validation
 
-- [ ] 8.1 Add unit tests for payload normalization, path sanitization, and retry policy behavior.
-- [ ] 8.2 Add integration tests for authenticated negotiation, auto-activation, and target delivery outcomes.
-- [ ] 8.3 Add functional tests for end-to-end instant-share scenarios: text-to-clipboard, photo-to-file, video-to-file, and unreachable-PC failure.
+- [ ] 8.1 Add integration tests for authenticated negotiation, auto-activation, and target delivery outcomes.
+- [ ] 8.2 Add functional tests for end-to-end instant-share scenarios: text-to-clipboard, photo-to-file, video-to-file, and unreachable-PC failure.
+- [ ] 8.3 Run a regression sweep to ensure per-task unit tests are added/updated for every applicable code change.
 
 ## 9. Rollout and Safeguards
 
