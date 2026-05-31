@@ -37,3 +37,14 @@ The system SHALL implement runtime receive behavior according to the selected UX
 #### Scenario: Variant B selected
 - **WHEN** Variant B is selected as final UX
 - **THEN** clicking the instant-share notification entry opens AuSearch for receive handling
+
+### Requirement: Desktop phased UI rollout
+The desktop side SHALL ship a minimum viable instant-share receive UX first and SHALL defer visual design/polish refinements to a dedicated later pass.
+
+#### Scenario: Desktop MVP UI available for flow bring-up
+- **WHEN** instant-share MVP is enabled for testing
+- **THEN** desktop provides functional minimal receive UX and status visibility without requiring final polished visuals
+
+#### Scenario: Desktop polish pass occurs after MVP validation
+- **WHEN** end-to-end flow is validated with MVP UX
+- **THEN** desktop UI design and polish tasks are executed as a separate follow-up pass

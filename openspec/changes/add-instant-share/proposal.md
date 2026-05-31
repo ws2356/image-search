@@ -18,7 +18,10 @@ Users currently need to launch AuSearch or AuBackup and navigate through multipl
   - option A: full notification-only receive UX
   - option B: notification entry opens AuSearch for instant-sharing receive handling
   - provide two mock sets and finalize UX after review
-- Add a fast, minimal confirmation and status UX on both sides to show queued, transferring, success, failure, and user-aborted outcomes.
+- Phase UI delivery on both platforms:
+  - phase 1: minimum viable UX to get end-to-end instant-share flow running quickly
+  - phase 2: dedicated UI design and polish pass after flow validation
+- Add a fast confirmation and status UX on both sides to show queued, transferring, success, failure, and user-aborted outcomes in phase 1.
 - Add fallback behavior when PC is unreachable (retry/backoff and user-visible error state).
 - Defer large media optimization (special handling for very large payloads) to a future iteration.
 - Do not reuse existing QR backup pairing/session infrastructure or backup-session capability exchange endpoint for Instant Share flow.
@@ -43,6 +46,7 @@ Users currently need to launch AuSearch or AuBackup and navigate through multipl
   - mobile/pc transport path: BLE discovery, trust handshake, instant-share-specific payload transfer protocol
   - desktop BLE service daemon: always-on instant-share discovery broadcast
   - PC app UX (AuSearch/AuBackup): notification-based receive surface and completion feedback
+  - mobile and PC UI layers: phased MVP-first UI plus later polish pass
 - Affected code areas (expected):
   - `mobile/ios/*` share/transfer and state handling
   - New instant-share transport/pairing code path on mobile side (separate from backup-session capability exchange)

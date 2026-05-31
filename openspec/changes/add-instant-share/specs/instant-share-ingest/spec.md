@@ -39,3 +39,14 @@ The system SHALL treat advanced optimization for very large media payloads as ou
 #### Scenario: Accept baseline media transfer behavior
 - **WHEN** a valid media payload is shared in this iteration
 - **THEN** the system uses baseline transfer behavior without requiring large-media optimization features
+
+### Requirement: Mobile phased UI rollout
+The mobile side SHALL ship a minimum viable instant-share UX first (basic status/error surfaces) and SHALL defer UI design/polish refinements to a dedicated later pass.
+
+#### Scenario: Mobile MVP UI available for flow bring-up
+- **WHEN** instant-share MVP is enabled for testing
+- **THEN** mobile presents functional minimal UX for selection, transfer status, and error outcomes without requiring final polished visuals
+
+#### Scenario: Mobile polish pass occurs after MVP validation
+- **WHEN** end-to-end flow is validated with MVP UX
+- **THEN** mobile UI design and polish tasks are executed as a separate follow-up pass

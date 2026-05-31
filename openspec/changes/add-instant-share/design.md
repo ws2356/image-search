@@ -20,6 +20,8 @@ Stakeholders:
 **Goals:**
 - Enable iOS Share Extension to initiate instant-share for text, screenshots, photos, videos, and other file types.
 - Maintain always-on discoverability via desktop BLE broadcast daemon for instant sharing.
+- Ship a minimum viable UI on both mobile and desktop quickly to validate end-to-end flow.
+- Run a dedicated UI design and polish pass for both mobile and desktop after MVP flow validation.
 - Finalize desktop receive UX after comparing two mock variants (notification-only vs notification-click-opens-AuSearch).
 - Deliver text to clipboard only; deliver images to clipboard or local files; deliver videos/other files to local files with predictable naming and status reporting.
 - Ensure reliability with bounded retry, single-session execution, and recoverable error handling.
@@ -86,6 +88,12 @@ Stakeholders:
 - Alternative considered: Concurrent sessions and/or size-based pre-reject.
 - Why not: Adds race complexity and may prematurely block legitimate large transfers.
 
+9. Two-phase UI implementation strategy (mobile + desktop).
+- Decision: Implement minimum viable UX first to validate protocol/transfer flow, then perform a dedicated design/polish pass.
+- Rationale: Reduces time-to-first-working-flow while preserving room for quality UX refinement.
+- Alternative considered: Full polished UX before flow validation.
+- Why not: Slows functional validation and increases rework risk if protocol behavior changes.
+
 ## Risks / Trade-offs
 
 - [Large payloads may take long time and appear stalled] -> Mitigation: Always show progress plus explicit user actions to continue waiting or abort.
@@ -103,10 +111,12 @@ Stakeholders:
 5. Implement BLE `ConnectionConfig` session bootstrap and remove `/sessions` endpoint dependency.
 6. Implement trust flow endpoints: `/trust/handshake`, encrypted `/trust/apply`, and long-poll `/trust/confirm`.
 7. Produce two desktop receive UX mock sets and finalize behavior.
-8. Add finalized desktop receive UX and status surfaces wired via event bus.
-9. Enforce single active instant-share session handling.
-10. Enable telemetry spans/events for end-to-end success/failure/user-abort analysis.
-11. Roll out with default-off internal testing, then staged enablement.
+8. Implement minimum viable mobile and desktop UX surfaces for flow bring-up.
+9. Add finalized desktop receive UX and status surfaces wired via event bus.
+10. Run dedicated mobile and desktop UI design/polish pass.
+11. Enforce single active instant-share session handling.
+12. Enable telemetry spans/events for end-to-end success/failure/user-abort analysis.
+13. Roll out with default-off internal testing, then staged enablement.
 
 Rollback strategy:
 - Disable feature flag to bypass instant-share entrypoints while keeping core backup/search flows unchanged.
