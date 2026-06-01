@@ -33,7 +33,7 @@ Out of scope:
   - Mobile MUST validate incoming session ID against the session generated at selection time.
 - Role direction in v1:
   - Mobile hosts the instant-sharing HTTP service using the IP/port from `ConnectionConfig`.
-  - PC acts as HTTP caller for trust and transfer operations.
+  - PC acts as HTTP caller for trust and payload-download operations.
 
 Versioning:
 - Backward-compatible changes: additive optional fields.
@@ -53,12 +53,10 @@ Versioning:
 ### 3.2 Required Metadata Fields
 
 - `flow_id`: fixed value `instant_share`.
-- `payload_class`: one of `text | image | video | file`.
+- `payload_class`: current implementation slice supports `text | image`.
 - `target_intent`:
   - `text`: `clipboard_only`
   - `image`: `clipboard_or_file`
-  - `video`: `file_only`
-  - `file`: `file_only`
 - `trust_mode`: `first_share | trusted_direct`.
 
 ## 4. BLE GATT Contract (Desktop Daemon)
@@ -91,8 +89,8 @@ Characteristics:
   - `mobile_port`: integer
   - `mobile_ip_list`: array of IP strings (IPv4/IPv6 allowed)
   - `correlation_id`: UUID
-  - `payload_class`: `text | image | video | file`
-  - `target_intent`: `clipboard_only | clipboard_or_file | file_only`
+  - `payload_class`: `text | image`
+  - `target_intent`: `clipboard_only | clipboard_or_file`
 
 Rules:
 - PC MUST persist `ConnectionConfig` for the active session window.
@@ -115,7 +113,7 @@ Response 200:
 Notes:
 - `pin_code` MUST NOT appear in request or response.
 - Both sides derive `session_symmetric_key` from DH shared secret + nonces + `kdf_context`.
-- This endpoint is part of first-share trust bootstrap and is not replaced by mTLS on the initial pairing.
+- This endpoint is part of first-share trust bootstrap and does not require mTLS in this phase.
 
 ## 5.2 POST /api/instant-share/v1/trust/apply
 Sent by PC to mobile after handshake. Carries PIN-related trust apply payload encrypted with `session_symmetric_key`.
@@ -152,30 +150,42 @@ Trust relationship is established when:
 - `/trust/apply` accepted, and
 - `/trust/confirm` returns success with mobile public key.
 
-## 6. Transfer Endpoints
+## 6. Payload Download Endpoints
 
 Caller/host direction:
 - PC calls these endpoints on the mobile-hosted HTTP service using `ConnectionConfig` transport data.
-- Sensitive transfer calls SHOULD include valid session signature headers and session-id matching.
+- After trust completes, mobile remains the source of truth for the shared payload and desktop downloads the payload from the iOS-hosted server.
+- Sensitive payload-download calls SHOULD include valid session signature headers and session-id matching.
 
 ## 6.1 POST /api/instant-share/v1/payload/text
-Used when `payload_class = text`.
+Used when `payload_class = text` and PC needs to fetch the shared text body.
 
 Request:
+- metadata envelope only:
+  - `flow_id`
+  - `payload_class`
+  - `target_intent`
+  - `trust_mode`
+
+Response 200:
+- `state`: `delivering`
 - `text_utf8`: string
 
-Response 202:
-- `state`: `delivering`
+## 6.2 POST /api/instant-share/v1/payload/image
+Used when `payload_class = image` and PC needs to fetch the shared image bytes.
 
-## 6.2 POST /api/instant-share/v1/payload/binary
-Used when `payload_class = image | video | file`.
+Request:
+- metadata envelope only:
+  - `flow_id`
+  - `payload_class`
+  - `target_intent`
+  - `trust_mode`
 
-Request: `multipart/form-data`
-- `manifest_json`: JSON string metadata
-- `content`: one or more binary parts
-
-Response 202:
-- `state`: `transferring | delivering`
+Response 200:
+- raw response body: image bytes
+- `Content-Type`: image MIME type
+- `X-Instant-Share-Filename`: optional suggested filename
+- `X-Instant-Share-Manifest`: optional JSON string with image metadata
 
 Abort behavior:
 - There is no dedicated `/abort` endpoint in v1.
@@ -289,6 +299,6 @@ Task 1.1 is complete when:
 - BLE service and three characteristics (`DeviceName`, `DeviceSignature`, `ConnectionConfig`) are implemented in desktop daemon.
 - Session bootstrap via `ConnectionConfig` write is implemented (no `/sessions` endpoint).
 - Trust endpoints `/trust/handshake`, `/trust/apply`, and `/trust/confirm` are implemented with specified cryptographic behavior.
-- Transfer and result endpoints in sections 6 and 7 are implemented.
+- Payload-download and result endpoints in sections 6 and 7 are implemented.
 - Session/header contract and single-session rules are enforced.
 - Error model and security requirements are covered by integration tests.

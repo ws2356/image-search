@@ -4,16 +4,16 @@ Users currently need to launch AuSearch or AuBackup and navigate through multipl
 
 ## What Changes
 
-- Add an iPhone Share Extension driven "Instant Share" flow that supports text, screenshots, photos, videos, and other file types from iOS share sheet.
+- Add an iPhone Share Extension driven "Instant Share" flow that supports text and images from iOS share sheet in the current implementation slice, with video and other file types deferred to follow-up work.
 - Add BLE-based candidate PC discovery before send, so mobile scans pairing-service broadcasts and shows a list of available PCs for user selection.
 - Add a desktop background daemon process that continuously broadcasts instant-sharing BLE service for mobile discovery and access, independent of backup session state.
 - Add a first-share trust establishment flow: after user selects a PC, mobile and PC perform DH exchange, receiver shows a PIN popup, sender shows same PIN for user confirmation, then both sides exchange X509 public certificates.
 - Add HTTPS transport with self-signed certs after first trust establishment, using exchanged certificates during TLS negotiation.
 - Add signed PC broadcasts and public-key pinning for future sharing so mobile can verify signature and send directly to trusted PC over HTTPS.
-- Add receive-target rules on PC:
+- Add receive-target rules on PC for the current implementation slice:
   - text payloads: clipboard only
   - image payloads: clipboard or local file save
-  - video and other file payloads: local file save only
+  - video and other file payload rules remain follow-up work
 - Desktop instant-sharing receive UX remains unfinalized for v1 implementation lock:
   - option A: full notification-only receive UX
   - option B: notification entry opens AuSearch for instant-sharing receive handling
@@ -26,6 +26,7 @@ Users currently need to launch AuSearch or AuBackup and navigate through multipl
 - Defer large media optimization (special handling for very large payloads) to a future iteration.
 - Do not reuse existing QR backup pairing/session infrastructure or backup-session capability exchange endpoint for Instant Share flow.
 - Keep Instant Share implementation separate from mobile-folder implementation: do not change desktop code in `dt_image_search/mobile/*`; place PC-side implementation in `dt_image_search/instant_sharing`.
+- Keep the v1 desktop transfer direction explicit: iOS hosts the local HTTP service and PC acts as the client that completes trust, then downloads the shared text or image.
 
 ## Capabilities
 

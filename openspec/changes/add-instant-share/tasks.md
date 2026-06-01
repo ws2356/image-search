@@ -2,8 +2,8 @@
 
 - [ ] 1.1 Implement dedicated instant-share protocol endpoints for discovery/trust/transfer with flow id, payload class, target intent, and correlation id metadata, following `openspec/changes/add-instant-share/api-spec.md`.
 - [ ] 1.1a Add/update unit tests for protocol endpoint request/response contracts and metadata validation.
-- [ ] 1.2 Implement instant-share trust and negotiation flow independent from QR backup pairing/session and backup capability-exchange endpoints.
-- [ ] 1.2a Add/update unit tests for trust/negotiation state transitions and independence from backup-session paths.
+- [x] 1.2 Implement instant-share trust and negotiation flow independent from QR backup pairing/session and backup capability-exchange endpoints.
+- [x] 1.2a Add/update unit tests for trust/negotiation state transitions and independence from backup-session paths.
 - [ ] 1.3 Add authenticated sender validation for instant-share initiation with explicit failure responses for untrusted requests.
 - [ ] 1.3a Add/update unit tests for trusted/untrusted sender validation outcomes.
 - [ ] 1.3b Implement session-id signature headers on PC requests and mobile-side verification using exchanged trusted public key.
@@ -26,10 +26,10 @@
 
 ## 3. Desktop Instant Receive Orchestration
 
-- [ ] 3.1 Implement desktop instant receive orchestrator under `dt_image_search/instant_sharing` that subscribes to incoming instant-share sessions and emits lifecycle events.
-- [ ] 3.1a Add/update unit tests for orchestrator subscription and lifecycle-event emission behavior.
-- [ ] 3.2 Wire orchestrator lifecycle states (`queued`, `negotiating`, `transferring`, `delivering`, `done|failed|timed_out`) onto event bus messages.
-- [ ] 3.2a Add/update unit tests for event bus state mapping and message payload schema.
+- [x] 3.1 Implement desktop instant receive orchestrator under `dt_image_search/instant_sharing` that subscribes to incoming instant-share sessions and emits lifecycle events.
+- [x] 3.1a Add/update unit tests for orchestrator subscription and lifecycle-event emission behavior.
+- [x] 3.2 Wire orchestrator lifecycle states (`queued`, `negotiating`, `transferring`, `delivering`, `done|failed|timed_out`) onto event bus messages.
+- [x] 3.2a Add/update unit tests for event bus state mapping and message payload schema.
 - [ ] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) click notification entry opens AuSearch.
 - [ ] 3.4 Run UX review and record final selection for runtime behavior.
 - [ ] 3.5 Implement minimum viable desktop receive UX behavior based on selected variant for rapid flow bring-up.
@@ -37,14 +37,14 @@
 
 ## 4. Target Delivery Implementation
 
-- [ ] 4.1 Implement clipboard writer path for text payload delivery (clipboard only) with completion/failure signaling.
-- [ ] 4.1a Add/update unit tests for clipboard delivery success/failure signaling.
+- [x] 4.1 Implement clipboard writer path for text payload delivery (clipboard only) with completion/failure signaling.
+- [x] 4.1a Add/update unit tests for clipboard delivery success/failure signaling.
 - [ ] 4.2 Implement image dual-target delivery (clipboard or file) and video/other-file local-file-only delivery with sanitized deterministic filename generation and collision handling.
 - [ ] 4.2a Add/update unit tests for target selection rules, filename sanitization, and collision resolution.
-- [ ] 4.3 Enforce receive-directory boundary checks and reject unsafe path resolutions with explicit errors.
-- [ ] 4.3a Add/update unit tests for safe/unsafe path resolution cases.
-- [ ] 4.4 Set default local-file target path to user Downloads folder when no explicit directory is configured.
-- [ ] 4.4a Add/update unit tests for default directory fallback behavior.
+- [x] 4.3 Enforce receive-directory boundary checks and reject unsafe path resolutions with explicit errors.
+- [x] 4.3a Add/update unit tests for safe/unsafe path resolution cases.
+- [x] 4.4 Set default local-file target path to user Downloads folder when no explicit directory is configured.
+- [x] 4.4a Add/update unit tests for default directory fallback behavior.
 
 ## 5. Mobile and Desktop UI Delivery Phases
 
@@ -61,8 +61,8 @@
 - [ ] 6.1a Add/update unit tests for retry limits, backoff intervals, and retryable error classification.
 - [ ] 6.2 Implement timeout thresholds and final state mapping for exhausted retry attempts.
 - [ ] 6.2a Add/update unit tests for timeout threshold handling and terminal-state mapping.
-- [ ] 6.3 Enforce single active instant-share session handling (reject/defer concurrent requests).
-- [ ] 6.3a Add/update unit tests for concurrent session rejection/deferral behavior.
+- [x] 6.3 Enforce single active instant-share session handling (reject/defer concurrent requests).
+- [x] 6.3a Add/update unit tests for concurrent session rejection/deferral behavior.
 - [ ] 6.4 Add user-visible wait/abort controls for long transfers and surface user-aborted outcomes in desktop and iOS states.
 - [ ] 6.4a Add/update unit tests for wait/abort state transitions and user-aborted outcome propagation.
 
@@ -83,6 +83,6 @@
 
 ## 9. Rollout and Safeguards
 
-- [ ] 9.1 Gate instant-share feature behind a configuration flag and add safe default-off behavior.
+- [x] 9.1 Gate instant-share feature behind a configuration flag and add safe default-off behavior.
 - [ ] 9.2 Define staged enablement checklist and rollback procedure using feature flag disable path.
 - [ ] 9.3 Update operator/developer docs for setup, user-facing behavior, troubleshooting, and known limits.

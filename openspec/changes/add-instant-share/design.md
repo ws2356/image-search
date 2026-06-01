@@ -7,7 +7,7 @@ AuSearch and AuBackup currently support rich transfer and backup workflows, but 
 
 Constraints:
 - iOS Share Extension has strict execution/memory limits and limited background runtime.
-- Payload sizes vary greatly (text, images, videos, and other files).
+- Payload sizes vary in the current slice across text and images, with video and other-file handling deferred to follow-up work.
 - PC app can be running, minimized, or not currently focused.
 
 Stakeholders:
@@ -18,12 +18,12 @@ Stakeholders:
 ## Goals / Non-Goals
 
 **Goals:**
-- Enable iOS Share Extension to initiate instant-share for text, screenshots, photos, videos, and other file types.
+- Enable iOS Share Extension to initiate instant-share for text and images in the current implementation slice, with video and other file support deferred to a follow-up phase.
 - Maintain always-on discoverability via desktop BLE broadcast daemon for instant sharing.
 - Ship a minimum viable UI on both mobile and desktop quickly to validate end-to-end flow.
 - Run a dedicated UI design and polish pass for both mobile and desktop after MVP flow validation.
 - Finalize desktop receive UX after comparing two mock variants (notification-only vs notification-click-opens-AuSearch).
-- Deliver text to clipboard only; deliver images to clipboard or local files; deliver videos/other files to local files with predictable naming and status reporting.
+- Deliver text to clipboard only and deliver images to clipboard or local files with predictable naming and status reporting in the current slice.
 - Ensure reliability with bounded retry, single-session execution, and recoverable error handling.
 
 **Non-Goals:**
@@ -99,6 +99,12 @@ Stakeholders:
 - Rationale: This provides a simple and fast-to-implement client authentication mechanism using trust material we already exchange.
 - Alternative considered: Require mTLS for all trusted-direct traffic.
 - Why not: Higher implementation overhead for this phase; can be added later as a transport hardening step.
+
+11. Keep the current desktop slice mobile-hosted and PC-downloaded.
+- Decision: After trust completes, PC remains the HTTP client and downloads shared text or image payloads from the iOS-hosted local HTTP service.
+- Rationale: This matches the iOS Share Extension hosting model and keeps desktop work isolated to `dt_image_search/instant_sharing` without changing `dt_image_search/mobile/*`.
+- Alternative considered: Desktop-hosted ingestion endpoints that accept pushed payload bodies.
+- Why not: That contradicts the current iOS-hosted server requirement and would reintroduce coupling to the existing desktop mobile-folder transport path.
 
 ## Risks / Trade-offs
 

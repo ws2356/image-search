@@ -75,6 +75,16 @@ def is_strict_security_feature_enabled(default: bool = False) -> bool:
     return default
 
 
+def is_instant_share_feature_enabled(default: bool = False) -> bool:
+    config = get_config()
+    instant_share_config = config.get("instant_share")
+    if isinstance(instant_share_config, dict) and "enabled" in instant_share_config:
+        return _as_bool(instant_share_config.get("enabled"), default)
+    if "instant_share.enabled" in config:
+        return _as_bool(config.get("instant_share.enabled"), default)
+    return default
+
+
 def _as_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
         return value
