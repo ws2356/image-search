@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import threading
 
 from dt_image_search.instant_sharing.contracts import ErrorCode, SessionState
 from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
@@ -55,16 +56,40 @@ class InstantShareReceiverOrchestrator:
                 pc_nonce=request.pc_nonce,
                 correlation_id=correlation_id,
             )
+            confirm_payload_holder: dict[str, object] = {}
+            confirm_error_holder: list[BaseException] = []
+            confirm_completed = threading.Event()
+
+            def _run_trust_confirm() -> None:
+                try:
+                    confirm_payload_holder.update(
+                        client.trust_confirm(
+                            pc_public_key_pem=request.pc_public_key_pem,
+                            correlation_id=correlation_id,
+                        )
+                    )
+                except BaseException as exc:
+                    confirm_error_holder.append(exc)
+                finally:
+                    confirm_completed.set()
+
+            confirm_thread = threading.Thread(
+                target=_run_trust_confirm,
+                name="instant_share_trust_confirm",
+                daemon=True,
+            )
+            confirm_thread.start()
+
             client.trust_apply(
                 encrypted_payload=request.encrypted_payload,
                 encryption_alg=request.encryption_alg,
                 correlation_id=correlation_id,
                 key_id=request.key_id,
             )
-            confirm_payload = client.trust_confirm(
-                pc_public_key_pem=request.pc_public_key_pem,
-                correlation_id=correlation_id,
-            )
+            confirm_completed.wait()
+            if confirm_error_holder:
+                raise confirm_error_holder[0]
+            confirm_payload = dict(confirm_payload_holder)
         except InstantShareError as error:
             self._transition_on_error(session_id=session_id, error=error)
             raise

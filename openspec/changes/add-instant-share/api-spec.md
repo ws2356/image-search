@@ -113,35 +113,58 @@ Response 200:
 Notes:
 - `pin_code` MUST NOT appear in request or response.
 - Both sides derive `session_symmetric_key` from DH shared secret + nonces + `kdf_context`.
+- Once `session_symmetric_key` is derived, pre-trust HTTP JSON bodies MUST use a trust-session envelope until `/trust/confirm` completes and pinned TLS trust is established.
 - This endpoint is part of first-share trust bootstrap and does not require mTLS in this phase.
+
+Trust-session encrypted envelope:
+- `schema`: `dtis.instant-share.trust-envelope.v1`
+- `nonce`: base64url AES-GCM nonce
+- `ciphertext`: base64url AES-GCM ciphertext over the logical JSON body
+- HTTP headers remain in cleartext; body payload is encrypted.
 
 ## 5.2 POST /api/instant-share/v1/trust/apply
 Sent by PC to mobile after handshake. Carries PIN-related trust apply payload encrypted with `session_symmetric_key`.
 
 Request:
-- `encrypted_payload`: base64
-- `encryption_alg`: string
-- `key_id`: string optional
+- Entire JSON body is wrapped in the trust-session encrypted envelope after `/trust/handshake` succeeds.
+- Decrypted logical request fields:
+  - `flow_id`: `instant_share`
+  - `payload_class`: `text | image`
+  - `target_intent`: `clipboard_only | clipboard_or_file`
+  - `trust_mode`: `first_share | trusted_direct`
+  - `encrypted_payload`: base64
+  - `encryption_alg`: string
+  - `key_id`: string optional
 
 Decrypted payload (logical fields):
 - `pin_code`: string
 - `mobile_display_proof`: string optional
 
 Response 202:
-- `apply_status`: accepted
+- Response MAY be plaintext or MAY use the trust-session encrypted envelope during the pre-TLS trust phase.
+- Decrypted logical response field:
+  - `apply_status`: accepted
 
 ## 5.3 POST /api/instant-share/v1/trust/confirm
 Sent by PC simultaneously with `/trust/apply` phase. This is a long-poll style confirm call to mobile service that waits for mobile-side user confirmation.
 
 Request:
-- `pc_public_key_pem`: string
+- Entire JSON body is wrapped in the trust-session encrypted envelope after `/trust/handshake` succeeds.
+- Decrypted logical request fields:
+  - `flow_id`: `instant_share`
+  - `payload_class`: `text | image`
+  - `target_intent`: `clipboard_only | clipboard_or_file`
+  - `trust_mode`: `first_share | trusted_direct`
+  - `pc_public_key_pem`: string
 
 Behavior:
 - Endpoint blocks (within timeout bound) until mobile confirms both devices show same PIN.
 
 Response 200:
-- `mobile_public_key_pem`: string
-- `trust_status`: trusted
+- Response MAY use the trust-session encrypted envelope during the pre-TLS trust phase.
+- Decrypted logical response fields:
+  - `mobile_public_key_pem`: string
+  - `trust_status`: trusted
 
 Failure:
 - `409` with `PIN_MISMATCH_OR_REJECTED` when user rejects or PIN mismatch occurs.

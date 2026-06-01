@@ -22,6 +22,10 @@ from dt_image_search.instant_sharing.contracts import (
     DeliveryResult,
 )
 from dt_image_search.instant_sharing.errors import InstantShareError
+from dt_image_search.instant_sharing.trust_crypto import (
+    TrustSessionProtector,
+    is_trust_session_envelope,
+)
 
 
 class SessionRequestSigner(Protocol):
@@ -186,6 +190,7 @@ class InstantShareHttpClient:
         device_id: str,
         requester: HttpRequester | None = None,
         session_signer: SessionRequestSigner | None = None,
+        trust_session_protector: TrustSessionProtector | None = None,
         pinned_mobile_public_key_pem: str | None = None,
         retry_policy: RetryPolicy | None = None,
         sleep_func: Callable[[float], None] = time.sleep,
@@ -195,6 +200,7 @@ class InstantShareHttpClient:
         self._device_id = device_id
         self._requester = requester if requester is not None else PinnedHttpsRequester()
         self._session_signer = session_signer
+        self._trust_session_protector = trust_session_protector
         self._pinned_mobile_public_key_pem = pinned_mobile_public_key_pem.strip() if pinned_mobile_public_key_pem else None
         self._retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
         self._sleep_func = sleep_func
@@ -214,17 +220,24 @@ class InstantShareHttpClient:
         self._pinned_mobile_public_key_pem = normalized_public_key_pem
 
     def trust_handshake(self, *, pc_dh_public_key: str, pc_nonce: str, correlation_id: str) -> dict[str, object]:
-        return self._post_json(
+        handshake_request_payload = {
+            "pc_dh_public_key": pc_dh_public_key,
+            "pc_nonce": pc_nonce,
+        }
+        response_payload = self._post_json(
             path="/trust/handshake",
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=False,
             requires_tls_pin=False,
-            payload={
-                "pc_dh_public_key": pc_dh_public_key,
-                "pc_nonce": pc_nonce,
-            },
+            payload=handshake_request_payload,
         )
+        if self._trust_session_protector is not None:
+            self._trust_session_protector.establish_from_handshake(
+                handshake_request=handshake_request_payload,
+                handshake_response=response_payload,
+            )
+        return response_payload
 
     def trust_apply(
         self,
@@ -246,6 +259,7 @@ class InstantShareHttpClient:
             correlation_id=correlation_id,
             requires_signature=False,
             requires_tls_pin=False,
+            protect_with_trust_session=self._trust_session_protector is not None,
             payload=payload,
         )
 
@@ -256,6 +270,7 @@ class InstantShareHttpClient:
             correlation_id=correlation_id,
             requires_signature=False,
             requires_tls_pin=False,
+            protect_with_trust_session=self._trust_session_protector is not None,
             payload={"pc_public_key_pem": pc_public_key_pem},
         )
         mobile_public_key_pem = response_payload.get("mobile_public_key_pem")
@@ -332,6 +347,7 @@ class InstantShareHttpClient:
         requires_signature: bool,
         requires_tls_pin: bool,
         payload: Mapping[str, object],
+        protect_with_trust_session: bool = False,
     ) -> dict[str, object]:
         response = self._send_request(
             path=path,
@@ -340,8 +356,19 @@ class InstantShareHttpClient:
             requires_signature=requires_signature,
             requires_tls_pin=requires_tls_pin,
             payload=payload,
+            protect_with_trust_session=protect_with_trust_session,
         )
-        return response.json()
+        response_payload = response.json()
+        if (
+            protect_with_trust_session
+            and self._trust_session_protector is not None
+            and is_trust_session_envelope(response_payload)
+        ):
+            return self._trust_session_protector.decrypt_json_payload(
+                encrypted_payload=response_payload,
+                correlation_id=correlation_id,
+            )
+        return response_payload
 
     def _send_request(
         self,
@@ -352,6 +379,7 @@ class InstantShareHttpClient:
         requires_signature: bool,
         requires_tls_pin: bool,
         payload: Mapping[str, object],
+        protect_with_trust_session: bool = False,
     ) -> InstantShareHttpResponse:
         metadata.validate()
         if requires_tls_pin and (self._pinned_mobile_public_key_pem is None or not self._pinned_mobile_public_key_pem.strip()):
@@ -361,7 +389,14 @@ class InstantShareHttpClient:
                 correlation_id=correlation_id,
             )
         headers = self._build_headers(correlation_id=correlation_id, requires_signature=requires_signature)
-        request_body = json.dumps({**metadata.as_dict(), **payload}, ensure_ascii=False).encode("utf-8")
+        logical_payload = {**metadata.as_dict(), **payload}
+        request_payload: Mapping[str, object] = logical_payload
+        if protect_with_trust_session and self._trust_session_protector is not None:
+            request_payload = self._trust_session_protector.encrypt_json_payload(
+                payload=logical_payload,
+                correlation_id=correlation_id,
+            )
+        request_body = json.dumps(dict(request_payload), ensure_ascii=False).encode("utf-8")
         request_headers = dict(headers)
         request_headers["Content-Type"] = "application/json"
         request_headers["Accept"] = "application/json, image/*, application/octet-stream"

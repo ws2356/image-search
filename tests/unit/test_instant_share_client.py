@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import threading
 import unittest
 import uuid
 from datetime import datetime, timedelta
@@ -14,6 +15,7 @@ from cryptography.x509.oid import NameOID
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.instant_sharing.ble import ConnectionConfig
+from dt_image_search.instant_sharing import AesGcmTrustSessionProtector
 from dt_image_search.instant_sharing.contracts import (
     DeliveryResult,
     DeliveryTargetResult,
@@ -263,6 +265,113 @@ class TestInstantShareHttpClient(unittest.TestCase):
         self.assertEqual(client.pinned_mobile_public_key_pem, "mobile-public-key-pem-from-confirm")
         self.assertEqual(requester.requests[1].pinned_mobile_public_key_pem, "mobile-public-key-pem-from-confirm")
         self.assertTrue(requester.requests[1].requires_tls_pin)
+
+    def test_trust_follow_up_calls_use_encrypted_session_envelope_after_handshake(self):
+        handshake_request_payload = {
+            "pc_dh_public_key": "desktop-dh-pub",
+            "pc_nonce": "desktop-nonce",
+        }
+        handshake_response_payload = {
+            "mobile_dh_public_key": "mobile-dh-pub",
+            "mobile_nonce": "mobile-nonce",
+            "kdf_context": "ctx-001",
+        }
+        protected_response_payload = {
+            "mobile_public_key_pem": "mobile-public-key-pem-from-confirm",
+            "trust_status": "trusted",
+        }
+        session_key_resolver = lambda **kwargs: b"1" * 32
+        response_protector = AesGcmTrustSessionProtector(
+            session_key_resolver=session_key_resolver,
+            nonce_provider=lambda size: b"0" * size,
+        )
+        response_protector.establish_from_handshake(
+            handshake_request=handshake_request_payload,
+            handshake_response=handshake_response_payload,
+        )
+        requester = _StubRequester(
+            InstantShareHttpResponse(
+                status_code=200,
+                headers={"Content-Type": "application/json"},
+                body=json.dumps(handshake_response_payload).encode("utf-8"),
+            ),
+            InstantShareHttpResponse(
+                status_code=200,
+                headers={"Content-Type": "application/json"},
+                body=json.dumps({"apply_status": "accepted"}).encode("utf-8"),
+            ),
+            InstantShareHttpResponse(
+                status_code=200,
+                headers={"Content-Type": "application/json"},
+                body=json.dumps(
+                    response_protector.encrypt_json_payload(
+                        payload=protected_response_payload,
+                        correlation_id=str(uuid.uuid4()),
+                    )
+                ).encode("utf-8"),
+            ),
+        )
+        protector = AesGcmTrustSessionProtector(
+            session_key_resolver=session_key_resolver,
+            nonce_provider=lambda size: b"0" * size,
+        )
+        client = InstantShareHttpClient(
+            connection_config=_connection_config(trust_mode="first_share"),
+            device_id="pc-001",
+            requester=requester,
+            trust_session_protector=protector,
+        )
+
+        handshake_payload = client.trust_handshake(
+            pc_dh_public_key=handshake_request_payload["pc_dh_public_key"],
+            pc_nonce=handshake_request_payload["pc_nonce"],
+            correlation_id=str(uuid.uuid4()),
+        )
+        apply_payload = client.trust_apply(
+            encrypted_payload="pin-ciphertext",
+            encryption_alg="aes-gcm",
+            correlation_id=str(uuid.uuid4()),
+            key_id="key-001",
+        )
+        confirm_payload = client.trust_confirm(
+            pc_public_key_pem="desktop-public-key",
+            correlation_id=str(uuid.uuid4()),
+        )
+
+        self.assertEqual(handshake_payload["mobile_dh_public_key"], "mobile-dh-pub")
+        self.assertEqual(apply_payload["apply_status"], "accepted")
+        self.assertEqual(confirm_payload["trust_status"], "trusted")
+
+        apply_request_body = json.loads(requester.requests[1].body.decode("utf-8"))
+        confirm_request_body = json.loads(requester.requests[2].body.decode("utf-8"))
+        self.assertEqual(apply_request_body["schema"], "dtis.instant-share.trust-envelope.v1")
+        self.assertEqual(confirm_request_body["schema"], "dtis.instant-share.trust-envelope.v1")
+        self.assertNotIn("encrypted_payload", apply_request_body)
+        self.assertNotIn("pc_public_key_pem", confirm_request_body)
+        self.assertEqual(client.pinned_mobile_public_key_pem, "mobile-public-key-pem-from-confirm")
+
+    def test_trust_apply_requires_handshake_when_session_protector_is_configured(self):
+        requester = _StubRequester()
+        protector = AesGcmTrustSessionProtector(
+            session_key_resolver=lambda **kwargs: b"1" * 32,
+            nonce_provider=lambda size: b"0" * size,
+        )
+        client = InstantShareHttpClient(
+            connection_config=_connection_config(trust_mode="first_share"),
+            device_id="pc-001",
+            requester=requester,
+            trust_session_protector=protector,
+        )
+
+        with self.assertRaises(InstantShareError) as exc_info:
+            client.trust_apply(
+                encrypted_payload="pin-ciphertext",
+                encryption_alg="aes-gcm",
+                correlation_id=str(uuid.uuid4()),
+            )
+
+        self.assertEqual(exc_info.exception.error_code.value, "HANDSHAKE_REQUIRED")
+        self.assertEqual(requester.requests, [])
 
     def test_verify_peer_public_key_pin_accepts_matching_public_key(self):
         pinned_public_key_pem, certificate_der = _generate_public_key_and_certificate("mobile.local")

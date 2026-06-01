@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import unittest
 import uuid
 
@@ -73,6 +74,27 @@ class _TimeoutingClient(_StubClient):
         )
 
 
+class _ParallelTrustClient(_StubClient):
+    def __init__(self):
+        super().__init__()
+        self.apply_started = threading.Event()
+        self.confirm_started = threading.Event()
+        self.allow_apply_complete = threading.Event()
+
+    def trust_apply(self, **kwargs):
+        self.calls.append(("trust_apply", kwargs))
+        self.apply_started.set()
+        if not self.allow_apply_complete.wait(timeout=1.0):
+            raise TimeoutError("trust_apply did not observe trust_confirm in time")
+        return {"apply_status": "accepted"}
+
+    def trust_confirm(self, **kwargs):
+        self.calls.append(("trust_confirm", kwargs))
+        self.confirm_started.set()
+        self.allow_apply_complete.set()
+        return {"mobile_public_key_pem": "mobile-public-key", "trust_status": "trusted"}
+
+
 def _connection_config():
     return ConnectionConfig.from_dict(
         {
@@ -131,16 +153,9 @@ class TestInstantShareReceiverOrchestrator(unittest.TestCase):
             [event["state"] for event in received_events],
             ["queued", "negotiating", "transferring", "delivering", "done"],
         )
-        self.assertEqual(
-            [call[0] for call in client.calls],
-            [
-                "trust_handshake",
-                "trust_apply",
-                "trust_confirm",
-                "download_text_payload",
-                "report_delivery_result",
-            ],
-        )
+        self.assertEqual(client.calls[0][0], "trust_handshake")
+        self.assertEqual({client.calls[1][0], client.calls[2][0]}, {"trust_apply", "trust_confirm"})
+        self.assertEqual([call[0] for call in client.calls[3:]], ["download_text_payload", "report_delivery_result"])
 
     def test_transfer_timeout_maps_session_to_timed_out(self):
         clipboard = _ClipboardRecorder()
@@ -173,6 +188,51 @@ class TestInstantShareReceiverOrchestrator(unittest.TestCase):
             [event["state"] for event in received_events],
             ["queued", "transferring", "timed_out"],
         )
+
+    def test_complete_trust_runs_apply_and_confirm_in_parallel(self):
+        clipboard = _ClipboardRecorder()
+        delivery_service = InstantShareDeliveryService(clipboard_writer=clipboard)
+        orchestrator = InstantShareReceiverOrchestrator(
+            session_registry=InstantShareSessionRegistry(),
+            delivery_service=delivery_service,
+        )
+        client = _ParallelTrustClient()
+        connection_config = _connection_config()
+
+        session = orchestrator.handle_connection_config(connection_config)
+
+        trust_result: dict[str, object] = {}
+        trust_error: list[BaseException] = []
+
+        def _run_complete_trust() -> None:
+            try:
+                trust_result.update(
+                    orchestrator.complete_trust(
+                        session_id=session.connection_config.session_id,
+                        client=client,
+                        correlation_id=connection_config.correlation_id,
+                        request=TrustHandshakeRequest(
+                            pc_dh_public_key="pc-dh-public-key",
+                            pc_nonce="pc-nonce",
+                            encrypted_payload="encrypted-payload",
+                            encryption_alg="aes-gcm",
+                            pc_public_key_pem="desktop-public-key",
+                        ),
+                    )
+                )
+            except BaseException as exc:
+                trust_error.append(exc)
+
+        worker = threading.Thread(target=_run_complete_trust, daemon=True)
+        worker.start()
+
+        self.assertTrue(client.apply_started.wait(timeout=1.0))
+        self.assertTrue(client.confirm_started.wait(timeout=1.0))
+        worker.join(timeout=1.0)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(trust_error, [])
+        self.assertEqual(trust_result["trust_status"], "trusted")
 
 
 if __name__ == "__main__":

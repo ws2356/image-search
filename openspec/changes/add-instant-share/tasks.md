@@ -13,7 +13,7 @@
 - [x] 1.5 Implement session bootstrap via BLE `ConnectionConfig` write (session id + mobile port + mobile ip list).
 - [x] 1.5a Add/update unit tests for `ConnectionConfig` parsing/validation and bootstrap error handling.
 - [ ] 1.6 Implement trust APIs as `/trust/handshake`, encrypted `/trust/apply`, and parallel long-poll `/trust/confirm` with key exchange completion.
-- [ ] 1.6a Add/update unit tests for trust API crypto envelope handling and confirm long-poll completion semantics.
+- [x] 1.6a Add/update unit tests for trust API crypto envelope handling and confirm long-poll completion semantics.
 
 ## 2. iOS Share Extension Ingest
 

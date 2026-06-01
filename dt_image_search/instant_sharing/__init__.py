@@ -42,6 +42,10 @@ from dt_image_search.instant_sharing.http_client import (
     RetryPolicy,
     SessionRequestSigner,
 )
+from dt_image_search.instant_sharing.trust_crypto import (
+    AesGcmTrustSessionProtector,
+    TrustSessionProtector,
+)
 from dt_image_search.instant_sharing.orchestrator import (
     INSTANT_SHARE_LIFECYCLE_EVENT,
     InstantShareReceiverOrchestrator,
@@ -54,6 +58,7 @@ from dt_image_search.instant_sharing.session import (
 
 __all__ = [
     "API_PREFIX",
+    "AesGcmTrustSessionProtector",
     "FLOW_ID",
     "PROTOCOL_VERSION",
     "CONNECTION_CONFIG_CHARACTERISTIC",
@@ -93,5 +98,6 @@ __all__ = [
     "SessionState",
     "TargetIntent",
     "TrustHandshakeRequest",
+    "TrustSessionProtector",
     "TrustMode",
 ]
