@@ -77,8 +77,8 @@
 
 ## 8. Integration and Functional Validation
 
-- [ ] 8.1 Add integration tests for authenticated negotiation, auto-activation, and target delivery outcomes.
-- [ ] 8.2 Add functional tests for end-to-end instant-share scenarios: text-to-clipboard, photo-to-file, video-to-file, and unreachable-PC failure.
+- [x] 8.1 Add integration tests for authenticated negotiation, auto-activation, and target delivery outcomes.
+- [x] 8.2 Add functional tests for end-to-end instant-share scenarios: text-to-clipboard, photo-to-file, video-to-file, and unreachable-PC failure.
 - [ ] 8.3 Run a regression sweep to ensure per-task unit tests are added/updated for every applicable code change.
 
 ## 9. Rollout and Safeguards
