@@ -46,6 +46,10 @@ from dt_image_search.instant_sharing.trust_crypto import (
     AesGcmTrustSessionProtector,
     TrustSessionProtector,
 )
+from dt_image_search.instant_sharing.security import (
+    PersistentEd25519SessionSigner,
+    X25519TrustSessionKeyResolver,
+)
 from dt_image_search.instant_sharing.orchestrator import (
     INSTANT_SHARE_LIFECYCLE_EVENT,
     InstantShareReceiverOrchestrator,
@@ -94,6 +98,7 @@ __all__ = [
     "InstantShareSessionRegistry",
     "PayloadClass",
     "PinnedHttpsRequester",
+    "PersistentEd25519SessionSigner",
     "QtClipboardWriter",
     "RetryPolicy",
     "SessionRequestSigner",
@@ -102,4 +107,5 @@ __all__ = [
     "TrustHandshakeRequest",
     "TrustSessionProtector",
     "TrustMode",
+    "X25519TrustSessionKeyResolver",
 ]
