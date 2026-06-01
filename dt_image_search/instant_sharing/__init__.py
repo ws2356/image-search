@@ -51,6 +51,7 @@ from dt_image_search.instant_sharing.orchestrator import (
     InstantShareReceiverOrchestrator,
     TrustHandshakeRequest,
 )
+from dt_image_search.instant_sharing.runtime import InstantShareRuntime
 from dt_image_search.instant_sharing.session import (
     InstantShareSession,
     InstantShareSessionRegistry,
@@ -88,6 +89,7 @@ __all__ = [
     "InstantShareHttpResponse",
     "InstantShareMetadata",
     "InstantShareReceiverOrchestrator",
+    "InstantShareRuntime",
     "InstantShareSession",
     "InstantShareSessionRegistry",
     "PayloadClass",
