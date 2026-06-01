@@ -8,10 +8,10 @@
 - [ ] 1.3a Add/update unit tests for trusted/untrusted sender validation outcomes.
 - [ ] 1.3b Implement session-id signature headers on PC requests and mobile-side verification using exchanged trusted public key.
 - [ ] 1.3c Add/update unit tests for missing signature, invalid signature, missing trusted key, and valid signature paths.
-- [ ] 1.4 Implement desktop background daemon BLE service with three characteristics: `DeviceName` (RO), `DeviceSignature` (RO), `ConnectionConfig` (WO).
-- [ ] 1.4a Add/update unit tests for BLE characteristic exposure and access mode enforcement.
-- [ ] 1.5 Implement session bootstrap via BLE `ConnectionConfig` write (session id + mobile port + mobile ip list).
-- [ ] 1.5a Add/update unit tests for `ConnectionConfig` parsing/validation and bootstrap error handling.
+- [x] 1.4 Implement desktop background daemon BLE service with three characteristics: `DeviceName` (RO), `DeviceSignature` (RO), `ConnectionConfig` (WO).
+- [x] 1.4a Add/update unit tests for BLE characteristic exposure and access mode enforcement.
+- [x] 1.5 Implement session bootstrap via BLE `ConnectionConfig` write (session id + mobile port + mobile ip list).
+- [x] 1.5a Add/update unit tests for `ConnectionConfig` parsing/validation and bootstrap error handling.
 - [ ] 1.6 Implement trust APIs as `/trust/handshake`, encrypted `/trust/apply`, and parallel long-poll `/trust/confirm` with key exchange completion.
 - [ ] 1.6a Add/update unit tests for trust API crypto envelope handling and confirm long-poll completion semantics.
 
@@ -57,10 +57,10 @@
 
 ## 6. Reliability and Recovery
 
-- [ ] 6.1 Implement bounded retry with exponential backoff for transient negotiation/transfer failures.
-- [ ] 6.1a Add/update unit tests for retry limits, backoff intervals, and retryable error classification.
-- [ ] 6.2 Implement timeout thresholds and final state mapping for exhausted retry attempts.
-- [ ] 6.2a Add/update unit tests for timeout threshold handling and terminal-state mapping.
+- [x] 6.1 Implement bounded retry with exponential backoff for transient negotiation/transfer failures.
+- [x] 6.1a Add/update unit tests for retry limits, backoff intervals, and retryable error classification.
+- [x] 6.2 Implement timeout thresholds and final state mapping for exhausted retry attempts.
+- [x] 6.2a Add/update unit tests for timeout threshold handling and terminal-state mapping.
 - [x] 6.3 Enforce single active instant-share session handling (reject/defer concurrent requests).
 - [x] 6.3a Add/update unit tests for concurrent session rejection/deferral behavior.
 - [ ] 6.4 Add user-visible wait/abort controls for long transfers and surface user-aborted outcomes in desktop and iOS states.

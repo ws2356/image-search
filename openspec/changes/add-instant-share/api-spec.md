@@ -150,12 +150,17 @@ Trust relationship is established when:
 - `/trust/apply` accepted, and
 - `/trust/confirm` returns success with mobile public key.
 
+Pinning rule after trust confirmation:
+- PC MUST persist `mobile_public_key_pem` returned by `/trust/confirm` for the active session.
+- All subsequent transfer HTTPS calls (`/payload/*` and `/delivery-result`) MUST validate that the mobile HTTPS server certificate presents the same public key as `mobile_public_key_pem`.
+
 ## 6. Payload Download Endpoints
 
 Caller/host direction:
 - PC calls these endpoints on the mobile-hosted HTTP service using `ConnectionConfig` transport data.
 - After trust completes, mobile remains the source of truth for the shared payload and desktop downloads the payload from the iOS-hosted server.
 - Sensitive payload-download calls SHOULD include valid session signature headers and session-id matching.
+- Payload-download and delivery-result calls MUST use HTTPS with public-key pinning derived from `mobile_public_key_pem` returned by `/trust/confirm`.
 
 ## 6.1 POST /api/instant-share/v1/payload/text
 Used when `payload_class = text` and PC needs to fetch the shared text body.
@@ -271,6 +276,7 @@ Defined error codes:
   - MUST verify `DeviceSignature` characteristic.
   - MUST enforce certificate pin validation during TLS negotiation.
   - MUST verify `X-Session-Signature` against trusted PC public key and `X-Session-Id`.
+- After `/trust/confirm`, PC MUST use the returned `mobile_public_key_pem` as the HTTPS public-key pin for transfer calls in the active session.
 - Any PIN mismatch/rejection MUST terminate trust flow.
 - All HTTP calls MUST carry `X-Session-Id`; receiver MUST enforce match with BLE bootstrap session.
 - Request-level replay hardening beyond session-id signature verification (for example, monotonic counters) is intentionally deferred to a later pass.

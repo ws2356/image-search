@@ -9,6 +9,7 @@ from dt_image_search.instant_sharing.ble import (
     ConnectionConfig,
     DeviceNameAdvertisement,
     DeviceSignatureAdvertisement,
+    InstantShareBleDaemon,
     InstantShareBleService,
 )
 from dt_image_search.instant_sharing.contracts import (
@@ -37,6 +38,8 @@ from dt_image_search.instant_sharing.http_client import (
     InstantShareHttpClient,
     InstantShareHttpRequest,
     InstantShareHttpResponse,
+    PinnedHttpsRequester,
+    RetryPolicy,
     SessionRequestSigner,
 )
 from dt_image_search.instant_sharing.orchestrator import (
@@ -70,6 +73,7 @@ __all__ = [
     "DownloadedImagePayload",
     "DownloadedTextPayload",
     "ErrorCode",
+    "InstantShareBleDaemon",
     "InstantShareBleService",
     "InstantShareDeliveryService",
     "InstantShareError",
@@ -82,7 +86,9 @@ __all__ = [
     "InstantShareSession",
     "InstantShareSessionRegistry",
     "PayloadClass",
+    "PinnedHttpsRequester",
     "QtClipboardWriter",
+    "RetryPolicy",
     "SessionRequestSigner",
     "SessionState",
     "TargetIntent",

@@ -49,28 +49,34 @@ class InstantShareReceiverOrchestrator:
     ) -> dict[str, object]:
         session = self._session_registry.transition(session_id, SessionState.NEGOTIATING)
         self._publish(session)
-        client.trust_handshake(
-            pc_dh_public_key=request.pc_dh_public_key,
-            pc_nonce=request.pc_nonce,
-            correlation_id=correlation_id,
-        )
-        client.trust_apply(
-            encrypted_payload=request.encrypted_payload,
-            encryption_alg=request.encryption_alg,
-            correlation_id=correlation_id,
-            key_id=request.key_id,
-        )
-        confirm_payload = client.trust_confirm(
-            pc_public_key_pem=request.pc_public_key_pem,
-            correlation_id=correlation_id,
-        )
+        try:
+            client.trust_handshake(
+                pc_dh_public_key=request.pc_dh_public_key,
+                pc_nonce=request.pc_nonce,
+                correlation_id=correlation_id,
+            )
+            client.trust_apply(
+                encrypted_payload=request.encrypted_payload,
+                encryption_alg=request.encryption_alg,
+                correlation_id=correlation_id,
+                key_id=request.key_id,
+            )
+            confirm_payload = client.trust_confirm(
+                pc_public_key_pem=request.pc_public_key_pem,
+                correlation_id=correlation_id,
+            )
+        except InstantShareError as error:
+            self._transition_on_error(session_id=session_id, error=error)
+            raise
         mobile_public_key_pem = confirm_payload.get("mobile_public_key_pem")
         if not isinstance(mobile_public_key_pem, str) or not mobile_public_key_pem.strip():
-            raise InstantShareError(
+            error = InstantShareError(
                 ErrorCode.CONFIRM_TIMEOUT,
                 "Instant-share trust confirm did not return mobile_public_key_pem.",
                 correlation_id=correlation_id,
             )
+            self._transition_on_error(session_id=session_id, error=error)
+            raise error
         self._session_registry.set_trusted_mobile_public_key(session_id, mobile_public_key_pem)
         return confirm_payload
 
@@ -86,20 +92,28 @@ class InstantShareReceiverOrchestrator:
         session = self._session_registry.transition(session_id, SessionState.TRANSFERRING)
         self._publish(session)
 
-        if session.connection_config.metadata.payload_class.value == "text":
-            downloaded_payload = client.download_text_payload(
-                correlation_id=correlation_id,
-                requires_signature=requires_signature,
-            )
-        else:
-            downloaded_payload = client.download_image_payload(
-                correlation_id=correlation_id,
-                requires_signature=requires_signature,
-            )
+        try:
+            if session.connection_config.metadata.payload_class.value == "text":
+                downloaded_payload = client.download_text_payload(
+                    correlation_id=correlation_id,
+                    requires_signature=requires_signature,
+                )
+            else:
+                downloaded_payload = client.download_image_payload(
+                    correlation_id=correlation_id,
+                    requires_signature=requires_signature,
+                )
+        except InstantShareError as error:
+            self._transition_on_error(session_id=session_id, error=error)
+            raise
 
         session = self._session_registry.transition(session_id, SessionState.DELIVERING)
         self._publish(session)
-        delivery_result = self._delivery_service.deliver(downloaded_payload)
+        try:
+            delivery_result = self._delivery_service.deliver(downloaded_payload)
+        except InstantShareError as error:
+            self._transition_on_error(session_id=session_id, error=error)
+            raise
 
         terminal_state = delivery_result.state
         session = self._session_registry.transition(session_id, terminal_state)
@@ -115,6 +129,23 @@ class InstantShareReceiverOrchestrator:
         session = self._session_registry.transition(session_id, SessionState.FAILED)
         self._publish(session, error=error)
         return session
+
+    def _transition_on_error(self, *, session_id: str, error: InstantShareError) -> InstantShareSession:
+        desired_state = self._desired_terminal_state_for_error(error)
+        try:
+            session = self._session_registry.transition(session_id, desired_state)
+        except InstantShareError:
+            session = self._session_registry.transition(session_id, SessionState.FAILED)
+        self._publish(session, error=error)
+        return session
+
+    @staticmethod
+    def _desired_terminal_state_for_error(error: InstantShareError) -> SessionState:
+        if error.error_code is ErrorCode.USER_ABORTED:
+            return SessionState.ABORTED
+        if error.error_code in {ErrorCode.TRANSFER_TIMEOUT, ErrorCode.CONFIRM_TIMEOUT}:
+            return SessionState.TIMED_OUT
+        return SessionState.FAILED
 
     @staticmethod
     def _publish(session: InstantShareSession, *, error: InstantShareError | None = None) -> None:

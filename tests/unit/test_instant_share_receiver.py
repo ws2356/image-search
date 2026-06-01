@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import DownloadedTextPayload, InstantShareMetadata, PayloadClass, TargetIntent, TrustMode
 from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
+from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.orchestrator import (
     INSTANT_SHARE_LIFECYCLE_EVENT,
     InstantShareReceiverOrchestrator,
@@ -60,6 +61,16 @@ class _StubClient:
     def report_delivery_result(self, **kwargs):
         self.calls.append(("report_delivery_result", kwargs))
         return {"ack": True}
+
+
+class _TimeoutingClient(_StubClient):
+    def download_text_payload(self, **kwargs):
+        self.calls.append(("download_text_payload", kwargs))
+        raise InstantShareError(
+            error_code=__import__("dt_image_search.instant_sharing.contracts", fromlist=["ErrorCode"]).ErrorCode.TRANSFER_TIMEOUT,
+            message="download timed out",
+            correlation_id=str(uuid.uuid4()),
+        )
 
 
 def _connection_config():
@@ -129,6 +140,38 @@ class TestInstantShareReceiverOrchestrator(unittest.TestCase):
                 "download_text_payload",
                 "report_delivery_result",
             ],
+        )
+
+    def test_transfer_timeout_maps_session_to_timed_out(self):
+        clipboard = _ClipboardRecorder()
+        delivery_service = InstantShareDeliveryService(clipboard_writer=clipboard)
+        orchestrator = InstantShareReceiverOrchestrator(
+            session_registry=InstantShareSessionRegistry(),
+            delivery_service=delivery_service,
+        )
+        client = _TimeoutingClient()
+        connection_config = _connection_config()
+        received_events = []
+        subscription = default_bus.subscribe(
+            INSTANT_SHARE_LIFECYCLE_EVENT,
+            lambda **event: received_events.append(event),
+        )
+        self.addCleanup(subscription.dispose)
+
+        session = orchestrator.handle_connection_config(connection_config)
+
+        with self.assertRaises(InstantShareError) as exc_info:
+            orchestrator.receive_payload(
+                session_id=session.connection_config.session_id,
+                client=client,
+                correlation_id=connection_config.correlation_id,
+                requires_signature=False,
+            )
+
+        self.assertEqual(exc_info.exception.error_code.value, "TRANSFER_TIMEOUT")
+        self.assertEqual(
+            [event["state"] for event in received_events],
+            ["queued", "transferring", "timed_out"],
         )
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import threading
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Mapping
@@ -163,3 +164,61 @@ class InstantShareBleService:
     def active_connection_config(self) -> ConnectionConfig | None:
         with self._lock:
             return self._active_connection_config
+
+
+class InstantShareBleDaemon:
+    def __init__(
+        self,
+        *,
+        ble_service: InstantShareBleService,
+        is_enabled: Callable[[], bool],
+        heartbeat: Callable[[], None] | None = None,
+        poll_interval_seconds: float = 0.1,
+    ) -> None:
+        self._ble_service = ble_service
+        self._is_enabled = is_enabled
+        self._heartbeat = heartbeat
+        self._poll_interval_seconds = poll_interval_seconds
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._lock = threading.RLock()
+
+    @property
+    def ble_service(self) -> InstantShareBleService:
+        return self._ble_service
+
+    @property
+    def is_running(self) -> bool:
+        with self._lock:
+            return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> bool:
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return True
+            if not self._is_enabled():
+                return False
+            self._stop_event = threading.Event()
+            self._thread = threading.Thread(
+                target=self._run_loop,
+                name="instant_share_ble_daemon",
+                daemon=True,
+            )
+            thread = self._thread
+        thread.start()
+        return True
+
+    def stop(self) -> None:
+        with self._lock:
+            thread = self._thread
+            self._thread = None
+            self._stop_event.set()
+        if thread is not None:
+            thread.join(timeout=max(self._poll_interval_seconds, 0.1) * 5)
+
+    def _run_loop(self) -> None:
+        while not self._stop_event.is_set():
+            if self._heartbeat is not None:
+                self._heartbeat()
+            if self._stop_event.wait(self._poll_interval_seconds):
+                break

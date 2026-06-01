@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import unittest
 import uuid
 
@@ -14,6 +15,7 @@ from dt_image_search.instant_sharing.ble import (
     ConnectionConfig,
     DeviceNameAdvertisement,
     DeviceSignatureAdvertisement,
+    InstantShareBleDaemon,
     InstantShareBleService,
 )
 from dt_image_search.instant_sharing.contracts import (
@@ -103,6 +105,72 @@ class TestInstantShareContracts(unittest.TestCase):
         self.assertEqual(len(received_connection_configs), 1)
         self.assertEqual(received_connection_configs[0].metadata.payload_class, PayloadClass.TEXT)
         self.assertEqual(service.active_connection_config.session_id, received_connection_configs[0].session_id)
+
+    def test_connection_config_write_rejects_invalid_bootstrap_payload(self):
+        received_connection_configs = []
+        service = InstantShareBleService(
+            device_name_provider=lambda: DeviceNameAdvertisement(device_name="Studio Mac", receiver_id="pc-001"),
+            signature_provider=lambda: DeviceSignatureAdvertisement(
+                signature="c2lnbmF0dXJl",
+                signature_key_id="key-001",
+                timestamp_ms=1710000000123,
+            ),
+            bootstrap_handler=received_connection_configs.append,
+        )
+
+        with self.assertRaises(ValueError):
+            service.write_characteristic(
+                CONNECTION_CONFIG_CHARACTERISTIC,
+                _connection_config_payload(mobile_ip_list=["not-an-ip-address"]),
+            )
+
+        self.assertEqual(received_connection_configs, [])
+        self.assertIsNone(service.active_connection_config)
+
+    def test_ble_daemon_starts_and_stops_when_feature_enabled(self):
+        heartbeat_event = threading.Event()
+        service = InstantShareBleService(
+            device_name_provider=lambda: DeviceNameAdvertisement(device_name="Studio Mac", receiver_id="pc-001"),
+            signature_provider=lambda: DeviceSignatureAdvertisement(
+                signature="c2lnbmF0dXJl",
+                signature_key_id="key-001",
+                timestamp_ms=1710000000123,
+            ),
+            bootstrap_handler=lambda config: None,
+        )
+        daemon = InstantShareBleDaemon(
+            ble_service=service,
+            is_enabled=lambda: True,
+            heartbeat=heartbeat_event.set,
+            poll_interval_seconds=0.01,
+        )
+
+        self.assertTrue(daemon.start())
+        self.assertTrue(heartbeat_event.wait(timeout=1.0))
+        self.assertTrue(daemon.is_running)
+
+        daemon.stop()
+
+        self.assertFalse(daemon.is_running)
+
+    def test_ble_daemon_does_not_start_when_feature_disabled(self):
+        service = InstantShareBleService(
+            device_name_provider=lambda: DeviceNameAdvertisement(device_name="Studio Mac", receiver_id="pc-001"),
+            signature_provider=lambda: DeviceSignatureAdvertisement(
+                signature="c2lnbmF0dXJl",
+                signature_key_id="key-001",
+                timestamp_ms=1710000000123,
+            ),
+            bootstrap_handler=lambda config: None,
+        )
+        daemon = InstantShareBleDaemon(
+            ble_service=service,
+            is_enabled=lambda: False,
+            poll_interval_seconds=0.01,
+        )
+
+        self.assertFalse(daemon.start())
+        self.assertFalse(daemon.is_running)
 
 
 if __name__ == "__main__":
