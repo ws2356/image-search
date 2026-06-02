@@ -34,7 +34,7 @@
 - [x] 3.1a Add/update unit tests for orchestrator subscription and lifecycle-event emission behavior.
 - [x] 3.2 Wire orchestrator lifecycle states (`queued`, `negotiating`, `transferring`, `delivering`, `done|failed|timed_out`) onto event bus messages.
 - [x] 3.2a Add/update unit tests for event bus state mapping and message payload schema.
-- [ ] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) click notification entry opens AuSearch.
+- [x] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) click notification entry opens AuSearch.
 - [ ] 3.4 Run UX review and record final selection for runtime behavior.
 - [ ] 3.5 Implement production desktop receive UX behavior based on selected variant, including progress, result, failure, and user-aborted states.
 - [ ] 3.5a Add/update unit tests for selected-variant branching and non-visual receive UI controller/view-model logic.

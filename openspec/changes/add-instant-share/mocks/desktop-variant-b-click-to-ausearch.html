@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Desktop Receive UX – Variant B (Click-to-Open AuSearch)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:#1e1e1e;color:#fff;padding:40px}
+.title{font-size:28px;font-weight:700;margin-bottom:8px}
+.subtitle{font-size:14px;color:#999;margin-bottom:48px}
+.flow{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap}
+.stage{flex:0 0 340px;background:#2a2a2e;border-radius:16px;padding:24px;border:1px solid #3a3a3e}
+.stage-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:16px}
+.stage-title{font-size:16px;font-weight:600;margin-bottom:16px}
+.arrow{flex:0 0 60px;display:flex;align-items:center;justify-content:center;font-size:28px;color:#555}
+/* Desktop notification */
+.notification{background:#3a3a3e;border-radius:12px;padding:16px;position:relative;overflow:hidden;cursor:pointer;transition:transform 0.1s}
+.notification:hover{transform:scale(1.01)}
+.notification::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#34c759}
+.notif-icon{width:32px;height:32px;border-radius:8px;background:#34c759;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.notif-icon svg{width:18px;height:18px;fill:#fff}
+.notif-title{font-size:13px;font-weight:600}
+.notif-body{font-size:12px;color:#aaa;margin-top:4px}
+.notif-actions{display:flex;gap:8px;margin-top:12px}
+.notif-btn{padding:4px 12px;border-radius:6px;font-size:11px;font-weight:500;border:none;cursor:pointer}
+.notif-btn.primary{background:#34c759;color:#fff}
+.notif-btn.secondary{background:#4a4a4e;color:#ccc}
+.progress-track{height:3px;background:#4a4a4e;border-radius:2px;margin-top:8px;overflow:hidden}
+.progress-fill{height:100%;background:#34c759;border-radius:2px}
+/* AuSearch receive panel */
+.ausearch-window{background:#1c1c1e;border:1px solid #3a3a3e;border-radius:12px;overflow:hidden}
+.window-bar{background:#2a2a2e;padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #3a3a3e}
+.window-dot{width:12px;height:12px;border-radius:50%}
+.window-dot.red{background:#ff5f57}
+.window-dot.yellow{background:#ffbd2e}
+.window-dot.green{background:#28c840}
+.window-title{flex:1;text-align:center;font-size:12px;color:#aaa;font-weight:500}
+.receive-panel{padding:24px}
+.receive-header{text-align:center;margin-bottom:24px}
+.receive-header h3{font-size:18px;margin-bottom:4px}
+.receive-header p{font-size:12px;color:#999}
+.device-card{background:#2a2a2e;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #3a3a3e;display:flex;align-items:center;gap:16px}
+.device-avatar{width:48px;height:48px;border-radius:12px;background:#34c759;display:flex;align-items:center;justify-content:center;font-size:24px}
+.device-info h4{font-size:14px;font-weight:600}
+.device-info p{font-size:12px;color:#999}
+.device-status{margin-left:auto;font-size:11px;padding:4px 10px;border-radius:6px;background:#3a3a3e;color:#34c759}
+.payload-card{background:#2a2a2e;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #3a3a3e}
+.payload-card h4{font-size:13px;font-weight:600;margin-bottom:8px}
+.payload-meta{display:flex;gap:16px;font-size:12px;color:#999}
+.progress-section{margin-bottom:16px}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px}
+.progress-track-lg{height:6px;background:#4a4a4e;border-radius:3px;overflow:hidden}
+.progress-fill-lg{height:100%;background:#34c759;border-radius:3px}
+.pin-card{background:#2a2a2e;border-radius:12px;padding:16px;text-align:center;margin-bottom:16px;border:1px solid #ff9f0a}
+.pin-card h4{font-size:13px;margin-bottom:12px;color:#ff9f0a}
+.pin-code{font-size:32px;font-weight:bold;letter-spacing:8px;font-family:'SF Mono',monospace;color:#ff9f0a}
+.pin-note{font-size:11px;color:#999;margin-top:8px}
+.action-row{display:flex;gap:12px;justify-content:center}
+.btn{padding:10px 24px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer}
+.btn.primary{background:#34c759;color:#fff}
+.btn.secondary{background:#3a3a3e;color:#ccc}
+.btn.danger{background:#ff3b30;color:#fff}
+.result-card{background:#2a2a2e;border-radius:12px;padding:24px;text-align:center;border:1px solid #34c759}
+.result-icon{font-size:48px;margin-bottom:12px}
+.result-card h4{font-size:16px;margin-bottom:4px}
+.result-card p{font-size:12px;color:#999}
+.result-card.error{border-color:#ff3b30}
+.note{font-size:11px;color:#666;margin-top:24px;padding:12px;background:#222;border-radius:8px;line-height:1.5}
+.note strong{color:#999}
+</style>
+</head>
+<body>
+
+<div class="title">Variant B – Click Notification → AuSearch</div>
+<div class="subtitle">Desktop receive: clicking the notification opens AuSearch with a full transfer panel. User gets visual confirmation and control.</div>
+
+<div class="flow">
+
+<!-- Stage 1: Notification -->
+<div class="stage">
+  <div class="stage-label">Stage 1</div>
+  <div class="stage-title">Click to Open</div>
+  <div class="notification">
+    <div class="notif-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 3H3v18h18V3zM10 17l-5-5h3V8h4v4h3l-5 5z"/></svg>
+    </div>
+    <div class="notif-title">Incoming Share from iPhone</div>
+    <div class="notif-body">photo.jpg — 2.4 MB · Tap to view</div>
+    <div class="notif-actions">
+      <button class="notif-btn primary">View Transfer</button>
+    </div>
+  </div>
+  <div class="note"><strong>Key:</strong> Single CTA to open AuSearch. No accept/decline buttons here.</div>
+</div>
+
+<div class="arrow">→</div>
+
+<!-- Stage 2: AuSearch window - First use -->
+<div class="stage">
+  <div class="stage-label">Stage 2</div>
+  <div class="stage-title">AuSearch – First-Use Trust</div>
+  <div class="ausearch-window">
+    <div class="window-bar">
+      <div class="window-dot red"></div>
+      <div class="window-dot yellow"></div>
+      <div class="window-dot green"></div>
+      <div class="window-title">AuSearch · Instant Share</div>
+    </div>
+    <div class="receive-panel">
+      <div class="receive-header">
+        <h3>Incoming Share</h3>
+        <p>Verify the code matches your iPhone</p>
+      </div>
+
+      <div class="device-card">
+        <div class="device-avatar">📱</div>
+        <div class="device-info">
+          <h4>iPhone</h4>
+          <p>Pro Max · Untrusted device</p>
+        </div>
+        <div class="device-status">NEW</div>
+      </div>
+
+      <div class="pin-card">
+        <h4>🔐 Verification PIN</h4>
+        <div class="pin-code">7 · 4 · 2 · 9 · 1 · 8</div>
+        <div class="pin-note">Confirm this matches on your iPhone</div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn danger">Reject</button>
+        <button class="btn primary">Code Matches ✓</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="arrow">→</div>
+
+<!-- Stage 3: AuSearch window - Transferring -->
+<div class="stage">
+  <div class="stage-label">Stage 3</div>
+  <div class="stage-title">AuSearch – Transferring</div>
+  <div class="ausearch-window">
+    <div class="window-bar">
+      <div class="window-dot red"></div>
+      <div class="window-dot yellow"></div>
+      <div class="window-dot green"></div>
+      <div class="window-title">AuSearch · Instant Share</div>
+    </div>
+    <div class="receive-panel">
+      <div class="receive-header">
+        <h3>Receiving from iPhone</h3>
+        <p>Transfer in progress</p>
+      </div>
+
+      <div class="device-card">
+        <div class="device-avatar">📱</div>
+        <div class="device-info">
+          <h4>iPhone</h4>
+          <p>Pro Max · Trusted</p>
+        </div>
+        <div class="device-status">● CONNECTED</div>
+      </div>
+
+      <div class="payload-card">
+        <h4>📦 Transfer Details</h4>
+        <div class="payload-meta">
+          <span>photo.jpg</span>
+          <span>2.4 MB</span>
+          <span>Image</span>
+        </div>
+      </div>
+
+      <div class="progress-section">
+        <div class="progress-label">
+          <span>1.2 MB received</span>
+          <span>50%</span>
+        </div>
+        <div class="progress-track-lg">
+          <div class="progress-fill-lg" style="width:50%"></div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn danger">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="arrow">→</div>
+
+<!-- Stage 4: Success -->
+<div class="stage">
+  <div class="stage-label">Stage 4</div>
+  <div class="stage-title">AuSearch – Success</div>
+  <div class="ausearch-window">
+    <div class="window-bar">
+      <div class="window-dot red"></div>
+      <div class="window-dot yellow"></div>
+      <div class="window-dot green"></div>
+      <div class="window-title">AuSearch · Instant Share</div>
+    </div>
+    <div class="receive-panel">
+      <div class="result-card">
+        <div class="result-icon">✅</div>
+        <h4>Transfer Complete</h4>
+        <p>photo.jpg saved to ~/Downloads</p>
+      </div>
+
+      <div style="height:16px"></div>
+
+      <div class="device-card">
+        <div class="device-avatar">📱</div>
+        <div class="device-info">
+          <h4>iPhone</h4>
+          <p>Pro Max · Trusted · Remembered</p>
+        </div>
+        <div class="device-status">● TRUSTED</div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn secondary">Show in Finder</button>
+        <button class="btn primary">Open File</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="arrow">→</div>
+
+<!-- Stage 5: Error -->
+<div class="stage">
+  <div class="stage-label">Stage 5</div>
+  <div class="stage-title">AuSearch – Error</div>
+  <div class="ausearch-window">
+    <div class="window-bar">
+      <div class="window-dot red"></div>
+      <div class="window-dot yellow"></div>
+      <div class="window-dot green"></div>
+      <div class="window-title">AuSearch · Instant Share</div>
+    </div>
+    <div class="receive-panel">
+      <div class="result-card error">
+        <div class="result-icon">❌</div>
+        <h4>Transfer Failed</h4>
+        <p>Connection lost. The iPhone may have moved out of range.</p>
+      </div>
+
+      <div style="height:16px"></div>
+
+      <div class="action-row">
+        <button class="btn secondary">Dismiss</button>
+        <button class="btn primary">Retry</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div style="margin-top:48px;padding:24px;background:#2a2a2e;border-radius:12px;max-width:720px">
+  <h3 style="font-size:14px;margin-bottom:12px">Variant B Summary</h3>
+  <ul style="font-size:13px;color:#aaa;line-height:2;padding-left:20px">
+    <li><strong>Visual confirmation:</strong> Full AuSearch window shows transfer progress</li>
+    <li><strong>PIN display:</strong> Clear code comparison in the window</li>
+    <li><strong>Device trust:</strong> Trusted devices shown with green status</li>
+    <li><strong>Error handling:</strong> Clear error messages with retry option</li>
+    <li><strong>Post-transfer:</strong> Open file or show in Finder directly</li>
+    <li><strong>Window closes</strong> after transfer completes or user dismisses</li>
+  </ul>
+</div>
+
+</body>
+</html>
