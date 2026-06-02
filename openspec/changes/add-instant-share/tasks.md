@@ -101,5 +101,5 @@
 ## 9. Rollout and Safeguards
 
 - [x] 9.1 Gate instant-share feature behind a configuration flag and add safe default-off behavior.
-- [ ] 9.2 Define staged enablement checklist and rollback procedure using feature flag disable path.
-- [ ] 9.3 Update operator/developer docs for setup, user-facing behavior, troubleshooting, and known limits.
+- [x] 9.2 Define staged enablement checklist and rollback procedure using feature flag disable path.
+- [x] 9.3 Update operator/developer docs for setup, user-facing behavior, troubleshooting, and known limits.
