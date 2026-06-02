@@ -186,6 +186,42 @@ final class InstantShareTrustSessionManagerTests: XCTestCase {
     }
 }
 
+final class InstantShareResumeViewModelTests: XCTestCase {
+    func test_resume_state_initial_is_loading() {
+        let service = InstantShareService()
+        let viewModel = InstantShareResumeViewModel(service: service)
+        XCTAssertEqual(viewModel.state, .loading)
+    }
+
+    func test_describe_payload_text() {
+        let service = InstantShareService()
+        let viewModel = InstantShareResumeViewModel(service: service)
+        let context = InstantShareHandoffContext(
+            from: InstantSharePayloadEnvelope(
+                payloadType: .text, textContent: "Hello world", fileURL: nil,
+                filename: nil, contentType: "text/plain", fileSizeBytes: 11
+            ),
+            selectedDeviceID: "dev-1", selectedDeviceName: "My Mac", isTrustedDevice: false
+        )
+
+        XCTAssertEqual(viewModel.state, .loading)
+        XCTAssertNotNil(context.textContent)
+    }
+
+    func test_describe_payload_image_with_filename() {
+        let context = InstantShareHandoffContext(
+            from: InstantSharePayloadEnvelope(
+                payloadType: .image, textContent: nil,
+                fileURL: URL(string: "file:///tmp/photo.jpg"),
+                filename: "photo.jpg", contentType: "public.jpeg", fileSizeBytes: 2048
+            ),
+            selectedDeviceID: nil, selectedDeviceName: nil, isTrustedDevice: false
+        )
+        XCTAssertEqual(context.payloadType, "image")
+        XCTAssertEqual(context.filename, "photo.jpg")
+    }
+}
+
 final class InstantSharePayloadExtractorTests: XCTestCase {
     func test_classify_text_types() {
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.plain-text"), .text)

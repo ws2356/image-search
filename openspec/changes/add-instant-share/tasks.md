@@ -52,11 +52,11 @@
 
 ## 5. Production Mobile and Desktop UI
 
-- [ ] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume, first-use trust confirmation, trusted-device revisit, progress, error, success, and abort/result states.
-- [ ] 5.2 Implement production Share Extension selector card visual states for scanning, empty/no receiver, discovered devices, selected device, and unavailable Bluetooth/permission states.
+- [x] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume, first-use trust confirmation, trusted-device revisit, progress, error, success, and abort/result states.
+- [x] 5.2 Implement production Share Extension selector card visual states for scanning, empty/no receiver, discovered devices, selected device, and unavailable Bluetooth/permission states.
 - [ ] 5.3 Implement production desktop instant-share UX for the selected receive variant with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states.
 - [ ] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop receive surfaces.
-- [ ] 5.5 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced for production UI.
+- [x] 5.5 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced for production UI.
 
 ## 6. Reliability and Recovery
 
@@ -82,7 +82,7 @@
 
 - [x] 8.1 Add integration tests for authenticated negotiation, auto-activation, and target delivery outcomes.
 - [x] 8.2 Add functional tests for end-to-end instant-share scenarios: text-to-clipboard, photo-to-file, video-to-file, and unreachable-PC failure.
-- [ ] 8.3 Run a regression sweep to ensure per-task unit tests are added/updated for every applicable code change.
+- [x] 8.3 Run a regression sweep to ensure per-task unit tests are added/updated for every applicable code change.
 
 ## 10. iOS Debug UI and BLE/HTTPS Server (manual test path)
 
