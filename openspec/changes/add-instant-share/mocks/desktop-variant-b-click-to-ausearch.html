@@ -1,433 +1,285 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Desktop Receive UX – Variant B (Integrated with AuSearch)</title>
+<title>AuSearch — Instant Share Mini Window Mockup</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
   body {
     background: #a8a8a8; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; min-height: 100vh; padding: 24px;
+    align-items: center; justify-content: center; min-height: 100vh; padding: 40px;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+  
   .page-label {
-    margin-bottom: 14px; font-size: 12px; font-weight: 500; color: #333;
-    background: rgba(255,255,255,0.65); padding: 4px 14px; border-radius: 20px; letter-spacing: 0.02em;
+    margin-bottom: 24px; font-size: 13px; font-weight: 500; color: #111;
+    background: rgba(255,255,255,0.75); padding: 6px 16px; border-radius: 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
   }
-  .flows-row { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
-  .app-window {
-    width: 960px; height: 660px; border-radius: 10px; overflow: hidden; position: relative;
-    box-shadow: 0 0 0 0.5px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.14), 0 22px 60px rgba(0,0,0,0.5);
-    display: flex; flex-direction: column; background: #ececec;
+
+  .windows-container {
+    display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; align-items: flex-start;
   }
+
+  .flow-case {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+
+  .flow-case h3 {
+    font-size: 14px; font-weight: 600; color: #222; text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+  }
+
+  /* ── macOS 独立的 Mini 传输窗口样式 (360x520 黄金紧凑比例) ── */
+  .mini-window {
+    width: 360px; height: 500px; border-radius: 12px; overflow: hidden; position: relative;
+    box-shadow: 0 0 0 0.5px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15), 0 25px 50px rgba(0,0,0,0.4);
+    display: flex; flex-direction: column; background: #f3f3f3;
+  }
+
+  /* ── 标题栏 (去掉了主窗口庞大的搜索和面包屑) ── */
   .title-bar {
-    height: 38px; background: linear-gradient(to bottom, #f0f0f0, #e7e7e7);
-    border-bottom: 1px solid #cacaca; display: flex; align-items: center;
-    padding: 0 14px; flex-shrink: 0; user-select: none; position: relative;
+    height: 34px; background: linear-gradient(to bottom, #f6f6f6, #ebebeb);
+    border-bottom: 1px solid #d1d1d1; display: flex; align-items: center;
+    padding: 0 12px; flex-shrink: 0; user-select: none; position: relative;
   }
-  .traffic-lights { display: flex; gap: 8px; }
+  .traffic-lights { display: flex; gap: 8px; position: absolute; left: 12px; }
   .tl { width: 12px; height: 12px; border-radius: 50%; }
   .tl-red { background: #ff5f57; box-shadow: 0 0 0 0.5px #e0443e; }
-  .tl-amber { background: #febc2e; box-shadow: 0 0 0 0.5px #d79b07; }
-  .tl-green { background: #28c840; box-shadow: 0 0 0 0.5px #1aaa2f; }
-  .window-title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 13px; font-weight: 600; color: #333; }
-  .app-body { flex: 1; display: flex; overflow: hidden; }
-  .left-panel {
-    width: 280px; background: #f2f2f2; border-right: 1px solid #ccc;
-    display: flex; flex-direction: column; padding: 10px 8px; gap: 8px; flex-shrink: 0;
+  .tl-disabled { background: #e0e0e0; box-shadow: 0 0 0 0.5px #cccccc; } /* 传输中禁止随便关闭 */
+  .window-title { width: 100%; text-align: center; font-size: 12px; font-weight: 600; color: #666; }
+
+  /* ── 核心内容舞台 ── */
+  .window-content {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 24px; justify-content: space-between; background: #fdfdfd;
   }
-  .search-box-wrap { position: relative; }
-  .search-box-wrap svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); pointer-events: none; }
-  .search-box-wrap input {
-    width: 100%; padding: 6px 10px 6px 28px; border: 1px solid #bbb; border-radius: 6px;
-    background: white; font-size: 12px; color: #555; font-family: inherit; outline: none;
+
+  .header-area {
+    text-align: center; width: 100%; margin-top: 8px;
   }
-  .folder-tree-box {
-    flex: 1; border: 1px solid #bbb; border-radius: 5px; background: white;
-    overflow-y: auto; overflow-x: hidden;
+  .share-badge {
+    display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; 
+    border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; margin-bottom: 12px;
   }
-  .tree-section-header {
-    padding: 6px 8px 4px; font-size: 10px; font-weight: 700; color: #888;
-    background: #f8f8f8; border-bottom: 1px solid #eee;
-    text-transform: uppercase; letter-spacing: 0.06em; position: sticky; top: 0; z-index: 1;
-  }
-  .tree-item {
-    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
-    font-size: 12px; color: #333; cursor: default; border-bottom: 1px solid #f0f0f0;
-    user-select: none; min-height: 30px;
-  }
-  .tree-item:hover:not(.active) { background: #f5f5f5; }
-  .tree-item.active { background: #1560cd; color: white; }
-  .tree-item .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tree-divider {
-    padding: 8px 8px 4px; font-size: 10px; font-weight: 700; color: #999;
-    background: #f5f5f5; border-top: 1px solid #e8e8e8; border-bottom: 1px solid #e8e8e8;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    display: flex; align-items: center; gap: 5px; user-select: none;
-  }
-  .tree-item-mobile {
-    display: flex; flex-direction: column; padding: 5px 8px 6px; font-size: 12px;
-    color: #333; cursor: default; border-bottom: 1px solid #f0f0f0;
-    user-select: none; min-height: 42px; position: relative;
-  }
-  .tree-item-mobile:hover { background: #f5f5f5; }
-  .tree-item-mobile.active { background: #e8f0fd; }
-  .mobile-item-top { display: flex; align-items: center; gap: 6px; }
-  .mobile-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #1a1a1a; }
-  .mobile-item-sub { font-size: 10.5px; color: #888; padding: 1px 0 0 20px; line-height: 1.4; }
-  .state-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 2px 7px 2px 5px; border-radius: 20px; font-size: 10px; font-weight: 600;
-    white-space: nowrap; flex-shrink: 0; letter-spacing: 0.01em;
-  }
-  .state-badge.awaiting { background: #FFF3CD; color: #9A6400; border: 1px solid #FFD97D; }
-  .state-badge.transferring { background: #DBEAFE; color: #1D4ED8; border: 1px solid #93C5FD; }
-  .state-badge.completed { background: #DCFCE7; color: #166534; border: 1px solid #86EFAC; }
-  .state-badge.failed { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
-  .state-badge.incoming { background: #DBEAFE; color: #1D4ED8; border: 1px solid #93C5FD; }
-  .progress-bar-wrap { margin: 3px 0 0 20px; height: 4px; background: #dbeafe; border-radius: 2px; overflow: hidden; }
-  .progress-bar-fill { height: 100%; background: #3B82F6; border-radius: 2px; }
-  .spin { animation: spin 1.4s linear infinite; display: inline-block; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  .add-folder-btn {
-    padding: 7px 12px; border: 1px solid #b0b0b0; border-radius: 5px;
-    background: #e8e8e8; font-size: 12px; color: #333; text-align: center;
-    cursor: pointer; font-family: inherit;
-  }
-  .right-panel { flex: 1; background: white; overflow-y: auto; }
-  .right-panel-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 11px 16px 8px; border-bottom: 1px solid #eee; background: #fafafa;
-  }
-  .right-panel-title { font-size: 13px; font-weight: 600; color: #2c2c2c; }
-  .share-receive { padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 20px; height: 100%; }
-  .share-icon { font-size: 48px; margin-bottom: 4px; }
-  .share-title { font-size: 17px; font-weight: 600; color: #1a1a1a; }
-  .share-subtitle { font-size: 12px; color: #888; text-align: center; }
+  .share-badge.incoming { background: #e0f2fe; color: #0369a1; border: 0.5px solid #bae6fd; }
+  .share-badge.active { background: #dbeafe; color: #1d4ed8; border: 0.5px solid #93c5fd; }
+  .share-badge.success { background: #dcfce7; color: #156534; border: 0.5px solid #86efac; }
+  
+  .main-title { font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 4px; }
+  .subtitle { font-size: 11.5px; color: #777; line-height: 1.4; padding: 0 10px; }
+
+  /* ── 设备名片卡 ── */
   .device-card {
-    background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px;
-    padding: 14px 16px; width: 100%; max-width: 480px;
-    display: flex; align-items: center; gap: 12px;
+    background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 12px 14px; width: 100%; display: flex; align-items: center; gap: 12px;
   }
-  .device-avatar { width: 40px; height: 40px; border-radius: 10px; background: #e8f0fd; display: flex; align-items: center; justify-content: center; }
-  .device-info { flex: 1; }
-  .device-info h4 { font-size: 13px; font-weight: 600; color: #1a1a1a; }
-  .device-info p { font-size: 11px; color: #888; margin-top: 1px; }
-  .pin-card {
-    background: #f9f9f9; border: 1px solid #FFD97D; border-radius: 8px;
-    padding: 20px; width: 100%; max-width: 480px; text-align: center;
+  .device-avatar { 
+    width: 38px; height: 38px; border-radius: 8px; background: #e0e7ff; 
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .pin-card h4 { font-size: 13px; font-weight: 600; color: #9A6400; margin-bottom: 12px; }
-  .pin-code { font-size: 32px; font-weight: 700; letter-spacing: 8px; font-family: "SF Mono", "Menlo", monospace; color: #9A6400; }
-  .pin-note { font-size: 11px; color: #888; margin-top: 8px; }
-  .progress-section { width: 100%; max-width: 480px; }
-  .progress-label { display: flex; justify-content: space-between; font-size: 11px; color: #555; margin-bottom: 6px; }
-  .progress-track-lg { height: 6px; background: #dbeafe; border-radius: 3px; overflow: hidden; }
-  .progress-fill-lg { height: 100%; background: #3B82F6; border-radius: 3px; }
-  .payload-card {
-    background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px;
-    padding: 14px 16px; width: 100%; max-width: 480px;
+  .device-info { flex: 1; min-width: 0; }
+  .device-info h4 { font-size: 12.5px; font-weight: 600; color: #1f2937; }
+  .device-info p { font-size: 11px; color: #6b7280; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── 状态展示核心区（卡片变换） ── */
+  .center-display-panel {
+    width: 100%; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 20px 0;
   }
-  .payload-card h4 { font-size: 12px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px; }
-  .payload-meta { display: flex; gap: 16px; font-size: 11px; color: #888; }
-  .btn-row { display: flex; gap: 10px; }
+
+  /* 状态A：安全比对 PIN 码块 */
+  .pin-box {
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;
+    padding: 18px; width: 100%; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  }
+  .pin-box h5 { font-size: 11px; font-weight: 600; color: #b45309; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .pin-code { font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #d97706; font-family: "SF Mono", Menlo, monospace; padding-left: 6px; }
+
+  /* 状态B：大容量进度条 */
+  .progress-box { width: 100%; }
+  .progress-meta { display: flex; justify-content: space-between; font-size: 11px; color: #4b5563; margin-bottom: 6px; font-weight: 500; }
+  .progress-track { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; width: 100%; }
+  .progress-fill { height: 100%; background: #2563eb; border-radius: 3px; width: 55%; }
+  .file-preview-mini {
+    margin-top: 12px; font-size: 11px; color: #6b7280; display: flex; align-items: center; gap: 6px;
+    background: #f3f4f6; padding: 6px 10px; border-radius: 6px; width: 100%;
+  }
+  .file-preview-mini span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+
+  /* 状态C：成功大图标志 */
+  .result-anim-icon {
+    width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 8px;
+  }
+  .result-anim-icon.success { background: #f0fdf4; color: #16a34a; border: 2px solid #bbf7d0; }
+  .result-text-big { font-size: 14px; font-weight: 600; color: #111827; }
+
+  /* ── 底部操作按钮行 ── */
+  .action-footer {
+    width: 100%; display: flex; gap: 10px; flex-shrink: 0;
+  }
   .btn {
-    padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 500;
-    border: 1px solid #b0b0b0; background: #e8e8e8; color: #333; cursor: pointer; font-family: inherit;
+    flex: 1; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    border: 1px solid #c3c3c3; background: linear-gradient(to bottom, #ffffff, #f5f5f5); color: #333; 
+    cursor: pointer; font-family: inherit; text-align: center; user-select: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
-  .btn:hover { background: #e0e0e0; }
-  .btn.primary { background: #1560cd; color: white; border-color: #1560cd; }
-  .btn.danger { background: #fff; color: #ff3b30; border-color: #ff3b30; }
-  .result-card {
-    background: #f9f9f9; border: 1px solid #86EFAC; border-radius: 8px;
-    padding: 24px; width: 100%; max-width: 480px; text-align: center;
+  .btn:hover { background: #f0f0f0; border-color: #b5b5b5; }
+  .btn:active { background: #e5e5e5; box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); }
+  .btn.primary { 
+    background: linear-gradient(to bottom, #3b82f6, #1d4ed8); color: white; border-color: #1d4ed8; 
+    box-shadow: 0 1px 2px rgba(29,78,216,0.2);
   }
-  .result-card.error { border-color: #FCA5A5; }
-  .result-icon { font-size: 36px; margin-bottom: 8px; }
-  .result-card h4 { font-size: 15px; font-weight: 600; color: #1a1a1a; }
-  .result-card p { font-size: 12px; color: #888; margin-top: 4px; }
-  .status-bar {
-    height: 22px; background: #e2e2e2; border-top: 1px solid #c4c4c4;
-    display: flex; align-items: center; padding: 0 10px; font-size: 11px; color: #666; flex-shrink: 0;
-  }
-  .flow-label { text-align: center; margin-bottom: 16px; }
-  .flow-label h3 { font-size: 16px; font-weight: 600; color: #333; }
-  .flow-label p { font-size: 12px; color: #666; margin-top: 4px; }
-  .notification {
-    position: fixed; top: 60px; right: 40px; width: 320px;
-    background: rgba(245,245,245,0.97); border: 0.5px solid rgba(0,0,0,0.2);
-    border-radius: 12px; padding: 14px 16px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.25); backdrop-filter: blur(12px); z-index: 200;
-  }
-  .notif-icon { width: 28px; height: 28px; border-radius: 7px; background: #1560cd; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
-  .notif-icon svg { width: 14px; height: 14px; fill: #fff; }
-  .notif-title { font-size: 13px; font-weight: 600; color: #1a1a1a; }
-  .notif-body { font-size: 11px; color: #888; margin-top: 2px; }
-  .notif-actions { display: flex; gap: 8px; margin-top: 10px; }
-  .notif-btn { padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 500; border: none; cursor: pointer; }
-  .notif-btn.primary { background: #1560cd; color: #fff; }
+  .btn.primary:hover { background: linear-gradient(to bottom, #2563eb, #1e40af); }
+  .btn.danger-text { color: #dc2626; }
+  
+  /* 旋转特效 */
+  .spin { animation: spin 1.2s linear infinite; display: inline-block; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
-<div class="page-label">Variant B — Integrated with AuSearch Window</div>
-<div class="flows-row">
 
-<!-- FLOW 1: First-Use Trust -->
-<div>
-  <div class="flow-label"><h3>Step 1: Verify Sender (First-Use Trust)</h3><p>Instant Share entry appears in left panel · PIN confirmation in right panel</p></div>
-  <div class="app-window">
-    <div class="title-bar">
-      <div class="traffic-lights"><div class="tl tl-red"></div><div class="tl tl-amber"></div><div class="tl tl-green"></div></div>
-      <div class="window-title">DTImageSearch</div>
-    </div>
-    <div class="app-body">
-      <div class="left-panel">
-        <div class="search-box-wrap">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="opacity:0.45"><circle cx="5.5" cy="5.5" r="4.5" stroke="#555" stroke-width="1.3"/><line x1="9" y1="9" x2="12" y2="12" stroke="#555" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <input type="text" placeholder="Search images …">
+<div class="page-label">AuSearch 2.0 — 极速快传（Instant Share）独立路由子窗口设计 </div>
+
+<div class="windows-container">
+
+  <div class="flow-case">
+    <h3>步骤 1：新设备安全配对确认</h3>
+    <div class="mini-window">
+      <div class="title-bar">
+        <div class="traffic-lights">
+          <div class="tl tl-red"></div>
+          <div class="tl tl-disabled"></div>
+          <div class="tl tl-disabled"></div>
         </div>
-        <div class="folder-tree-box">
-          <div class="tree-section-header">Local</div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">personal-photos</span></div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">work-screenshots</span></div>
-          <div class="tree-divider"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="3" y="0.5" width="6" height="11" rx="1.5" fill="#9CA3AF"/><rect x="4.5" y="1.5" width="3" height="1" rx="0.5" fill="white" opacity="0.7"/></svg>Mobile</div>
-          <div class="tree-item-mobile">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"/></svg>
-              <span class="mobile-item-name">Alex's iPhone 15 Pro</span>
-              <span class="state-badge awaiting">Awaiting</span>
-            </div>
-            <div class="mobile-item-sub">Last backup 3 hours ago · 1,247 files</div>
-          </div>
-          <div class="tree-item-mobile active">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#1560cd"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="white"/><rect x="4" y="10.2" width="4" height="0.8" rx="0.4" fill="white" opacity="0.6"/></svg>
-              <span class="mobile-item-name" style="color:#1560cd;font-weight:600">iPhone · Instant Share</span>
-              <span class="state-badge incoming"><span class="spin" style="font-size:9px;line-height:1">↻</span> Incoming</span>
-            </div>
-            <div class="mobile-item-sub">photo.jpg · 2.4 MB · Tap to verify</div>
-          </div>
-        </div>
-        <button class="add-folder-btn">+ Add Folder</button>
+        <div class="window-title">安全配对</div>
       </div>
-      <div class="right-panel">
-        <div class="right-panel-header"><div class="right-panel-title">Instant Share — Verify Sender</div></div>
-        <div class="share-receive">
-          <div class="share-icon">📱 → 💻</div>
-          <div class="share-title">Incoming Share from iPhone</div>
-          <div class="share-subtitle">Verify the code below matches on your iPhone</div>
-          <div class="device-card">
-            <div class="device-avatar"><svg width="20" height="20" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"/></svg></div>
-            <div class="device-info"><h4>iPhone</h4><p>Untrusted device · First share</p></div>
-            <span class="state-badge awaiting">NEW</span>
+      <div class="window-content">
+        <div class="header-area">
+          <span class="share-badge incoming">陌生设备请求</span>
+          <div class="main-title">收到快传请求</div>
+          <div class="subtitle">核对下方的安全码是否与手机上显示的数字一致。</div>
+        </div>
+
+        <div class="center-display-panel">
+          <div class="pin-box">
+            <h5>Verification PIN</h5>
+            <div class="pin-code">742918</div>
           </div>
-          <div class="pin-card">
-            <h4>Verification PIN</h4>
-            <div class="pin-code">7 · 4 · 2 · 9 · 1 · 8</div>
-            <div class="pin-note">Confirm this matches on your iPhone</div>
+        </div>
+
+        <div class="device-card">
+          <div class="device-avatar">
+            <svg width="18" height="18" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#4f46e5"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#e0e7ff"/><circle cx="6" cy="10" r="0.4" fill="white"/></svg>
           </div>
-          <div class="btn-row">
-            <button class="btn danger">Reject</button>
-            <button class="btn primary">Code Matches ✓</button>
+          <div class="device-info">
+            <h4>Alex's iPhone 15 Pro</h4>
+            <p>首次请求连接 · 距离极近</p>
           </div>
+        </div>
+
+        <div class="action-footer" style="margin-top: 18px;">
+          <button class="btn danger-text">拒绝</button>
+          <button class="btn primary">配对并接收 ✓</button>
         </div>
       </div>
     </div>
-    <div class="status-bar">Instant Share · Waiting for PIN verification · iPhone</div>
   </div>
-</div>
 
-<!-- FLOW 2: Transferring -->
-<div>
-  <div class="flow-label"><h3>Step 2: Transferring</h3><p>Progress in left panel badge + right panel progress bar</p></div>
-  <div class="app-window">
-    <div class="title-bar">
-      <div class="traffic-lights"><div class="tl tl-red"></div><div class="tl tl-amber"></div><div class="tl tl-green"></div></div>
-      <div class="window-title">DTImageSearch</div>
-    </div>
-    <div class="app-body">
-      <div class="left-panel">
-        <div class="search-box-wrap">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="opacity:0.45"><circle cx="5.5" cy="5.5" r="4.5" stroke="#555" stroke-width="1.3"/><line x1="9" y1="9" x2="12" y2="12" stroke="#555" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <input type="text" placeholder="Search images …">
+  <div class="flow-case">
+    <h3>步骤 2：受信任秒传进行中</h3>
+    <div class="mini-window">
+      <div class="title-bar">
+        <div class="traffic-lights">
+          <div class="tl tl-disabled"></div> <div class="tl tl-disabled"></div>
+          <div class="tl tl-disabled"></div>
         </div>
-        <div class="folder-tree-box">
-          <div class="tree-section-header">Local</div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">personal-photos</span></div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">work-screenshots</span></div>
-          <div class="tree-divider"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="3" y="0.5" width="6" height="11" rx="1.5" fill="#9CA3AF"/><rect x="4.5" y="1.5" width="3" height="1" rx="0.5" fill="white" opacity="0.7"/></svg>Mobile</div>
-          <div class="tree-item-mobile">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"/></svg>
-              <span class="mobile-item-name">Alex's iPhone 15 Pro</span>
-              <span class="state-badge awaiting">Awaiting</span>
-            </div>
-            <div class="mobile-item-sub">Last backup 3 hours ago · 1,247 files</div>
-          </div>
-          <div class="tree-item-mobile active">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#1560cd"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="white"/><rect x="4" y="10.2" width="4" height="0.8" rx="0.4" fill="white" opacity="0.6"/></svg>
-              <span class="mobile-item-name" style="color:#1560cd;font-weight:600">iPhone · Instant Share</span>
-              <span class="state-badge transferring"><span class="spin" style="font-size:9px;line-height:1">↻</span> Transferring</span>
-            </div>
-            <div class="mobile-item-sub">photo.jpg · 1.2 / 2.4 MB</div>
-            <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:50%"></div></div>
-          </div>
-        </div>
-        <button class="add-folder-btn">+ Add Folder</button>
+        <div class="window-title">正在接收...</div>
       </div>
-      <div class="right-panel">
-        <div class="right-panel-header"><div class="right-panel-title">Instant Share — Receiving</div></div>
-        <div class="share-receive">
-          <div class="share-icon">📥</div>
-          <div class="share-title">Receiving from iPhone</div>
-          <div class="share-subtitle">Transfer in progress</div>
-          <div class="device-card">
-            <div class="device-avatar"><svg width="20" height="20" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#166534"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="white"/></svg></div>
-            <div class="device-info"><h4>iPhone</h4><p>Trusted · Remembered</p></div>
-            <span class="state-badge completed">● TRUSTED</span>
+      <div class="window-content">
+        <div class="header-area">
+          <span class="share-badge active"><span class="spin">↻</span> 正在高速传输</span>
+          <div class="main-title">正在接收文件</div>
+          <div class="subtitle">请保持设备连接，不要断开 Wi-Fi 或蓝牙。</div>
+        </div>
+
+        <div class="center-display-panel">
+          <div class="progress-box">
+            <div class="progress-meta">
+              <span>54.2 MB / 108.4 MB</span>
+              <strong>50%</strong>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" style="width: 50%;"></div>
+            </div>
+            <div class="file-preview-mini">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#6b7280" stroke-width="1.2"><path d="M2 1.5.5h5l3 3V10.5A1.5 1.5 0 0 1 7 12H2A1.5 1.5 0 0 1 .5 10.5v-9z"/><polyline points="6.5,1.5 6.5,4.5 9.5,4.5"/></svg>
+              <span>IMG_4829_RAW.DNG</span>
+            </div>
           </div>
-          <div class="payload-card"><h4>Transfer Details</h4><div class="payload-meta"><span>photo.jpg</span><span>2.4 MB</span><span>Image</span></div></div>
-          <div class="progress-section">
-            <div class="progress-label"><span>1.2 MB received</span><span>50%</span></div>
-            <div class="progress-track-lg"><div class="progress-fill-lg" style="width:50%"></div></div>
+        </div>
+
+        <div class="device-card">
+          <div class="device-avatar" style="background: #dcfce7;">
+            <svg width="18" height="18" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#16a34a"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#e0f2fe"/><circle cx="6" cy="10" r="0.4" fill="white"/></svg>
           </div>
-          <div class="btn-row"><button class="btn danger">Cancel</button></div>
+          <div class="device-info">
+            <h4>Alex's iPhone 15 Pro</h4>
+            <p>● 已信任设备 · 速度 42 MB/s</p>
+          </div>
+        </div>
+
+        <div class="action-footer" style="margin-top: 18px;">
+          <button class="btn" style="width: 100%;">取消传输</button>
         </div>
       </div>
     </div>
-    <div class="status-bar">Instant Share · Transferring from iPhone (BLE) · photo.jpg · 1.2 / 2.4 MB</div>
   </div>
-</div>
 
-<!-- FLOW 3: Success -->
-<div>
-  <div class="flow-label"><h3>Step 3: Transfer Complete</h3><p>Success state with file actions</p></div>
-  <div class="app-window">
-    <div class="title-bar">
-      <div class="traffic-lights"><div class="tl tl-red"></div><div class="tl tl-amber"></div><div class="tl tl-green"></div></div>
-      <div class="window-title">DTImageSearch</div>
-    </div>
-    <div class="app-body">
-      <div class="left-panel">
-        <div class="search-box-wrap">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="opacity:0.45"><circle cx="5.5" cy="5.5" r="4.5" stroke="#555" stroke-width="1.3"/><line x1="9" y1="9" x2="12" y2="12" stroke="#555" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <input type="text" placeholder="Search images …">
+  <div class="flow-case">
+    <h3>步骤 3：收尾完成（传完即走）</h3>
+    <div class="mini-window">
+      <div class="title-bar">
+        <div class="traffic-lights">
+          <div class="tl tl-red"></div>
+          <div class="tl tl-disabled"></div>
+          <div class="tl tl-disabled"></div>
         </div>
-        <div class="folder-tree-box">
-          <div class="tree-section-header">Local</div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">personal-photos</span></div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">work-screenshots</span></div>
-          <div class="tree-divider"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="3" y="0.5" width="6" height="11" rx="1.5" fill="#9CA3AF"/><rect x="4.5" y="1.5" width="3" height="1" rx="0.5" fill="white" opacity="0.7"/></svg>Mobile</div>
-          <div class="tree-item-mobile">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"/></svg>
-              <span class="mobile-item-name">Alex's iPhone 15 Pro</span>
-              <span class="state-badge awaiting">Awaiting</span>
-            </div>
-            <div class="mobile-item-sub">Last backup 3 hours ago · 1,247 files</div>
-          </div>
-          <div class="tree-item-mobile">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#166534"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="white"/></svg>
-              <span class="mobile-item-name">iPhone · Instant Share</span>
-              <span class="state-badge completed">✓ Done</span>
-            </div>
-            <div class="mobile-item-sub">photo.jpg saved to ~/Downloads</div>
-          </div>
-        </div>
-        <button class="add-folder-btn">+ Add Folder</button>
+        <div class="window-title">传输完成</div>
       </div>
-      <div class="right-panel">
-        <div class="right-panel-header"><div class="right-panel-title">Instant Share — Complete</div></div>
-        <div class="share-receive">
-          <div class="result-card">
-            <div class="result-icon">✅</div>
-            <h4>Transfer Complete</h4>
-            <p>photo.jpg saved to ~/Downloads</p>
+      <div class="window-content">
+        <div class="header-area">
+          <span class="share-badge success">✓ 成功</span>
+          <div class="main-title">接收已圆满完成</div>
+          <div class="subtitle">共收到 1 个高画质原图项目，已安全存落本地。</div>
+        </div>
+
+        <div class="center-display-panel">
+          <div class="result-anim-icon success">✓</div>
+          <div class="result-text-big">成功保存至下载文件夹</div>
+        </div>
+
+        <div class="device-card">
+          <div class="device-avatar" style="background: #f3f4f6;">
+            <svg width="18" height="18" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#6b7280"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#f3f4f6"/><circle cx="6" cy="10" r="0.4" fill="#6b7280"/></svg>
           </div>
-          <div class="device-card">
-            <div class="device-avatar"><svg width="20" height="20" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#166534"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="white"/></svg></div>
-            <div class="device-info"><h4>iPhone</h4><p>Trusted · Remembered for future shares</p></div>
-            <span class="state-badge completed">● TRUSTED</span>
+          <div class="device-info">
+            <h4>传输概览</h4>
+            <p>耗时 2.5s · 历史记录已存入主App</p>
           </div>
-          <div class="btn-row"><button class="btn">Show in Finder</button><button class="btn primary">Open File</button></div>
+        </div>
+
+        <div class="action-footer" style="margin-top: 18px;">
+          <button class="btn">在 Finder 中显示</button>
+          <button class="btn primary">确定</button>
         </div>
       </div>
     </div>
-    <div class="status-bar">Instant Share · Transfer complete · photo.jpg (2.4 MB) · iPhone trusted</div>
   </div>
-</div>
 
-<!-- FLOW 4: Error -->
-<div>
-  <div class="flow-label"><h3>Step 4: Transfer Failed</h3><p>Error state with retry option</p></div>
-  <div class="app-window">
-    <div class="title-bar">
-      <div class="traffic-lights"><div class="tl tl-red"></div><div class="tl tl-amber"></div><div class="tl tl-green"></div></div>
-      <div class="window-title">DTImageSearch</div>
-    </div>
-    <div class="app-body">
-      <div class="left-panel">
-        <div class="search-box-wrap">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="opacity:0.45"><circle cx="5.5" cy="5.5" r="4.5" stroke="#555" stroke-width="1.3"/><line x1="9" y1="9" x2="12" y2="12" stroke="#555" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <input type="text" placeholder="Search images …">
-        </div>
-        <div class="folder-tree-box">
-          <div class="tree-section-header">Local</div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">personal-photos</span></div>
-          <div class="tree-item"><svg width="14" height="13" viewBox="0 0 14 13" fill="#6B7280"><path d="M0 2.5A1.5 1.5 0 011.5 1H5L6.5 3H13a1 1 0 011 1v7.5A1.5 1.5 0 0112.5 13h-11A1.5 1.5 0 010 11.5V2.5z"/></svg><span class="item-name">work-screenshots</span></div>
-          <div class="tree-divider"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="3" y="0.5" width="6" height="11" rx="1.5" fill="#9CA3AF"/><rect x="4.5" y="1.5" width="3" height="1" rx="0.5" fill="white" opacity="0.7"/></svg>Mobile</div>
-          <div class="tree-item-mobile">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#374151"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="#1F2937"/></svg>
-              <span class="mobile-item-name">Alex's iPhone 15 Pro</span>
-              <span class="state-badge awaiting">Awaiting</span>
-            </div>
-            <div class="mobile-item-sub">Last backup 3 hours ago · 1,247 files</div>
-          </div>
-          <div class="tree-item-mobile">
-            <div class="mobile-item-top">
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#991B1B"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="white"/></svg>
-              <span class="mobile-item-name" style="color:#991B1B">iPhone · Instant Share</span>
-              <span class="state-badge failed"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="2.5" y1="2.5" x2="7.5" y2="7.5" stroke="#991B1B" stroke-width="1.4" stroke-linecap="round"/><line x1="7.5" y1="2.5" x2="2.5" y2="7.5" stroke="#991B1B" stroke-width="1.4" stroke-linecap="round"/></svg> Failed</span>
-            </div>
-            <div class="mobile-item-sub" style="color:#b91c1c">Connection lost during transfer</div>
-          </div>
-        </div>
-        <button class="add-folder-btn">+ Add Folder</button>
-      </div>
-      <div class="right-panel">
-        <div class="right-panel-header"><div class="right-panel-title">Instant Share — Failed</div></div>
-        <div class="share-receive">
-          <div class="result-card error">
-            <div class="result-icon">❌</div>
-            <h4>Transfer Failed</h4>
-            <p>Connection lost. The iPhone may have moved out of range.</p>
-          </div>
-          <div class="device-card">
-            <div class="device-avatar"><svg width="20" height="20" viewBox="0 0 12 12" fill="none"><rect x="2.5" y="0.5" width="7" height="11" rx="1.5" fill="#991B1B"/><rect x="3.5" y="2" width="5" height="7.5" rx="0.5" fill="#A8CCEC"/><rect x="4.5" y="1" width="3" height="0.8" rx="0.4" fill="white"/></svg></div>
-            <div class="device-info"><h4>iPhone</h4><p>Connection lost · 1.2 MB received</p></div>
-            <span class="state-badge failed">● DISCONNECTED</span>
-          </div>
-          <div class="btn-row"><button class="btn">Dismiss</button><button class="btn primary">Retry</button></div>
-        </div>
-      </div>
-    </div>
-    <div class="status-bar">Instant Share · Transfer failed · Connection lost · iPhone</div>
-  </div>
-</div>
-
-</div><!-- /flows-row -->
-
-<!-- Notification preview -->
-<div class="notification">
-  <div class="notif-icon"><svg viewBox="0 0 24 24"><path d="M21 3H3v18h18V3zM10 17l-5-5h3V8h4v4h3l-5 5z"/></svg></div>
-  <div class="notif-title">Incoming Share from iPhone</div>
-  <div class="notif-body">photo.jpg — 2.4 MB · Tap to view</div>
-  <div class="notif-actions"><button class="notif-btn primary">View Transfer</button></div>
 </div>
 
 </body>
