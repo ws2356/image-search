@@ -34,10 +34,10 @@
 - [x] 3.1a Add/update unit tests for orchestrator subscription and lifecycle-event emission behavior.
 - [x] 3.2 Wire orchestrator lifecycle states (`queued`, `negotiating`, `transferring`, `delivering`, `done|failed|timed_out`) onto event bus messages.
 - [x] 3.2a Add/update unit tests for event bus state mapping and message payload schema.
-- [x] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) click notification entry opens AuSearch.
-- [x] 3.4 Run UX review and record final selection for runtime behavior.
-- [ ] 3.5 Implement production desktop receive UX behavior based on selected variant, including progress, result, failure, and user-aborted states.
-- [ ] 3.5a Add/update unit tests for selected-variant branching and non-visual receive UI controller/view-model logic.
+- [x] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) standalone mini window.
+- [x] 3.4 Run UX review and record final selection: Variant B (standalone mini window) selected.
+- [ ] 3.5 Implement standalone desktop mini window for instant-share receive, independent from main AuSearch app. The mini window (360x520) has its own title bar, traffic lights, and lifecycle. Includes progress, result, failure, and user-aborted states.
+- [ ] 3.5a Add/update unit tests for mini window controller/view-model logic and non-visual receive state management.
 
 ## 4. Target Delivery Implementation
 
@@ -54,8 +54,8 @@
 
 - [x] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume, first-use trust confirmation, trusted-device revisit, progress, error, success, and abort/result states.
 - [x] 5.2 Implement production Share Extension selector card visual states for scanning, empty/no receiver, discovered devices, selected device, and unavailable Bluetooth/permission states.
-- [ ] 5.3 Implement production desktop instant-share UX for the selected receive variant with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states.
-- [ ] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop receive surfaces.
+- [ ] 5.3 Implement production desktop instant-share standalone mini window with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states. Window is independent from main AuSearch app.
+- [ ] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop standalone mini window receive surface.
 - [x] 5.5 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced for production UI.
 
 ## 6. Reliability and Recovery
@@ -95,8 +95,8 @@
 - [x] 10.7 Rewrite `InstantShareDebugViewModel` and `InstantShareDebugView` for the full discovery → select → connect → config → start → PIN display flow.
 - [x] 10.8 Build iOS app for iPhone 17 Pro Max simulator without errors.
 - [x] 10.9 Add iOS unit tests for `InstantShareTrustSessionManager` key derivation and `InstantShareHTTPServer` request parser.
-- [x] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_runtime.py` to launch the BLE + HTTP runtime for manual testing.
-- [ ] 10.11 Manual e2e test: run PC CLI, open iOS debug view, scan, select PC, write config, verify trust handshake, verify text/photo transfer.
+- [x] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_runtime.py` to launch the BLE + HTTP runtime for manual testing (standalone mini window receive flow).
+- [ ] 10.11 Manual e2e test: run PC CLI, open iOS debug view, scan, select PC, write config, verify trust handshake, verify text/photo transfer opens standalone mini window on desktop.
 
 ## 9. Rollout and Safeguards
 

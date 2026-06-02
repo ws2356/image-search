@@ -21,8 +21,8 @@ Stakeholders:
 - Enable iOS Share Extension to initiate instant-share for text and images in the current implementation slice, with video and other file support deferred to a follow-up phase.
 - Maintain always-on discoverability via desktop BLE broadcast daemon for instant sharing.
 - Ship production-quality instant-share UI on both mobile and desktop as part of this implementation slice.
+- Desktop instant-share UI lives in a standalone mini window, completely independent from the main AuSearch app.
 - Keep the iOS Share Extension lightweight by limiting it to payload preflight, BLE discovery, and a production device selector card, then handing selected device and payload context to AuBackup main app.
-- Finalize desktop receive UX after comparing two mock variants (notification-only vs notification-click-opens-AuSearch).
 - Deliver text to clipboard only and deliver images to clipboard or local files with predictable naming and status reporting in the current slice.
 - Ensure reliability with bounded retry, single-session execution, and recoverable error handling.
 
@@ -74,13 +74,11 @@ Stakeholders:
 - Alternative considered: Always prompt user for target at receive time.
 - Why not: Adds interaction friction and breaks "share and forget" intent.
 
-7. Desktop receive UX finalization via mock comparison.
-- Decision: Keep desktop receive UX unfinalized until two mock sets are reviewed:
-	- Variant A: notification-only receive UX
-	- Variant B: notification entry opens AuSearch for receive handling
-- Rationale: UX tradeoff between low intrusion and explicit workflow handoff needs validation before locking behavior.
-- Alternative considered: Lock notification-only immediately.
-- Why not: Premature decision before UX review could reduce usability.
+7. Desktop receive UX finalized as Variant B — standalone mini window.
+- Decision: Instant Share on desktop uses a standalone mini window (Variant B), independent from the main AuSearch app. The mini window is a dedicated 360x520px surface with its own title bar, traffic lights, and lifecycle. It opens on demand when an incoming share arrives and closes after completion. Completely separate from existing backup, browser, and search features.
+- Rationale: Provides explicit visual confirmation and control for the transfer workflow without coupling to the main app's navigation or tab state. Users get a focused, task-specific surface that does not disrupt their current workflow in AuSearch.
+- Alternative considered: Variant A (notification-only) and embedding inside AuSearch main window.
+- Why not: Notification-only lacks progress visibility and user control for larger transfers. Embedding in AuSearch couples instant-share to existing UI navigation and risks disrupting backup/browser/search flows.
 
 8. Single-session transfer model with user-controlled wait/abort.
 - Decision: Do not support concurrent instant-share sessions. Queue/reject new incoming requests while one session is active. Do not reject transfers based on file size; allow user to keep waiting or abort.
@@ -100,6 +98,12 @@ Stakeholders:
 - Alternative considered: Require mTLS for all trusted-direct traffic.
 - Why not: Higher implementation overhead for this phase; can be added later as a transport hardening step.
 
+13. Instant Share lives in a separate window, not embedded in the main AuSearch app.
+- Decision: The instant-share desktop receive UI is implemented as a standalone mini window with its own window lifecycle, independent from the main AuSearch application window. The mini window does not share UI surface, navigation, tab state, or panel layout with backup, browser, or search features.
+- Rationale: Keeps instant-share completely decoupled from existing features. The mini window can be created/destroyed on demand without affecting main app state. Simplifies development and testing by avoiding cross-feature UI dependencies.
+- Alternative considered: Embed instant-share as a panel or tab inside the main AuSearch window.
+- Why not: Coupling to main app navigation would risk disrupting existing features and complicates the instant-share lifecycle (e.g., user switches tabs mid-transfer).
+
 11. Keep the current desktop slice mobile-hosted and PC-downloaded.
 - Decision: After trust completes, PC remains the HTTP client and downloads shared text or image payloads from the iOS-hosted local HTTP service.
 - Rationale: This matches the iOS Share Extension hosting model and keeps desktop work isolated to `dt_image_search/instant_sharing` without changing `dt_image_search/mobile/*`.
@@ -115,7 +119,7 @@ Stakeholders:
 ## Risks / Trade-offs
 
 - [Large payloads may take long time and appear stalled] -> Mitigation: Always show progress plus explicit user actions to continue waiting or abort.
-- [Desktop receive UX may be suboptimal if chosen without validation] -> Mitigation: Produce and review two mock sets before behavior lock; add acceptance criteria per variant.
+- [Desktop receive UX may be suboptimal if chosen without validation] -> Mitigation: Resolved — Variant B (standalone mini window) selected after mock review. Mini window is independent from main app to avoid cross-feature coupling.
 - [Clipboard writes can conflict with user clipboard usage] -> Mitigation: Restrict auto-clipboard to text payloads and display overwrite notice + optional preference to disable.
 - [Single-session model can delay subsequent shares] -> Mitigation: Show busy state and queue/retry guidance on sender.
 - [Cross-platform filesystem constraints] -> Mitigation: Normalize names, sanitize unsafe characters, enforce path boundary checks, and fallback naming.
@@ -131,7 +135,7 @@ Stakeholders:
 4. Implement desktop BLE broadcast daemon for always-on candidate discovery.
 5. Implement BLE `ConnectionConfig` session bootstrap and remove `/sessions` endpoint dependency.
 6. Implement trust flow endpoints: `/trust/handshake`, encrypted `/trust/apply`, and long-poll `/trust/confirm`.
-7. Produce two desktop receive UX mock sets and finalize behavior.
+7. Finalize desktop receive UX: Variant B selected — standalone mini window independent from AuSearch main app.
 8. Implement production mobile and desktop UX surfaces wired via event bus and mobile state models.
 9. Enforce single active instant-share session handling.
 10. Enable telemetry spans/events for end-to-end success/failure/user-abort analysis.
@@ -143,11 +147,8 @@ Rollback strategy:
 
 ## Open Questions
 
-- Desktop receive UX behavior is pending mock review. Options:
-	- Variant A: full notification-only UX.
-	- Variant B: click notification entry to open AuSearch for receive flow.
-
 Resolved decisions:
+	- Desktop receive UX: Variant B selected — standalone mini window, independent from main AuSearch app.
 	- Local file target default path is user Downloads folder.
 	- No size-based rejection policy; user decides to keep waiting or abort transfer.
 	- Text-to-file is out of scope; text target is clipboard only.

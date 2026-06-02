@@ -21,7 +21,7 @@ The system SHALL publish instant-share lifecycle state changes to the desktop ev
 ### Requirement: Desktop receive UX mock variants before behavior lock
 The system SHALL provide two desktop receive UX mock sets for review before final behavior lock:
 - Variant A: full notification-only UX
-- Variant B: click notification entry opens AuSearch for receive flow
+- Variant B: standalone mini window independent from main AuSearch app
 
 #### Scenario: Mock review artifacts are available
 - **WHEN** product/design review for instant-sharing desktop UX is initiated
@@ -34,17 +34,30 @@ The system SHALL implement runtime receive behavior according to the selected UX
 - **WHEN** Variant A is selected as final UX
 - **THEN** incoming instant-share uses notification-only receive flow
 
-#### Scenario: Variant B selected
+#### Scenario: Variant B selected (standalone mini window)
 - **WHEN** Variant B is selected as final UX
-- **THEN** clicking the instant-share notification entry opens AuSearch for receive handling
+- **THEN** clicking the instant-share notification entry opens a standalone mini window (360x520px) independent from main AuSearch app
+- **THEN** the mini window has its own title bar, traffic lights, and lifecycle
+- **THEN** the mini window is completely separate from existing backup, browser, and search features
 
 ### Requirement: Production desktop receive UX
-The desktop side SHALL ship production-quality instant-share receive UX for the selected receive pattern, including clear lifecycle, completion, failure, timeout, busy, and user-aborted states.
+The desktop side SHALL ship production-quality instant-share receive UX as a standalone mini window for the selected receive pattern, including clear lifecycle, completion, failure, timeout, busy, and user-aborted states.
 
 #### Scenario: Production receive UX shows lifecycle state
 - **WHEN** instant-share is enabled and a session progresses through receive states
-- **THEN** desktop presents the selected production receive UX with clear state-specific feedback
+- **THEN** desktop presents the standalone mini window with clear state-specific feedback
 
 #### Scenario: Production receive UX handles terminal outcomes
 - **WHEN** an instant-share session ends in success, failure, timeout, busy rejection, or user abort
-- **THEN** desktop presents the corresponding final outcome through the production receive UX
+- **THEN** desktop presents the corresponding final outcome through the standalone mini window
+
+### Requirement: Mini window independence from main app
+The standalone mini window SHALL NOT share UI surface, navigation, tab state, or panel layout with the main AuSearch application.
+
+#### Scenario: Mini window opens without affecting main app
+- **WHEN** an incoming instant-share triggers the mini window to open
+- **THEN** the main AuSearch window state remains unchanged — no tabs switch, no panels shift, no navigation occurs
+
+#### Scenario: Mini window closes independently
+- **WHEN** the instant-share session completes or is dismissed
+- **THEN** only the mini window closes; the main AuSearch window is unaffected

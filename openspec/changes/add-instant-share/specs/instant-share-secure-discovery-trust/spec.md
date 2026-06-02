@@ -76,11 +76,15 @@ For subsequent shares, the PC SHALL include a cryptographic signature in its bro
 - **THEN** mobile excludes that candidate from direct-send path and does not initiate HTTPS transfer
 
 ### Requirement: PC-side implementation isolation
-The desktop system SHALL implement instant-share orchestration and trust/transport flow in a dedicated PC module path and SHALL NOT modify desktop code in `dt_image_search/mobile/*`.
+The desktop system SHALL implement instant-share orchestration, trust/transport flow, and the standalone mini window UI in a dedicated PC module path and SHALL NOT modify desktop code in `dt_image_search/mobile/*`. The mini window SHALL be independent from the main AuSearch application window.
 
 #### Scenario: Isolated PC module usage
 - **WHEN** implementing instant-share receiver functionality on desktop
 - **THEN** implementation resides under `dt_image_search/instant_sharing` and no desktop implementation changes are made under `dt_image_search/mobile/*`
+
+#### Scenario: Mini window is independent from main app
+- **WHEN** the instant-share mini window is created or destroyed
+- **THEN** the main AuSearch window state, navigation, and tab layout remain unchanged
 
 ### Requirement: No dependency on QR backup pairing/session capability exchange
 The instant-share flow SHALL NOT depend on existing QR backup pairing/session infrastructure, including backup-session capability exchange endpoints.

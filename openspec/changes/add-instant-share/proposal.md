@@ -15,10 +15,11 @@ Users currently need to launch AuSearch or AuBackup and navigate through multipl
   - text payloads: clipboard only
   - image payloads: clipboard or local file save
   - video and other file payload rules remain follow-up work
-- Desktop instant-sharing receive UX remains unfinalized for v1 implementation lock:
-  - option A: full notification-only receive UX
-  - option B: notification entry opens AuSearch for instant-sharing receive handling
-  - provide two mock sets and finalize UX after review
+- Desktop instant-sharing receive UX uses a standalone mini window (Variant B selected):
+  - notification entry opens a dedicated 360x520px mini window independent from main AuSearch app
+  - mini window has its own title bar, traffic lights, and lifecycle
+  - completely separate from existing backup, browser, and search features
+  - PIN confirmation, progress, device status, and completion all visible in the mini window
 - Ship production-quality mobile and desktop UX for instant-share entry, confirmation, progress, success, failure, and user-aborted outcomes as part of the implementation slice.
 - Add fallback behavior when PC is unreachable (retry/backoff and user-visible error state).
 - Defer large media optimization (special handling for very large payloads) to a future iteration.
@@ -44,13 +45,13 @@ Users currently need to launch AuSearch or AuBackup and navigate through multipl
   - iOS companion app: Share Extension entrypoint, payload extraction, production device selector card, and AuBackup handoff
   - mobile/pc transport path: BLE discovery, trust handshake, instant-share-specific payload transfer protocol
   - desktop BLE service daemon: always-on instant-share discovery broadcast
-  - PC app UX (AuSearch/AuBackup): notification-based receive surface and completion feedback
+  - PC app UX: standalone mini window for receive flow, independent from main AuSearch window
   - mobile and PC UI layers: production UX surfaces for selection, handoff, progress, result, and failure states
 - Affected code areas (expected):
   - `mobile/ios/*` share/transfer and state handling
   - New instant-share transport/pairing code path on mobile side (separate from backup-session capability exchange)
-  - `dt_image_search/instant_sharing/*` new PC-side orchestration, trust, transport, and delivery code
-  - PC UI controllers and event bus integration for candidate receive UX patterns (notification-only vs notification-click-opens-AuSearch)
+  - `dt_image_search/instant_sharing/*` new PC-side orchestration, trust, transport, delivery code, and standalone mini window UI
+  - PC standalone mini window controllers, event bus integration, and window lifecycle management
 - Potential dependency/API impacts:
   - Additional transport metadata for content type, allowed target(s), trust state, and pinned-cert identity
   - BLE broadcast payload/signature format and verification keys
