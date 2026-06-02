@@ -206,6 +206,21 @@ class InstantShareReceiverOrchestrator:
         )
         return session
 
+    def abort_session(self, *, session_id: str) -> InstantShareSession:
+        error = InstantShareError(
+            ErrorCode.USER_ABORTED,
+            "User aborted the instant-share transfer.",
+        )
+        session = self._session_registry.transition(session_id, SessionState.ABORTED)
+        self._publish(session, error=error)
+        log(
+            "warning",
+            message="Instant-share session aborted by user",
+            where="instant_share.orchestrator.abort_session",
+            attributes=_session_attributes(session.connection_config),
+        )
+        return session
+
     def _transition_on_error(self, *, session_id: str, error: InstantShareError) -> InstantShareSession:
         desired_state = self._desired_terminal_state_for_error(error)
         try:

@@ -230,6 +230,29 @@ class TestInstantShareReceiverOrchestrator(unittest.TestCase):
         self.assertEqual(trust_error, [])
         self.assertEqual(trust_result["trust_status"], "trusted")
 
+    def test_abort_session_transitions_to_aborted(self):
+        clipboard = _ClipboardRecorder()
+        delivery_service = InstantShareDeliveryService(clipboard_writer=clipboard)
+        orchestrator = InstantShareReceiverOrchestrator(
+            session_registry=InstantShareSessionRegistry(),
+            delivery_service=delivery_service,
+        )
+        connection_config = _connection_config()
+        received_events = []
+        subscription = default_bus.subscribe(
+            INSTANT_SHARE_LIFECYCLE_EVENT,
+            lambda **event: received_events.append(event),
+        )
+        self.addCleanup(subscription.dispose)
+
+        session = orchestrator.handle_connection_config(connection_config)
+        orchestrator._session_registry.transition(session.connection_config.session_id, __import__("dt_image_search.instant_sharing.contracts", fromlist=["SessionState"]).SessionState.TRANSFERRING)
+        aborted = orchestrator.abort_session(session_id=session.connection_config.session_id)
+
+        self.assertEqual(aborted.state.value, "aborted")
+        self.assertEqual(received_events[-1]["state"], "aborted")
+        self.assertEqual(received_events[-1]["error_code"], "USER_ABORTED")
+
 
 if __name__ == "__main__":
     unittest.main()

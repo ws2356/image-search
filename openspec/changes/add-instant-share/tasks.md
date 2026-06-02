@@ -43,8 +43,8 @@
 
 - [x] 4.1 Implement clipboard writer path for text payload delivery (clipboard only) with completion/failure signaling.
 - [x] 4.1a Add/update unit tests for clipboard delivery success/failure signaling.
-- [ ] 4.2 Implement image dual-target delivery (clipboard or file) and video/other-file local-file-only delivery with sanitized deterministic filename generation and collision handling.
-- [ ] 4.2a Add/update unit tests for target selection rules, filename sanitization, and collision resolution.
+- [x] 4.2 Implement image dual-target delivery (clipboard or file) and video/other-file local-file-only delivery with sanitized deterministic filename generation and collision handling.
+- [x] 4.2a Add/update unit tests for target selection rules, filename sanitization, and collision resolution.
 - [x] 4.3 Enforce receive-directory boundary checks and reject unsafe path resolutions with explicit errors.
 - [x] 4.3a Add/update unit tests for safe/unsafe path resolution cases.
 - [x] 4.4 Set default local-file target path to user Downloads folder when no explicit directory is configured.
@@ -66,8 +66,8 @@
 - [x] 6.2a Add/update unit tests for timeout threshold handling and terminal-state mapping.
 - [x] 6.3 Enforce single active instant-share session handling (reject/defer concurrent requests).
 - [x] 6.3a Add/update unit tests for concurrent session rejection/deferral behavior.
-- [ ] 6.4 Add user-visible wait/abort controls for long transfers and surface user-aborted outcomes in desktop and iOS states.
-- [ ] 6.4a Add/update unit tests for wait/abort state transitions and user-aborted outcome propagation.
+- [x] 6.4 Add user-visible wait/abort controls for long transfers and surface user-aborted outcomes in desktop and iOS states.
+- [x] 6.4a Add/update unit tests for wait/abort state transitions and user-aborted outcome propagation.
 
 ## 7. Telemetry and Observability
 
