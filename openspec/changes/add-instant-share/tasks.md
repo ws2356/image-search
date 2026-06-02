@@ -23,6 +23,10 @@
 - [ ] 2.2a Add/update unit tests for preflight pass/fail conditions.
 - [ ] 2.3 Implement unsupported-type rejection UX and error reporting in extension flow.
 - [ ] 2.3a Add/update unit tests for unsupported-type rejection mapping and error payload construction.
+- [ ] 2.4 Implement production Share Extension device selector card that lists discovered BLE PCs with usable device identity and trust-state affordances.
+- [ ] 2.4a Add/update tests for selector view-model state: scanning, empty, discovered, stale/expired device, trusted revisit, and first-use states.
+- [ ] 2.5 Implement selected-device and payload-context handoff from Share Extension to AuBackup main app for both first use and trusted revisits.
+- [ ] 2.5a Add/update tests for handoff context persistence, stale/missing context handling, and main-app resume routing.
 
 ## 3. Desktop Instant Receive Orchestration
 
@@ -32,8 +36,8 @@
 - [x] 3.2a Add/update unit tests for event bus state mapping and message payload schema.
 - [ ] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) click notification entry opens AuSearch.
 - [ ] 3.4 Run UX review and record final selection for runtime behavior.
-- [ ] 3.5 Implement minimum viable desktop receive UX behavior based on selected variant for rapid flow bring-up.
-- [ ] 3.5a Add/update unit tests for selected-variant branching logic where testable (non-visual controller logic).
+- [ ] 3.5 Implement production desktop receive UX behavior based on selected variant, including progress, result, failure, and user-aborted states.
+- [ ] 3.5a Add/update unit tests for selected-variant branching and non-visual receive UI controller/view-model logic.
 
 ## 4. Target Delivery Implementation
 
@@ -46,14 +50,13 @@
 - [x] 4.4 Set default local-file target path to user Downloads folder when no explicit directory is configured.
 - [x] 4.4a Add/update unit tests for default directory fallback behavior.
 
-## 5. Mobile and Desktop UI Delivery Phases
+## 5. Production Mobile and Desktop UI
 
-- [ ] 5.1 Implement minimum viable mobile instant-share UX (selection, progress, error/result states) for end-to-end flow validation.
-- [ ] 5.2 Validate end-to-end flow using MVP UI on both mobile and desktop.
-- [ ] 5.3 Execute dedicated UI design and polish pass for mobile.
-- [ ] 5.4 Execute dedicated UI design and polish pass for desktop.
-- [ ] 5.5 Re-verify behavior parity after polish pass.
-- [ ] 5.6 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced during MVP and polish phases.
+- [ ] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume, first-use trust confirmation, trusted-device revisit, progress, error, success, and abort/result states.
+- [ ] 5.2 Implement production Share Extension selector card visual states for scanning, empty/no receiver, discovered devices, selected device, and unavailable Bluetooth/permission states.
+- [ ] 5.3 Implement production desktop instant-share UX for the selected receive variant with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states.
+- [ ] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop receive surfaces.
+- [ ] 5.5 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced for production UI.
 
 ## 6. Reliability and Recovery
 

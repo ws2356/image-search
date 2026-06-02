@@ -40,13 +40,24 @@ The system SHALL treat advanced optimization for very large media payloads as ou
 - **WHEN** a valid media payload is shared in this iteration
 - **THEN** the system uses baseline transfer behavior without requiring large-media optimization features
 
-### Requirement: Mobile phased UI rollout
-The mobile side SHALL ship a minimum viable instant-share UX first (basic status/error surfaces) and SHALL defer UI design/polish refinements to a dedicated later pass.
+### Requirement: Share Extension device selector card
+The iOS Share Extension SHALL present a production-quality device selector card that lists discovered BLE PCs and lets the user choose the target receiver before opening the main app.
 
-#### Scenario: Mobile MVP UI available for flow bring-up
-- **WHEN** instant-share MVP is enabled for testing
-- **THEN** mobile presents functional minimal UX for selection, transfer status, and error outcomes without requiring final polished visuals
+#### Scenario: Display discovered receivers in extension
+- **WHEN** the Share Extension discovers one or more eligible PCs over BLE
+- **THEN** it renders those PCs in the device selector card with recognizable receiver identity and current availability state
 
-#### Scenario: Mobile polish pass occurs after MVP validation
-- **WHEN** end-to-end flow is validated with MVP UX
-- **THEN** mobile UI design and polish tasks are executed as a separate follow-up pass
+#### Scenario: Handoff selected receiver to AuBackup
+- **WHEN** the user taps a device in the selector card
+- **THEN** the Share Extension persists selected receiver and payload context and opens AuBackup for further handling
+
+### Requirement: Main-app handling after extension selection
+The main AuBackup app SHALL resume instant-share from Share Extension handoff context and SHALL handle both first-use trust flow and trusted-device revisit flow.
+
+#### Scenario: First-use selected receiver resumes in AuBackup
+- **WHEN** the selected receiver has no established trust relationship
+- **THEN** AuBackup resumes the share attempt and presents the first-share trust and transfer flow
+
+#### Scenario: Trusted receiver revisit resumes in AuBackup
+- **WHEN** the selected receiver has an established trusted relationship
+- **THEN** AuBackup resumes the share attempt and proceeds through trusted-device transfer handling without requiring the user to reselect the device in the extension

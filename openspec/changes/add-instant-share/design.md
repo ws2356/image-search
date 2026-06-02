@@ -20,8 +20,8 @@ Stakeholders:
 **Goals:**
 - Enable iOS Share Extension to initiate instant-share for text and images in the current implementation slice, with video and other file support deferred to a follow-up phase.
 - Maintain always-on discoverability via desktop BLE broadcast daemon for instant sharing.
-- Ship a minimum viable UI on both mobile and desktop quickly to validate end-to-end flow.
-- Run a dedicated UI design and polish pass for both mobile and desktop after MVP flow validation.
+- Ship production-quality instant-share UI on both mobile and desktop as part of this implementation slice.
+- Keep the iOS Share Extension lightweight by limiting it to payload preflight, BLE discovery, and a production device selector card, then handing selected device and payload context to AuBackup main app.
 - Finalize desktop receive UX after comparing two mock variants (notification-only vs notification-click-opens-AuSearch).
 - Deliver text to clipboard only and deliver images to clipboard or local files with predictable naming and status reporting in the current slice.
 - Ensure reliability with bounded retry, single-session execution, and recoverable error handling.
@@ -57,7 +57,7 @@ Stakeholders:
 - Why not: Discovery reliability drops and flow depends on UI foreground state.
 
 4. Session bootstrap via BLE instead of `/sessions` endpoint.
-- Decision: Remove `/sessions` dependency. Session is created on mobile at device selection time and written to PC through BLE `ConnectionConfig` (mobile IP list, port, session ID).
+- Decision: Remove `/sessions` dependency. Session is created by AuBackup after it resumes Share Extension handoff context and is written to PC through BLE `ConnectionConfig` (mobile IP list, port, session ID).
 - Rationale: Keeps session initiation coupled to physical device choice and reduces extra round-trip endpoint complexity.
 - Alternative considered: HTTP `/sessions` create endpoint.
 - Why not: Redundant with BLE bootstrap and less aligned with discovery-first flow.
@@ -88,11 +88,11 @@ Stakeholders:
 - Alternative considered: Concurrent sessions and/or size-based pre-reject.
 - Why not: Adds race complexity and may prematurely block legitimate large transfers.
 
-9. Two-phase UI implementation strategy (mobile + desktop).
-- Decision: Implement minimum viable UX first to validate protocol/transfer flow, then perform a dedicated design/polish pass.
-- Rationale: Reduces time-to-first-working-flow while preserving room for quality UX refinement.
-- Alternative considered: Full polished UX before flow validation.
-- Why not: Slows functional validation and increases rework risk if protocol behavior changes.
+9. Production UI implementation strategy (mobile + desktop).
+- Decision: Build production-quality UI surfaces directly for instant-share selection, handoff, confirmation, progress, success, failure, and abort states.
+- Rationale: The protocol has matured enough that temporary validation UI would create throwaway work and risk mismatched behavior between validation and release.
+- Alternative considered: Deferring final visual and interaction quality until after functional validation.
+- Why not: The feature is now targeting production readiness, and the Share Extension selector card is part of the user-facing contract.
 
 10. Use session-id signature verification as the immediate client authentication layer.
 - Decision: Do not require mTLS in this phase. Require PC to sign session id with its private key on each HTTP request, and require mobile to verify the signature with exchanged trusted PC public key.
@@ -106,6 +106,12 @@ Stakeholders:
 - Alternative considered: Desktop-hosted ingestion endpoints that accept pushed payload bodies.
 - Why not: That contradicts the current iOS-hosted server requirement and would reintroduce coupling to the existing desktop mobile-folder transport path.
 
+12. Share Extension hands selected device to AuBackup for handling.
+- Decision: The iOS Share Extension discovers BLE receivers and renders the production selector card, but tapping a device opens AuBackup main app with selected receiver identity, trust hints, and payload context. AuBackup then performs first-share trust, trusted-direct revisit handling, BLE `ConnectionConfig` bootstrap, local HTTP hosting, and transfer lifecycle UI.
+- Rationale: Share Extension runtime is constrained; discovery and selection are user-facing and extension-appropriate, while trust, long-poll confirmation, HTTPS serving, retry, and delivery-result handling are better owned by the main app.
+- Alternative considered: Complete trust and transfer inside the Share Extension after device selection.
+- Why not: Extension lifetime and background constraints make the full trust/transfer lifecycle fragile, especially for first use and slower image transfers.
+
 ## Risks / Trade-offs
 
 - [Large payloads may take long time and appear stalled] -> Mitigation: Always show progress plus explicit user actions to continue waiting or abort.
@@ -114,22 +120,22 @@ Stakeholders:
 - [Single-session model can delay subsequent shares] -> Mitigation: Show busy state and queue/retry guidance on sender.
 - [Cross-platform filesystem constraints] -> Mitigation: Normalize names, sanitize unsafe characters, enforce path boundary checks, and fallback naming.
 - [Session signature verification can be bypassed if headers are missing or key lookup fails open] -> Mitigation: Enforce fail-closed validation and explicit errors for missing/invalid signatures or missing trusted keys.
+- [Share Extension handoff can lose payload or selected-device context] -> Mitigation: Persist handoff context through app-group storage or equivalent extension-safe mechanism before opening AuBackup, and make AuBackup fail closed with a clear recovery state if context is missing or stale.
+- [BLE scanning from Share Extension may be constrained by iOS extension runtime, permissions, or short execution windows] -> Mitigation: Validate on physical devices early, show production permission/unavailable states, and fall back to opening AuBackup for discovery only if extension-level discovery cannot complete reliably.
 
 ## Migration Plan
 
 1. Add dedicated instant-sharing discovery/trust/transfer protocol path (independent from backup session endpoints).
 2. Implement desktop orchestrator and target writers under `dt_image_search/instant_sharing` behind feature flag.
-3. Implement iOS Share Extension payload extraction and transfer trigger path for text/image/video/other files.
+3. Implement iOS Share Extension payload extraction, BLE discovery, production device selector card, and AuBackup handoff path for text/image inputs.
 4. Implement desktop BLE broadcast daemon for always-on candidate discovery.
 5. Implement BLE `ConnectionConfig` session bootstrap and remove `/sessions` endpoint dependency.
 6. Implement trust flow endpoints: `/trust/handshake`, encrypted `/trust/apply`, and long-poll `/trust/confirm`.
 7. Produce two desktop receive UX mock sets and finalize behavior.
-8. Implement minimum viable mobile and desktop UX surfaces for flow bring-up.
-9. Add finalized desktop receive UX and status surfaces wired via event bus.
-10. Run dedicated mobile and desktop UI design/polish pass.
-11. Enforce single active instant-share session handling.
-12. Enable telemetry spans/events for end-to-end success/failure/user-abort analysis.
-13. Roll out with default-off internal testing, then staged enablement.
+8. Implement production mobile and desktop UX surfaces wired via event bus and mobile state models.
+9. Enforce single active instant-share session handling.
+10. Enable telemetry spans/events for end-to-end success/failure/user-abort analysis.
+11. Roll out with default-off internal testing, then staged enablement.
 
 Rollback strategy:
 - Disable feature flag to bypass instant-share entrypoints while keeping core backup/search flows unchanged.

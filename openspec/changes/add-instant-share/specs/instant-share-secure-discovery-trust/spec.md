@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: BLE candidate PC discovery before send
-The mobile system SHALL scan BLE pairing-service broadcasts from nearby PCs and SHALL maintain a user-selectable list of candidate PCs before initiating instant-share transfer.
+The mobile system SHALL scan BLE pairing-service broadcasts from nearby PCs and SHALL maintain a user-selectable list of candidate PCs in the iOS Share Extension before handing selected receiver context to AuBackup.
 
 #### Scenario: Candidate list population
 - **WHEN** the sender opens instant-share target selection
-- **THEN** the mobile app presents a list of discovered candidate PCs from BLE broadcasts
+- **THEN** the Share Extension presents a production device selector card populated with discovered candidate PCs from BLE broadcasts
 
 ### Requirement: BLE service characteristics contract
 The desktop BLE service SHALL expose exactly three characteristics for instant-sharing bootstrap:
@@ -15,11 +15,11 @@ The desktop BLE service SHALL expose exactly three characteristics for instant-s
 
 #### Scenario: Mobile builds device list from DeviceName
 - **WHEN** mobile reads discovered device characteristics
-- **THEN** mobile uses `DeviceName` values to render candidate PC list
+- **THEN** the Share Extension uses `DeviceName` values to render the candidate PC list
 
 #### Scenario: Mobile writes connection bootstrap to ConnectionConfig
-- **WHEN** user selects a target PC from the discovered list
-- **THEN** mobile writes session ID, mobile port, and mobile IP list to `ConnectionConfig` before HTTP trust/transfer calls
+- **WHEN** AuBackup resumes from Share Extension handoff after user selects a target PC
+- **THEN** AuBackup writes session ID, mobile port, and mobile IP list to `ConnectionConfig` before HTTP trust/transfer calls
 
 ### Requirement: Desktop BLE broadcast daemon
 The desktop system SHALL run a background daemon process that continuously broadcasts the instant-sharing BLE service for mobile discovery and access.
@@ -90,7 +90,7 @@ The instant-share flow SHALL NOT depend on existing QR backup pairing/session in
 - **THEN** the system completes discovery, trust establishment, and transfer using instant-share-specific protocol endpoints only
 
 ### Requirement: No `/sessions` endpoint dependency
-Instant-sharing SHALL NOT require an HTTP `/sessions` endpoint because session is created on mobile at device selection time and bootstrapped through BLE `ConnectionConfig`.
+Instant-sharing SHALL NOT require an HTTP `/sessions` endpoint because session is created by AuBackup after Share Extension handoff and bootstrapped through BLE `ConnectionConfig`.
 
 #### Scenario: Session verified from BLE bootstrap
 - **WHEN** PC performs instant-sharing HTTP calls
