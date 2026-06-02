@@ -2,38 +2,39 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 @MainActor
-final class InstantShareExtensionViewModel: ObservableObject {
+public final class InstantShareExtensionViewModel: ObservableObject {
     @Published var scannerState: String = "idle"
     @Published var discoveredDevices: [InstantShareDiscoveredPeripheral] = []
-    @Published var selectedDevice: InstantShareDiscoveredPeripheral?
-    @Published var payloadEnvelope: InstantSharePayloadEnvelope?
+    @Published public var selectedDevice: InstantShareDiscoveredPeripheral?
+    @Published public var payloadEnvelope: InstantSharePayloadEnvelope?
     @Published var errorMessage: String?
     @Published var isProcessing: Bool = false
 
     private let scanner: InstantShareBLEScanner
     private let service: InstantShareService
 
-    init(scanner: InstantShareBLEScanner, service: InstantShareService) {
+    public init(scanner: InstantShareBLEScanner, service: InstantShareService) {
         self.scanner = scanner
         self.service = service
     }
 
-    func startDiscovery() {
+    public func startDiscovery() {
         scannerState = "scanning"
         scanner.initialize()
         scanner.startScanning()
     }
 
-    func stopDiscovery() {
+    public func stopDiscovery() {
         scanner.stopScanning()
         scannerState = "idle"
     }
 
-    func loadPayload(from extensionItems: [NSExtensionItem]) async {
+    public func loadPayload(from extensionItems: [NSExtensionItem]) async {
         isProcessing = true
         defer { isProcessing = false }
         do {
-            let envelope = try await InstantSharePayloadExtractor.extract(from: extensionItems)
+            nonisolated(unsafe) let items = extensionItems
+            let envelope = try await InstantSharePayloadExtractor.extract(from: items)
             self.payloadEnvelope = envelope
         } catch {
             self.errorMessage = error.localizedDescription

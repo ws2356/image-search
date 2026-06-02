@@ -1,25 +1,43 @@
 import SwiftUI
 
-struct InstantShareExtensionView: View {
+public struct InstantShareExtensionView: View {
     @ObservedObject var viewModel: InstantShareExtensionViewModel
     let onCancel: () -> Void
     let onSend: () -> Void
 
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                payloadCard
-                deviceSelectorCard
-                Spacer()
-                actionBar
-            }
-            .padding()
-            .navigationTitle("Instant Share")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onCancel)
+    public init(viewModel: InstantShareExtensionViewModel, onCancel: @escaping () -> Void, onSend: @escaping () -> Void) {
+        self.viewModel = viewModel
+        self.onCancel = onCancel
+        self.onSend = onSend
+    }
+
+    public var body: some View {
+        Group {
+            if #available(iOS 16.0, *) {
+                NavigationStack {
+                    content
                 }
+            } else {
+                NavigationView {
+                    content
+                }
+            }
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 16) {
+            payloadCard
+            deviceSelectorCard
+            Spacer()
+            actionBar
+        }
+        .padding()
+        .navigationTitle("Instant Share")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", action: onCancel)
             }
         }
     }
@@ -90,7 +108,7 @@ struct InstantShareExtensionView: View {
                 Image(systemName: "laptopcomputer")
                     .foregroundStyle(.blue)
                 VStack(alignment: .leading) {
-                    Text(device.name)
+                    Text(device.name ?? "Unknown Device")
                         .font(.body)
                     Text("RSSI: \(device.rssi)")
                         .font(.caption2)

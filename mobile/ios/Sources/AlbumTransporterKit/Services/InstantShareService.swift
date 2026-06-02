@@ -13,7 +13,7 @@ import Foundation
 /// 5. PC calls /payload/text or /payload/image
 /// 6. PC calls /delivery-result
 @MainActor
-final class InstantShareService: ObservableObject {
+public final class InstantShareService: ObservableObject {
     @Published private(set) var scanner: InstantShareBLEScanner
     @Published private(set) var httpsServer: InstantShareHTTPServer
     @Published private(set) var trustSession: InstantShareTrustSessionManager
@@ -27,7 +27,7 @@ final class InstantShareService: ObservableObject {
 
     private let connector = InstantShareBLEPeripheralConnector()
 
-    init() {
+    public init() {
         let trustManager = InstantShareTrustSessionManager()
         self.trustSession = trustManager
         self.httpsServer = InstantShareHTTPServer(trustManager: trustManager)
@@ -115,6 +115,19 @@ final class InstantShareService: ObservableObject {
         connectionConfig = nil
         selectedPeripheral = nil
         log("Session stopped")
+    }
+
+    /// Confirm trust after user verifies PIN match.
+    func confirmTrust() {
+        log("Trust confirmed by user")
+        httpsServer.confirmTrust()
+    }
+
+    /// Reject trust when user declines or PIN doesn't match.
+    func rejectTrust() {
+        log("Trust rejected by user")
+        httpsServer.rejectTrust()
+        trustSession.reset()
     }
 
     private func log(_ message: String) {

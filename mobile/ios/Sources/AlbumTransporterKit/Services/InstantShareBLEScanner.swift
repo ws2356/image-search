@@ -6,12 +6,12 @@ import Foundation
 ///
 /// The PC exposes a single GATT service with UUID `4abf1c8a-6e2e-4cf2-bff7-6cbad77b0f8b`
 /// and the name "instant-sharing" (see `InstantShareProtocol`).
-struct InstantShareDiscoveredPeripheral: Identifiable, Equatable {
-    let id: UUID
-    let name: String?
-    let advertisementServiceUUIDStrings: [String]
-    let rssi: Int
-    let discoveredAt: Date
+public struct InstantShareDiscoveredPeripheral: Identifiable, Equatable {
+    public let id: UUID
+    public let name: String?
+    public let advertisementServiceUUIDStrings: [String]
+    public let rssi: Int
+    public let discoveredAt: Date
 }
 
 enum InstantShareBLEScannerState: Equatable, Sendable {
@@ -24,7 +24,7 @@ enum InstantShareBLEScannerState: Equatable, Sendable {
 }
 
 @MainActor
-final class InstantShareBLEScanner: NSObject, ObservableObject {
+public final class InstantShareBLEScanner: NSObject, ObservableObject {
     @Published private(set) var state: InstantShareBLEScannerState = .uninitialized
     @Published private(set) var discovered: [InstantShareDiscoveredPeripheral] = []
 
@@ -37,7 +37,7 @@ final class InstantShareBLEScanner: NSObject, ObservableObject {
     private var discoveredAtByPeripheralID: [UUID: Date] = [:]
     private var isScanning = false
 
-    override init() {
+    public override init() {
         super.init()
     }
 
@@ -108,7 +108,7 @@ final class InstantShareBLEScanner: NSObject, ObservableObject {
 }
 
 extension InstantShareBLEScanner: CBCentralManagerDelegate {
-    nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
+    nonisolated public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let newState: InstantShareBLEScannerState
         switch central.state {
         case .poweredOn:
@@ -139,7 +139,7 @@ extension InstantShareBLEScanner: CBCentralManagerDelegate {
         }
     }
 
-    nonisolated func centralManager(
+    nonisolated public func centralManager(
         _ central: CBCentralManager,
         didDiscover peripheral: CBPeripheral,
         advertisementData: [String: Any],

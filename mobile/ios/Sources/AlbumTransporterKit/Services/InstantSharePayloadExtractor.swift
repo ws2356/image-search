@@ -1,22 +1,23 @@
 import Foundation
+import UIKit
 import UniformTypeIdentifiers
 
-enum InstantSharePayloadType: String, Codable {
+public enum InstantSharePayloadType: String, Codable {
     case text
     case image
     case video
     case file
 }
 
-struct InstantSharePayloadEnvelope: Codable {
-    let payloadType: InstantSharePayloadType
-    let textContent: String?
-    let fileURL: URL?
-    let filename: String?
-    let contentType: String?
-    let fileSizeBytes: Int64?
+public struct InstantSharePayloadEnvelope: Codable {
+    public let payloadType: InstantSharePayloadType
+    public let textContent: String?
+    public let fileURL: URL?
+    public let filename: String?
+    public let contentType: String?
+    public let fileSizeBytes: Int64?
 
-    var targetIntent: String {
+    public var targetIntent: String {
         switch payloadType {
         case .text: return "clipboard_only"
         case .image: return "clipboard_or_file"
@@ -93,11 +94,26 @@ struct InstantSharePayloadExtractor {
         throw InstantSharePayloadExtractorError.noSupportedItems
     }
 
+    private static func loadItem(provider: NSItemProvider, typeIdentifier: String) async throws -> Any {
+        try await withCheckedThrowingContinuation { continuation in
+            provider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { item, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else if let item = item {
+                    nonisolated(unsafe) let unsafeItem = item as Any
+                    continuation.resume(returning: unsafeItem)
+                } else {
+                    continuation.resume(throwing: InstantSharePayloadExtractorError.unreadableContent("loadItem returned nil"))
+                }
+            }
+        }
+    }
+
     private static func extractText(from provider: NSItemProvider) async throws -> InstantSharePayloadEnvelope? {
         let matchingType = supportedTextTypes.first { provider.hasItemConformingToTypeIdentifier($0) }
         guard let typeIdentifier = matchingType else { return nil }
 
-        let result = try await provider.loadItem(forTypeIdentifier: typeIdentifier)
+        let result = try await loadItem(provider: provider, typeIdentifier: typeIdentifier)
         let text: String
         if let string = result as? String {
             text = string
@@ -126,7 +142,7 @@ struct InstantSharePayloadExtractor {
         let matchingType = typeSet.first { provider.hasItemConformingToTypeIdentifier($0) }
         guard let typeIdentifier = matchingType else { return nil }
 
-        let result = try await provider.loadItem(forTypeIdentifier: typeIdentifier)
+        let result = try await loadItem(provider: provider, typeIdentifier: typeIdentifier)
         let fileURL: URL
         if let url = result as? URL {
             fileURL = url
@@ -162,7 +178,7 @@ struct InstantSharePayloadExtractor {
     private static func extractFile(from provider: NSItemProvider) async throws -> InstantSharePayloadEnvelope? {
         guard provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) else { return nil }
 
-        let result = try await provider.loadItem(forTypeIdentifier: UTType.data.identifier)
+        let result = try await loadItem(provider: provider, typeIdentifier: UTType.data.identifier)
         guard let url = result as? URL else {
             return nil
         }
