@@ -18,8 +18,6 @@ INSTANT_SHARE_LIFECYCLE_EVENT = "instant_share.lifecycle"
 class TrustHandshakeRequest:
     pc_dh_public_key: str
     pc_nonce: str
-    encrypted_payload: str
-    encryption_alg: str
     pc_public_key_pem: str
     key_id: str | None = None
 
@@ -81,8 +79,6 @@ class InstantShareReceiverOrchestrator:
             confirm_thread.start()
 
             client.trust_apply(
-                encrypted_payload=request.encrypted_payload,
-                encryption_alg=request.encryption_alg,
                 correlation_id=correlation_id,
                 key_id=request.key_id,
             )

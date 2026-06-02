@@ -135,8 +135,6 @@ class TestInstantShareReceiverOrchestrator(unittest.TestCase):
             request=TrustHandshakeRequest(
                 pc_dh_public_key="pc-dh-public-key",
                 pc_nonce="pc-nonce",
-                encrypted_payload="encrypted-payload",
-                encryption_alg="aes-gcm",
                 pc_public_key_pem="desktop-public-key",
             ),
         )
@@ -214,8 +212,6 @@ class TestInstantShareReceiverOrchestrator(unittest.TestCase):
                         request=TrustHandshakeRequest(
                             pc_dh_public_key="pc-dh-public-key",
                             pc_nonce="pc-nonce",
-                            encrypted_payload="encrypted-payload",
-                            encryption_alg="aes-gcm",
                             pc_public_key_pem="desktop-public-key",
                         ),
                     )

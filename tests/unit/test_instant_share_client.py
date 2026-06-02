@@ -327,9 +327,7 @@ class TestInstantShareHttpClient(unittest.TestCase):
             pc_nonce=handshake_request_payload["pc_nonce"],
             correlation_id=str(uuid.uuid4()),
         )
-        apply_payload = client.trust_apply(
-            encrypted_payload="pin-ciphertext",
-            encryption_alg="aes-gcm",
+        apply_pin = client.trust_apply(
             correlation_id=str(uuid.uuid4()),
             key_id="key-001",
         )
@@ -339,14 +337,14 @@ class TestInstantShareHttpClient(unittest.TestCase):
         )
 
         self.assertEqual(handshake_payload["mobile_dh_public_key"], "mobile-dh-pub")
-        self.assertEqual(apply_payload["apply_status"], "accepted")
+        self.assertIsInstance(apply_pin, str)
+        self.assertEqual(len(apply_pin), 6)
         self.assertEqual(confirm_payload["trust_status"], "trusted")
 
         apply_request_body = json.loads(requester.requests[1].body.decode("utf-8"))
         confirm_request_body = json.loads(requester.requests[2].body.decode("utf-8"))
         self.assertEqual(apply_request_body["schema"], "dtis.instant-share.trust-envelope.v1")
         self.assertEqual(confirm_request_body["schema"], "dtis.instant-share.trust-envelope.v1")
-        self.assertNotIn("encrypted_payload", apply_request_body)
         self.assertNotIn("pc_public_key_pem", confirm_request_body)
         self.assertEqual(client.pinned_mobile_public_key_pem, "mobile-public-key-pem-from-confirm")
 
@@ -365,8 +363,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
 
         with self.assertRaises(InstantShareError) as exc_info:
             client.trust_apply(
-                encrypted_payload="pin-ciphertext",
-                encryption_alg="aes-gcm",
                 correlation_id=str(uuid.uuid4()),
             )
 

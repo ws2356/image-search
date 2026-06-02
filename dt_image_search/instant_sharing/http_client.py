@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import ssl
 from dataclasses import dataclass
 import time
@@ -242,18 +243,24 @@ class InstantShareHttpClient:
     def trust_apply(
         self,
         *,
-        encrypted_payload: str,
-        encryption_alg: str,
         correlation_id: str,
         key_id: str | None = None,
-    ) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "encrypted_payload": encrypted_payload,
-            "encryption_alg": encryption_alg,
+    ) -> str:
+        pin_code = _generate_pin_code()
+        apply_payload: dict[str, object] = {
+            "pin_code": pin_code,
         }
+        payload: dict[str, object] = {}
+        if self._trust_session_protector is not None and self._trust_session_protector.is_established:
+            payload["encrypted_payload"] = _base64url_encode_bytes(
+                json.dumps(apply_payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+            )
+            payload["encryption_alg"] = "aes-256-gcm"
+        else:
+            payload.update(apply_payload)
         if key_id is not None:
             payload["key_id"] = key_id
-        return self._post_json(
+        self._post_json(
             path="/trust/apply",
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
@@ -262,6 +269,7 @@ class InstantShareHttpClient:
             protect_with_trust_session=self._trust_session_protector is not None,
             payload=payload,
         )
+        return pin_code
 
     def trust_confirm(self, *, pc_public_key_pem: str, correlation_id: str) -> dict[str, object]:
         response_payload = self._post_json(
@@ -561,3 +569,12 @@ class InstantShareHttpClient:
             retryable=retryable,
             details=details,
         )
+
+
+def _generate_pin_code() -> str:
+    return f"{int.from_bytes(os.urandom(3), 'big') % 1000000:06d}"
+
+
+def _base64url_encode_bytes(data: bytes) -> str:
+    import base64
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")

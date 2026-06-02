@@ -157,8 +157,6 @@ class TestInstantShareEndToEnd(unittest.TestCase):
             request=TrustHandshakeRequest(
                 pc_dh_public_key=handshake_request["pc_dh_public_key"],
                 pc_nonce=handshake_request["pc_nonce"],
-                encrypted_payload="mock-pin-ciphertext",
-                encryption_alg="aes-gcm",
                 pc_public_key_pem=pc_public_key_pem,
             ),
         )
@@ -253,8 +251,6 @@ class TestInstantShareEndToEnd(unittest.TestCase):
             request=TrustHandshakeRequest(
                 pc_dh_public_key=handshake_request["pc_dh_public_key"],
                 pc_nonce=handshake_request["pc_nonce"],
-                encrypted_payload="mock-pin-ciphertext",
-                encryption_alg="aes-gcm",
                 pc_public_key_pem=pc_public_key_pem,
             ),
         )
@@ -386,8 +382,6 @@ class TestInstantShareEndToEnd(unittest.TestCase):
             request=TrustHandshakeRequest(
                 pc_dh_public_key=handshake_request["pc_dh_public_key"],
                 pc_nonce=handshake_request["pc_nonce"],
-                encrypted_payload="pin",
-                encryption_alg="aes-gcm",
                 pc_public_key_pem=pc_public_key_pem,
             ),
         )
