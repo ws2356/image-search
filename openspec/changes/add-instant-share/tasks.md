@@ -94,7 +94,7 @@
 - [x] 10.6 Add `instantShareService` to `Container+App.swift` Factory DI and add `NSBluetoothAlwaysUsageDescription` to `App/Info.plist`.
 - [x] 10.7 Rewrite `InstantShareDebugViewModel` and `InstantShareDebugView` for the full discovery → select → connect → config → start → PIN display flow.
 - [x] 10.8 Build iOS app for iPhone 17 Pro Max simulator without errors.
-- [ ] 10.9 Add iOS unit tests for `InstantShareTrustSessionManager` key derivation and `InstantShareHTTPServer` request parser.
+- [x] 10.9 Add iOS unit tests for `InstantShareTrustSessionManager` key derivation and `InstantShareHTTPServer` request parser.
 - [x] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_runtime.py` to launch the BLE + HTTP runtime for manual testing.
 - [ ] 10.11 Manual e2e test: run PC CLI, open iOS debug view, scan, select PC, write config, verify trust handshake, verify text/photo transfer.
 
