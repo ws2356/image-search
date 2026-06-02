@@ -1,14 +1,28 @@
+import Foundation
+import PhotosUI
 import SwiftUI
+import Factory
 
 struct InstantShareDebugView: View {
-    @StateObject private var viewModel = InstantShareDebugViewModel()
+    @StateObject private var viewModel: InstantShareDebugViewModel
+
+    init() {
+        let service = Container.shared.instantShareService()
+        _viewModel = StateObject(wrappedValue: InstantShareDebugViewModel(service: service))
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 18) {
                 headerCard
+                discoveryCard
+                sharedPayloadCard
                 configurationCard
-                validationCard
+                startSessionCard
+                if let pin = viewModel.service.currentPIN {
+                    pinDisplayCard(pin: pin)
+                }
+                statusLogCard
                 endpointsCard
                 protocolCard
             }
@@ -18,13 +32,19 @@ struct InstantShareDebugView: View {
         .background(Color(hex: 0xF7F9FC).ignoresSafeArea())
         .navigationTitle("Instant Share")
         .navigationBarTitleDisplayMode(.inline)
-        .compatibleScrollBounceBasedOnSize()
+        .sheet(isPresented: $viewModel.showingImagePicker) {
+            ImagePicker { result in
+                viewModel.handleImagePicked(result)
+            }
+        }
     }
+
+    // MARK: - Header
 
     private var headerCard: some View {
         StatusCard(
             title: "iPhone-side Instant Share",
-            subtitle: "Validate connection config fields and preview the HTTPS endpoints that the PC will call.",
+            subtitle: "Discover a PC, select a payload, and start the share-and-forget flow.",
             systemImage: "dot.radiowaves.left.and.right"
         ) {
             HStack(spacing: 12) {
@@ -35,10 +55,168 @@ struct InstantShareDebugView: View {
         }
     }
 
+    // MARK: - BLE Discovery
+
+    private var discoveryCard: some View {
+        StatusCard(
+            title: "1. Discover PCs",
+            subtitle: "Scan for nearby PCs broadcasting the instant-sharing BLE service.",
+            systemImage: "antenna.radiowaves.left.and.right"
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    ActionButton(
+                        title: viewModel.service.scanner.state == .scanning ? "Stop Scan" : "Start Scan",
+                        icon: viewModel.service.scanner.state == .scanning ? "stop.fill" : "magnifyingglass",
+                        style: viewModel.service.scanner.state == .scanning ? .destructive : .primary,
+                        action: {
+                            if viewModel.service.scanner.state == .scanning {
+                                viewModel.stopDiscovery()
+                            } else {
+                                viewModel.startDiscovery()
+                            }
+                        }
+                    )
+                    scannerStateBadge
+                }
+
+                if viewModel.service.scanner.state == .poweredOff {
+                    Text("Bluetooth is off. Enable it in Settings.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0xD70015))
+                } else if viewModel.service.scanner.state == .unauthorized {
+                    Text("Bluetooth permission denied. Enable in Settings.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0xD70015))
+                }
+
+                if !viewModel.service.scanner.discovered.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Discovered PCs")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color(hex: 0x6E6E73))
+                        ForEach(viewModel.service.scanner.discovered) { peripheral in
+                            discoveredPeripheralRow(peripheral)
+                        }
+                    }
+                } else if viewModel.service.scanner.state == .scanning {
+                    Text("Scanning...")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0x6E6E73))
+                }
+            }
+        }
+    }
+
+    private var scannerStateBadge: some View {
+        let (label, color) = scannerStateInfo
+        return Text(label)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color)
+            .clipShape(Capsule())
+    }
+
+    private var scannerStateInfo: (String, Color) {
+        switch viewModel.service.scanner.state {
+        case .uninitialized: return ("Init", Color(hex: 0x8E8E93))
+        case .poweredOff: return ("Off", Color(hex: 0xD70015))
+        case .unauthorized: return ("Denied", Color(hex: 0xD70015))
+        case .unsupported: return ("No BT", Color(hex: 0xD70015))
+        case .idle: return ("Idle", Color(hex: 0x8E8E93))
+        case .scanning: return ("Scanning", Color(hex: 0x30D158))
+        }
+    }
+
+    private func discoveredPeripheralRow(_ peripheral: InstantShareDiscoveredPeripheral) -> some View {
+        let isSelected = viewModel.service.selectedPeripheral?.id == peripheral.id
+        return Button(action: { viewModel.selectPC(peripheral) }) {
+            HStack(spacing: 12) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color(hex: 0x30D158) : Color(hex: 0x8E8E93))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(peripheral.name ?? "Unknown PC")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Color(hex: 0x1C1C1E))
+                    Text("RSSI: \(peripheral.rssi) dBm · ID: \(peripheral.id.uuidString.prefix(8))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(hex: 0x6E6E73))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .background(isSelected ? Color(hex: 0xEAF9EE) : Color(hex: 0xF2F2F7))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Shared Payload
+
+    private var sharedPayloadCard: some View {
+        StatusCard(
+            title: "2. Shared Payload",
+            subtitle: "What the PC will receive.",
+            systemImage: "square.and.arrow.up"
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                if viewModel.payloadClass == .text {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Text")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color(hex: 0x6E6E73))
+                        TextEditor(text: $viewModel.sharedText)
+                            .font(.system(size: 14))
+                            .frame(minHeight: 80, maxHeight: 120)
+                            .padding(8)
+                            .background(Color(hex: 0xF2F2F7))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                } else {
+                    HStack(spacing: 12) {
+                        if let data = viewModel.selectedImageData,
+                           let image = UIImage(data: data) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 80)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(viewModel.selectedImageFilename ?? "photo.jpg")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("\(data.count) bytes")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color(hex: 0x6E6E73))
+                            }
+                        } else {
+                            Image(systemName: "photo")
+                                .font(.system(size: 40))
+                                .foregroundStyle(Color(hex: 0x8E8E93))
+                            Text("No image selected")
+                                .font(.system(size: 14))
+                                .foregroundStyle(Color(hex: 0x6E6E73))
+                        }
+                        Spacer(minLength: 0)
+                        ActionButton(
+                            title: "Pick",
+                            icon: "photo.on.rectangle",
+                            style: .secondary,
+                            action: { viewModel.showingImagePicker = true }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Configuration
+
     private var configurationCard: some View {
         StatusCard(
-            title: "Connection Config",
-            subtitle: "Edit the fields below to mirror the BLE bootstrap payload the desktop runtime receives.",
+            title: "3. Connection Config",
+            subtitle: "Edit the fields below to mirror the BLE bootstrap payload the desktop receives.",
             systemImage: "server.rack"
         ) {
             VStack(alignment: .leading, spacing: 14) {
@@ -48,14 +226,13 @@ struct InstantShareDebugView: View {
                 InstantShareDebugField(
                     title: "Mobile IP List",
                     text: $viewModel.mobileIPList,
-                    placeholder: "192.168.1.20, fe80::10"
+                    placeholder: "192.168.1.20, 127.0.0.1"
                 )
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Payload Class")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color(hex: 0x6E6E73))
-
                     Picker("Payload Class", selection: $viewModel.payloadClass) {
                         ForEach(InstantSharePayloadClass.allCases, id: \.rawValue) { payloadClass in
                             Text(payloadTitle(payloadClass)).tag(payloadClass)
@@ -68,7 +245,6 @@ struct InstantShareDebugView: View {
                     Text("Trust Mode")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color(hex: 0x6E6E73))
-
                     Picker("Trust Mode", selection: $viewModel.trustMode) {
                         ForEach(InstantShareTrustMode.allCases, id: \.rawValue) { trustMode in
                             Text(trustModeTitle(trustMode)).tag(trustMode)
@@ -88,36 +264,109 @@ struct InstantShareDebugView: View {
                     style: .secondary,
                     action: viewModel.loadSampleConfiguration
                 )
+
+                if let message = viewModel.validationMessage {
+                    Text(message)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0xD70015))
+                }
             }
         }
     }
 
-    private var validationCard: some View {
-        Group {
-            if let validationMessage = viewModel.validationMessage {
-                InstantShareDebugBanner(
-                    title: "Config needs attention",
-                    message: validationMessage,
-                    color: Color(hex: 0xFFF3CD),
-                    accent: Color(hex: 0xFF9F0A),
-                    symbol: "exclamationmark.triangle.fill"
-                )
-            } else {
-                InstantShareDebugBanner(
-                    title: "Config is valid",
-                    message: "This payload can derive iPhone HTTPS endpoints for the current instant-share slice.",
-                    color: Color(hex: 0xEAF9EE),
-                    accent: Color(hex: 0x30D158),
-                    symbol: "checkmark.seal.fill"
-                )
+    // MARK: - Start Session
+
+    private var startSessionCard: some View {
+        StatusCard(
+            title: "4. Start Session",
+            subtitle: "Begin HTTPS server, generate PIN, and write ConnectionConfig to the selected PC.",
+            systemImage: "play.circle.fill"
+        ) {
+            VStack(spacing: 10) {
+                if viewModel.isSessionActive {
+                    ActionButton(
+                        title: "Stop Session",
+                        icon: "stop.fill",
+                        style: .destructive,
+                        action: viewModel.stopSession
+                    )
+                } else {
+                    ActionButton(
+                        title: "Start Instant Share",
+                        icon: "paperplane.fill",
+                        style: .primary,
+                        action: {
+                            Task { await viewModel.startSession() }
+                        }
+                    )
+                    .disabled(viewModel.service.selectedPeripheral == nil || viewModel.validationMessage != nil)
+                }
+                if let error = viewModel.lastError {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0xD70015))
+                }
             }
         }
     }
+
+    // MARK: - PIN
+
+    private func pinDisplayCard(pin: String) -> some View {
+        VStack(spacing: 12) {
+            Text("Compare this PIN with the one shown on the PC. Confirm when they match.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: 0x6E6E73))
+                .multilineTextAlignment(.center)
+            Text(pin)
+                .font(.system(size: 42, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(hex: 0x1C1C1E))
+                .padding(.horizontal, 32)
+                .padding(.vertical, 16)
+                .background(Color(hex: 0xFFF3CD))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(hex: 0xFF9F0A), lineWidth: 1.5)
+        )
+    }
+
+    // MARK: - Status Log
+
+    private var statusLogCard: some View {
+        StatusCard(
+            title: "Status Log",
+            subtitle: "Live events from the instant-share session.",
+            systemImage: "terminal"
+        ) {
+            VStack(alignment: .leading, spacing: 6) {
+                if viewModel.service.statusLog.isEmpty {
+                    Text("No events yet.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0x6E6E73))
+                } else {
+                    ForEach(viewModel.service.statusLog.suffix(20).reversed(), id: \.self) { line in
+                        Text(line)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color(hex: 0x1C1C1E))
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Endpoints
 
     private var endpointsCard: some View {
         StatusCard(
             title: "Derived Endpoints",
-            subtitle: "These are the concrete URLs the PC-side instant-share client will target after BLE bootstrap.",
+            subtitle: "The exact URLs the PC client will target after BLE bootstrap.",
             systemImage: "network"
         ) {
             if viewModel.endpointRows.isEmpty {
@@ -133,7 +382,7 @@ struct InstantShareDebugView: View {
                                 .foregroundStyle(Color(hex: 0x1C1C1E))
                             ForEach(row.urls, id: \.self) { url in
                                 Text(url)
-                                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                                    .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(Color(hex: 0x0060DF))
                                     .textSelection(.enabled)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -144,6 +393,8 @@ struct InstantShareDebugView: View {
             }
         }
     }
+
+    // MARK: - Protocol
 
     private var protocolCard: some View {
         StatusCard(
@@ -159,35 +410,33 @@ struct InstantShareDebugView: View {
         }
     }
 
+    // MARK: - Helpers
+
     private func payloadTitle(_ payloadClass: InstantSharePayloadClass) -> String {
         switch payloadClass {
-        case .text:
-            return "Text"
-        case .image:
-            return "Image"
+        case .text: return "Text"
+        case .image: return "Image"
         }
     }
 
     private func trustModeTitle(_ trustMode: InstantShareTrustMode) -> String {
         switch trustMode {
-        case .firstShare:
-            return "First Share"
-        case .trustedDirect:
-            return "Trusted"
+        case .firstShare: return "First Share"
+        case .trustedDirect: return "Trusted"
         }
     }
 
     private func targetIntentTitle(_ targetIntent: InstantShareTargetIntent) -> String {
         switch targetIntent {
-        case .clipboardOnly:
-            return "Clipboard Only"
-        case .clipboardOrFile:
-            return "Clipboard or File"
+        case .clipboardOnly: return "Clipboard Only"
+        case .clipboardOrFile: return "Clipboard or File"
         }
     }
 }
 
-private struct InstantShareDebugField: View {
+// MARK: - Subviews
+
+struct InstantShareDebugField: View {
     let title: String
     @Binding var text: String
     var placeholder: String = ""
@@ -211,7 +460,7 @@ private struct InstantShareDebugField: View {
     }
 }
 
-private struct InstantShareDebugReadOnlyRow: View {
+struct InstantShareDebugReadOnlyRow: View {
     let title: String
     let value: String
 
@@ -231,40 +480,38 @@ private struct InstantShareDebugReadOnlyRow: View {
     }
 }
 
-private struct InstantShareDebugBanner: View {
-    let title: String
-    let message: String
-    let color: Color
-    let accent: Color
-    let symbol: String
+// MARK: - Image Picker
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbol)
-                .foregroundStyle(accent)
-                .font(.system(size: 18))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0x1C1C1E))
-                Text(message)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(hex: 0x555555))
-                    .fixedSize(horizontal: false, vertical: true)
+struct ImagePicker: UIViewControllerRepresentable {
+    let onPicked: (PHPickerResult) -> Void
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration(photoLibrary: .shared())
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onPicked: onPicked)
+    }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let onPicked: (PHPickerResult) -> Void
+
+        init(onPicked: @escaping (PHPickerResult) -> Void) {
+            self.onPicked = onPicked
+        }
+
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            if let result = results.first {
+                onPicked(result)
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(color)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
-
-#if DEBUG
-@available(iOS 17.0, *)
-#Preview {
-    NavigationStack {
-        InstantShareDebugView()
-    }
-}
-#endif

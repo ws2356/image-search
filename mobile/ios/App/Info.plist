@@ -31,6 +31,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>AuBackup uses the camera to scan the desktop pairing QR code and start a local backup session.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>AuBackup uses Bluetooth to discover nearby desktop computers for the instant-share flow.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AuBackup connects directly to your desktop on the local network during pairing and transfer.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

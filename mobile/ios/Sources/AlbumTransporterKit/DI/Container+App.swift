@@ -150,4 +150,10 @@ extension Container {
         }
         .singleton
     }
+
+    @MainActor
+    var instantShareService: Factory<InstantShareService> {
+        self { @MainActor in InstantShareService() }
+            .singleton
+    }
 }

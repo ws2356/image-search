@@ -1,4 +1,8 @@
+import Combine
+import CoreBluetooth
 import Foundation
+import PhotosUI
+import SwiftUI
 
 struct InstantShareDebugEndpointRow: Identifiable, Equatable {
     let id: String
@@ -20,15 +24,25 @@ final class InstantShareDebugViewModel: ObservableObject {
     @Published var mobileIPList: String
     @Published var payloadClass: InstantSharePayloadClass
     @Published var trustMode: InstantShareTrustMode
+    @Published var sharedText: String = "Hello from iPhone!"
+    @Published var selectedImageData: Data?
+    @Published var selectedImageFilename: String?
+    @Published var selectedImageContentType: String?
+    @Published var isSessionActive: Bool = false
+    @Published var showingImagePicker: Bool = false
+    @Published var lastError: String?
 
-    init() {
-        let sampleConfiguration = Self.sampleConnectionConfig()
-        sessionID = sampleConfiguration.sessionID
-        correlationID = sampleConfiguration.correlationID
-        mobilePort = String(sampleConfiguration.mobilePort)
-        mobileIPList = sampleConfiguration.mobileIPList.joined(separator: ", ")
-        payloadClass = sampleConfiguration.metadata.payloadClass
-        trustMode = sampleConfiguration.metadata.trustMode
+    let service: InstantShareService
+
+    init(service: InstantShareService) {
+        self.service = service
+        let sample = Self.sampleConnectionConfig()
+        self.sessionID = sample.sessionID
+        self.correlationID = sample.correlationID
+        self.mobilePort = String(sample.mobilePort)
+        self.mobileIPList = sample.mobileIPList.joined(separator: ", ")
+        self.payloadClass = sample.metadata.payloadClass
+        self.trustMode = sample.metadata.trustMode
     }
 
     var targetIntent: InstantShareTargetIntent {
@@ -40,38 +54,38 @@ final class InstantShareDebugViewModel: ObservableObject {
             _ = try currentConnectionConfig().validated()
             return nil
         } catch {
-            return Self.render(error: error)
+            return (error as? LocalizedError)?.errorDescription ?? String(describing: error)
         }
     }
 
     var endpointRows: [InstantShareDebugEndpointRow] {
         do {
-            let connectionConfig = try currentConnectionConfig().validated()
+            let config = try currentConnectionConfig().validated()
             return try [
                 InstantShareDebugEndpointRow(
                     id: "trust-handshake",
                     title: "Trust handshake",
-                    urls: connectionConfig.endpointURLs(path: InstantShareProtocol.trustHandshakePath).map(\.absoluteString)
+                    urls: config.endpointURLs(path: InstantShareProtocol.trustHandshakePath).map(\.absoluteString)
                 ),
                 InstantShareDebugEndpointRow(
                     id: "trust-apply",
                     title: "Trust apply",
-                    urls: connectionConfig.endpointURLs(path: InstantShareProtocol.trustApplyPath).map(\.absoluteString)
+                    urls: config.endpointURLs(path: InstantShareProtocol.trustApplyPath).map(\.absoluteString)
                 ),
                 InstantShareDebugEndpointRow(
                     id: "trust-confirm",
                     title: "Trust confirm",
-                    urls: connectionConfig.endpointURLs(path: InstantShareProtocol.trustConfirmPath).map(\.absoluteString)
+                    urls: config.endpointURLs(path: InstantShareProtocol.trustConfirmPath).map(\.absoluteString)
                 ),
                 InstantShareDebugEndpointRow(
                     id: "payload",
                     title: payloadClass == .text ? "Text payload" : "Image payload",
-                    urls: connectionConfig.endpointURLs(path: activePayloadPath).map(\.absoluteString)
+                    urls: config.endpointURLs(path: activePayloadPath).map(\.absoluteString)
                 ),
                 InstantShareDebugEndpointRow(
                     id: "delivery-result",
                     title: "Delivery result",
-                    urls: connectionConfig.endpointURLs(path: InstantShareProtocol.deliveryResultPath).map(\.absoluteString)
+                    urls: config.endpointURLs(path: InstantShareProtocol.deliveryResultPath).map(\.absoluteString)
                 ),
             ]
         } catch {
@@ -89,18 +103,72 @@ final class InstantShareDebugViewModel: ObservableObject {
         ]
     }
 
+    // MARK: - Actions
+
     func loadSampleConfiguration() {
-        let sampleConfiguration = Self.sampleConnectionConfig(
-            payloadClass: payloadClass,
-            trustMode: trustMode
-        )
-        sessionID = sampleConfiguration.sessionID
-        correlationID = sampleConfiguration.correlationID
-        mobilePort = String(sampleConfiguration.mobilePort)
-        mobileIPList = sampleConfiguration.mobileIPList.joined(separator: ", ")
-        payloadClass = sampleConfiguration.metadata.payloadClass
-        trustMode = sampleConfiguration.metadata.trustMode
+        let sample = Self.sampleConnectionConfig(payloadClass: payloadClass, trustMode: trustMode)
+        sessionID = sample.sessionID
+        correlationID = sample.correlationID
+        mobilePort = String(sample.mobilePort)
+        mobileIPList = sample.mobileIPList.joined(separator: ", ")
     }
+
+    func startDiscovery() {
+        service.startDiscovery()
+    }
+
+    func stopDiscovery() {
+        service.stopDiscovery()
+    }
+
+    func selectPC(_ peripheral: InstantShareDiscoveredPeripheral) {
+        service.selectPC(peripheral)
+    }
+
+    func setSharedText(_ text: String) {
+        service.setSharedText(text)
+    }
+
+    func setSharedImage(data: Data, filename: String, contentType: String) {
+        service.setSharedImage(data: data, filename: filename, contentType: contentType)
+    }
+
+    func startSession() async {
+        do {
+            let config = try currentConnectionConfig().validated()
+            service.setSharedText(sharedText)
+            if let imageData = selectedImageData, let filename = selectedImageFilename, let contentType = selectedImageContentType {
+                service.setSharedImage(data: imageData, filename: filename, contentType: contentType)
+            }
+            try await service.startSession(connectionConfig: config)
+            isSessionActive = true
+        } catch {
+            lastError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+        }
+    }
+
+    func stopSession() {
+        service.stopSession()
+        isSessionActive = false
+    }
+
+    func handleImagePicked(_ result: PHPickerResult) {
+        let provider = result.itemProvider
+        if provider.canLoadObject(ofClass: UIImage.self) {
+            provider.loadObject(ofClass: UIImage.self) { [weak self] image, _ in
+                guard let image = image as? UIImage,
+                      let data = image.jpegData(compressionQuality: 0.85) else { return }
+                let filename = "shared-photo-\(Int(Date().timeIntervalSince1970)).jpg"
+                Task { @MainActor in
+                    self?.selectedImageData = data
+                    self?.selectedImageFilename = filename
+                    self?.selectedImageContentType = "image/jpeg"
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
 
     private var activePayloadPath: String {
         payloadClass == .text ? InstantShareProtocol.payloadTextPath : InstantShareProtocol.payloadImagePath
@@ -130,24 +198,15 @@ final class InstantShareDebugViewModel: ObservableObject {
             .filter { !$0.isEmpty }
     }
 
-    private static func render(error: Error) -> String {
-        if let localizedError = error as? LocalizedError,
-           let description = localizedError.errorDescription,
-           !description.isEmpty {
-            return description
-        }
-        return String(describing: error)
-    }
-
-    private static func sampleConnectionConfig(
+    static func sampleConnectionConfig(
         payloadClass: InstantSharePayloadClass = .text,
         trustMode: InstantShareTrustMode = .firstShare
     ) -> InstantShareConnectionConfig {
         InstantShareConnectionConfig(
-            sessionID: "83a637dd-e57a-4e71-a2f3-34db1d0b2811",
+            sessionID: UUID().uuidString.lowercased(),
             mobilePort: 8443,
-            mobileIPList: ["192.168.1.20", "fe80::10"],
-            correlationID: "f7f0ff11-1bdf-472f-aaf9-801c4b0f31d4",
+            mobileIPList: ["127.0.0.1"],
+            correlationID: UUID().uuidString.lowercased(),
             metadata: InstantShareMetadata(
                 payloadClass: payloadClass,
                 targetIntent: payloadClass == .text ? .clipboardOnly : .clipboardOrFile,

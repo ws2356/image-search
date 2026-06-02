@@ -393,7 +393,7 @@ enum InstantShareTrustSessionProtector {
     }
 }
 
-private extension Data {
+extension Data {
     init(instantShareBase64URLEncoded value: String) throws {
         let normalizedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedValue.isEmpty else {

@@ -81,6 +81,20 @@
 - [x] 8.2 Add functional tests for end-to-end instant-share scenarios: text-to-clipboard, photo-to-file, video-to-file, and unreachable-PC failure.
 - [ ] 8.3 Run a regression sweep to ensure per-task unit tests are added/updated for every applicable code change.
 
+## 10. iOS Debug UI and BLE/HTTPS Server (manual test path)
+
+- [x] 10.1 Implement `InstantShareBLEScanner` (`CBCentralManager` wrapper that scans for the instant-share service UUID, exposes `discovered` peripherals, and publishes scanner state).
+- [x] 10.2 Implement `InstantShareBLEPeripheralConnector` (connects to a selected peripheral, discovers the instant-share GATT service, and writes the `ConnectionConfig` payload).
+- [x] 10.3 Implement `InstantShareTrustSessionManager` (X25519 ECDH + HKDF-SHA256 session key derivation that matches `X25519TrustSessionKeyResolver` on the PC, so the AES-GCM trust envelope unwraps on both sides).
+- [x] 10.4 Implement `InstantShareHTTPServer` (`NWListener` with TLS using the bundled P12 identity, all 6 protocol endpoints, request/response parser, and request-id/correlation-id propagation).
+- [x] 10.5 Implement `InstantShareService` orchestrator that owns scanner, server, and trust session state; publishes `statusLog`, `sharedPayload`, and `lastError`; and exposes `startDiscovery`, `selectPeripheral`, `updateConfig`, `startSession`, `stopSession`.
+- [x] 10.6 Add `instantShareService` to `Container+App.swift` Factory DI and add `NSBluetoothAlwaysUsageDescription` to `App/Info.plist`.
+- [x] 10.7 Rewrite `InstantShareDebugViewModel` and `InstantShareDebugView` for the full discovery → select → connect → config → start → PIN display flow.
+- [x] 10.8 Build iOS app for iPhone 17 Pro Max simulator without errors.
+- [ ] 10.9 Add iOS unit tests for `InstantShareTrustSessionManager` key derivation and `InstantShareHTTPServer` request parser.
+- [x] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_runtime.py` to launch the BLE + HTTP runtime for manual testing.
+- [ ] 10.11 Manual e2e test: run PC CLI, open iOS debug view, scan, select PC, write config, verify trust handshake, verify text/photo transfer.
+
 ## 9. Rollout and Safeguards
 
 - [x] 9.1 Gate instant-share feature behind a configuration flag and add safe default-off behavior.
