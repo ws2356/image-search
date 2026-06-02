@@ -71,12 +71,12 @@
 
 ## 7. Telemetry and Observability
 
-- [ ] 7.1 Add span-first tracing for instant-share lifecycle with correlation id propagation across iOS and desktop components.
-- [ ] 7.1a Add/update unit tests for telemetry context propagation and required span attributes.
-- [ ] 7.2 Add key lifecycle events (session accepted, transfer start, delivery complete, failure reason) using standardized telemetry attributes.
-- [ ] 7.2a Add/update unit tests for lifecycle event emission and attribute completeness.
-- [ ] 7.3 Add sampling guardrails for high-volume transfer events to avoid telemetry overload.
-- [ ] 7.3a Add/update unit tests for telemetry sampling decision logic.
+- [x] 7.1 Add span-first tracing for instant-share lifecycle with correlation id propagation across iOS and desktop components.
+- [x] 7.1a Add/update unit tests for telemetry context propagation and required span attributes.
+- [x] 7.2 Add key lifecycle events (session accepted, transfer start, delivery complete, failure reason) using standardized telemetry attributes.
+- [x] 7.2a Add/update unit tests for lifecycle event emission and attribute completeness.
+- [x] 7.3 Add sampling guardrails for high-volume transfer events to avoid telemetry overload.
+- [x] 7.3a Add/update unit tests for telemetry sampling decision logic.
 
 ## 8. Integration and Functional Validation
 

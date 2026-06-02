@@ -54,6 +54,7 @@ unit_and_functional_tests=(
   tests/unit/test_instant_share_lifecycle_notifications.py
   tests/unit/test_instant_share_runtime.py
   tests/unit/test_instant_share_sender_validation.py
+  tests/unit/test_instant_share_telemetry.py
   tests/unit/test_mobile_apple_mobile_device_support.py
   tests/unit/test_dts_index.py
   tests/unit/test_browse_controller_mobile_folder.py
