@@ -186,6 +186,91 @@ final class InstantShareTrustSessionManagerTests: XCTestCase {
     }
 }
 
+final class InstantSharePayloadExtractorTests: XCTestCase {
+    func test_classify_text_types() {
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.plain-text"), .text)
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.utf8-plain-text"), .text)
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.url"), .text)
+    }
+
+    func test_classify_image_types() {
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.jpeg"), .image)
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.png"), .image)
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.heic"), .image)
+    }
+
+    func test_classify_video_types() {
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.mpeg-4"), .video)
+    }
+
+    func test_classify_unknown_returns_nil() {
+        XCTAssertNil(InstantSharePayloadExtractor.classify(typeIdentifier: "com.apple.application-bundle"))
+    }
+
+    func test_payload_envelope_text_target_intent() {
+        let envelope = InstantSharePayloadEnvelope(
+            payloadType: .text, textContent: "hello", fileURL: nil,
+            filename: nil, contentType: "text/plain", fileSizeBytes: 5
+        )
+        XCTAssertEqual(envelope.targetIntent, "clipboard_only")
+    }
+
+    func test_payload_envelope_image_target_intent() {
+        let envelope = InstantSharePayloadEnvelope(
+            payloadType: .image, textContent: nil, fileURL: URL(string: "file:///tmp/test.jpg"),
+            filename: "test.jpg", contentType: "public.jpeg", fileSizeBytes: 1024
+        )
+        XCTAssertEqual(envelope.targetIntent, "clipboard_or_file")
+    }
+}
+
+final class InstantShareHandoffContextTests: XCTestCase {
+    func test_handoff_context_encodes_and_decodes() throws {
+        let envelope = InstantSharePayloadEnvelope(
+            payloadType: .text, textContent: "test message", fileURL: nil,
+            filename: nil, contentType: "text/plain", fileSizeBytes: 12
+        )
+        let context = InstantShareHandoffContext(
+            from: envelope,
+            selectedDeviceID: "device-123",
+            selectedDeviceName: "My Mac",
+            isTrustedDevice: false
+        )
+
+        let data = try JSONEncoder().encode(context)
+        let decoded = try JSONDecoder().decode(InstantShareHandoffContext.self, from: data)
+
+        XCTAssertEqual(decoded.payloadType, "text")
+        XCTAssertEqual(decoded.textContent, "test message")
+        XCTAssertEqual(decoded.selectedDeviceID, "device-123")
+        XCTAssertEqual(decoded.selectedDeviceName, "My Mac")
+        XCTAssertFalse(decoded.isTrustedDevice)
+    }
+
+    func test_handoff_context_is_not_stale_when_recent() {
+        let envelope = InstantSharePayloadEnvelope(
+            payloadType: .text, textContent: "hi", fileURL: nil,
+            filename: nil, contentType: "text/plain", fileSizeBytes: 2
+        )
+        let context = InstantShareHandoffContext(
+            from: envelope, selectedDeviceID: nil, selectedDeviceName: nil, isTrustedDevice: false
+        )
+        XCTAssertFalse(context.isStale)
+    }
+
+    func test_handoff_context_file_url_round_trips() {
+        let url = URL(string: "file:///tmp/test.jpg")!
+        let envelope = InstantSharePayloadEnvelope(
+            payloadType: .image, textContent: nil, fileURL: url,
+            filename: "test.jpg", contentType: "public.jpeg", fileSizeBytes: 1024
+        )
+        let context = InstantShareHandoffContext(
+            from: envelope, selectedDeviceID: nil, selectedDeviceName: nil, isTrustedDevice: false
+        )
+        XCTAssertEqual(context.fileURL, url)
+    }
+}
+
 final class InstantShareHTTPRequestParserTests: XCTestCase {
     func test_parse_post_request_with_json_body() {
         let rawHTTP = "POST /api/instant-share/v1/trust/handshake HTTP/1.1\r\n" +

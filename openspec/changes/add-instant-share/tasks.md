@@ -17,16 +17,16 @@
 
 ## 2. iOS Share Extension Ingest
 
-- [ ] 2.1 Implement Share Extension payload extractor for text, image, video, and other file inputs with normalized envelope creation.
-- [ ] 2.1a Add/update unit tests for payload normalization across text/image/video/file inputs.
-- [ ] 2.2 Add extension preflight checks for payload readability and metadata completeness before negotiation starts.
-- [ ] 2.2a Add/update unit tests for preflight pass/fail conditions.
-- [ ] 2.3 Implement unsupported-type rejection UX and error reporting in extension flow.
-- [ ] 2.3a Add/update unit tests for unsupported-type rejection mapping and error payload construction.
-- [ ] 2.4 Implement production Share Extension device selector card that lists discovered BLE PCs with usable device identity and trust-state affordances.
-- [ ] 2.4a Add/update tests for selector view-model state: scanning, empty, discovered, stale/expired device, trusted revisit, and first-use states.
-- [ ] 2.5 Implement selected-device and payload-context handoff from Share Extension to AuBackup main app for both first use and trusted revisits.
-- [ ] 2.5a Add/update tests for handoff context persistence, stale/missing context handling, and main-app resume routing.
+- [x] 2.1 Implement Share Extension payload extractor for text, image, video, and other file inputs with normalized envelope creation.
+- [x] 2.1a Add/update unit tests for payload normalization across text/image/video/file inputs.
+- [x] 2.2 Add extension preflight checks for payload readability and metadata completeness before negotiation starts.
+- [x] 2.2a Add/update unit tests for preflight pass/fail conditions.
+- [x] 2.3 Implement unsupported-type rejection UX and error reporting in extension flow.
+- [x] 2.3a Add/update unit tests for unsupported-type rejection mapping and error payload construction.
+- [x] 2.4 Implement production Share Extension device selector card that lists discovered BLE PCs with usable device identity and trust-state affordances.
+- [x] 2.4a Add/update tests for selector view-model state: scanning, empty, discovered, stale/expired device, trusted revisit, and first-use states.
+- [x] 2.5 Implement selected-device and payload-context handoff from Share Extension to AuBackup main app for both first use and trusted revisits.
+- [x] 2.5a Add/update tests for handoff context persistence, stale/missing context handling, and main-app resume routing.
 
 ## 3. Desktop Instant Receive Orchestration
 
