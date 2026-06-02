@@ -13,8 +13,13 @@ from dt_image_search.instant_sharing.ble import (
     InstantShareBleDaemon,
     InstantShareBleService,
 )
+from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
-from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
+from dt_image_search.instant_sharing.http_client import InstantShareHttpClient
+from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator, TrustHandshakeRequest
+from dt_image_search.instant_sharing.sender_validation import SenderIdentity
+from dt_image_search.instant_sharing.security import X25519TrustSessionKeyResolver
+from dt_image_search.instant_sharing.trust_crypto import AesGcmTrustSessionProtector
 from dt_image_search.instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
 from dt_image_search.model.dt_device_id import get_device_id
 from dt_image_search.model.feature_flags import is_instant_share_enabled
@@ -27,7 +32,8 @@ class InstantShareRuntime:
         is_enabled: Callable[[], bool] = is_instant_share_enabled,
         device_id_provider: Callable[[], str] = get_device_id,
         desktop_name_provider: Callable[[], str] | None = None,
-        signature_provider: Callable[[], DeviceSignatureAdvertisement] | None = None,
+        sender_identity: SenderIdentity | None = None,
+        config_dir: Path | None = None,
         clipboard_writer: ClipboardWriter | None = None,
         image_delivery_mode: str = "file",
         downloads_dir: Path | None = None,
@@ -40,7 +46,7 @@ class InstantShareRuntime:
         self._is_enabled = is_enabled
         self._device_id_provider = device_id_provider
         self._desktop_name_provider = desktop_name_provider or _default_desktop_name
-        self._signature_provider = signature_provider or self._default_signature_provider
+        self._sender_identity = sender_identity or self._create_default_sender_identity(config_dir)
         self._session_registry = session_registry if session_registry is not None else InstantShareSessionRegistry()
         self._delivery_service = (
             delivery_service
@@ -61,7 +67,7 @@ class InstantShareRuntime:
         )
         self._ble_service = InstantShareBleService(
             device_name_provider=self._device_name_advertisement,
-            signature_provider=self._signature_provider,
+            signature_provider=self._real_signature_provider,
             bootstrap_handler=self._handle_connection_config,
         )
         self._ble_daemon = InstantShareBleDaemon(
@@ -92,6 +98,10 @@ class InstantShareRuntime:
         return self._orchestrator
 
     @property
+    def sender_identity(self) -> SenderIdentity:
+        return self._sender_identity
+
+    @property
     def is_running(self) -> bool:
         return self._ble_daemon.is_running
 
@@ -110,6 +120,42 @@ class InstantShareRuntime:
             self._ble_service.write_characteristic(CONNECTION_CONFIG_CHARACTERISTIC, payload)
         return self._session_registry.require_session(connection_config.session_id)
 
+    def create_http_client(self, connection_config: ConnectionConfig) -> InstantShareHttpClient:
+        key_resolver = X25519TrustSessionKeyResolver()
+        trust_session_protector = AesGcmTrustSessionProtector(session_key_resolver=key_resolver)
+        handshake_payload = key_resolver.handshake_request_payload()
+        return InstantShareHttpClient(
+            connection_config=connection_config,
+            device_id=self._device_id_provider(),
+            session_signer=self._sender_identity.session_signer,
+            trust_session_protector=trust_session_protector,
+        ), key_resolver, handshake_payload
+
+    def run_receive_flow(self, connection_config: ConnectionConfig) -> object:
+        session = self._session_registry.require_session(connection_config.session_id)
+        client, key_resolver, handshake_payload = self.create_http_client(connection_config)
+        correlation_id = connection_config.correlation_id
+
+        if connection_config.metadata.trust_mode is TrustMode.FIRST_SHARE:
+            self._orchestrator.complete_trust(
+                session_id=connection_config.session_id,
+                client=client,
+                request=TrustHandshakeRequest(
+                    pc_dh_public_key=handshake_payload["pc_dh_public_key"],
+                    pc_nonce=handshake_payload["pc_nonce"],
+                    encrypted_payload="",
+                    encryption_alg="",
+                    pc_public_key_pem=self._sender_identity.public_key_pem(),
+                ),
+                correlation_id=correlation_id,
+            )
+
+        return self._orchestrator.receive_payload(
+            session_id=connection_config.session_id,
+            client=client,
+            correlation_id=correlation_id,
+        )
+
     def _handle_connection_config(self, connection_config: ConnectionConfig) -> None:
         self._orchestrator.handle_connection_config(connection_config)
 
@@ -119,12 +165,12 @@ class InstantShareRuntime:
             receiver_id=self._device_id_provider(),
         )
 
-    def _default_signature_provider(self) -> DeviceSignatureAdvertisement:
-        return DeviceSignatureAdvertisement(
-            signature="instant-share-signature-pending",
-            signature_key_id=self._device_id_provider(),
-            timestamp_ms=int(time.time() * 1000),
-        )
+    def _real_signature_provider(self) -> DeviceSignatureAdvertisement:
+        return self._sender_identity.device_signature_advertisement()
+
+    def _create_default_sender_identity(self, config_dir: Path | None) -> SenderIdentity:
+        identity_dir = config_dir or Path.home() / ".config" / "ausearch"
+        return SenderIdentity.from_config_dir(identity_dir, device_id=self._device_id_provider())
 
 
 def _default_desktop_name() -> str:

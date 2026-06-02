@@ -46,6 +46,7 @@ from dt_image_search.instant_sharing.trust_crypto import (
     AesGcmTrustSessionProtector,
     TrustSessionProtector,
 )
+from dt_image_search.instant_sharing.sender_validation import SenderIdentity
 from dt_image_search.instant_sharing.security import (
     PersistentEd25519SessionSigner,
     X25519TrustSessionKeyResolver,
@@ -101,6 +102,7 @@ __all__ = [
     "PersistentEd25519SessionSigner",
     "QtClipboardWriter",
     "RetryPolicy",
+    "SenderIdentity",
     "SessionRequestSigner",
     "SessionState",
     "TargetIntent",

@@ -1,13 +1,13 @@
 ## 1. Protocol and Session Foundations
 
-- [ ] 1.1 Implement dedicated instant-share protocol endpoints for discovery/trust/transfer with flow id, payload class, target intent, and correlation id metadata, following `openspec/changes/add-instant-share/api-spec.md`.
-- [ ] 1.1a Add/update unit tests for protocol endpoint request/response contracts and metadata validation.
+- [x] 1.1 Implement dedicated instant-share protocol endpoints for discovery/trust/transfer with flow id, payload class, target intent, and correlation id metadata, following `openspec/changes/add-instant-share/api-spec.md`.
+- [x] 1.1a Add/update unit tests for protocol endpoint request/response contracts and metadata validation.
 - [x] 1.2 Implement instant-share trust and negotiation flow independent from QR backup pairing/session and backup capability-exchange endpoints.
 - [x] 1.2a Add/update unit tests for trust/negotiation state transitions and independence from backup-session paths.
-- [ ] 1.3 Add authenticated sender validation for instant-share initiation with explicit failure responses for untrusted requests.
-- [ ] 1.3a Add/update unit tests for trusted/untrusted sender validation outcomes.
-- [ ] 1.3b Implement session-id signature headers on PC requests and mobile-side verification using exchanged trusted public key.
-- [ ] 1.3c Add/update unit tests for missing signature, invalid signature, missing trusted key, and valid signature paths.
+- [x] 1.3 Add authenticated sender validation for instant-share initiation with explicit failure responses for untrusted requests.
+- [x] 1.3a Add/update unit tests for trusted/untrusted sender validation outcomes.
+- [x] 1.3b Implement session-id signature headers on PC requests and mobile-side verification using exchanged trusted public key.
+- [x] 1.3c Add/update unit tests for missing signature, invalid signature, missing trusted key, and valid signature paths.
 - [x] 1.4 Implement desktop background daemon BLE service with three characteristics: `DeviceName` (RO), `DeviceSignature` (RO), `ConnectionConfig` (WO).
 - [x] 1.4a Add/update unit tests for BLE characteristic exposure and access mode enforcement.
 - [x] 1.5 Implement session bootstrap via BLE `ConnectionConfig` write (session id + mobile port + mobile ip list).
