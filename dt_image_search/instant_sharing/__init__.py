@@ -12,6 +12,14 @@ from dt_image_search.instant_sharing.mdns import (
 from dt_image_search.instant_sharing.https_bootstrap import (
     InstantShareBootstrapServer,
 )
+from dt_image_search.instant_sharing.mini_window import (
+    InstantShareMiniWindow,
+    MiniWindowPhase,
+    MiniWindowState,
+)
+from dt_image_search.instant_sharing.mini_window_factory import (
+    InstantShareMiniWindowFactory,
+)
 from dt_image_search.instant_sharing.contracts import (
     API_PREFIX,
     FLOW_ID,
@@ -91,10 +99,14 @@ __all__ = [
     "InstantShareHttpResponse",
     "InstantShareMDNSAdvertiser",
     "InstantShareMetadata",
+    "InstantShareMiniWindow",
+    "InstantShareMiniWindowFactory",
     "InstantShareReceiverOrchestrator",
     "InstantShareRuntime",
     "InstantShareSession",
     "InstantShareSessionRegistry",
+    "MiniWindowPhase",
+    "MiniWindowState",
     "PayloadClass",
     "PinnedHttpsRequester",
     "PersistentEd25519SessionSigner",

@@ -107,6 +107,12 @@ Stakeholders:
 - Alternative considered: Embed instant-share as a panel or tab inside the main AuSearch window.
 - Why not: Coupling to main app navigation would risk disrupting existing features and complicates the instant-share lifecycle (e.g., user switches tabs mid-transfer).
 
+14. Mini window triggered from background daemon via event bus + MainThreadDispatcher.
+- Decision: The mini window is created by an `InstantShareMiniWindowFactory` that subscribes to the `INSTANT_SHARE_LIFECYCLE_EVENT` event bus directly (not through MainWindow). When the background daemon receives a bootstrap HTTP POST, the orchestrator publishes the lifecycle event, and the factory uses the existing `MainThreadDispatcher` to safely create and show the `QDialog`-based mini window on the Qt main thread. This works whether MainWindow is open or not.
+- Rationale: The daemon runs in background threads (bootstrap HTTP server, orchestrator). Creating a Qt window directly from those threads is unsafe. The established `dispatcher.post()` pattern provides thread-safe main-thread dispatching without coupling to MainWindow's Signal/Slot infrastructure. The factory's independent event bus subscription means the mini window works even before MainWindow exists or after it's closed.
+- Alternative considered: Add signals to MainWindow and require it to be open.
+- Why not: The daemon receives bootstrap calls independently; the mini window must appear regardless of whether the user has the main search window open.
+
 11. Keep the current desktop slice mobile-hosted and PC-downloaded.
 - Decision: After trust completes, PC remains the HTTP client and downloads shared text or image payloads from the iOS-hosted local HTTP service.
 - Rationale: This matches the iOS Share Extension hosting model and keeps desktop work isolated to `dt_image_search/instant_sharing` without changing `dt_image_search/mobile/*`.

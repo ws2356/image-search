@@ -36,8 +36,8 @@
 - [x] 3.2a Add/update unit tests for event bus state mapping and message payload schema.
 - [x] 3.3 Produce two desktop receive UX mock sets: (A) notification-only, (B) standalone mini window.
 - [x] 3.4 Run UX review and record final selection: Variant B (standalone mini window) selected.
-- [ ] 3.5 Implement standalone desktop mini window for instant-share receive, independent from main AuSearch app. The mini window (360x520) has its own title bar, traffic lights, and lifecycle. Includes progress, result, failure, and user-aborted states.
-- [ ] 3.5a Add/update unit tests for mini window controller/view-model logic and non-visual receive state management.
+- [x] 3.5 Implement standalone desktop mini window for instant-share receive, independent from main AuSearch app. The mini window (360x520) has its own title bar, traffic lights, and lifecycle. Includes progress, result, failure, and user-aborted states.
+- [x] 3.5a Add/update unit tests for mini window controller/view-model logic and non-visual receive state management.
 
 ## 4. Target Delivery Implementation
 
@@ -54,7 +54,7 @@
 
 - [x] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume, first-use trust confirmation, trusted-device revisit, progress, error, success, and abort/result states.
 - [x] 5.2 Implement production Share Extension selector card visual states for scanning, empty/no receiver, discovered devices, selected device, and unavailable network states.
-- [ ] 5.3 Implement production desktop instant-share standalone mini window with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states. Window is independent from main AuSearch app.
+- [x] 5.3 Implement production desktop instant-share standalone mini window with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states. Window is independent from main AuSearch app.
 - [ ] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop standalone mini window receive surface.
 - [x] 5.5 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced for production UI.
 

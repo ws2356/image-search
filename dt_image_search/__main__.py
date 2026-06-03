@@ -74,6 +74,7 @@ from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.lifecycle_notifications import build_instant_share_lifecycle_notification
+from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 from dt_image_search.instant_sharing.orchestrator import INSTANT_SHARE_LIFECYCLE_EVENT
 from dt_image_search.mobile import MobileFolderCoordinator, MobileSourceType
 from dt_image_search.mobile.mobile_pairing_service import MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT
@@ -89,6 +90,7 @@ _SearchMode = 2
 _app_lock = None
 _activation_server = None
 _instant_share_runtime: InstantShareRuntime | None = None
+_mini_window_factory: InstantShareMiniWindowFactory | None = None
 def _crash_support_log(severity: str, error_type: str = "", message: str = "", where: str = "") -> None:
     from dt_image_search.telemetry.telemetry_client import log
 
@@ -848,8 +850,12 @@ def qt_message_handler(mode, context, message):
 
 def cleanup():
     global _instant_share_runtime
+    global _mini_window_factory
 
     _crash_recovery.disable_native_crash_dump_capture()
+    if _mini_window_factory is not None:
+        _mini_window_factory.stop()
+        _mini_window_factory = None
     if _instant_share_runtime is not None:
         _instant_share_runtime.stop()
         _instant_share_runtime = None
@@ -925,6 +931,8 @@ def main():
     _instant_share_runtime = InstantShareRuntime()
     if is_instant_share_enabled():
         _instant_share_runtime.start()
+    _mini_window_factory = InstantShareMiniWindowFactory()
+    _mini_window_factory.start()
     
     # Install Qt message handler
     from PySide6.QtCore import qInstallMessageHandler
