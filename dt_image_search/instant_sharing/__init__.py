@@ -1,7 +1,10 @@
 from dt_image_search.instant_sharing.ble import (
     CONNECTION_CONFIG_CHARACTERISTIC,
+    CONNECTION_CONFIG_CHARACTERISTIC_UUID,
     DEVICE_NAME_CHARACTERISTIC,
+    DEVICE_NAME_CHARACTERISTIC_UUID,
     DEVICE_SIGNATURE_CHARACTERISTIC,
+    DEVICE_SIGNATURE_CHARACTERISTIC_UUID,
     INSTANT_SHARE_GATT_SERVICE_NAME,
     INSTANT_SHARE_GATT_SERVICE_UUID,
     CharacteristicAccessError,
@@ -11,6 +14,7 @@ from dt_image_search.instant_sharing.ble import (
     DeviceSignatureAdvertisement,
     InstantShareBleDaemon,
     InstantShareBleService,
+    InstantShareBlessServer,
 )
 from dt_image_search.instant_sharing.contracts import (
     API_PREFIX,
@@ -68,8 +72,11 @@ __all__ = [
     "FLOW_ID",
     "PROTOCOL_VERSION",
     "CONNECTION_CONFIG_CHARACTERISTIC",
+    "CONNECTION_CONFIG_CHARACTERISTIC_UUID",
     "DEVICE_NAME_CHARACTERISTIC",
+    "DEVICE_NAME_CHARACTERISTIC_UUID",
     "DEVICE_SIGNATURE_CHARACTERISTIC",
+    "DEVICE_SIGNATURE_CHARACTERISTIC_UUID",
     "INSTANT_SHARE_GATT_SERVICE_NAME",
     "INSTANT_SHARE_GATT_SERVICE_UUID",
     "INSTANT_SHARE_LIFECYCLE_EVENT",
@@ -86,6 +93,7 @@ __all__ = [
     "ErrorCode",
     "InstantShareBleDaemon",
     "InstantShareBleService",
+    "InstantShareBlessServer",
     "InstantShareDeliveryService",
     "InstantShareError",
     "InstantShareHeaders",

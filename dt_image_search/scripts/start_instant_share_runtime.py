@@ -7,13 +7,13 @@ Usage:
     python -m dt_image_search.scripts.start_instant_share_runtime [--downloads-dir DIR]
 
 The script runs until interrupted (Ctrl+C). It exposes the BLE GATT service
-via the logical abstraction in dt_image_search.instant_sharing.ble and
-handles incoming ConnectionConfig writes from mobile devices.
+via bless and handles incoming ConnectionConfig writes from mobile devices.
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import sys
@@ -24,11 +24,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.ble import (
-    INSTANT_SHARE_GATT_SERVICE_NAME,
-    INSTANT_SHARE_GATT_SERVICE_UUID,
     CONNECTION_CONFIG_CHARACTERISTIC,
     DEVICE_NAME_CHARACTERISTIC,
     DEVICE_SIGNATURE_CHARACTERISTIC,
+    INSTANT_SHARE_GATT_SERVICE_NAME,
+    INSTANT_SHARE_GATT_SERVICE_UUID,
 )
 from dt_image_search.model.feature_flags import is_instant_share_enabled
 
@@ -54,11 +54,22 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Bypass the feature flag check and start the runtime regardless.",
     )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging verbosity. Defaults to INFO.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
+
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
     if not args.force_enable and not is_instant_share_enabled():
         print(
@@ -79,16 +90,31 @@ def main() -> int:
         print(f"  Downloads dir:     ~/Downloads (default)")
 
     runtime = InstantShareRuntime(
+        is_enabled=lambda: True,
         image_delivery_mode=args.image_delivery_mode,
         downloads_dir=args.downloads_dir,
     )
 
     started = runtime.start()
     if not started:
-        print("Failed to start BLE daemon (feature flag disabled?).", file=sys.stderr)
+        print("Failed to start BLE daemon.", file=sys.stderr)
+        last_error = runtime.ble_server.last_error
+        if last_error is not None:
+            print(f"  Last error: {type(last_error).__name__}: {last_error}", file=sys.stderr)
         return 1
 
-    print(f"\nRuntime started. Waiting for mobile connections...")
+    is_advertising = runtime.ble_server.is_advertising
+    print(f"\nRuntime started. BLE advertising: {is_advertising}")
+    if not is_advertising:
+        last_error = runtime.ble_server.last_error
+        if last_error is not None:
+            print(f"  WARNING: advertising not active. Last error: {last_error}", file=sys.stderr)
+        else:
+            print(
+                "  WARNING: advertising not active, but no error reported. "
+                "Check System Settings > Bluetooth.",
+                file=sys.stderr,
+            )
     print(f"Press Ctrl+C to stop.\n")
 
     stop_requested = False
@@ -101,12 +127,27 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _handle_signal)
 
     try:
+        last_ad_status = None
         while not stop_requested:
+            ad_status = runtime.ble_server.is_advertising
+            if ad_status != last_ad_status:
+                logging.getLogger(__name__).info(
+                    "BLE advertising status changed: %s -> %s",
+                    last_ad_status,
+                    ad_status,
+                )
+                last_ad_status = ad_status
             active_session = runtime.session_registry.get_active_session()
             if active_session is not None:
                 state = active_session.state.value
                 session_id = active_session.connection_config.session_id
-                print(f"\r  Active session: {state:14s}  (id={session_id[:8]}...)", end="", flush=True)
+                print(
+                    f"\r  advertising={ad_status!s:5s}  active session: {state:14s}  (id={session_id[:8]}...)",
+                    end="",
+                    flush=True,
+                )
+            else:
+                print(f"\r  advertising={ad_status!s:5s}  (no active session)        ", end="", flush=True)
             time.sleep(1.0)
     except KeyboardInterrupt:
         pass

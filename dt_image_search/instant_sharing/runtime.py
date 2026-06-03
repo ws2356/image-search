@@ -12,6 +12,7 @@ from dt_image_search.instant_sharing.ble import (
     DeviceSignatureAdvertisement,
     InstantShareBleDaemon,
     InstantShareBleService,
+    InstantShareBlessServer,
 )
 from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
@@ -70,16 +71,22 @@ class InstantShareRuntime:
             signature_provider=self._real_signature_provider,
             bootstrap_handler=self._handle_connection_config,
         )
+        self._ble_server = InstantShareBlessServer(ble_service=self._ble_service)
         self._ble_daemon = InstantShareBleDaemon(
             ble_service=self._ble_service,
             is_enabled=self._is_enabled,
             heartbeat=heartbeat,
             poll_interval_seconds=poll_interval_seconds,
+            ble_server=self._ble_server,
         )
 
     @property
     def ble_service(self) -> InstantShareBleService:
         return self._ble_service
+
+    @property
+    def ble_server(self) -> InstantShareBlessServer:
+        return self._ble_server
 
     @property
     def ble_daemon(self) -> InstantShareBleDaemon:
@@ -106,10 +113,33 @@ class InstantShareRuntime:
         return self._ble_daemon.is_running
 
     def start(self) -> bool:
-        return self._ble_daemon.start()
+        import logging
+        _logger = logging.getLogger(__name__)
+        is_enabled = self._is_enabled()
+        _logger.info(
+            "[InstantShareRuntime] start() called, is_enabled=%s, has_ble_server=%s",
+            is_enabled,
+            self._ble_server is not None,
+        )
+        if not is_enabled:
+            _logger.warning("[InstantShareRuntime] feature flag disabled, refusing to start")
+        result = self._ble_daemon.start()
+        if result:
+            _logger.info(
+                "[InstantShareRuntime] BLE daemon started, is_advertising=%s, last_error=%s",
+                self._ble_server.is_advertising,
+                self._ble_server.last_error,
+            )
+        else:
+            _logger.error("[InstantShareRuntime] BLE daemon failed to start")
+        return result
 
     def stop(self) -> None:
+        import logging
+        _logger = logging.getLogger(__name__)
+        _logger.info("[InstantShareRuntime] stop() called")
         self._ble_daemon.stop()
+        _logger.info("[InstantShareRuntime] stop() complete")
 
     def bootstrap_connection_config(self, payload: Mapping[str, object] | ConnectionConfig) -> InstantShareSession:
         if isinstance(payload, ConnectionConfig):

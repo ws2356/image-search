@@ -24,6 +24,7 @@ public final class InstantShareService: ObservableObject {
     @Published private(set) var sharedImage: (data: Data, filename: String, contentType: String)?
     @Published private(set) var lastError: String?
     @Published private(set) var statusLog: [String] = []
+    @Published private(set) var selectedPeripheralInfo: InstantSharePeripheralInfo?
 
     private let connector = InstantShareBLEPeripheralConnector()
 
@@ -92,10 +93,17 @@ public final class InstantShareService: ObservableObject {
             throw InstantShareBLEPeripheralConnector.ConnectorError.serviceNotFound
         }
         do {
-            try await connector.connect(
+            let info = try await connector.connect(
                 peripheral: cbPeripheral,
                 connectionConfig: connectionConfig
             )
+            self.selectedPeripheralInfo = info
+            if let name = info.deviceName, !name.isEmpty {
+                log("PC device name: \(name)")
+            }
+            if let sig = info.deviceSignature {
+                log("PC signature: key=\(sig.signatureKeyID) ts=\(sig.timestampMS)")
+            }
             log("ConnectionConfig written to PC")
         } catch {
             log("Failed to write ConnectionConfig: \(error.localizedDescription)")

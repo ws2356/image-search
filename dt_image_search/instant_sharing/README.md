@@ -17,7 +17,7 @@ iOS Share Extension          AuBackup Main App              PC (AuSearch)
 
 | Component | Location | Role |
 |-----------|----------|------|
-| BLE Daemon | `dt_image_search/instant_sharing/ble.py` | Always-on GATT service broadcasting PC identity |
+| BLE Daemon | `dt_image_search/instant_sharing/ble.py` | Always-on GATT service broadcasting PC identity via `bless` |
 | Orchestrator | `dt_image_search/instant_sharing/orchestrator.py` | Session lifecycle, trust, payload receive |
 | HTTP Client | `dt_image_search/instant_sharing/http_client.py` | PC-side HTTPS caller with TLS pinning |
 | Delivery Service | `dt_image_search/instant_sharing/delivery.py` | Routes payloads to clipboard or files |
@@ -146,4 +146,4 @@ Use the iOS debug view (HomeView → Instant Share Debug) for full discovery →
 - **Text-to-file not supported**: Text payloads go to clipboard only
 - **Video/other files deferred**: Only text and image in current slice
 - **No mTLS**: Session-id signature verification only (can add mTLS later)
-- **BLE daemon is logical only**: No real GATT stack integration yet (polling abstraction)
+- **BLE GATT server via `bless`**: PC uses the [`bless`](https://github.com/kevincar/bless) library to advertise the `4abf1c8a-6e2e-4cf2-bff7-6cbad77b0f8b` GATT service with DeviceName (read), DeviceSignature (read), and ConnectionConfig (write) characteristics. Requires Bluetooth permission on first run.

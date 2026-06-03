@@ -33,7 +33,9 @@ class ShareViewController: SLComposeServiceViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        InstantShareLog.info("[Share VC] viewDidLoad")
         let extensionItems = extensionContext?.inputItems as? [NSExtensionItem] ?? []
+        InstantShareLog.info("[Share VC] received \(extensionItems.count) extension items")
 
         let hosting = UIHostingController(
             rootView: InstantShareExtensionView(
@@ -55,6 +57,7 @@ class ShareViewController: SLComposeServiceViewController {
 
         Task {
             await viewModel.loadPayload(from: extensionItems)
+            InstantShareLog.info("[Share VC] payload loaded, starting discovery")
             viewModel.startDiscovery()
         }
     }
