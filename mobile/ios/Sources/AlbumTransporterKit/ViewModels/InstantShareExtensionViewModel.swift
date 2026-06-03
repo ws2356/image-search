@@ -5,44 +5,43 @@ import Combine
 @MainActor
 public final class InstantShareExtensionViewModel: ObservableObject {
     @Published var scannerState: String = "idle"
-    @Published var discoveredDevices: [InstantShareDiscoveredPeripheral] = []
-    @Published public var selectedDevice: InstantShareDiscoveredPeripheral?
+    @Published var discoveredDevices: [InstantShareDiscoveredPC] = []
+    @Published public var selectedDevice: InstantShareDiscoveredPC?
     @Published public var payloadEnvelope: InstantSharePayloadEnvelope?
     @Published var errorMessage: String?
     @Published var isProcessing: Bool = false
 
-    private let scanner: InstantShareBLEScanner
+    private let mdnsBrowser: InstantShareMDNSBrowser
     private let service: InstantShareService
     private var cancellables: Set<AnyCancellable> = []
 
-    public init(scanner: InstantShareBLEScanner, service: InstantShareService) {
-        self.scanner = scanner
+    public init(mdnsBrowser: InstantShareMDNSBrowser, service: InstantShareService) {
+        self.mdnsBrowser = mdnsBrowser
         self.service = service
-        InstantShareLog.info("[Extension VM] init, subscribing to scanner.objectWillChange")
-        scanner.objectWillChange
+        InstantShareLog.info("[Extension VM] init, subscribing to mdnsBrowser.objectWillChange")
+        mdnsBrowser.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                let count = self.scanner.discovered.count
+                let count = self.mdnsBrowser.discovered.count
                 if count != self.discoveredDevices.count {
                     InstantShareLog.info(
-                        "[Extension VM] scanner changed, copying discovered (\(count) devices) to discoveredDevices"
+                        "[Extension VM] mDNS browser changed, copying discovered (\(count) PCs) to discoveredDevices"
                     )
                 }
-                self.discoveredDevices = self.scanner.discovered
+                self.discoveredDevices = self.mdnsBrowser.discovered
             }
             .store(in: &cancellables)
     }
 
     public func startDiscovery() {
         InstantShareLog.info("[Extension VM] startDiscovery() called")
-        scannerState = "scanning"
-        scanner.initialize()
-        scanner.startScanning()
+        scannerState = "browsing"
+        mdnsBrowser.startBrowsing()
     }
 
     public func stopDiscovery() {
-        scanner.stopScanning()
+        mdnsBrowser.stopBrowsing()
         scannerState = "idle"
     }
 
@@ -61,18 +60,24 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         }
     }
 
-    func selectDevice(_ device: InstantShareDiscoveredPeripheral) {
+    func selectDevice(_ device: InstantShareDiscoveredPC) {
         self.selectedDevice = device
+        service.selectPC(device)
     }
 
     func performHandoff() throws {
         guard let envelope = payloadEnvelope else {
             throw InstantShareHandoffError.contextMissing
         }
+        guard let pc = selectedDevice else {
+            throw InstantShareHandoffError.contextMissing
+        }
         let context = InstantShareHandoffContext(
             from: envelope,
-            selectedDeviceID: selectedDevice?.id.uuidString,
-            selectedDeviceName: selectedDevice?.name,
+            selectedDeviceID: pc.id,
+            selectedDeviceName: pc.name,
+            selectedDeviceHost: pc.host,
+            selectedDevicePort: pc.port,
             isTrustedDevice: false
         )
         try context.persist()

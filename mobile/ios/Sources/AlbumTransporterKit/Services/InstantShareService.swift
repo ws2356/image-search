@@ -1,55 +1,53 @@
-import CoreBluetooth
 import Foundation
 
-/// Top-level service that coordinates the BLE scanner, HTTPS server, trust
-/// session, and shared payload for the mobile-side instant-share flow.
+/// Top-level service that coordinates the mDNS browser, bootstrap client,
+/// HTTPS server, and trust session for the mobile-side instant-share flow.
 ///
 /// Lifecycle:
-/// 1. `startDiscovery()` — starts BLE scan for PC peripherals
-/// 2. `selectPC(_:)` — user picks a discovered peripheral
-/// 3. `startSession(connectionConfig:sharedText:)` — opens HTTPS server,
-///    generates a PIN, writes ConnectionConfig to the PC
+/// 1. `startDiscovery()` — starts mDNS browse for PC services
+/// 2. `selectPC(_:)` — user picks a discovered PC
+/// 3. `startSession(connectionConfig:)` — opens HTTPS server, generates PIN,
+///    sends HTTP bootstrap to the PC, then waits for PC to connect
 /// 4. PC calls /trust/handshake → /trust/apply (PIN) → /trust/confirm (long-poll)
 /// 5. PC calls /payload/text or /payload/image
 /// 6. PC calls /delivery-result
 @MainActor
 public final class InstantShareService: ObservableObject {
-    @Published private(set) var scanner: InstantShareBLEScanner
+    @Published private(set) var mdnsBrowser: InstantShareMDNSBrowser
     @Published private(set) var httpsServer: InstantShareHTTPServer
     @Published private(set) var trustSession: InstantShareTrustSessionManager
     @Published private(set) var connectionConfig: InstantShareConnectionConfig?
-    @Published private(set) var selectedPeripheral: InstantShareDiscoveredPeripheral?
+    @Published private(set) var selectedPC: InstantShareDiscoveredPC?
     @Published private(set) var currentPIN: String?
     @Published private(set) var sharedText: String = ""
     @Published private(set) var sharedImage: (data: Data, filename: String, contentType: String)?
     @Published private(set) var lastError: String?
     @Published private(set) var statusLog: [String] = []
-    @Published private(set) var selectedPeripheralInfo: InstantSharePeripheralInfo?
 
-    private let connector = InstantShareBLEPeripheralConnector()
+    private let bootstrapClient = InstantShareHTTPSessionBootstrapClient()
 
     public init() {
         let trustManager = InstantShareTrustSessionManager()
         self.trustSession = trustManager
         self.httpsServer = InstantShareHTTPServer(trustManager: trustManager)
-        self.scanner = InstantShareBLEScanner()
+        self.mdnsBrowser = InstantShareMDNSBrowser()
     }
 
-    /// Start scanning for PC peripherals.
+    /// Start browsing for PCs via mDNS.
     func startDiscovery() {
-        log("Starting BLE discovery...")
-        scanner.startScanning()
+        log("Starting mDNS discovery...")
+        mdnsBrowser.startBrowsing()
     }
 
-    /// Stop scanning.
+    /// Stop browsing.
     func stopDiscovery() {
-        scanner.stopScanning()
+        mdnsBrowser.stopBrowsing()
     }
 
     /// Select a discovered PC and prepare the session.
-    func selectPC(_ peripheral: InstantShareDiscoveredPeripheral) {
-        selectedPeripheral = peripheral
-        log("Selected PC: \(peripheral.name ?? "Unknown") (RSSI: \(peripheral.rssi))")
+    func selectPC(_ pc: InstantShareDiscoveredPC) {
+        selectedPC = pc
+        log("Selected PC: \(pc.name) at \(pc.host):\(pc.port)")
     }
 
     /// Configure the shared text payload.
@@ -66,10 +64,15 @@ public final class InstantShareService: ObservableObject {
         log("Shared image set (\(data.count) bytes, \(filename))")
     }
 
-    /// Start the full instant-share session: HTTPS server + BLE write.
+    /// Start the full instant-share session: HTTPS server + HTTP bootstrap.
     func startSession(connectionConfig: InstantShareConnectionConfig) async throws {
         self.connectionConfig = connectionConfig
         log("Starting instant-share session on port \(connectionConfig.mobilePort)...")
+
+        guard let pc = selectedPC else {
+            log("No PC selected")
+            throw InstantShareHTTPServerError.serverAlreadyRunning
+        }
 
         // 1. Start the HTTPS server
         do {
@@ -85,28 +88,17 @@ public final class InstantShareService: ObservableObject {
         self.currentPIN = pin
         log("Generated PIN: \(pin)")
 
-        // 3. Write ConnectionConfig to the PC
-        guard let discovered = selectedPeripheral,
-              let cbPeripheral = scanner.peripheral(for: discovered) else {
-            log("No PC selected or peripheral not available")
-            httpsServer.stop()
-            throw InstantShareBLEPeripheralConnector.ConnectorError.serviceNotFound
-        }
+        // 3. Send HTTP bootstrap to PC (replaces BLE ConnectionConfig write)
         do {
-            let info = try await connector.connect(
-                peripheral: cbPeripheral,
-                connectionConfig: connectionConfig
+            try await bootstrapClient.sendBootstrap(
+                to: pc.host,
+                port: pc.port,
+                connectionConfig: connectionConfig,
+                expectedPCDeviceID: pc.id
             )
-            self.selectedPeripheralInfo = info
-            if let name = info.deviceName, !name.isEmpty {
-                log("PC device name: \(name)")
-            }
-            if let sig = info.deviceSignature {
-                log("PC signature: key=\(sig.signatureKeyID) ts=\(sig.timestampMS)")
-            }
-            log("ConnectionConfig written to PC")
+            log("Bootstrap sent to PC \(pc.name)")
         } catch {
-            log("Failed to write ConnectionConfig: \(error.localizedDescription)")
+            log("Failed to send bootstrap: \(error.localizedDescription)")
             httpsServer.stop()
             throw error
         }
@@ -121,7 +113,7 @@ public final class InstantShareService: ObservableObject {
         trustSession.reset()
         currentPIN = nil
         connectionConfig = nil
-        selectedPeripheral = nil
+        selectedPC = nil
         log("Session stopped")
     }
 

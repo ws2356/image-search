@@ -5,15 +5,15 @@ import time
 from pathlib import Path
 from typing import Callable, Mapping
 
-from dt_image_search.instant_sharing.ble import (
-    CONNECTION_CONFIG_CHARACTERISTIC,
+from dt_image_search.instant_sharing.mdns import (
     ConnectionConfig,
     DeviceNameAdvertisement,
     DeviceSignatureAdvertisement,
     InstantShareBleDaemon,
     InstantShareBleService,
-    InstantShareBlessServer,
+    InstantShareMDNSAdvertiser,
 )
+from dt_image_search.instant_sharing.https_bootstrap import InstantShareBootstrapServer
 from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
 from dt_image_search.instant_sharing.http_client import InstantShareHttpClient
@@ -66,18 +66,27 @@ class InstantShareRuntime:
                 delivery_service=self._delivery_service,
             )
         )
+        device_id = self._device_id_provider()
+        desktop_name = self._desktop_name_provider()
         self._ble_service = InstantShareBleService(
             device_name_provider=self._device_name_advertisement,
             signature_provider=self._real_signature_provider,
             bootstrap_handler=self._handle_connection_config,
         )
-        self._ble_server = InstantShareBlessServer(ble_service=self._ble_service)
+        self._mdns_advertiser = InstantShareMDNSAdvertiser(
+            ble_service=self._ble_service,
+            device_id=device_id,
+            desktop_name=desktop_name,
+        )
+        self._bootstrap_server = InstantShareBootstrapServer(
+            ble_service=self._ble_service,
+        )
         self._ble_daemon = InstantShareBleDaemon(
             ble_service=self._ble_service,
             is_enabled=self._is_enabled,
             heartbeat=heartbeat,
             poll_interval_seconds=poll_interval_seconds,
-            ble_server=self._ble_server,
+            mdns_advertiser=self._mdns_advertiser,
         )
 
     @property
@@ -85,8 +94,12 @@ class InstantShareRuntime:
         return self._ble_service
 
     @property
-    def ble_server(self) -> InstantShareBlessServer:
-        return self._ble_server
+    def mdns_advertiser(self) -> InstantShareMDNSAdvertiser:
+        return self._mdns_advertiser
+
+    @property
+    def bootstrap_server(self) -> InstantShareBootstrapServer:
+        return self._bootstrap_server
 
     @property
     def ble_daemon(self) -> InstantShareBleDaemon:
@@ -115,29 +128,34 @@ class InstantShareRuntime:
     def start(self) -> bool:
         import logging
         _logger = logging.getLogger(__name__)
-        is_enabled = self._is_enabled()
+        is_enabled_val = self._is_enabled()
         _logger.info(
-            "[InstantShareRuntime] start() called, is_enabled=%s, has_ble_server=%s",
-            is_enabled,
-            self._ble_server is not None,
+            "[InstantShareRuntime] start() called, is_enabled=%s",
+            is_enabled_val,
         )
-        if not is_enabled:
+        if not is_enabled_val:
             _logger.warning("[InstantShareRuntime] feature flag disabled, refusing to start")
         result = self._ble_daemon.start()
-        if result:
-            _logger.info(
-                "[InstantShareRuntime] BLE daemon started, is_advertising=%s, last_error=%s",
-                self._ble_server.is_advertising,
-                self._ble_server.last_error,
-            )
-        else:
-            _logger.error("[InstantShareRuntime] BLE daemon failed to start")
+        if not result:
+            _logger.error("[InstantShareRuntime] mDNS daemon failed to start")
+            return False
+        _logger.info(
+            "[InstantShareRuntime] mDNS daemon started, is_advertising=%s, last_error=%s",
+            self._mdns_advertiser.is_advertising,
+            self._mdns_advertiser.last_error,
+        )
+        bs_ok = self._bootstrap_server.start()
+        _logger.info(
+            "[InstantShareRuntime] bootstrap HTTP server started=%s",
+            bs_ok,
+        )
         return result
 
     def stop(self) -> None:
         import logging
         _logger = logging.getLogger(__name__)
         _logger.info("[InstantShareRuntime] stop() called")
+        self._bootstrap_server.stop()
         self._ble_daemon.stop()
         _logger.info("[InstantShareRuntime] stop() complete")
 
@@ -147,10 +165,10 @@ class InstantShareRuntime:
             self._handle_connection_config(connection_config)
         else:
             connection_config = ConnectionConfig.from_dict(payload)
-            self._ble_service.write_characteristic(CONNECTION_CONFIG_CHARACTERISTIC, payload)
+            self._ble_service.handle_bootstrap(connection_config)
         return self._session_registry.require_session(connection_config.session_id)
 
-    def create_http_client(self, connection_config: ConnectionConfig) -> InstantShareHttpClient:
+    def create_http_client(self, connection_config: ConnectionConfig) -> tuple[InstantShareHttpClient, X25519TrustSessionKeyResolver, dict[str, object]]:
         key_resolver = X25519TrustSessionKeyResolver()
         trust_session_protector = AesGcmTrustSessionProtector(session_key_resolver=key_resolver)
         handshake_payload = key_resolver.handshake_request_payload()
@@ -171,8 +189,8 @@ class InstantShareRuntime:
                 session_id=connection_config.session_id,
                 client=client,
                 request=TrustHandshakeRequest(
-                    pc_dh_public_key=handshake_payload["pc_dh_public_key"],
-                    pc_nonce=handshake_payload["pc_nonce"],
+                    pc_dh_public_key=str(handshake_payload.get("pc_dh_public_key", "")),
+                    pc_nonce=str(handshake_payload.get("pc_nonce", "")),
                     pc_public_key_pem=self._sender_identity.public_key_pem(),
                 ),
                 correlation_id=correlation_id,

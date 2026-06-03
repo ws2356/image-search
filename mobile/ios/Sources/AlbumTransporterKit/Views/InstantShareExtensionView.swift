@@ -100,7 +100,7 @@ public struct InstantShareExtensionView: View {
         .padding(.vertical, 16)
     }
 
-    private func deviceRow(_ device: InstantShareDiscoveredPeripheral) -> some View {
+    private func deviceRow(_ device: InstantShareDiscoveredPC) -> some View {
         Button {
             viewModel.selectDevice(device)
         } label: {
@@ -108,9 +108,9 @@ public struct InstantShareExtensionView: View {
                 Image(systemName: "laptopcomputer")
                     .foregroundStyle(.blue)
                 VStack(alignment: .leading) {
-                    Text(device.name ?? "Unknown Device")
+                    Text(device.name)
                         .font(.body)
-                    Text("RSSI: \(device.rssi)")
+                    Text("\(device.host):\(device.port)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

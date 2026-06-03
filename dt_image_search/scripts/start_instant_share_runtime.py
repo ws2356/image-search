@@ -1,13 +1,14 @@
 """Start the PC-side instant share runtime in standalone mode.
 
-Launches the BLE service daemon and orchestrator for manual end-to-end testing
-of the instant share flow with the iOS debug UI.
+Launches the mDNS advertised service daemon and bootstrap HTTP server for
+manual end-to-end testing of the instant share flow with the iOS debug UI.
 
 Usage:
     python -m dt_image_search.scripts.start_instant_share_runtime [--downloads-dir DIR]
 
-The script runs until interrupted (Ctrl+C). It exposes the BLE GATT service
-via bless and handles incoming ConnectionConfig writes from mobile devices.
+The script runs until interrupted (Ctrl+C). It advertises an mDNS (Bonjour)
+service `_instantshare._tcp` on the local network and listens for session
+bootstrap HTTP POSTs from mobile devices.
 """
 
 from __future__ import annotations
@@ -23,13 +24,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dt_image_search.instant_sharing import InstantShareRuntime
-from dt_image_search.instant_sharing.ble import (
-    CONNECTION_CONFIG_CHARACTERISTIC,
-    DEVICE_NAME_CHARACTERISTIC,
-    DEVICE_SIGNATURE_CHARACTERISTIC,
-    INSTANT_SHARE_GATT_SERVICE_NAME,
-    INSTANT_SHARE_GATT_SERVICE_UUID,
-)
+from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE, INSTANT_SHARE_MDNS_PORT
 from dt_image_search.model.feature_flags import is_instant_share_enabled
 
 
@@ -79,10 +74,8 @@ def main() -> int:
         return 1
 
     print(f"Starting instant share runtime...")
-    print(f"  BLE service:       {INSTANT_SHARE_GATT_SERVICE_NAME} ({INSTANT_SHARE_GATT_SERVICE_UUID})")
-    print(f"  DeviceName char:   {DEVICE_NAME_CHARACTERISTIC} (read-only)")
-    print(f"  DeviceSignature:   {DEVICE_SIGNATURE_CHARACTERISTIC} (read-only)")
-    print(f"  ConnectionConfig:  {CONNECTION_CONFIG_CHARACTERISTIC} (write-only)")
+    print(f"  mDNS service:      {INSTANT_SHARE_MDNS_SERVICE_TYPE}")
+    print(f"  Bootstrap endpoint: POST /api/instant-share/v1/sessions/bootstrap (port {INSTANT_SHARE_MDNS_PORT})")
     print(f"  Image delivery:    {args.image_delivery_mode}")
     if args.downloads_dir:
         print(f"  Downloads dir:     {args.downloads_dir}")
@@ -97,22 +90,24 @@ def main() -> int:
 
     started = runtime.start()
     if not started:
-        print("Failed to start BLE daemon.", file=sys.stderr)
-        last_error = runtime.ble_server.last_error
+        print("Failed to start mDNS daemon.", file=sys.stderr)
+        last_error = runtime.mdns_advertiser.last_error
         if last_error is not None:
             print(f"  Last error: {type(last_error).__name__}: {last_error}", file=sys.stderr)
         return 1
 
-    is_advertising = runtime.ble_server.is_advertising
-    print(f"\nRuntime started. BLE advertising: {is_advertising}")
+    is_advertising = runtime.mdns_advertiser.is_advertising
+    print(f"\nRuntime started.")
+    print(f"  mDNS advertising: {is_advertising}")
+    print(f"  Bootstrap HTTP:   listening on port {runtime.bootstrap_server.port}")
     if not is_advertising:
-        last_error = runtime.ble_server.last_error
+        last_error = runtime.mdns_advertiser.last_error
         if last_error is not None:
             print(f"  WARNING: advertising not active. Last error: {last_error}", file=sys.stderr)
         else:
             print(
                 "  WARNING: advertising not active, but no error reported. "
-                "Check System Settings > Bluetooth.",
+                "Check network settings.",
                 file=sys.stderr,
             )
     print(f"Press Ctrl+C to stop.\n")
@@ -129,10 +124,10 @@ def main() -> int:
     try:
         last_ad_status = None
         while not stop_requested:
-            ad_status = runtime.ble_server.is_advertising
+            ad_status = runtime.mdns_advertiser.is_advertising
             if ad_status != last_ad_status:
                 logging.getLogger(__name__).info(
-                    "BLE advertising status changed: %s -> %s",
+                    "mDNS advertising status changed: %s -> %s",
                     last_ad_status,
                     ad_status,
                 )

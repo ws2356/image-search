@@ -1,5 +1,4 @@
 import Combine
-import CoreBluetooth
 import Foundation
 import PhotosUI
 import SwiftUI
@@ -121,8 +120,8 @@ final class InstantShareDebugViewModel: ObservableObject {
         service.stopDiscovery()
     }
 
-    func selectPC(_ peripheral: InstantShareDiscoveredPeripheral) {
-        service.selectPC(peripheral)
+    func selectPC(_ pc: InstantShareDiscoveredPC) {
+        service.selectPC(pc)
     }
 
     func setSharedText(_ text: String) {

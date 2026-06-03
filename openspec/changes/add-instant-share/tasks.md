@@ -9,9 +9,9 @@
 - [x] 1.3b Implement session-id signature headers on PC requests and mobile-side verification using exchanged trusted public key.
 - [x] 1.3c Add/update unit tests for missing signature, invalid signature, missing trusted key, and valid signature paths.
 - [x] 1.4 Implement desktop background daemon mDNS (Bonjour) service advertisement: service type `_instantshare._tcp`, TXT records (`ver`, `device_name`, `device_id`, `signature`, `signature_key_id`, `timestamp_ms`) on PC HTTP API port.
-- [ ] 1.4a Add/update unit tests for mDNS TXT record advertisement and service lifecycle.
+- [x] 1.4a Add/update unit tests for mDNS TXT record advertisement and service lifecycle.
 - [x] 1.5 Implement HTTP session bootstrap endpoint on PC (`POST /api/instant-share/v1/sessions/bootstrap`) accepting session id, mobile port, and mobile IP list from AuBackup.
-- [ ] 1.5a Add/update unit tests for HTTP bootstrap endpoint parsing/validation and error handling.
+- [x] 1.5a Add/update unit tests for HTTP bootstrap endpoint parsing/validation and error handling.
 - [x] 1.6 Implement trust APIs as `/trust/handshake`, encrypted `/trust/apply`, and parallel long-poll `/trust/confirm` with key exchange completion.
 - [x] 1.6a Add/update unit tests for trust API crypto envelope handling and confirm long-poll completion semantics.
 
@@ -86,16 +86,16 @@
 
 ## 10. iOS mDNS Discovery and HTTPS Server (manual test path)
 
-- [ ] 10.1 Implement `InstantShareMDNSBrowser` (`NWBrowser` wrapper that browses for `_instantshare._tcp`, resolves discovered services, extracts TXT records, and exposes `discovered` PCs with device name, device ID, signature, IP, and port).
-- [ ] 10.2 Implement `InstantShareHTTPSessionBootstrapClient` (HTTP client that POSTs session bootstrap data to the PC's `/api/instant-share/v1/sessions/bootstrap` endpoint using the IP:port from mDNS resolution).
+- [x] 10.1 Implement `InstantShareMDNSBrowser` (`NWBrowser` wrapper that browses for `_instantshare._tcp`, resolves discovered services, extracts TXT records, and exposes `discovered` PCs with device name, device ID, signature, IP, and port).
+- [x] 10.2 Implement `InstantShareHTTPSessionBootstrapClient` (HTTP client that POSTs session bootstrap data to the PC's `/api/instant-share/v1/sessions/bootstrap` endpoint using the IP:port from mDNS resolution).
 - [x] 10.3 Implement `InstantShareTrustSessionManager` (X25519 ECDH + HKDF-SHA256 session key derivation that matches `X25519TrustSessionKeyResolver` on the PC, so the AES-GCM trust envelope unwraps on both sides).
 - [x] 10.4 Implement `InstantShareHTTPServer` (`NWListener` with TLS using the bundled P12 identity, all 6 protocol endpoints, request/response parser, and request-id/correlation-id propagation).
-- [ ] 10.5 Implement `InstantShareService` orchestrator that owns mDNS browser, bootstrap client, HTTPS server, and trust session state; publishes `statusLog`, `sharedPayload`, and `lastError`; and exposes `startDiscovery`, `selectPC`, `startSession`, `stopSession`.
-- [ ] 10.6 Add `instantShareService` to `Container+App.swift` Factory DI and add `NSLocalNetworkUsageDescription` to `App/Info.plist` for mDNS discovery (replaces `NSBluetoothAlwaysUsageDescription`).
-- [ ] 10.7 Rewrite `InstantShareDebugViewModel` and `InstantShareDebugView` for the full mDNS discovery → select → bootstrap → start → PIN display flow.
+- [x] 10.5 Implement `InstantShareService` orchestrator that owns mDNS browser, bootstrap client, HTTPS server, and trust session state; publishes `statusLog`, `sharedPayload`, and `lastError`; and exposes `startDiscovery`, `selectPC`, `startSession`, `stopSession`.
+- [x] 10.6 Add `instantShareService` to `Container+App.swift` Factory DI and add `NSLocalNetworkUsageDescription` to `App/Info.plist` for mDNS discovery (replaces `NSBluetoothAlwaysUsageDescription`).
+- [x] 10.7 Rewrite `InstantShareDebugViewModel` and `InstantShareDebugView` for the full mDNS discovery → select → bootstrap → start → PIN display flow.
 - [x] 10.8 Build iOS app for iPhone 17 Pro Max simulator without errors.
 - [x] 10.9 Add iOS unit tests for `InstantShareTrustSessionManager` key derivation and `InstantShareHTTPServer` request parser.
-- [ ] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_runtime.py` to launch the mDNS + HTTP runtime for manual testing (standalone mini window receive flow).
+- [x] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_runtime.py` to launch the mDNS + HTTP runtime for manual testing (standalone mini window receive flow).
 - [ ] 10.11 Manual e2e test: run PC CLI, open iOS debug view, discover PC via mDNS, select PC, send bootstrap, verify trust handshake, verify text/photo transfer opens standalone mini window on desktop.
 
 ## 9. Rollout and Safeguards

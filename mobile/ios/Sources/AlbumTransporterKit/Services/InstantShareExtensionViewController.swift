@@ -4,7 +4,7 @@ import UIKit
 class InstantShareExtensionViewController: UIViewController {
     private var extensionItems: [NSExtensionItem] = []
     private let viewModel = InstantShareExtensionViewModel(
-        scanner: InstantShareBLEScanner(),
+        mdnsBrowser: InstantShareMDNSBrowser(),
         service: InstantShareService()
     )
 

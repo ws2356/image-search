@@ -55,22 +55,22 @@ struct InstantShareDebugView: View {
         }
     }
 
-    // MARK: - BLE Discovery
+    // MARK: - mDNS Discovery
 
     private var discoveryCard: some View {
         StatusCard(
             title: "1. Discover PCs",
-            subtitle: "Scan for nearby PCs broadcasting the instant-sharing BLE service.",
+            subtitle: "Browse for nearby PCs advertising _instantshare._tcp via mDNS.",
             systemImage: "antenna.radiowaves.left.and.right"
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     ActionButton(
-                        title: viewModel.service.scanner.state == .scanning ? "Stop Scan" : "Start Scan",
-                        icon: viewModel.service.scanner.state == .scanning ? "stop.fill" : "magnifyingglass",
-                        style: viewModel.service.scanner.state == .scanning ? .destructive : .primary,
+                        title: viewModel.service.mdnsBrowser.state == .browsing ? "Stop Browse" : "Start Browse",
+                        icon: viewModel.service.mdnsBrowser.state == .browsing ? "stop.fill" : "magnifyingglass",
+                        style: viewModel.service.mdnsBrowser.state == .browsing ? .destructive : .primary,
                         action: {
-                            if viewModel.service.scanner.state == .scanning {
+                            if viewModel.service.mdnsBrowser.state == .browsing {
                                 viewModel.stopDiscovery()
                             } else {
                                 viewModel.startDiscovery()
@@ -80,27 +80,17 @@ struct InstantShareDebugView: View {
                     scannerStateBadge
                 }
 
-                if viewModel.service.scanner.state == .poweredOff {
-                    Text("Bluetooth is off. Enable it in Settings.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(hex: 0xD70015))
-                } else if viewModel.service.scanner.state == .unauthorized {
-                    Text("Bluetooth permission denied. Enable in Settings.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(hex: 0xD70015))
-                }
-
-                if !viewModel.service.scanner.discovered.isEmpty {
+                if !viewModel.service.mdnsBrowser.discovered.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Discovered PCs")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Color(hex: 0x6E6E73))
-                        ForEach(viewModel.service.scanner.discovered) { peripheral in
-                            discoveredPeripheralRow(peripheral)
+                        ForEach(viewModel.service.mdnsBrowser.discovered) { pc in
+                            discoveredPCRow(pc)
                         }
                     }
-                } else if viewModel.service.scanner.state == .scanning {
-                    Text("Scanning...")
+                } else if viewModel.service.mdnsBrowser.state == .browsing {
+                    Text("Browsing...")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(hex: 0x6E6E73))
                 }
@@ -120,27 +110,24 @@ struct InstantShareDebugView: View {
     }
 
     private var scannerStateInfo: (String, Color) {
-        switch viewModel.service.scanner.state {
-        case .uninitialized: return ("Init", Color(hex: 0x8E8E93))
-        case .poweredOff: return ("Off", Color(hex: 0xD70015))
-        case .unauthorized: return ("Denied", Color(hex: 0xD70015))
-        case .unsupported: return ("No BT", Color(hex: 0xD70015))
+        switch viewModel.service.mdnsBrowser.state {
         case .idle: return ("Idle", Color(hex: 0x8E8E93))
-        case .scanning: return ("Scanning", Color(hex: 0x30D158))
+        case .browsing: return ("Browsing", Color(hex: 0x30D158))
+        case .stopped: return ("Stopped", Color(hex: 0xD70015))
         }
     }
 
-    private func discoveredPeripheralRow(_ peripheral: InstantShareDiscoveredPeripheral) -> some View {
-        let isSelected = viewModel.service.selectedPeripheral?.id == peripheral.id
-        return Button(action: { viewModel.selectPC(peripheral) }) {
+    private func discoveredPCRow(_ pc: InstantShareDiscoveredPC) -> some View {
+        let isSelected = viewModel.service.selectedPC?.id == pc.id
+        return Button(action: { viewModel.selectPC(pc) }) {
             HStack(spacing: 12) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? Color(hex: 0x30D158) : Color(hex: 0x8E8E93))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(peripheral.name ?? "Unknown PC")
+                    Text(pc.name)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Color(hex: 0x1C1C1E))
-                    Text("RSSI: \(peripheral.rssi) dBm · ID: \(peripheral.id.uuidString.prefix(8))")
+                    Text("\(pc.host):\(pc.port) · ID: \(String(pc.id.prefix(8)))")
                         .font(.system(size: 11))
                         .foregroundStyle(Color(hex: 0x6E6E73))
                 }
@@ -299,7 +286,7 @@ struct InstantShareDebugView: View {
                             Task { await viewModel.startSession() }
                         }
                     )
-                    .disabled(viewModel.service.selectedPeripheral == nil || viewModel.validationMessage != nil)
+                    .disabled(viewModel.service.selectedPC == nil || viewModel.validationMessage != nil)
                 }
                 if let error = viewModel.lastError {
                     Text(error)

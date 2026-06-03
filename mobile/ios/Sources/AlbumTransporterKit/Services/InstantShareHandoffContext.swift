@@ -9,13 +9,22 @@ struct InstantShareHandoffContext: Codable {
     let fileSizeBytes: Int64?
     let selectedDeviceID: String?
     let selectedDeviceName: String?
+    let selectedDeviceHost: String?
+    let selectedDevicePort: Int?
     let isTrustedDevice: Bool
     let createdAt: Date
 
     static let appGroupIdentifier = "group.com.aubackup.instant-share"
     static let handoffKey = "pending-instant-share-handoff"
 
-    init(from envelope: InstantSharePayloadEnvelope, selectedDeviceID: String?, selectedDeviceName: String?, isTrustedDevice: Bool) {
+    init(
+        from envelope: InstantSharePayloadEnvelope,
+        selectedDeviceID: String?,
+        selectedDeviceName: String?,
+        selectedDeviceHost: String? = nil,
+        selectedDevicePort: Int? = nil,
+        isTrustedDevice: Bool
+    ) {
         self.payloadType = envelope.payloadType.rawValue
         self.textContent = envelope.textContent
         self.fileURLString = envelope.fileURL?.absoluteString
@@ -24,6 +33,8 @@ struct InstantShareHandoffContext: Codable {
         self.fileSizeBytes = envelope.fileSizeBytes
         self.selectedDeviceID = selectedDeviceID
         self.selectedDeviceName = selectedDeviceName
+        self.selectedDeviceHost = selectedDeviceHost
+        self.selectedDevicePort = selectedDevicePort
         self.isTrustedDevice = isTrustedDevice
         self.createdAt = Date()
     }
