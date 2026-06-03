@@ -19,10 +19,10 @@ Stakeholders:
 
 **Goals:**
 - Enable iOS Share Extension to initiate instant-share for text and images in the current implementation slice, with video and other file support deferred to a follow-up phase.
-- Maintain always-on discoverability via desktop BLE broadcast daemon for instant sharing.
+- Maintain always-on discoverability via desktop mDNS (Bonjour) advertisement daemon for instant sharing.
 - Ship production-quality instant-share UI on both mobile and desktop as part of this implementation slice.
 - Desktop instant-share UI lives in a standalone mini window, completely independent from the main AuSearch app.
-- Keep the iOS Share Extension lightweight by limiting it to payload preflight, BLE discovery, and a production device selector card, then handing selected device and payload context to AuBackup main app.
+- Keep the iOS Share Extension lightweight by limiting it to payload preflight, mDNS discovery, and a production device selector card, then handing selected device and payload context to AuBackup main app.
 - Deliver text to clipboard only and deliver images to clipboard or local files with predictable naming and status reporting in the current slice.
 - Ensure reliability with bounded retry, single-session execution, and recoverable error handling.
 
@@ -36,7 +36,7 @@ Stakeholders:
 ## Decisions
 
 1. Use a dedicated Instant Sharing protocol path independent of QR backup pairing/session infrastructure.
-- Decision: Implement BLE discovery, trust establishment, and transfer negotiation for instant sharing without depending on backup-session capability exchange endpoint.
+- Decision: Implement mDNS discovery, trust establishment, and transfer negotiation for instant sharing without depending on backup-session capability exchange endpoint.
 - Rationale: Existing capability exchange endpoint is only available during QR backup session and does not fit instant-share entrypoint.
 - Alternative considered: Reusing backup pairing/session/capability exchange.
 - Why not: Lifecycle mismatch, hidden coupling, and inability to initiate from Share Extension flow.
@@ -47,20 +47,23 @@ Stakeholders:
 - Alternative considered: Handle everything in existing UI controllers.
 - Why not: Increases UI/business coupling and thread-safety risk.
 
-3. Introduce a desktop background BLE broadcast daemon.
-- Decision: Run an always-on desktop daemon process under instant-sharing domain to expose one BLE service with three characteristics:
-	- `DeviceName` (read-only)
-	- `DeviceSignature` (read-only)
-	- `ConnectionConfig` (write-only)
-- Rationale: Mobile must discover candidate PCs before send even when backup session is not active.
-- Alternative considered: Broadcast from UI process only when app window is active.
-- Why not: Discovery reliability drops and flow depends on UI foreground state.
+3. Introduce a desktop background mDNS advertisement daemon.
+- Decision: Run an always-on desktop daemon process under instant-sharing domain to advertise one Bonjour service `_instantshare._tcp` with TXT records carrying:
+	- `device_name` (human-readable PC name)
+	- `device_id` (persistent unique identifier)
+	- `signature` (cryptographic signature for trusted-direct verification)
+	- `signature_key_id` (key identifier for signature verification)
+	- `timestamp_ms` (signature freshness)
+	- `ver` (protocol version)
+- Rationale: Mobile must discover candidate PCs before send even when backup session is not active. mDNS (Bonjour) provides fast LAN-local discovery without the async state machine complexity of BLE, making it compatible with the iOS Share Extension's constrained execution window.
+- Alternative considered: BLE GATT service with three characteristics (DeviceName, DeviceSignature, ConnectionConfig).
+- Why not: BLE's `CBCentralManager` async state machine (`poweredOn` → scan → `didDiscover`) has unpredictable latency incompatible with Share Extension's short execution window. mDNS resolution completes in 100-300ms on LAN with no permission chain dependencies.
 
-4. Session bootstrap via BLE instead of `/sessions` endpoint.
-- Decision: Remove `/sessions` dependency. Session is created by AuBackup after it resumes Share Extension handoff context and is written to PC through BLE `ConnectionConfig` (mobile IP list, port, session ID).
-- Rationale: Keeps session initiation coupled to physical device choice and reduces extra round-trip endpoint complexity.
-- Alternative considered: HTTP `/sessions` create endpoint.
-- Why not: Redundant with BLE bootstrap and less aligned with discovery-first flow.
+4. Session bootstrap via HTTP callback instead of BLE write.
+- Decision: Mobile discovers PC via mDNS, then AuBackup sends an HTTP POST to the PC's `/api/instant-share/v1/sessions/bootstrap` endpoint (advertised port from mDNS TXT record) carrying session id, mobile port, and mobile ip list. This replaces the BLE `ConnectionConfig` write.
+- Rationale: After mDNS discovery, the PC's IP and port are already known. Sending bootstrap data as an HTTP call is simpler, more reliable, and avoids the final BLE dependency.
+- Alternative considered: Keep BLE `ConnectionConfig` write alongside mDNS discovery.
+- Why not: Requires maintaining two radio stacks; BLE write adds unnecessary fragility in the AuBackup handoff path.
 
 5. Use staged receive states with idempotent completion semantics.
 - Decision: Standardize states: `queued -> negotiating -> transferring -> delivering -> done|failed|timed_out` with a transfer/session correlation id.
@@ -111,7 +114,7 @@ Stakeholders:
 - Why not: That contradicts the current iOS-hosted server requirement and would reintroduce coupling to the existing desktop mobile-folder transport path.
 
 12. Share Extension hands selected device to AuBackup for handling.
-- Decision: The iOS Share Extension discovers BLE receivers and renders the production selector card, but tapping a device opens AuBackup main app with selected receiver identity, trust hints, and payload context. AuBackup then performs first-share trust, trusted-direct revisit handling, BLE `ConnectionConfig` bootstrap, local HTTP hosting, and transfer lifecycle UI.
+- Decision: The iOS Share Extension discovers mDNS receivers via `NWBrowser` and renders the production selector card, but tapping a device opens AuBackup main app with selected receiver identity (device name, device ID, IP, port, signature TXT fields), trust hints, and payload context. AuBackup then performs: HTTP session bootstrap (POST to PC), first-share trust, trusted-direct revisit handling, local HTTP hosting, and transfer lifecycle UI.
 - Rationale: Share Extension runtime is constrained; discovery and selection are user-facing and extension-appropriate, while trust, long-poll confirmation, HTTPS serving, retry, and delivery-result handling are better owned by the main app.
 - Alternative considered: Complete trust and transfer inside the Share Extension after device selection.
 - Why not: Extension lifetime and background constraints make the full trust/transfer lifecycle fragile, especially for first use and slower image transfers.
@@ -125,15 +128,15 @@ Stakeholders:
 - [Cross-platform filesystem constraints] -> Mitigation: Normalize names, sanitize unsafe characters, enforce path boundary checks, and fallback naming.
 - [Session signature verification can be bypassed if headers are missing or key lookup fails open] -> Mitigation: Enforce fail-closed validation and explicit errors for missing/invalid signatures or missing trusted keys.
 - [Share Extension handoff can lose payload or selected-device context] -> Mitigation: Persist handoff context through app-group storage or equivalent extension-safe mechanism before opening AuBackup, and make AuBackup fail closed with a clear recovery state if context is missing or stale.
-- [BLE scanning from Share Extension may be constrained by iOS extension runtime, permissions, or short execution windows] -> Mitigation: Validate on physical devices early, show production permission/unavailable states, and fall back to opening AuBackup for discovery only if extension-level discovery cannot complete reliably.
+- [mDNS discovery may not find PC if devices are on different subnets or multicast is blocked] -> Mitigation: Show production empty/unavailable states with guidance to check same-network connection; mDNS failure is deterministic and fast, unlike BLE which silently hangs.
 
 ## Migration Plan
 
 1. Add dedicated instant-sharing discovery/trust/transfer protocol path (independent from backup session endpoints).
 2. Implement desktop orchestrator and target writers under `dt_image_search/instant_sharing` behind feature flag.
-3. Implement iOS Share Extension payload extraction, BLE discovery, production device selector card, and AuBackup handoff path for text/image inputs.
-4. Implement desktop BLE broadcast daemon for always-on candidate discovery.
-5. Implement BLE `ConnectionConfig` session bootstrap and remove `/sessions` endpoint dependency.
+3. Implement iOS Share Extension payload extraction, mDNS discovery, production device selector card, and AuBackup handoff path for text/image inputs.
+4. Implement desktop mDNS advertisement daemon for always-on candidate discovery.
+5. Implement HTTP session bootstrap endpoint on PC (replaces BLE `ConnectionConfig`) and remove BLE dependency.
 6. Implement trust flow endpoints: `/trust/handshake`, encrypted `/trust/apply`, and long-poll `/trust/confirm`.
 7. Finalize desktop receive UX: Variant B selected — standalone mini window independent from AuSearch main app.
 8. Implement production mobile and desktop UX surfaces wired via event bus and mobile state models.
