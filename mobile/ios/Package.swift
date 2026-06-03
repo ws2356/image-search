@@ -25,9 +25,7 @@ let package = Package(
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
                 .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
             ],
-            resources: [
-                .process("Resources"),
-            ]
+            resources: []
         ),
         .testTarget(
             name: "AlbumTransporterKitTests",

@@ -6,9 +6,10 @@ import UIKit
 
 /// Manages the mobile-side HTTPS server for the instant-share protocol.
 ///
-/// Loads the dev identity (P12 + PEM) from the app bundle, starts a TLS-enabled
-/// NWListener on the configured port, and routes incoming PC requests to the
-/// 6 protocol endpoints defined in `InstantShareProtocol`.
+/// Generates or loads a per-device TLS identity from the keychain at runtime
+/// (EC P-256 self-signed certificate), starts a TLS-enabled NWListener on the
+/// configured port, and routes incoming PC requests to the 6 protocol endpoints
+/// defined in `InstantShareProtocol`.
 @MainActor
 final class InstantShareHTTPServer: ObservableObject {
     enum ServerError: Error, LocalizedError {
@@ -19,7 +20,7 @@ final class InstantShareHTTPServer: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .identityLoadFailed:
-                return "Failed to load instant-share identity (P12) from app bundle."
+                return "Failed to generate or load instant-share TLS identity."
             case .listenerStartFailed(let detail):
                 return "Failed to start TLS listener: \(detail)"
             case .invalidPort:
@@ -48,47 +49,11 @@ final class InstantShareHTTPServer: ObservableObject {
         self.trustManager = trustManager
     }
 
-    /// Load the P12 identity and PEM public key from the app bundle.
+    /// Generate or load the per-device TLS identity from the keychain.
     func loadIdentity() throws {
-        guard let p12URL = Bundle.module.url(
-            forResource: "instant-share-dev-identity",
-            withExtension: "p12.base64"
-        ) else {
-            throw ServerError.identityLoadFailed
-        }
-        let pemURL = Bundle.module.url(
-            forResource: "instant-share-dev-public",
-            withExtension: "pem"
-        )
-        let pem = pemURL.flatMap { try? String(contentsOf: $0, encoding: .utf8) }
-        let p12Base64 = try String(contentsOf: p12URL, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let p12Data = Data(base64Encoded: p12Base64) else {
-            throw ServerError.identityLoadFailed
-        }
-
-        // Import P12 into keychain. The password is empty for the dev identity.
-        let importPassword: String = ""
-        let importOptions: [String: Any] = [
-            kSecImportExportPassphrase as String: importPassword,
-        ]
-        var importedItems: CFArray?
-        let importStatus = SecPKCS12Import(
-            p12Data as CFData,
-            importOptions as CFDictionary,
-            &importedItems
-        )
-        guard importStatus == errSecSuccess,
-              let items = importedItems as? [[String: Any]],
-              let firstItem = items.first,
-              let secIdentity = firstItem[kSecImportItemIdentity as String]
-          else {
-            throw ServerError.identityLoadFailed
-        }
-
-        self.identity = (secIdentity as! SecIdentity)
-        self.publicKeyPEM = pem
+        let identity = try InstantShareIdentityManager.getOrCreateIdentity()
+        self.identity = identity.secIdentity
+        self.publicKeyPEM = identity.publicKeyPEM
     }
 
     /// Start listening for incoming PC connections.

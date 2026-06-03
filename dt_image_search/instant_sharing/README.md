@@ -50,7 +50,7 @@ Default: **off**. Enable via remote config payload with `instant_share: true`.
 ### iOS-Side Requirements
 
 - iOS 16+ with Bluetooth permission (`NSBluetoothAlwaysUsageDescription`)
-- TLS identity bundled in app resources (`instant-share-dev-identity.p12.base64`)
+- TLS identity generated at runtime (EC P-256 keypair in iOS Keychain)
 - App Group configured for Share Extension handoff (pending implementation)
 
 ## Protocol Flow
