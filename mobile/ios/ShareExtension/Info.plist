@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_instantshare._tcp</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -43,8 +47,6 @@
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.share-services</string>
 	</dict>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Instant Share uses Bluetooth to discover nearby desktop computers.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Instant Share connects directly to your desktop on the local network for file transfer.</string>
 </dict>

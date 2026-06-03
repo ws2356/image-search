@@ -165,8 +165,8 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             case .ready:
                 Task { @MainActor in
                     self.extractPCInfo(from: connection, result: result, deviceID: deviceID)
+                    connection.cancel()
                 }
-                connection.cancel()
             case .failed:
                 connection.cancel()
                 InstantShareLog.debug("[MDNS Browser] connection failed for \(deviceID)")
@@ -180,9 +180,26 @@ public final class InstantShareMDNSBrowser: ObservableObject {
     }
 
     private func extractPCInfo(from connection: NWConnection, result: NWBrowser.Result, deviceID: String) {
-        guard let endpoint = connection.currentPath?.remoteEndpoint,
-              case .hostPort(let host, let port) = endpoint,
-              case .ipv4 = host else {
+        let endpoint = connection.currentPath?.remoteEndpoint ?? connection.endpoint
+        
+        switch endpoint {
+        case .hostPort(let host, let port):
+            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .hostPort host: \(host), port: \(port)")
+        case .service(let name, let type, let domain, let interface):
+            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) service name: \(name), type: \(type), domain: \(domain), interface: \(interface)")
+        case .url(let url):
+            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .url: \(url)")
+        case .unix(let path):
+            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .unix: \(path)")
+        case .opaque(let endpoint_t):
+            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .opaque: \(endpoint_t)")
+        @unknown default:
+            fatalError()
+        }
+        
+        guard case .hostPort(let host, let port) = endpoint,
+              case .ipv4 = host,
+                let hostString = host.cleanString else {
             if let endpoint = connection.currentPath?.remoteEndpoint,
                case .hostPort(let host, let port) = endpoint,
                case .ipv6 = host {
@@ -190,9 +207,14 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                 return
             }
             InstantShareLog.debug("[MDNS Browser] extractPCInfo: could not determine host for \(deviceID)")
+            InstantShareLog.debug("[MDNS Browser] currentPath: \(connection.currentPath)")
+            InstantShareLog.debug("[MDNS Browser] point: \(endpoint)")
+            InstantShareLog.debug("[MDNS Browser] remoteEndpoint: \(connection.currentPath?.remoteEndpoint)")
+            
             return
         }
-        resolveWithEndpoint(host: "\(host)", port: Int(port.rawValue), result: result, deviceID: deviceID)
+
+        resolveWithEndpoint(host: "\(hostString)", port: Int(port.rawValue), result: result, deviceID: deviceID)
     }
 
     private func resolveWithEndpoint(host: String, port: Int, result: NWBrowser.Result, deviceID: String) {

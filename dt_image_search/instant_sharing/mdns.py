@@ -363,7 +363,7 @@ class InstantShareMDNSAdvertiser:
                 "[InstantShareMDNSAdvertiser] built TXT properties: %s",
                 properties,
             )
-            addresses = [socket.inet_aton(addr) for addr in _local_ip_addresses()]
+            addresses = [socket.inet_aton(addr) for addr in _local_ip_addresses() if addr != "127.0.0.1"]
             _logger.info(
                 "[InstantShareMDNSAdvertiser] local addresses: %s",
                 [socket.inet_ntoa(addr) if isinstance(addr, bytes) else addr for addr in addresses],
@@ -376,7 +376,6 @@ class InstantShareMDNSAdvertiser:
                 addresses=addresses,
                 port=self._port,
                 properties=properties,
-                server=f"{service_name}.local.",
             )
             with self._lock:
                 self._service_info = service_info
