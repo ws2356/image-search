@@ -117,7 +117,7 @@ struct InstantShareMetadata: Codable, Sendable, Equatable {
     }
 }
 
-struct InstantShareConnectionConfig: Codable, Sendable, Equatable {
+public struct InstantShareConnectionConfig: Codable, Sendable, Equatable {
     var sessionID: String
     var mobilePort: Int
     var mobileIPList: [String]
@@ -149,7 +149,7 @@ struct InstantShareConnectionConfig: Codable, Sendable, Equatable {
         self.metadata = metadata
     }
 
-    init(from decoder: any Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         sessionID = try container.decode(String.self, forKey: .sessionID)
         mobilePort = try container.decode(Int.self, forKey: .mobilePort)
@@ -167,7 +167,7 @@ struct InstantShareConnectionConfig: Codable, Sendable, Equatable {
         )
     }
 
-    func encode(to encoder: any Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(sessionID, forKey: .sessionID)
         try container.encode(mobilePort, forKey: .mobilePort)

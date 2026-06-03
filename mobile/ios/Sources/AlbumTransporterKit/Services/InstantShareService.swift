@@ -71,7 +71,7 @@ public final class InstantShareService: ObservableObject {
 
         guard let pc = selectedPC else {
             log("No PC selected")
-            throw InstantShareHTTPServerError.serverAlreadyRunning
+            throw InstantShareHTTPServer.ServerError.invalidPort
         }
 
         // 1. Start the HTTPS server

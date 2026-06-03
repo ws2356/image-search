@@ -136,14 +136,14 @@ public final class InstantShareMDNSBrowser: ObservableObject {
     }
 
     private func nameFromResult(_ result: NWBrowser.Result) -> String {
-        if case .bonjour(let name) = result.endpoint {
+        if case .service(let name, _, _, _) = result.endpoint {
             return name
         }
         return result.endpoint.debugDescription
     }
 
     private func deviceIDFromResult(_ result: NWBrowser.Result) -> String {
-        if case .bonjour(let name) = result.endpoint {
+        if case .service(let name, _, _, _) = result.endpoint {
             return name
         }
         return result.endpoint.debugDescription
@@ -163,7 +163,9 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             guard let self else { return }
             switch state {
             case .ready:
-                self.extractPCInfo(from: connection, result: result, deviceID: deviceID)
+                Task { @MainActor in
+                    self.extractPCInfo(from: connection, result: result, deviceID: deviceID)
+                }
                 connection.cancel()
             case .failed:
                 connection.cancel()
@@ -207,17 +209,15 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             name: String(deviceName),
             host: host,
             port: port,
-            signature: signature.flatMap { String($0) },
-            signatureKeyID: signatureKeyID.flatMap { String($0) },
+            signature: signature,
+            signatureKeyID: signatureKeyID,
             timestampMS: timestampMS,
-            protocolVersion: protocolVersion.flatMap { String($0) }
+            protocolVersion: protocolVersion
         )
 
-        Task { @MainActor in
-            self.resolvedPCs[deviceID] = pc
-            self.refreshDiscovered()
-            InstantShareLog.debug("[MDNS Browser] resolved \(pc.name) at \(host):\(port)")
-        }
+        resolvedPCs[deviceID] = pc
+        refreshDiscovered()
+        InstantShareLog.debug("[MDNS Browser] resolved \(pc.name) at \(host):\(port)")
     }
 
     private func extractTXTRecord(from result: NWBrowser.Result) -> [String: String]? {
@@ -225,11 +225,15 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             return nil
         }
         let dict = txtRecord.dictionary
-        var result_dict: [String: String] = [:]
+        var resultDict: [String: String] = [:]
         for (key, value) in dict {
-            result_dict[key] = String(data: value, encoding: .utf8) ?? ""
+            if let stringValue = value as? String {
+                resultDict[key] = stringValue
+            } else if let dataValue = value as? Data {
+                resultDict[key] = String(data: dataValue, encoding: .utf8) ?? ""
+            }
         }
-        return result_dict
+        return resultDict
     }
 
     private func refreshDiscovered() {

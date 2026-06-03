@@ -5,7 +5,7 @@ import AlbumTransporterKit
 
 class ShareViewController: SLComposeServiceViewController {
     private let viewModel = InstantShareExtensionViewModel(
-        scanner: InstantShareBLEScanner(),
+        mdnsBrowser: InstantShareMDNSBrowser(),
         service: InstantShareService()
     )
 
