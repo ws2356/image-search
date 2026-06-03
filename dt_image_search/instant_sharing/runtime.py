@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import socket
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Mapping
@@ -43,7 +45,9 @@ class InstantShareRuntime:
         session_registry: InstantShareSessionRegistry | None = None,
         delivery_service: InstantShareDeliveryService | None = None,
         orchestrator: InstantShareReceiverOrchestrator | None = None,
+        auto_receive: bool = False,
     ) -> None:
+        self._auto_receive = auto_receive
         self._is_enabled = is_enabled
         self._device_id_provider = device_id_provider
         self._desktop_name_provider = desktop_name_provider or _default_desktop_name
@@ -126,7 +130,6 @@ class InstantShareRuntime:
         return self._ble_daemon.is_running
 
     def start(self) -> bool:
-        import logging
         _logger = logging.getLogger(__name__)
         is_enabled_val = self._is_enabled()
         _logger.info(
@@ -152,7 +155,6 @@ class InstantShareRuntime:
         return result
 
     def stop(self) -> None:
-        import logging
         _logger = logging.getLogger(__name__)
         _logger.info("[InstantShareRuntime] stop() called")
         self._bootstrap_server.stop()
@@ -204,6 +206,21 @@ class InstantShareRuntime:
 
     def _handle_connection_config(self, connection_config: ConnectionConfig) -> None:
         self._orchestrator.handle_connection_config(connection_config)
+        if self._auto_receive:
+            logging.getLogger(__name__).info(
+                "[InstantShareRuntime] auto_receive: starting receive flow in background thread"
+            )
+            threading.Thread(
+                target=lambda: self._run_receive_flow_safely(connection_config),
+                name="instant_share_auto_receive",
+                daemon=True,
+            ).start()
+
+    def _run_receive_flow_safely(self, connection_config: ConnectionConfig) -> None:
+        try:
+            self.run_receive_flow(connection_config)
+        except Exception:
+            logging.getLogger(__name__).exception("[InstantShareRuntime] auto_receive failed")
 
     def _device_name_advertisement(self) -> DeviceNameAdvertisement:
         return DeviceNameAdvertisement(

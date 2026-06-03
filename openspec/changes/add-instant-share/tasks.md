@@ -55,7 +55,7 @@
 - [x] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume, first-use trust confirmation, trusted-device revisit, progress, error, success, and abort/result states.
 - [x] 5.2 Implement production Share Extension selector card visual states for scanning, empty/no receiver, discovered devices, selected device, and unavailable network states.
 - [x] 5.3 Implement production desktop instant-share standalone mini window with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states. Window is independent from main AuSearch app.
-- [ ] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop standalone mini window receive surface.
+- [x] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop standalone mini window receive surface.
 - [x] 5.5 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced for production UI.
 
 ## 6. Reliability and Recovery
@@ -96,7 +96,7 @@
 - [x] 10.8 Build iOS app for iPhone 17 Pro Max simulator without errors.
 - [x] 10.9 Add iOS unit tests for `InstantShareTrustSessionManager` key derivation and `InstantShareHTTPServer` request parser.
 - [x] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_runtime.py` to launch the mDNS + HTTP runtime for manual testing (standalone mini window receive flow).
-- [ ] 10.11 Manual e2e test: run PC CLI, open iOS debug view, discover PC via mDNS, select PC, send bootstrap, verify trust handshake, verify text/photo transfer opens standalone mini window on desktop.
+- [x] 10.11 Manual e2e test: run PC CLI, open iOS debug view, discover PC via mDNS, select PC, send bootstrap, verify trust handshake, verify text/photo transfer opens standalone mini window on desktop.
 
 ## 9. Rollout and Safeguards
 
