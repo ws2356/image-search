@@ -25,7 +25,7 @@
 - [x] 2.3a Add/update unit tests for unsupported-type rejection mapping and error payload construction.
 - [x] 2.4 Implement production Share Extension device selector card that lists mDNS-discovered PCs with usable device identity and trust-state affordances.
 - [x] 2.4a Add/update tests for selector view-model state: scanning, empty, discovered, stale/expired device, trusted revisit, and first-use states.
-- [x] 2.5 Implement selected-device and payload-context handoff from Share Extension to AuBackup main app for both first use and trusted revisits.
+- [x] 2.5 Implement complete trust + transfer flow inside Share Extension: device selection → start HTTPS server → send bootstrap → PIN verification UI → confirm/reject trust → payload transfer → success/failure UI. No main-app handoff (iOS navigation from extension is unreliable).
 - [x] 2.5a Add/update tests for handoff context persistence, stale/missing context handling, and main-app resume routing.
 
 ## 3. Desktop Instant Receive Orchestration

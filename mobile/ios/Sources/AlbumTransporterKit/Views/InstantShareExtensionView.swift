@@ -3,44 +3,199 @@ import SwiftUI
 public struct InstantShareExtensionView: View {
     @ObservedObject var viewModel: InstantShareExtensionViewModel
     let onCancel: () -> Void
-    let onSend: () -> Void
 
-    public init(viewModel: InstantShareExtensionViewModel, onCancel: @escaping () -> Void, onSend: @escaping () -> Void) {
+    public init(viewModel: InstantShareExtensionViewModel, onCancel: @escaping () -> Void) {
         self.viewModel = viewModel
         self.onCancel = onCancel
-        self.onSend = onSend
     }
 
     public var body: some View {
         Group {
-            if #available(iOS 16.0, *) {
-                NavigationStack {
-                    content
-                }
-            } else {
-                NavigationView {
-                    content
-                }
+            switch viewModel.sessionPhase {
+            case .scanning, .ready:
+                scanningContent
+            case .starting:
+                startingContent
+            case .verifying(let pin):
+                verifyingContent(pin: pin)
+            case .transferring:
+                transferringContent
+            case .success:
+                successContent
+            case .failed(let msg):
+                failedContent(message: msg)
             }
         }
+        .padding()
     }
 
-    private var content: some View {
+    // MARK: - Scanning / Ready
+
+    private var scanningContent: some View {
         VStack(spacing: 16) {
             payloadCard
             deviceSelectorCard
             Spacer()
-            actionBar
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            Button {
+                guard viewModel.canSend else { return }
+                Task { await viewModel.send() }
+            } label: {
+                HStack {
+                    if viewModel.isProcessing {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Text(viewModel.isProcessing ? "Connecting..." : "Send to \(viewModel.selectedDevice?.name ?? "...")")
+                        .fontWeight(.semibold)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.canSend || viewModel.isProcessing)
         }
-        .padding()
-        .navigationTitle("Instant Share")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: onCancel)
+    }
+
+    // MARK: - Starting
+
+    private var startingContent: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            ProgressView()
+                .controlSize(.large)
+            Text("Starting session...")
+                .font(.headline)
+            Text("Waiting for your Mac to connect")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Cancel", role: .cancel, action: { viewModel.dismissCompletion(); onCancel() })
+        }
+    }
+
+    // MARK: - Verifying PIN
+
+    private func verifyingContent(pin: String) -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Text("Verify PIN")
+                .font(.title2.bold())
+            Text("Make sure this code matches on your Mac:")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text(pin)
+                .font(.system(size: 56, weight: .heavy, design: .monospaced))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 40)
+                .padding(.vertical, 20)
+                .background(Color.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 20))
+            Spacer()
+            HStack(spacing: 16) {
+                Button(role: .cancel) {
+                    viewModel.rejectPIN()
+                } label: {
+                    Text("Reject")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                Button {
+                    viewModel.confirmPIN()
+                } label: {
+                    Text("Code Matches")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
     }
+
+    // MARK: - Transferring
+
+    private var transferringContent: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            ProgressView()
+                .controlSize(.large)
+            Text("Sending...")
+                .font(.headline)
+            Text("Transferring \(payloadDescription) to your Mac")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+
+    // MARK: - Success
+
+    private var successContent: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.green)
+            Text("Sent!")
+                .font(.title2.bold())
+            Text("\(payloadDescription.capitalized) delivered to your Mac")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+                viewModel.dismissCompletion()
+                onCancel()
+            } label: {
+                Text("Done")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    // MARK: - Failed
+
+    private func failedContent(message: String) -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.orange)
+            Text("Transfer Failed")
+                .font(.title2.bold())
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+            HStack(spacing: 16) {
+                Button {
+                    viewModel.dismissCompletion()
+                    onCancel()
+                } label: {
+                    Text("Cancel")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                Button {
+                    viewModel.dismissCompletion()
+                    viewModel.startDiscovery()
+                } label: {
+                    Text("Try Again")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    // MARK: - Cards
 
     private var payloadCard: some View {
         HStack {
@@ -64,40 +219,31 @@ public struct InstantShareExtensionView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Send to")
-                    .font(.headline)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.secondary)
                 Spacer()
-                if viewModel.scannerState == "scanning" {
+                if !viewModel.discoveredDevices.isEmpty {
+                    Text("\(viewModel.discoveredDevices.count) found")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if viewModel.discoveredDevices.isEmpty {
+                HStack {
                     ProgressView()
                         .controlSize(.small)
+                    Text("Looking for desktops...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-            }
-
-            if viewModel.discoveredDevices.isEmpty {
-                emptyDevicesView
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
             } else {
-                ForEach(viewModel.discoveredDevices) { device in
-                    deviceRow(device)
+                ForEach(viewModel.discoveredDevices) { pc in
+                    deviceRow(pc)
                 }
             }
         }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var emptyDevicesView: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "desktopcomputer")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text(viewModel.scannerState == "scanning"
-                 ? "Looking for nearby Macs..."
-                 : "No Macs found. Make sure AuSearch is running.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
     }
 
     private func deviceRow(_ device: InstantShareDiscoveredPC) -> some View {
@@ -132,29 +278,13 @@ public struct InstantShareExtensionView: View {
         .buttonStyle(.plain)
     }
 
-    private var actionBar: some View {
-        HStack {
-            if let error = viewModel.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
-            }
-            Spacer()
-            Button {
-                do {
-                    try viewModel.performHandoff()
-                    onSend()
-                } catch {
-                    viewModel.errorMessage = error.localizedDescription
-                }
-            } label: {
-                Text("Send")
-                    .fontWeight(.semibold)
-                    .frame(minWidth: 80)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(viewModel.selectedDevice == nil || viewModel.payloadEnvelope == nil)
+    // MARK: - Helpers
+
+    private var payloadDescription: String {
+        switch viewModel.payloadEnvelope?.payloadType {
+        case .text: return "text"
+        case .image: return "image"
+        default: return "file"
         }
     }
 
@@ -164,7 +294,7 @@ public struct InstantShareExtensionView: View {
         case .image: return "photo"
         case .video: return "video"
         case .file: return "doc"
-        case .none: return "questionmark.circle"
+        case .none: return viewModel.isProcessing ? "arrow.down.circle" : "questionmark.circle"
         }
     }
 
@@ -185,7 +315,7 @@ public struct InstantShareExtensionView: View {
     private var payloadSubtitle: String {
         guard let envelope = viewModel.payloadEnvelope else { return "" }
         if let size = envelope.fileSizeBytes {
-            return "\(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))"
+            return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         }
         return envelope.contentType ?? ""
     }

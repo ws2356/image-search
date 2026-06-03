@@ -6,7 +6,7 @@ Users currently need to launch AuSearch or AuBackup and navigate through multipl
 
 - Add an iPhone Share Extension driven "Instant Share" flow that supports text and images from iOS share sheet in the current implementation slice, with video and other file types deferred to follow-up work.
 - Add a production device selector card in the iOS Share Extension that discovers PCs via mDNS (Bonjour) on the local network and lists discovered PCs for user selection before handoff.
-- When the user taps a discovered PC, hand off to the main AuBackup app with selected device and payload context for all further handling, both for first use and revisits to trusted devices.
+- When the user taps a discovered PC, the Share Extension performs the full trust + transfer flow natively: starts local HTTPS server, sends HTTP bootstrap to PC, displays PIN for trust verification, receives user confirmation, and delivers the payload. No main-app navigation.
 - Add a desktop background daemon process that continuously advertises the instant-sharing service via mDNS (Bonjour) for mobile discovery and access, independent of backup session state.
 - Add a first-share trust establishment flow: after user selects a PC, mobile and PC perform DH exchange, receiver shows a PIN popup, sender shows same PIN for user confirmation, then both sides exchange X509 public certificates.
 - Add HTTPS transport with self-signed certs after first trust establishment, using exchanged certificates during TLS negotiation.

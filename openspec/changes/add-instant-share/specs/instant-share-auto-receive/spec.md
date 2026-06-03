@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Desktop auto-activation on incoming instant-share
-The desktop system SHALL detect incoming instant-share session requests and SHALL present desktop receive UX according to the finalized UX variant.
+The desktop system SHALL detect incoming instant-share session requests via the bootstrap HTTP endpoint and SHALL present the standalone receive mini window according to the finalized UX variant.
 
 #### Scenario: Activate receive panel while app is running
 - **WHEN** an authenticated instant-share session request arrives and the desktop app process is active

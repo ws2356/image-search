@@ -16,7 +16,7 @@ public final class InstantShareService: ObservableObject {
     @Published private(set) var mdnsBrowser: InstantShareMDNSBrowser
     @Published private(set) var httpsServer: InstantShareHTTPServer
     @Published private(set) var trustSession: InstantShareTrustSessionManager
-    @Published private(set) var connectionConfig: InstantShareConnectionConfig?
+    @Published public var connectionConfig: InstantShareConnectionConfig?
     @Published private(set) var selectedPC: InstantShareDiscoveredPC?
     @Published private(set) var currentPIN: String?
     @Published private(set) var sharedText: String = ""

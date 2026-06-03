@@ -15,8 +15,7 @@ class InstantShareExtensionViewController: UIViewController {
         let hostingController = UIHostingController(
             rootView: InstantShareExtensionView(
                 viewModel: viewModel,
-                onCancel: { [weak self] in self?.cancelAction() },
-                onSend: { [weak self] in self?.sendAction() }
+                onCancel: { [weak self] in self?.cancelAction() }
             )
         )
         addChild(hostingController)
@@ -43,19 +42,5 @@ class InstantShareExtensionViewController: UIViewController {
             code: 0,
             userInfo: [NSLocalizedDescriptionKey: "User canceled"]
         ))
-    }
-
-    private func sendAction() {
-        viewModel.stopDiscovery()
-        let openURL = URL(string: "aubackup://instant-share/resume")!
-        var responder: UIResponder? = self
-        while let next = responder?.next {
-            if let application = next as? UIApplication {
-                application.open(openURL, options: [:], completionHandler: nil)
-                break
-            }
-            responder = next
-        }
-        extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
 }

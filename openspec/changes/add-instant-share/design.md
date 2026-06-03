@@ -119,11 +119,12 @@ Stakeholders:
 - Alternative considered: Desktop-hosted ingestion endpoints that accept pushed payload bodies.
 - Why not: That contradicts the current iOS-hosted server requirement and would reintroduce coupling to the existing desktop mobile-folder transport path.
 
-12. Share Extension hands selected device to AuBackup for handling.
-- Decision: The iOS Share Extension discovers mDNS receivers via `NWBrowser` and renders the production selector card, but tapping a device opens AuBackup main app with selected receiver identity (device name, device ID, IP, port, signature TXT fields), trust hints, and payload context. AuBackup then performs: HTTP session bootstrap (POST to PC), first-share trust, trusted-direct revisit handling, local HTTP hosting, and transfer lifecycle UI.
-- Rationale: Share Extension runtime is constrained; discovery and selection are user-facing and extension-appropriate, while trust, long-poll confirmation, HTTPS serving, retry, and delivery-result handling are better owned by the main app.
-- Alternative considered: Complete trust and transfer inside the Share Extension after device selection.
-- Why not: Extension lifetime and background constraints make the full trust/transfer lifecycle fragile, especially for first use and slower image transfers.
+12. Share Extension handles full trust + transfer natively without main-app handoff.
+- Decision: The iOS Share Extension performs the complete instant-share flow in-place: mDNS discovery → device selection → HTTPS server start → HTTP bootstrap to PC → PIN-verified trust → payload transfer → completion UI. No URL-based navigation to the main AuBackup app occurs.
+- Rationale: iOS navigation from a Share Extension to its containing app is unreliable — the `UIApplication` responder chain is unavailable, `extensionContext.open(url)` is deprecated and inconsistently supported across iOS versions, and the user experience of switching apps mid-share is confusing. Handling everything in the extension keeps the flow atomic and predictable.
+- Alternative considered: Hand off selected device and payload context to AuBackup main app via app-group persistence + URL scheme navigation.
+- Why not: URL-based navigation from extensions is poorly supported by iOS system, leads to fragile responder-chain hacks, and creates a disjointed UX where the user bounces between apps.
+- Mitigation: Extension requests additional execution time via `beginRequest(with:)` for trust establishment and transfer. Text payloads complete in <5s; images complete in <15s. The extension shows clear progress, PIN confirmation, and completion states.
 
 ## Risks / Trade-offs
 

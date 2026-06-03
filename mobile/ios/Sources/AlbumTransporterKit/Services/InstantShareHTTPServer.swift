@@ -31,6 +31,8 @@ final class InstantShareHTTPServer: ObservableObject {
     @Published private(set) var isRunning: Bool = false
     @Published private(set) var boundPort: UInt16? = nil
     @Published private(set) var lastError: String? = nil
+    @Published private(set) var sharedTextDelivered: Bool = false
+    @Published private(set) var sharedImageDelivered: Bool = false
 
     private let queue = DispatchQueue(label: "instant-share.http-server", qos: .userInitiated)
     private var listener: NWListener?
@@ -363,6 +365,7 @@ final class InstantShareHTTPServer: ObservableObject {
             "state": "delivering",
             "text_utf8": sharedText,
         ]
+        sharedTextDelivered = true
         return .json(status: 200, body: body)
     }
 
@@ -374,6 +377,7 @@ final class InstantShareHTTPServer: ObservableObject {
             "Content-Type": imageData.contentType,
             "X-Instant-Share-Filename": imageData.filename,
         ]
+        sharedImageDelivered = true
         return .raw(status: 200, body: imageData.bytes, headers: headers)
     }
 

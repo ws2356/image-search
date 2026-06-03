@@ -10,21 +10,12 @@ class ShareViewController: SLComposeServiceViewController {
     )
 
     override func isContentValid() -> Bool {
-        return viewModel.selectedDevice != nil && viewModel.payloadEnvelope != nil
+        return viewModel.canSend
     }
 
     override func didSelectPost() {
-        viewModel.stopDiscovery()
-        let openURL = URL(string: "aubackup://instant-share/resume")!
-        var responder: UIResponder? = self
-        while let next = responder?.next {
-            if let application = next as? UIApplication {
-                application.open(openURL, options: [:], completionHandler: nil)
-                break
-            }
-            responder = next
-        }
-        extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+        InstantShareLog.info("[Share VC] didSelectPost — starting transfer in extension")
+        Task { await viewModel.send() }
     }
 
     override func configurationItems() -> [Any]! {
@@ -34,14 +25,16 @@ class ShareViewController: SLComposeServiceViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         InstantShareLog.info("[Share VC] viewDidLoad")
+
+        beginRequestExtensionTime()
+
         let extensionItems = extensionContext?.inputItems as? [NSExtensionItem] ?? []
-        InstantShareLog.info("[Share VC] received \(extensionItems.count) extension items")
+        InstantShareLog.info("[Share VC] \(extensionItems.count) extension items")
 
         let hosting = UIHostingController(
             rootView: InstantShareExtensionView(
                 viewModel: viewModel,
-                onCancel: { [weak self] in self?.cancelAction() },
-                onSend: { [weak self] in self?.didSelectPost() }
+                onCancel: { [weak self] in self?.cancelAction() }
             )
         )
         addChild(hosting)
@@ -57,8 +50,18 @@ class ShareViewController: SLComposeServiceViewController {
 
         Task {
             await viewModel.loadPayload(from: extensionItems)
-            InstantShareLog.info("[Share VC] payload loaded, starting discovery")
+            InstantShareLog.info("[Share VC] payload loaded, starting mDNS discovery")
             viewModel.startDiscovery()
+        }
+    }
+
+    private func beginRequestExtensionTime() {
+        let processInfo = ProcessInfo.processInfo
+        processInfo.performExpiringActivity(withReason: "Trust handshake and data transfer") { [weak self] expired in
+            if expired {
+                InstantShareLog.info("[Share VC] extension time expired")
+                self?.viewModel.stopDiscovery()
+            }
         }
     }
 

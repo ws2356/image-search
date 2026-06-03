@@ -23,8 +23,8 @@ The advertised TCP port SHALL be the PC's instant-share HTTP API port.
 - **THEN** the Share Extension uses `device_name` TXT values to render the candidate PC list and passes `device_id`, `signature`, `signature_key_id`, `timestamp_ms`, and resolved IP:port to AuBackup on device selection
 
 #### Scenario: Mobile sends session bootstrap to selected PC
-- **WHEN** AuBackup resumes from Share Extension handoff after user selects a target PC
-- **THEN** AuBackup sends an HTTP POST to the PC's `/api/instant-share/v1/sessions/bootstrap` endpoint (using the IP:port from mDNS resolution) with session ID, mobile port, and mobile IP list before HTTP trust/transfer calls
+- **WHEN** the user has selected a PC and taps "Send" in the Share Extension
+- **THEN** the Share Extension sends an HTTP POST to the PC's `/api/instant-share/v1/sessions/bootstrap` endpoint (using the IP:port from mDNS resolution) with session ID, mobile port, and mobile IP list, then starts the local HTTPS server and awaits the PC's trust handshake
 
 ### Requirement: Desktop mDNS advertisement daemon
 The desktop system SHALL run a background daemon process that continuously advertises the instant-sharing mDNS service for mobile discovery and access.

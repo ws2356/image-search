@@ -250,9 +250,9 @@ final class DefaultTelemetryService: TelemetryService {
             return "permissions"
         case .transfer:
             return "transfer"
-        case .completed:
+            case .completed:
             return "completed"
-        case .error(_):
+            case .error(_):
             return "error"
         }
     }
