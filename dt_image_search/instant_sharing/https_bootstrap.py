@@ -255,9 +255,18 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                 correlation_id=correlation_id,
                 body=raw_body,
             )
+            _logger.info(
+                "Transfer text received: session_id=%s correlation_id=%s",
+                session_id,
+                correlation_id,
+            )
             if orchestrator is not None:
                 try:
                     orchestrator.handle_transfer_received(
+                        session_id=session_id,
+                        correlation_id=correlation_id,
+                    )
+                    orchestrator.handle_delivery_complete(
                         session_id=session_id,
                         correlation_id=correlation_id,
                     )
@@ -296,9 +305,18 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                 content_type=content_type,
                 filename=filename,
             )
+            _logger.info(
+                "Transfer image received: session_id=%s correlation_id=%s",
+                session_id,
+                correlation_id,
+            )
             if orchestrator is not None:
                 try:
                     orchestrator.handle_transfer_received(
+                        session_id=session_id,
+                        correlation_id=correlation_id,
+                    )
+                    orchestrator.handle_delivery_complete(
                         session_id=session_id,
                         correlation_id=correlation_id,
                     )

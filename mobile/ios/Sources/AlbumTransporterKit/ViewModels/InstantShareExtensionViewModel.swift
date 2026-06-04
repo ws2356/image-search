@@ -96,6 +96,24 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         isProcessing = true
         errorMessage = nil
 
+        switch envelope.payloadType {
+        case .text:
+            if let text = envelope.textContent {
+                service.setSharedText(text)
+            }
+        case .image:
+            if let fileURL = envelope.fileURL,
+               let data = try? Data(contentsOf: fileURL) {
+                service.setSharedImage(
+                    data: data,
+                    filename: envelope.filename ?? "image",
+                    contentType: envelope.contentType ?? "image/jpeg"
+                )
+            }
+        default:
+            break
+        }
+
         let config = buildConnectionConfig(pc: pc, envelope: envelope)
         service.connectionConfig = config
 

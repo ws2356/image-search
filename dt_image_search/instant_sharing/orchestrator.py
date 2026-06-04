@@ -80,6 +80,9 @@ class InstantShareReceiverOrchestrator:
 
     def handle_delivery_complete(self, *, session_id: str, correlation_id: str) -> None:
         session = self._session_registry.require_session(session_id)
+        if session.state is not SessionState.DELIVERING:
+            delivering = self._session_registry.transition(session_id, SessionState.DELIVERING)
+            self._publish(delivering)
         updated = self._session_registry.transition(session_id, SessionState.DONE)
         self._publish(updated)
         log(
