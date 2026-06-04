@@ -39,7 +39,6 @@ class InstantShareSession:
     connection_config: ConnectionConfig
     state: SessionState = SessionState.BOOTSTRAPPED
     started_monotonic: float = 0.0
-    trusted_mobile_public_key_pem: str | None = None
 
     def __post_init__(self) -> None:
         if self.started_monotonic <= 0:
@@ -92,12 +91,5 @@ class InstantShareSessionRegistry:
                     correlation_id=current_session.connection_config.correlation_id,
                 )
             updated_session = replace(current_session, state=next_state)
-            self._active_session = updated_session
-            return updated_session
-
-    def set_trusted_mobile_public_key(self, session_id: str, public_key_pem: str) -> InstantShareSession:
-        with self._lock:
-            current_session = self.require_session(session_id)
-            updated_session = replace(current_session, trusted_mobile_public_key_pem=public_key_pem)
             self._active_session = updated_session
             return updated_session

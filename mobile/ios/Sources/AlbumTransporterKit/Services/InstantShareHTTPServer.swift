@@ -1,28 +1,22 @@
 import CryptoKit
 import Foundation
 import Network
-import Security
-import UIKit
 
-/// Manages the mobile-side HTTPS server for the instant-share protocol.
+/// Manages the mobile-side plain HTTP server for the instant-share protocol.
 ///
-/// Generates or loads a per-device TLS identity from the keychain at runtime
-/// (EC P-256 self-signed certificate), starts a TLS-enabled NWListener on the
-/// configured port, and routes incoming PC requests to the 6 protocol endpoints
-/// defined in `InstantShareProtocol`.
+/// Starts a plain TCP NWListener on the configured port and routes incoming PC
+/// requests to the 6 protocol endpoints defined in `InstantShareProtocol`.
+/// Trust apply/confirm payloads are encrypted with the DH-derived session key.
 @MainActor
 final class InstantShareHTTPServer: ObservableObject {
     enum ServerError: Error, LocalizedError {
-        case identityLoadFailed
         case listenerStartFailed(String)
         case invalidPort
 
         var errorDescription: String? {
             switch self {
-            case .identityLoadFailed:
-                return "Failed to generate or load instant-share TLS identity."
             case .listenerStartFailed(let detail):
-                return "Failed to start TLS listener: \(detail)"
+                return "Failed to start listener: \(detail)"
             case .invalidPort:
                 return "Configured port is invalid."
             }
@@ -37,8 +31,6 @@ final class InstantShareHTTPServer: ObservableObject {
 
     private let queue = DispatchQueue(label: "instant-share.http-server", qos: .userInitiated)
     private var listener: NWListener?
-    private var identity: SecIdentity?
-    private var publicKeyPEM: String?
     private var trustManager: InstantShareTrustSessionManager
     private var pinCode: String?
     private var pinConfirmationContinuation: CheckedContinuation<Bool, Never>?
@@ -49,37 +41,14 @@ final class InstantShareHTTPServer: ObservableObject {
         self.trustManager = trustManager
     }
 
-    /// Generate or load the per-device TLS identity from the keychain.
-    func loadIdentity() throws {
-        let identity = try InstantShareIdentityManager.getOrCreateIdentity()
-        self.identity = identity.secIdentity
-        self.publicKeyPEM = identity.publicKeyPEM
-    }
-
-    /// Start listening for incoming PC connections.
+    /// Start listening for incoming PC connections on plain TCP.
     func start(port: UInt16) throws {
         guard !isRunning else { return }
-        if identity == nil {
-            try loadIdentity()
-        }
-        guard let identity else {
-            throw ServerError.identityLoadFailed
-        }
         guard (1...65535).contains(Int(port)) else {
             throw ServerError.invalidPort
         }
 
-        let tlsOptions = NWProtocolTLS.Options()
-        sec_protocol_options_set_local_identity(
-            tlsOptions.securityProtocolOptions,
-            sec_identity_create(identity)!
-        )
-        sec_protocol_options_set_min_tls_protocol_version(
-            tlsOptions.securityProtocolOptions,
-            .TLSv13
-        )
-
-        let parameters = NWParameters(tls: tlsOptions, tcp: NWProtocolTCP.Options())
+        let parameters = NWParameters.tcp
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw ServerError.invalidPort
         }
@@ -89,7 +58,7 @@ final class InstantShareHTTPServer: ObservableObject {
                 self?.handle(connection: connection)
             }
         }
-        listener.stateUpdateHandler = { [weak self] state in
+        listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
             Task { @MainActor in
                 switch state {
                 case .ready:
@@ -170,10 +139,6 @@ final class InstantShareHTTPServer: ObservableObject {
         guard let continuation = pinConfirmationContinuation else { return }
         pinConfirmationContinuation = nil
         continuation.resume(returning: false)
-    }
-
-    var mobilePublicKeyPEM: String? {
-        publicKeyPEM
     }
 
     // MARK: - Connection handling
@@ -310,7 +275,6 @@ final class InstantShareHTTPServer: ObservableObject {
         }
         do {
             let responsePayload: [String: Any] = [
-                "mobile_public_key_pem": publicKeyPEM ?? "",
                 "trust_status": "trusted",
             ]
             let envelope = try trustManager.encryptResponse(responsePayload)

@@ -193,7 +193,6 @@ class InstantShareRuntime:
                 request=TrustHandshakeRequest(
                     pc_dh_public_key=str(handshake_payload.get("pc_dh_public_key", "")),
                     pc_nonce=str(handshake_payload.get("pc_nonce", "")),
-                    pc_public_key_pem=self._sender_identity.public_key_pem(),
                 ),
                 correlation_id=correlation_id,
             )

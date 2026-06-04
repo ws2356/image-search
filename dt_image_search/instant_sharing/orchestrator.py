@@ -19,7 +19,6 @@ INSTANT_SHARE_LIFECYCLE_EVENT = "instant_share.lifecycle"
 class TrustHandshakeRequest:
     pc_dh_public_key: str
     pc_nonce: str
-    pc_public_key_pem: str
     key_id: str | None = None
 
 
@@ -84,7 +83,6 @@ class InstantShareReceiverOrchestrator:
                     try:
                         confirm_payload_holder.update(
                             client.trust_confirm(
-                                pc_public_key_pem=request.pc_public_key_pem,
                                 correlation_id=correlation_id,
                             )
                         )
@@ -111,16 +109,6 @@ class InstantShareReceiverOrchestrator:
             except InstantShareError as error:
                 self._transition_on_error(session_id=session_id, error=error)
                 raise
-            mobile_public_key_pem = confirm_payload.get("mobile_public_key_pem")
-            if not isinstance(mobile_public_key_pem, str) or not mobile_public_key_pem.strip():
-                error = InstantShareError(
-                    ErrorCode.CONFIRM_TIMEOUT,
-                    "Instant-share trust confirm did not return mobile_public_key_pem.",
-                    correlation_id=correlation_id,
-                )
-                self._transition_on_error(session_id=session_id, error=error)
-                raise error
-            self._session_registry.set_trusted_mobile_public_key(session_id, mobile_public_key_pem)
             log(
                 "info",
                 message="Instant-share trust established",

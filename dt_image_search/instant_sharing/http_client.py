@@ -3,14 +3,10 @@ from __future__ import annotations
 import http.client
 import json
 import os
-import ssl
-from dataclasses import dataclass
 import time
+from dataclasses import dataclass
 from typing import Callable, Mapping, Protocol
 from urllib.parse import urlsplit
-
-from cryptography import x509
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_pem_public_key
 
 from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
@@ -41,8 +37,6 @@ class InstantShareHttpRequest:
     headers: Mapping[str, str]
     body: bytes | None = None
     timeout_seconds: float = 15.0
-    requires_tls_pin: bool = False
-    pinned_mobile_public_key_pem: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,34 +71,22 @@ class RetryPolicy:
         return self.backoff_seconds[capped_index]
 
 
-class PinnedHttpsRequester:
+class PlainHttpRequester:
     def __call__(self, request: InstantShareHttpRequest) -> InstantShareHttpResponse:
         parsed_url = urlsplit(request.url)
-        if parsed_url.scheme != "https":
-            raise ValueError(f"Instant-share requester requires https URLs, got {request.url}.")
+        if parsed_url.scheme != "http":
+            raise ValueError(f"Instant-share requester requires http URLs, got {request.url}.")
         if parsed_url.hostname is None:
             raise ValueError(f"Instant-share URL is missing a hostname: {request.url}.")
-        if request.requires_tls_pin and (
-            request.pinned_mobile_public_key_pem is None or not request.pinned_mobile_public_key_pem.strip()
-        ):
-            raise InstantShareError(
-                ErrorCode.TRUSTED_KEY_NOT_FOUND,
-                "Instant-share transfer requests require a pinned mobile public key.",
-            )
 
         request_path = parsed_url.path or "/"
         if parsed_url.query:
             request_path = f"{request_path}?{parsed_url.query}"
 
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-
-        connection = http.client.HTTPSConnection(
+        connection = http.client.HTTPConnection(
             host=parsed_url.hostname,
-            port=parsed_url.port or 443,
+            port=parsed_url.port or 8443,
             timeout=request.timeout_seconds,
-            context=ssl_context,
         )
         try:
             connection.request(
@@ -113,13 +95,6 @@ class PinnedHttpsRequester:
                 body=request.body,
                 headers=dict(request.headers),
             )
-            peer_certificate_der = self._get_peer_certificate_der(connection=connection, url=request.url)
-            if request.requires_tls_pin:
-                self.verify_peer_public_key_pin(
-                    peer_certificate_der=peer_certificate_der,
-                    pinned_mobile_public_key_pem=request.pinned_mobile_public_key_pem or "",
-                    url=request.url,
-                )
             response = connection.getresponse()
             response_body = response.read()
             return InstantShareHttpResponse(
@@ -129,58 +104,6 @@ class PinnedHttpsRequester:
             )
         finally:
             connection.close()
-
-    @staticmethod
-    def verify_peer_public_key_pin(
-        *,
-        peer_certificate_der: bytes,
-        pinned_mobile_public_key_pem: str,
-        url: str,
-    ) -> None:
-        if not peer_certificate_der:
-            raise InstantShareError(
-                ErrorCode.TLS_PIN_VALIDATION_FAILED,
-                f"Instant-share peer certificate is missing for {url}.",
-            )
-
-        try:
-            peer_certificate = x509.load_der_x509_certificate(peer_certificate_der)
-            pinned_public_key = load_pem_public_key(pinned_mobile_public_key_pem.encode("utf-8"))
-        except Exception as exc:
-            raise InstantShareError(
-                ErrorCode.TLS_PIN_VALIDATION_FAILED,
-                f"Instant-share TLS pin material is invalid for {url}.",
-            ) from exc
-
-        peer_public_key_der = peer_certificate.public_key().public_bytes(
-            Encoding.DER,
-            PublicFormat.SubjectPublicKeyInfo,
-        )
-        pinned_public_key_der = pinned_public_key.public_bytes(
-            Encoding.DER,
-            PublicFormat.SubjectPublicKeyInfo,
-        )
-        if peer_public_key_der != pinned_public_key_der:
-            raise InstantShareError(
-                ErrorCode.TLS_PIN_VALIDATION_FAILED,
-                f"Instant-share TLS public key pin validation failed for {url}.",
-            )
-
-    @staticmethod
-    def _get_peer_certificate_der(*, connection: http.client.HTTPSConnection, url: str) -> bytes:
-        socket_handle = getattr(connection, "sock", None)
-        if socket_handle is None:
-            raise InstantShareError(
-                ErrorCode.TLS_PIN_VALIDATION_FAILED,
-                f"Instant-share TLS connection did not expose a peer certificate for {url}.",
-            )
-        peer_certificate_der = socket_handle.getpeercert(binary_form=True)
-        if not peer_certificate_der:
-            raise InstantShareError(
-                ErrorCode.TLS_PIN_VALIDATION_FAILED,
-                f"Instant-share peer certificate is missing for {url}.",
-            )
-        return peer_certificate_der
 
 
 class InstantShareHttpClient:
@@ -192,33 +115,16 @@ class InstantShareHttpClient:
         requester: HttpRequester | None = None,
         session_signer: SessionRequestSigner | None = None,
         trust_session_protector: TrustSessionProtector | None = None,
-        pinned_mobile_public_key_pem: str | None = None,
-        retry_policy: RetryPolicy | None = None,
-        sleep_func: Callable[[float], None] = time.sleep,
-        timeout_seconds: float = 15.0,
+        correlation_id: str,
     ) -> None:
         self._connection_config = connection_config
         self._device_id = device_id
-        self._requester = requester if requester is not None else PinnedHttpsRequester()
+        self._requester = requester if requester is not None else PlainHttpRequester()
         self._session_signer = session_signer
         self._trust_session_protector = trust_session_protector
-        self._pinned_mobile_public_key_pem = pinned_mobile_public_key_pem.strip() if pinned_mobile_public_key_pem else None
         self._retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
         self._sleep_func = sleep_func
         self._timeout_seconds = timeout_seconds
-
-    @property
-    def pinned_mobile_public_key_pem(self) -> str | None:
-        return self._pinned_mobile_public_key_pem
-
-    def set_pinned_mobile_public_key_pem(self, public_key_pem: str) -> None:
-        normalized_public_key_pem = public_key_pem.strip()
-        if not normalized_public_key_pem:
-            raise InstantShareError(
-                ErrorCode.TRUSTED_KEY_NOT_FOUND,
-                "Instant-share pinned mobile public key must not be empty.",
-            )
-        self._pinned_mobile_public_key_pem = normalized_public_key_pem
 
     def trust_handshake(self, *, pc_dh_public_key: str, pc_nonce: str, correlation_id: str) -> dict[str, object]:
         handshake_request_payload = {
@@ -271,7 +177,7 @@ class InstantShareHttpClient:
         )
         return pin_code
 
-    def trust_confirm(self, *, pc_public_key_pem: str, correlation_id: str) -> dict[str, object]:
+    def trust_confirm(self, *, correlation_id: str) -> dict[str, object]:
         response_payload = self._post_json(
             path="/trust/confirm",
             metadata=self._connection_config.metadata,
@@ -279,11 +185,8 @@ class InstantShareHttpClient:
             requires_signature=False,
             requires_tls_pin=False,
             protect_with_trust_session=self._trust_session_protector is not None,
-            payload={"pc_public_key_pem": pc_public_key_pem},
+            payload={},
         )
-        mobile_public_key_pem = response_payload.get("mobile_public_key_pem")
-        if isinstance(mobile_public_key_pem, str) and mobile_public_key_pem.strip():
-            self.set_pinned_mobile_public_key_pem(mobile_public_key_pem)
         return response_payload
 
     def download_text_payload(self, *, correlation_id: str, requires_signature: bool = True) -> DownloadedTextPayload:
@@ -292,7 +195,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=requires_signature,
-            requires_tls_pin=True,
+            requires_tls_pin=False,
             payload={},
         )
         text_utf8 = response_payload.get("text_utf8")
@@ -310,7 +213,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=requires_signature,
-            requires_tls_pin=True,
+            requires_tls_pin=False,
             payload={},
         )
         content_type = str(response.headers.get("Content-Type", "application/octet-stream"))
@@ -342,7 +245,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=requires_signature,
-            requires_tls_pin=True,
+            requires_tls_pin=False,
             payload=result.as_dict(),
         )
 
@@ -353,7 +256,6 @@ class InstantShareHttpClient:
         metadata: InstantShareMetadata,
         correlation_id: str,
         requires_signature: bool,
-        requires_tls_pin: bool,
         payload: Mapping[str, object],
         protect_with_trust_session: bool = False,
     ) -> dict[str, object]:
@@ -362,7 +264,6 @@ class InstantShareHttpClient:
             metadata=metadata,
             correlation_id=correlation_id,
             requires_signature=requires_signature,
-            requires_tls_pin=requires_tls_pin,
             payload=payload,
             protect_with_trust_session=protect_with_trust_session,
         )
@@ -385,17 +286,9 @@ class InstantShareHttpClient:
         metadata: InstantShareMetadata,
         correlation_id: str,
         requires_signature: bool,
-        requires_tls_pin: bool,
-        payload: Mapping[str, object],
         protect_with_trust_session: bool = False,
     ) -> InstantShareHttpResponse:
         metadata.validate()
-        if requires_tls_pin and (self._pinned_mobile_public_key_pem is None or not self._pinned_mobile_public_key_pem.strip()):
-            raise InstantShareError(
-                ErrorCode.TRUSTED_KEY_NOT_FOUND,
-                "Instant-share transfer requests require a pinned mobile public key from /trust/confirm.",
-                correlation_id=correlation_id,
-            )
         headers = self._build_headers(correlation_id=correlation_id, requires_signature=requires_signature)
         logical_payload = {**metadata.as_dict(), **payload}
         request_payload: Mapping[str, object] = logical_payload
@@ -419,8 +312,6 @@ class InstantShareHttpClient:
                     headers=request_headers,
                     body=request_body,
                     timeout_seconds=self._timeout_seconds,
-                    requires_tls_pin=requires_tls_pin,
-                    pinned_mobile_public_key_pem=self._pinned_mobile_public_key_pem,
                 )
                 try:
                     response = self._requester(request)
@@ -501,14 +392,14 @@ class InstantShareHttpClient:
                 host = f"[{ip_value}]"
             else:
                 host = ip_value
-            base_urls.append(f"https://{host}:{self._connection_config.mobile_port}")
+            base_urls.append(f"http://{host}:{self._connection_config.mobile_port}")
         return tuple(base_urls)
 
     @staticmethod
     def _is_retryable_error(error: Exception) -> bool:
         if isinstance(error, InstantShareError):
             return error.retryable
-        return isinstance(error, (OSError, TimeoutError, ssl.SSLError))
+        return isinstance(error, (OSError, TimeoutError))
 
     @staticmethod
     def _coerce_exception_to_instant_share_error(

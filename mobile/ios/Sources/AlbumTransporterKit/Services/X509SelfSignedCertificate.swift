@@ -30,7 +30,7 @@ enum X509SelfSignedCertificate {
 
     /// Build SubjectPublicKeyInfo for an EC P-256 raw public key.
     static func encodeSubjectPublicKeyInfo(_ rawPublicKey: Data) -> Data {
-        let ecPubOID = Data([0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01])
+        let ecPubOID = Data([0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01])
         let p256OID = Data([0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07])
         let algoParams = encodeASN1(tag: 0x30, value: ecPubOID + p256OID)
         let pubKey = encodeASN1(tag: 0x03, value: Data([0x00]) + rawPublicKey)
@@ -46,12 +46,13 @@ struct DistinguishedName {
     func encode() -> Data {
         let cnOID = Data([0x06, 0x03, 0x55, 0x04, 0x03])
         let cnValue = X509SelfSignedCertificate.encodeASN1(
-            tag: 0x0C,
-            value: Data(commonName.utf8)
+            tag: 0x0C, value: Data(commonName.utf8)
+        )
+        let cnAttr = X509SelfSignedCertificate.encodeASN1(
+            tag: 0x30, value: cnOID + cnValue
         )
         let cnSet = X509SelfSignedCertificate.encodeASN1(
-            tag: 0x31,
-            value: cnOID + cnValue
+            tag: 0x31, value: cnAttr
         )
         return X509SelfSignedCertificate.encodeASN1(tag: 0x30, value: cnSet)
     }

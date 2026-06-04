@@ -46,7 +46,7 @@ from dt_image_search.instant_sharing.http_client import (
     InstantShareHttpClient,
     InstantShareHttpRequest,
     InstantShareHttpResponse,
-    PinnedHttpsRequester,
+    PlainHttpRequester,
     RetryPolicy,
     SessionRequestSigner,
 )
@@ -108,7 +108,7 @@ __all__ = [
     "MiniWindowPhase",
     "MiniWindowState",
     "PayloadClass",
-    "PinnedHttpsRequester",
+    "PlainHttpRequester",
     "PersistentEd25519SessionSigner",
     "QtClipboardWriter",
     "RetryPolicy",
