@@ -250,6 +250,12 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
             raw_body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            text_utf8 = ""
+            try:
+                payload = json.loads(raw_body.decode("utf-8"))
+                text_utf8 = str(payload.get("text_utf8", ""))
+            except Exception:
+                pass
             result = transfer_handler.receive_text(
                 session_id=session_id,
                 correlation_id=correlation_id,
@@ -269,6 +275,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                     orchestrator.handle_delivery_complete(
                         session_id=session_id,
                         correlation_id=correlation_id,
+                        text_content=text_utf8,
                     )
                 except Exception as exc:
                     _logger.warning("Failed to publish transfer lifecycle event: %s", exc)
@@ -310,6 +317,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                 session_id,
                 correlation_id,
             )
+            file_path = result.target_result.output_paths[0] if result.target_result.output_paths else ""
             if orchestrator is not None:
                 try:
                     orchestrator.handle_transfer_received(
@@ -319,6 +327,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                     orchestrator.handle_delivery_complete(
                         session_id=session_id,
                         correlation_id=correlation_id,
+                        file_path=file_path,
                     )
                 except Exception as exc:
                     _logger.warning("Failed to publish transfer lifecycle event: %s", exc)

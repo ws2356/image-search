@@ -52,6 +52,8 @@ class MiniWindowState:
     error_message: str = ""
     download_progress: float = 0.0
     pin_code: str = ""
+    text_content: str = ""
+    file_path: str = ""
 
 
 def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str, pin_code: str = "") -> str:
@@ -116,6 +118,8 @@ class InstantShareMiniWindow(QDialog):
         device_name: str = "",
         payload_class: str = "",
         error_message: str = "",
+        text_content: str = "",
+        file_path: str = "",
     ) -> None:
         phase = self.build_phase(state)
         label = _payload_label(payload_class) if payload_class else self._state.payload_label
@@ -128,6 +132,8 @@ class InstantShareMiniWindow(QDialog):
             error_message=error_message,
             download_progress=1.0 if phase == MiniWindowPhase.SUCCESS else 0.0,
             pin_code=self._state.pin_code,
+            text_content=text_content or self._state.text_content,
+            file_path=file_path or self._state.file_path,
         )
         self._refresh_ui()
 
@@ -146,6 +152,8 @@ class InstantShareMiniWindow(QDialog):
     def _schedule_auto_close(self) -> None:
         if self._auto_close_timer is not None:
             self._auto_close_timer.stop()
+        if self._state.phase == MiniWindowPhase.SUCCESS and (self._state.text_content or self._state.file_path):
+            return
         delay = 4000 if self._state.phase == MiniWindowPhase.SUCCESS else 8000
         self._auto_close_timer = QTimer(self)
         self._auto_close_timer.setSingleShot(True)
@@ -224,6 +232,16 @@ class InstantShareMiniWindow(QDialog):
         self._dismiss_button.setVisible(False)
         self._button_layout.addWidget(self._dismiss_button)
 
+        self._copy_button = QPushButton("Copy to Clipboard")
+        self._copy_button.clicked.connect(self._on_copy)
+        self._copy_button.setVisible(False)
+        self._button_layout.addWidget(self._copy_button)
+
+        self._open_button = QPushButton("Show in Finder")
+        self._open_button.clicked.connect(self._on_open)
+        self._open_button.setVisible(False)
+        self._button_layout.addWidget(self._open_button)
+
         self._main_layout.addLayout(self._button_layout)
 
         self._refresh_ui()
@@ -233,6 +251,18 @@ class InstantShareMiniWindow(QDialog):
         self._state.error_message = "Canceled by user."
         self._refresh_ui()
         self._schedule_auto_close()
+
+    def _on_copy(self) -> None:
+        text = self._state.text_content
+        if text:
+            from PySide6.QtWidgets import QApplication
+            QApplication.clipboard().setText(text)
+
+    def _on_open(self) -> None:
+        path = self._state.file_path
+        if path:
+            import subprocess
+            subprocess.Popen(["open", "-R", path])
 
     def _refresh_ui(self) -> None:
         phase = self._state.phase
@@ -274,6 +304,15 @@ class InstantShareMiniWindow(QDialog):
             and not is_terminal
         )
         self._dismiss_button.setVisible(is_terminal)
+
+        if phase == MiniWindowPhase.SUCCESS:
+            has_text = bool(self._state.text_content)
+            has_file = bool(self._state.file_path)
+            self._copy_button.setVisible(has_text)
+            self._open_button.setVisible(has_file)
+        else:
+            self._copy_button.setVisible(False)
+            self._open_button.setVisible(False)
 
         if phase in (MiniWindowPhase.FAILED, MiniWindowPhase.TIMED_OUT, MiniWindowPhase.ABORTED):
             self._error_label.setText(message)

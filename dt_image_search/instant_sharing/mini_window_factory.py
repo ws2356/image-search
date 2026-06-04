@@ -49,12 +49,16 @@ class InstantShareMiniWindowFactory:
         session_id: object,
         payload_class: object,
         error_message: object = None,
+        text_content: object = "",
+        file_path: object = "",
         **_: object,
     ) -> None:
         state_value = str(state) if state is not None else "unknown"
         session_id_value = str(session_id) if session_id is not None else ""
         payload_class_value = str(payload_class) if payload_class is not None else ""
         error_message_value = str(error_message) if error_message is not None else ""
+        text_content_value = str(text_content) if text_content is not None else ""
+        file_path_value = str(file_path) if file_path is not None else ""
 
         phase = InstantShareMiniWindow.build_phase(state_value)
         is_new_session = session_id_value and session_id_value != self._current_session_id
@@ -65,12 +69,16 @@ class InstantShareMiniWindowFactory:
                 state=state_value,
                 payload_class=payload_class_value,
                 error_message=error_message_value,
+                text_content=text_content_value,
+                file_path=file_path_value,
             ))
         elif self._active_window is not None:
             dispatcher.post(lambda: self._active_window.apply_session_event(
                 state=state_value,
                 payload_class=payload_class_value,
                 error_message=error_message_value,
+                text_content=text_content_value,
+                file_path=file_path_value,
             ))
 
     def _create_or_show_window(
@@ -79,6 +87,8 @@ class InstantShareMiniWindowFactory:
         state: str,
         payload_class: str,
         error_message: str,
+        text_content: str = "",
+        file_path: str = "",
     ) -> None:
         if self._active_window is not None:
             try:
@@ -92,6 +102,8 @@ class InstantShareMiniWindowFactory:
             state=state,
             payload_class=payload_class,
             error_message=error_message,
+            text_content=text_content,
+            file_path=file_path,
         )
         window.destroyed.connect(self._on_window_destroyed)
         window.show()

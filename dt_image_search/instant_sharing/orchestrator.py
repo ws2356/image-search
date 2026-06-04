@@ -78,13 +78,20 @@ class InstantShareReceiverOrchestrator:
             updated = self._session_registry.transition(session_id, SessionState.TRANSFERRING)
             self._publish(updated)
 
-    def handle_delivery_complete(self, *, session_id: str, correlation_id: str) -> None:
+    def handle_delivery_complete(
+        self,
+        *,
+        session_id: str,
+        correlation_id: str,
+        text_content: str = "",
+        file_path: str = "",
+    ) -> None:
         session = self._session_registry.require_session(session_id)
         if session.state is not SessionState.DELIVERING:
             delivering = self._session_registry.transition(session_id, SessionState.DELIVERING)
-            self._publish(delivering)
+            self._publish(delivering, text_content=text_content, file_path=file_path)
         updated = self._session_registry.transition(session_id, SessionState.DONE)
-        self._publish(updated)
+        self._publish(updated, text_content=text_content, file_path=file_path)
         log(
             "info",
             message="Instant-share delivery complete",
@@ -132,8 +139,14 @@ class InstantShareReceiverOrchestrator:
         return SessionState.FAILED
 
     @staticmethod
-    def _publish(session: InstantShareSession, *, error: InstantShareError | None = None) -> None:
-        event = {
+    def _publish(
+        session: InstantShareSession,
+        *,
+        error: InstantShareError | None = None,
+        text_content: str = "",
+        file_path: str = "",
+    ) -> None:
+        event: dict[str, object] = {
             "session_id": session.connection_config.session_id,
             "correlation_id": session.connection_config.correlation_id,
             "state": session.state.value,
@@ -141,6 +154,10 @@ class InstantShareReceiverOrchestrator:
             "target_intent": session.connection_config.metadata.target_intent.value,
             "trust_mode": session.connection_config.metadata.trust_mode.value,
         }
+        if text_content:
+            event["text_content"] = text_content
+        if file_path:
+            event["file_path"] = file_path
         if error is not None:
             event["error_code"] = error.error_code.value
             event["error_message"] = error.message
