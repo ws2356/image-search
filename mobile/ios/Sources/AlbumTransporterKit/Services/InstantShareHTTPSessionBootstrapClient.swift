@@ -16,7 +16,6 @@ public enum InstantShareBootstrapError: Error, LocalizedError {
     case invalidURL
     case httpError(statusCode: Int, message: String)
     case noData
-    case pcDeviceIDMismatch(expected: String, got: String)
     case receiverBusy
 
     public var errorDescription: String? {
@@ -27,8 +26,6 @@ public enum InstantShareBootstrapError: Error, LocalizedError {
             return "Bootstrap HTTP \(code): \(msg)"
         case .noData:
             return "Bootstrap returned no data"
-        case .pcDeviceIDMismatch(let expected, let got):
-            return "PC device ID mismatch: expected \(expected), got \(got)"
         case .receiverBusy:
             return "PC is busy with another session"
         }
@@ -49,8 +46,7 @@ public final class InstantShareHTTPSessionBootstrapClient: NSObject, @unchecked 
     public func sendBootstrap(
         to host: String,
         port: Int,
-        connectionConfig: InstantShareConnectionConfig,
-        expectedPCDeviceID: String
+        connectionConfig: InstantShareConnectionConfig
     ) async throws {
         guard let url = URL(string: "http://\(host):\(port)/api/instant-share/v1/sessions/bootstrap") else {
             throw InstantShareBootstrapError.invalidURL
@@ -108,13 +104,6 @@ public final class InstantShareHTTPSessionBootstrapClient: NSObject, @unchecked 
             throw InstantShareBootstrapError.httpError(
                 statusCode: 200,
                 message: "Bootstrap not accepted"
-            )
-        }
-
-        guard bootstrapResponse.pcDeviceID == expectedPCDeviceID else {
-            throw InstantShareBootstrapError.pcDeviceIDMismatch(
-                expected: expectedPCDeviceID,
-                got: bootstrapResponse.pcDeviceID
             )
         }
 

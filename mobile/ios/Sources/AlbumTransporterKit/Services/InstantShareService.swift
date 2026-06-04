@@ -93,8 +93,7 @@ public final class InstantShareService: ObservableObject {
             try await bootstrapClient.sendBootstrap(
                 to: pc.host,
                 port: pc.port,
-                connectionConfig: connectionConfig,
-                expectedPCDeviceID: pc.id
+                connectionConfig: connectionConfig
             )
             log("Bootstrap sent to PC \(pc.name)")
         } catch {

@@ -179,6 +179,7 @@ class InstantShareRuntime:
             device_id=self._device_id_provider(),
             session_signer=self._sender_identity.session_signer,
             trust_session_protector=trust_session_protector,
+            correlation_id=connection_config.correlation_id,
         ), key_resolver, handshake_payload
 
     def run_receive_flow(self, connection_config: ConnectionConfig) -> object:

@@ -203,7 +203,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             if let endpoint = connection.currentPath?.remoteEndpoint,
                case .hostPort(let host, let port) = endpoint,
                case .ipv6 = host {
-                resolveWithEndpoint(host: "\(host)", port: Int(port.rawValue), result: result, deviceID: deviceID)
+                resolveWithEndpoint(host: "\(host)", port: Int(port.rawValue), result: result, fallbackID: deviceID)
                 return
             }
             InstantShareLog.debug("[MDNS Browser] extractPCInfo: could not determine host for \(deviceID)")
@@ -214,20 +214,31 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             return
         }
 
-        resolveWithEndpoint(host: "\(hostString)", port: Int(port.rawValue), result: result, deviceID: deviceID)
+        resolveWithEndpoint(host: "\(hostString)", port: Int(port.rawValue), result: result, fallbackID: deviceID)
     }
 
-    private func resolveWithEndpoint(host: String, port: Int, result: NWBrowser.Result, deviceID: String) {
+    private func resolveWithEndpoint(host: String, port: Int, result: NWBrowser.Result, fallbackID: String) {
         let txtRecord = extractTXTRecord(from: result)
+        InstantShareLog.debug("[MDNS Browser] TXT record: \(txtRecord?.description ?? "nil")")
+        InstantShareLog.debug("[MDNS Browser] TXT keys: \(txtRecord?.keys.sorted().joined(separator: ", ") ?? "none")")
+        
+        let deviceID: String
+        if let idFromTXT = txtRecord?["device_id"], !idFromTXT.isEmpty {
+            deviceID = idFromTXT
+            InstantShareLog.debug("[MDNS Browser] Using device_id from TXT: \(deviceID)")
+        } else {
+            // TXT record missing device_id — use fallback (service name) with warning
+            InstantShareLog.debug("[MDNS Browser] No device_id in TXT, using fallback: \(fallbackID)")
+            deviceID = fallbackID
+        }
         let deviceName = txtRecord?["device_name"] ?? deviceID
         let signature = txtRecord?["signature"]
         let signatureKeyID = txtRecord?["signature_key_id"]
         let timestampMS = txtRecord?["timestamp_ms"].flatMap { Int64($0) }
         let protocolVersion = txtRecord?["ver"]
-        let deviceIDFromTXT = txtRecord?["device_id"] ?? deviceID
 
         let pc = InstantShareDiscoveredPC(
-            id: deviceIDFromTXT,
+            id: deviceID,
             name: String(deviceName),
             host: host,
             port: port,
@@ -239,20 +250,27 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
         resolvedPCs[deviceID] = pc
         refreshDiscovered()
-        InstantShareLog.debug("[MDNS Browser] resolved \(pc.name) at \(host):\(port)")
+        InstantShareLog.debug("[MDNS Browser] resolved \(pc.name) (\(pc.id)) at \(host):\(port)")
     }
 
     private func extractTXTRecord(from result: NWBrowser.Result) -> [String: String]? {
         guard case .bonjour(let txtRecord) = result.metadata else {
+            InstantShareLog.debug("[MDNS Browser] extractTXTRecord: metadata is not .bonjour, got: \(result.metadata)")
             return nil
         }
         let dict = txtRecord.dictionary
+        InstantShareLog.debug("[MDNS Browser] extractTXTRecord: raw dictionary has \(dict.count) entries")
         var resultDict: [String: String] = [:]
         for (key, value) in dict {
             if let stringValue = value as? String {
                 resultDict[key] = stringValue
+                InstantShareLog.debug("[MDNS Browser] TXT key '\(key)' = '\(stringValue)' (String)")
             } else if let dataValue = value as? Data {
-                resultDict[key] = String(data: dataValue, encoding: .utf8) ?? ""
+                let str = String(data: dataValue, encoding: .utf8) ?? ""
+                resultDict[key] = str
+                InstantShareLog.debug("[MDNS Browser] TXT key '\(key)' = '\(str)' (Data, \(dataValue.count) bytes)")
+            } else {
+                InstantShareLog.debug("[MDNS Browser] TXT key '\(key)' has unknown type: \(type(of: value))")
             }
         }
         return resultDict

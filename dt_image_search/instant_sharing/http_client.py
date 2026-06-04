@@ -116,6 +116,9 @@ class InstantShareHttpClient:
         session_signer: SessionRequestSigner | None = None,
         trust_session_protector: TrustSessionProtector | None = None,
         correlation_id: str,
+        retry_policy: RetryPolicy | None = None,
+        sleep_func: Callable[[float], None] = time.sleep,
+        timeout_seconds: float = 15.0,
     ) -> None:
         self._connection_config = connection_config
         self._device_id = device_id
@@ -136,7 +139,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=False,
-            requires_tls_pin=False,
+
             payload=handshake_request_payload,
         )
         if self._trust_session_protector is not None:
@@ -171,7 +174,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=False,
-            requires_tls_pin=False,
+
             protect_with_trust_session=self._trust_session_protector is not None,
             payload=payload,
         )
@@ -183,7 +186,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=False,
-            requires_tls_pin=False,
+
             protect_with_trust_session=self._trust_session_protector is not None,
             payload={},
         )
@@ -195,7 +198,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=requires_signature,
-            requires_tls_pin=False,
+
             payload={},
         )
         text_utf8 = response_payload.get("text_utf8")
@@ -213,7 +216,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=requires_signature,
-            requires_tls_pin=False,
+
             payload={},
         )
         content_type = str(response.headers.get("Content-Type", "application/octet-stream"))
@@ -245,7 +248,7 @@ class InstantShareHttpClient:
             metadata=self._connection_config.metadata,
             correlation_id=correlation_id,
             requires_signature=requires_signature,
-            requires_tls_pin=False,
+
             payload=result.as_dict(),
         )
 
@@ -286,6 +289,7 @@ class InstantShareHttpClient:
         metadata: InstantShareMetadata,
         correlation_id: str,
         requires_signature: bool,
+        payload: Mapping[str, object],
         protect_with_trust_session: bool = False,
     ) -> InstantShareHttpResponse:
         metadata.validate()
