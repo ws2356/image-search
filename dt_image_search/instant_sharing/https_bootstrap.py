@@ -95,7 +95,8 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
 
         # Bootstrap the instant-share session from connection config in handshake body
         orchestrator = self.__class__.orchestrator
-        if session_registry is not None and session_registry.get_active_session() is None:
+        active = session_registry.get_active_session() if session_registry is not None else None
+        if session_registry is not None and (active is None or active.connection_config.session_id != session_id):
             try:
                 metadata = InstantShareMetadata(
                     payload_class=PayloadClass(payload.get("payload_class", "text")),
@@ -317,7 +318,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                 session_id,
                 correlation_id,
             )
-            file_path = result.target_result.output_paths[0] if result.target_result.output_paths else ""
+            file_path = result.output_file_path
             if orchestrator is not None:
                 try:
                     orchestrator.handle_transfer_received(

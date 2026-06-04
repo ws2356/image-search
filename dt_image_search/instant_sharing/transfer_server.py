@@ -37,11 +37,17 @@ class TransferResult:
         correlation_id: str,
         state: str,
         bytes_received: int,
+        output_file_path: str = "",
     ) -> None:
         self._session_id = session_id
         self._correlation_id = correlation_id
         self._state = state
         self._bytes_received = bytes_received
+        self._output_file_path = output_file_path
+
+    @property
+    def output_file_path(self) -> str:
+        return self._output_file_path
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -141,9 +147,11 @@ class TransferHandler:
             manifest={},
         )
         result = self._delivery_service.deliver(image_payload)
+        file_path = result.target_result.output_paths[0] if result.target_result.output_paths else ""
         return TransferResult(
             session_id=session_id,
             correlation_id=correlation_id,
             state=result.state.value,
             bytes_received=len(body),
+            output_file_path=file_path,
         )
