@@ -29,7 +29,7 @@ The new trust flow has three clean steps:
 - **BREAKING**: PIN generation happens in response to `/trust/apply` (PC generates, encrypts, returns to iOS)
 - **BREAKING**: Trust confirmation is mobile-side only (no PC-side long-poll, no PC-side user action)
 - **BREAKING**: Data transfer inverts: iOS uploads to PC (not PC downloading from iOS)
-- Bootstrap flow unchanged: iOS still sends bootstrap to PC first
+- Bootstrap data merged into `/trust/handshake` body: no separate bootstrap endpoint. iOS embeds mobile_port, mobile_ip_list, payload_class, target_intent, trust_mode in the handshake request
 - mDNS discovery unchanged: PC advertises `_instantshare._tcp`, iOS browses
 - DH session key derivation unchanged: same X25519 + HKDF-SHA256 protocol
 - Trust envelope format unchanged: same AES-256-GCM envelope schema

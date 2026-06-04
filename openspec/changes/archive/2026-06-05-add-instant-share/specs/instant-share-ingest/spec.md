@@ -41,23 +41,12 @@ The system SHALL treat advanced optimization for very large media payloads as ou
 - **THEN** the system uses baseline transfer behavior without requiring large-media optimization features
 
 ### Requirement: Share Extension device selector card
-The iOS Share Extension SHALL present a production-quality device selector card that lists discovered BLE PCs and lets the user choose the target receiver before opening the main app.
+The iOS Share Extension SHALL present a production-quality device selector card that lists discovered mDNS PCs and lets the user choose the target receiver. No main-app handoff — the extension handles the full trust + upload flow natively.
 
 #### Scenario: Display discovered receivers in extension
-- **WHEN** the Share Extension discovers one or more eligible PCs over BLE
+- **WHEN** the Share Extension discovers one or more eligible PCs over mDNS (Bonjour)
 - **THEN** it renders those PCs in the device selector card with recognizable receiver identity and current availability state
 
-#### Scenario: Handoff selected receiver to AuBackup
+#### Scenario: Full flow in extension after device selection
 - **WHEN** the user taps a device in the selector card
-- **THEN** the Share Extension persists selected receiver and payload context and opens AuBackup for further handling
-
-### Requirement: Main-app handling after extension selection
-The main AuBackup app SHALL resume instant-share from Share Extension handoff context and SHALL handle both first-use trust flow and trusted-device revisit flow.
-
-#### Scenario: First-use selected receiver resumes in AuBackup
-- **WHEN** the selected receiver has no established trust relationship
-- **THEN** AuBackup resumes the share attempt and presents the first-share trust and transfer flow
-
-#### Scenario: Trusted receiver revisit resumes in AuBackup
-- **WHEN** the selected receiver has an established trusted relationship
-- **THEN** AuBackup resumes the share attempt and proceeds through trusted-device transfer handling without requiring the user to reselect the device in the extension
+- **THEN** the Share Extension initiates the complete trust + upload flow: calls PC's `/trust/handshake` with bootstrap data, receives encrypted PIN from `/trust/apply`, sends confirmation via `/trust/confirm`, and uploads payload via `/transfer/text` or `/transfer/image`. No AuBackup handoff, no URL navigation, no local HTTP server.

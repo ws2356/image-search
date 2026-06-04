@@ -22,7 +22,7 @@ Stakeholders:
 - Maintain always-on discoverability via desktop mDNS (Bonjour) advertisement daemon for instant sharing.
 - Ship production-quality instant-share UI on both mobile and desktop as part of this implementation slice.
 - Desktop instant-share UI lives in a standalone mini window, completely independent from the main AuSearch app.
-- Keep the iOS Share Extension lightweight by limiting it to payload preflight, mDNS discovery, and a production device selector card, then handing selected device and payload context to AuBackup main app.
+- Keep the iOS Share Extension handling the full flow natively (no AuBackup handoff): payload preflight, mDNS discovery, production device selector card, trust handshake/apply/confirm, and upload — all within the extension.
 - Deliver text to clipboard only and deliver images to clipboard or local files with predictable naming and status reporting in the current slice.
 - Ensure reliability with bounded retry, single-session execution, and recoverable error handling.
 
@@ -51,19 +51,18 @@ Stakeholders:
 - Decision: Run an always-on desktop daemon process under instant-sharing domain to advertise one Bonjour service `_instantshare._tcp` with TXT records carrying:
 	- `device_name` (human-readable PC name)
 	- `device_id` (persistent unique identifier)
-	- `signature` (cryptographic signature for trusted-direct verification)
-	- `signature_key_id` (key identifier for signature verification)
-	- `timestamp_ms` (signature freshness)
+	- `signature` (cryptographic signature for trusted-direct verification — **deferred**, currently populated with placeholder)
+	- `signature_key_id` (key identifier for signature verification — deferred)
+	- `timestamp_ms` (signature freshness — deferred)
 	- `ver` (protocol version)
 - Rationale: Mobile must discover candidate PCs before send even when backup session is not active. mDNS (Bonjour) provides fast LAN-local discovery without the async state machine complexity of BLE, making it compatible with the iOS Share Extension's constrained execution window.
 - Alternative considered: BLE GATT service with three characteristics (DeviceName, DeviceSignature, ConnectionConfig).
 - Why not: BLE's `CBCentralManager` async state machine (`poweredOn` → scan → `didDiscover`) has unpredictable latency incompatible with Share Extension's short execution window. mDNS resolution completes in 100-300ms on LAN with no permission chain dependencies.
 
-4. Session bootstrap via HTTP callback instead of BLE write.
-- Decision: Mobile discovers PC via mDNS, then AuBackup sends an HTTP POST to the PC's `/api/instant-share/v1/sessions/bootstrap` endpoint (advertised port from mDNS TXT record) carrying session id, mobile port, and mobile ip list. This replaces the BLE `ConnectionConfig` write.
-- Rationale: After mDNS discovery, the PC's IP and port are already known. Sending bootstrap data as an HTTP call is simpler, more reliable, and avoids the final BLE dependency.
-- Alternative considered: Keep BLE `ConnectionConfig` write alongside mDNS discovery.
-- Why not: Requires maintaining two radio stacks; BLE write adds unnecessary fragility in the AuBackup handoff path.
+4. Bootstrap data merged into trust handshake (dedicated bootstrap endpoint removed).
+- Decision: No dedicated `/sessions/bootstrap` endpoint. Bootstrap metadata (mobile_port, mobile_ip_list, payload_class, target_intent, trust_mode) is embedded in the `/trust/handshake` request body. Session creation happens when PC receives the handshake.
+- Rationale: With the trust-flow direction inverted (iOS calls PC), the handshake is the natural first request. Merging bootstrap data eliminates an extra round-trip and simplifies the extension's sequential flow.
+- History: The original design had a dedicated bootstrap POST (replacing BLE `ConnectionConfig` write). This was removed in the `pc-hosted-trust-and-upload` architecture inversion.
 
 5. Use staged receive states with idempotent completion semantics.
 - Decision: Standardize states: `queued -> negotiating -> transferring -> delivering -> done|failed|timed_out` with a transfer/session correlation id.
@@ -95,11 +94,11 @@ Stakeholders:
 - Alternative considered: Deferring final visual and interaction quality until after functional validation.
 - Why not: The feature is now targeting production readiness, and the Share Extension selector card is part of the user-facing contract.
 
-10. Use session-id signature verification as the immediate client authentication layer.
-- Decision: Do not require mTLS in this phase. Require PC to sign session id with its private key on each HTTP request, and require mobile to verify the signature with exchanged trusted PC public key.
-- Rationale: This provides a simple and fast-to-implement client authentication mechanism using trust material we already exchange.
-- Alternative considered: Require mTLS for all trusted-direct traffic.
-- Why not: Higher implementation overhead for this phase; can be added later as a transport hardening step.
+10. Session-id signature verification — **deferred**.
+- Decision: Not implemented in current phase. X509 certificate exchange, session-id signature headers, mDNS TXT signature verification, and cert-pinned HTTPS trust are all deferred to a future iteration.
+- Rationale: Current implementation uses AES-GCM trust envelope encryption with the session-derived key for confidentiality. The plain HTTP transport is considered acceptable for LAN-local v1 given the one-shot nature of instant-share sessions.
+- Alternative considered: Require mTLS or session-id signature verification.
+- Why not: Higher implementation overhead; deferred to simplify and ship v1.
 
 13. Instant Share lives in a separate window, not embedded in the main AuSearch app.
 - Decision: The instant-share desktop receive UI is implemented as a standalone mini window with its own window lifecycle, independent from the main AuSearch application window. The mini window does not share UI surface, navigation, tab state, or panel layout with backup, browser, or search features.
@@ -113,18 +112,17 @@ Stakeholders:
 - Alternative considered: Add signals to MainWindow and require it to be open.
 - Why not: The daemon receives bootstrap calls independently; the mini window must appear regardless of whether the user has the main search window open.
 
-11. Keep the current desktop slice mobile-hosted and PC-downloaded.
-- Decision: After trust completes, PC remains the HTTP client and downloads shared text or image payloads from the iOS-hosted local HTTP service.
-- Rationale: This matches the iOS Share Extension hosting model and keeps desktop work isolated to `dt_image_search/instant_sharing` without changing `dt_image_search/mobile/*`.
-- Alternative considered: Desktop-hosted ingestion endpoints that accept pushed payload bodies.
-- Why not: That contradicts the current iOS-hosted server requirement and would reintroduce coupling to the existing desktop mobile-folder transport path.
+11. **Inverted**: PC hosts endpoints, iOS acts as HTTP client.
+- Decision: The `pc-hosted-trust-and-upload` change inverted the architecture. PC hosts all trust and upload endpoints on port 9527. iOS calls PC's endpoints sequentially. No iOS-hosted HTTP server.
+- Rationale: iOS Share Extension becomes a simple sequential caller (no server, no long-poll). More reliable — iOS-initiated outbound HTTP is less likely to be blocked by network sandboxing. PC-only changes to `dt_image_search/instant_sharing` preserved.
+- Originally: Mobile-hosted, PC-downloaded. Inverted for reliability and extension execution efficiency.
 
-12. Share Extension handles full trust + transfer natively without main-app handoff.
-- Decision: The iOS Share Extension performs the complete instant-share flow in-place: mDNS discovery → device selection → HTTPS server start → HTTP bootstrap to PC → PIN-verified trust → payload transfer → completion UI. No URL-based navigation to the main AuBackup app occurs.
+12. Share Extension handles full trust + upload natively without main-app handoff or local server.
+- Decision: The iOS Share Extension performs the complete instant-share flow in-place: mDNS discovery → device selection → trust handshake (to PC) → apply (get PIN from PC) → confirm (user taps Confirm) → upload (to PC) → completion UI. No NWListener-based HTTP server, no dedicated bootstrap endpoint, no URL-based navigation to AuBackup.
 - Rationale: iOS navigation from a Share Extension to its containing app is unreliable — the `UIApplication` responder chain is unavailable, `extensionContext.open(url)` is deprecated and inconsistently supported across iOS versions, and the user experience of switching apps mid-share is confusing. Handling everything in the extension keeps the flow atomic and predictable.
 - Alternative considered: Hand off selected device and payload context to AuBackup main app via app-group persistence + URL scheme navigation.
 - Why not: URL-based navigation from extensions is poorly supported by iOS system, leads to fragile responder-chain hacks, and creates a disjointed UX where the user bounces between apps.
-- Mitigation: Extension requests additional execution time via `beginRequest(with:)` for trust establishment and transfer. Text payloads complete in <5s; images complete in <15s. The extension shows clear progress, PIN confirmation, and completion states.
+- Mitigation: Extension requests additional execution time via `beginRequest(with:)` for trust establishment and upload. Text payloads complete in <5s; images complete in <15s. The extension shows clear progress, PIN confirmation, and completion states.
 
 ## Risks / Trade-offs
 
@@ -133,18 +131,18 @@ Stakeholders:
 - [Clipboard writes can conflict with user clipboard usage] -> Mitigation: Restrict auto-clipboard to text payloads and display overwrite notice + optional preference to disable.
 - [Single-session model can delay subsequent shares] -> Mitigation: Show busy state and queue/retry guidance on sender.
 - [Cross-platform filesystem constraints] -> Mitigation: Normalize names, sanitize unsafe characters, enforce path boundary checks, and fallback naming.
-- [Session signature verification can be bypassed if headers are missing or key lookup fails open] -> Mitigation: Enforce fail-closed validation and explicit errors for missing/invalid signatures or missing trusted keys.
-- [Share Extension handoff can lose payload or selected-device context] -> Mitigation: Persist handoff context through app-group storage or equivalent extension-safe mechanism before opening AuBackup, and make AuBackup fail closed with a clear recovery state if context is missing or stale.
+- [Session signature verification can be bypassed if headers are missing or key lookup fails open] -> **Deferred**: Session-id signature verification not implemented. Current security relies on session-key AES-GCM trust envelope encryption over LAN-local HTTP.
+- [Share Extension handoff can lose payload or selected-device context] -> **Not applicable**: Share Extension handles the full flow natively — no AuBackup handoff needed.
 - [mDNS discovery may not find PC if devices are on different subnets or multicast is blocked] -> Mitigation: Show production empty/unavailable states with guidance to check same-network connection; mDNS failure is deterministic and fast, unlike BLE which silently hangs.
 
 ## Migration Plan
 
 1. Add dedicated instant-sharing discovery/trust/transfer protocol path (independent from backup session endpoints).
 2. Implement desktop orchestrator and target writers under `dt_image_search/instant_sharing` behind feature flag.
-3. Implement iOS Share Extension payload extraction, mDNS discovery, production device selector card, and AuBackup handoff path for text/image inputs.
+3. Implement iOS Share Extension payload extraction, mDNS discovery, production device selector card, and full flow handling (no AuBackup handoff — extension does everything) for text/image inputs.
 4. Implement desktop mDNS advertisement daemon for always-on candidate discovery.
-5. Implement HTTP session bootstrap endpoint on PC (replaces BLE `ConnectionConfig`) and remove BLE dependency.
-6. Implement trust flow endpoints: `/trust/handshake`, encrypted `/trust/apply`, and long-poll `/trust/confirm`.
+5. Implement PC-hosted HTTP server with trust and upload endpoints (no dedicated bootstrap endpoint — bootstrap data merged into `/trust/handshake`).
+6. Implement trust flow endpoints on PC: `/trust/handshake` (plain DH + bootstrap data), encrypted `/trust/apply` (PC returns PIN), and `/trust/confirm` (simple POST, no long-poll).
 7. Finalize desktop receive UX: Variant B selected — standalone mini window independent from AuSearch main app.
 8. Implement production mobile and desktop UX surfaces wired via event bus and mobile state models.
 9. Enforce single active instant-share session handling.

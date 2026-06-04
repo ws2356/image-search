@@ -14,7 +14,7 @@
 
 ## 3. PC Session Lifecycle Updates
 
-- [x] 3.1 Update `InstantShareSessionRegistry` (or `TrustSessionRegistry`) to allow trust session creation on bootstrap, so that a `TrustSession` is created when the bootstrap endpoint is called
+- [x] 3.1 Update `InstantShareSessionRegistry` (or `TrustSessionRegistry`) to allow trust session creation from handshake bootstrap data, so that a `TrustSession` is created when `/trust/handshake` is called
 - [x] 3.2 Update `InstantShareReceiverOrchestrator` to remove the outbound `InstantShareHttpClient`-driven trust flow (no longer calls `client.trust_handshake`, `client.trust_apply`, `client.trust_confirm`); the orchestrator now waits for inbound trust requests from iOS instead of driving them
 - [x] 3.3 Update `InstantShareReceiverOrchestrator.receive_payload` to remove the outbound download calls (`client.download_text_payload`, `client.download_image_payload`, `client.report_delivery_result`); the PC now receives uploads inbound from iOS instead of pulling
 - [x] 3.4 Add session state transitions for the new inbound flow: BOOTSTRAPPED → trust handshake received → NEGOTIATING → trust confirmed → TRANSFERRING (on upload) → DELIVERING → DONE
@@ -58,7 +58,7 @@
 ## 9. End-to-End Integration
 
 - [x] 9.1 Update `InstantShareRuntime.py` to start the extended HTTP server with all new endpoints (trust handshake, apply, confirm, transfer/text, transfer/image) on the same port as bootstrap
-- [x] 9.2 Verify the bootstrap flow still works: iOS discovers PC via mDNS, sends bootstrap POST to port 9527, PC creates session and returns `accepted: true` (verified by code review — bootstrap handler logic preserved in `_InstantShareHandler`)
+- [x] 9.2 Verify the handshake flow works: iOS discovers PC via mDNS, sends `/trust/handshake` with embedded bootstrap data to port 9527, PC creates session from bootstrap metadata (verified by code review — handshake handler creates `ConnectionConfig` and calls `session_registry.bootstrap()`) 
 - [x] 9.3 Update telemetry spans and events in `orchestrator.py` to reflect the inbound trust/transfer flow (e.g., span names like `instant_share.trust.handshake.received` instead of `instant_share.trust.handshake.sent`)
 - [x] 9.4 Add unit tests for the new PC-side trust handlers: handshake validation, apply decryption, confirm marking-trusted, error responses for missing/invalid sessions
 - [x] 9.5 Add unit tests for the new PC-side upload handlers: text upload with valid trusted session, image upload with valid trusted session, 403 for untrusted session, 404 for unknown session

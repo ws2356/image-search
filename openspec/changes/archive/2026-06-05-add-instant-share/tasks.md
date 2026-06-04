@@ -10,7 +10,7 @@
 - [x] 1.3c Add/update unit tests for missing signature, invalid signature, missing trusted key, and valid signature paths.
 - [x] 1.4 Implement desktop background daemon mDNS (Bonjour) service advertisement: service type `_instantshare._tcp`, TXT records (`ver`, `device_name`, `device_id`, `signature`, `signature_key_id`, `timestamp_ms`) on PC HTTP API port.
 - [x] 1.4a Add/update unit tests for mDNS TXT record advertisement and service lifecycle.
-- [x] 1.5 Implement HTTP session bootstrap endpoint on PC (`POST /api/instant-share/v1/sessions/bootstrap`) accepting session id, mobile port, and mobile IP list from AuBackup.
+- [x] 1.5 Implement HTTP session bootstrap endpoint on PC (`POST /api/instant-share/v1/sessions/bootstrap`) accepting session id, mobile port, and mobile IP list from AuBackup. *(Later removed — bootstrap data merged into `/trust/handshake` in `pc-hosted-trust-and-upload`.)*
 - [x] 1.5a Add/update unit tests for HTTP bootstrap endpoint parsing/validation and error handling.
 - [x] 1.6 Implement trust APIs as `/trust/handshake`, encrypted `/trust/apply`, and parallel long-poll `/trust/confirm` with key exchange completion.
 - [x] 1.6a Add/update unit tests for trust API crypto envelope handling and confirm long-poll completion semantics.
@@ -52,10 +52,10 @@
 
 ## 5. Production Mobile and Desktop UI
 
-- [x] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume, first-use trust confirmation, trusted-device revisit, progress, error, success, and abort/result states.
+- [~] 5.1 Implement production mobile instant-share UX in AuBackup for handoff resume... *(**Not built** — Share Extension handles full flow natively; no AuBackup handoff needed.)*
 - [x] 5.2 Implement production Share Extension selector card visual states for scanning, empty/no receiver, discovered devices, selected device, and unavailable network states.
 - [x] 5.3 Implement production desktop instant-share standalone mini window with clear queued, transferring, delivering, success, failure, timeout, busy, and user-aborted states. Window is independent from main AuSearch app.
-- [x] 5.4 Validate end-to-end production UI behavior across Share Extension, AuBackup main app, and desktop standalone mini window receive surface.
+- [x] 5.4 Validate end-to-end production UI behavior across Share Extension and desktop standalone mini window receive surface. *(AuBackup scope removed — extension handles full flow.)*
 - [x] 5.5 Add/update unit tests for non-visual UI state reducers/controllers/view-models introduced for production UI.
 
 ## 6. Reliability and Recovery
@@ -87,9 +87,9 @@
 ## 10. iOS mDNS Discovery and HTTPS Server (manual test path)
 
 - [x] 10.1 Implement `InstantShareMDNSBrowser` (`NWBrowser` wrapper that browses for `_instantshare._tcp`, resolves discovered services, extracts TXT records, and exposes `discovered` PCs with device name, device ID, signature, IP, and port).
-- [x] 10.2 Implement `InstantShareHTTPSessionBootstrapClient` (HTTP client that POSTs session bootstrap data to the PC's `/api/instant-share/v1/sessions/bootstrap` endpoint using the IP:port from mDNS resolution).
+- [x] 10.2 Implement `InstantShareHTTPSessionBootstrapClient` (HTTP client that POSTs session bootstrap data...). *(Later removed — `pc-hosted-trust-and-upload` inverted the architecture; `InstantShareTrustClient` now carries bootstrap data in the handshake body.)*
 - [x] 10.3 Implement `InstantShareTrustSessionManager` (X25519 ECDH + HKDF-SHA256 session key derivation that matches `X25519TrustSessionKeyResolver` on the PC, so the AES-GCM trust envelope unwraps on both sides).
-- [x] 10.4 Implement `InstantShareHTTPServer` (`NWListener` with TLS using the bundled P12 identity, all 6 protocol endpoints, request/response parser, and request-id/correlation-id propagation).
+- [x] 10.4 Implement `InstantShareHTTPServer` (`NWListener` with TLS using the bundled P12 identity, all 6 protocol endpoints...). *(Later removed — `pc-hosted-trust-and-upload` removed the iOS server entirely; PC now hosts all endpoints.)*
 - [x] 10.5 Implement `InstantShareService` orchestrator that owns mDNS browser, bootstrap client, HTTPS server, and trust session state; publishes `statusLog`, `sharedPayload`, and `lastError`; and exposes `startDiscovery`, `selectPC`, `startSession`, `stopSession`.
 - [x] 10.6 Add `instantShareService` to `Container+App.swift` Factory DI and add `NSLocalNetworkUsageDescription` to `App/Info.plist` for mDNS discovery (replaces `NSBluetoothAlwaysUsageDescription`).
 - [x] 10.7 Rewrite `InstantShareDebugViewModel` and `InstantShareDebugView` for the full mDNS discovery → select → bootstrap → start → PIN display flow.
