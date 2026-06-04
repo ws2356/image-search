@@ -101,7 +101,7 @@ final class InstantShareResumeViewModel: ObservableObject {
         }
         do {
             let config = try buildConnectionConfig(from: context)
-            try await service.startSession(connectionConfig: config)
+            await service.startSession(connectionConfig: config)
 
             let trustClient = InstantShareTrustClient(
                 trustSessionManager: service.trustSession
@@ -111,7 +111,12 @@ final class InstantShareResumeViewModel: ObservableObject {
                 host: pc.host,
                 port: pc.port,
                 sessionID: config.sessionID,
-                correlationID: config.correlationID
+                correlationID: config.correlationID,
+                mobilePort: config.mobilePort,
+                mobileIPList: config.mobileIPList,
+                payloadClass: config.metadata.payloadClass.rawValue,
+                targetIntent: config.metadata.targetIntent.rawValue,
+                trustMode: config.metadata.trustMode.rawValue
             )
 
             let pin = try await trustClient.apply(
@@ -157,8 +162,8 @@ final class InstantShareResumeViewModel: ObservableObject {
 
         return InstantShareConnectionConfig(
             sessionID: UUID().uuidString.lowercased(),
-            mobilePort: 0,
-            mobileIPList: [],
+            mobilePort: 1,
+            mobileIPList: ["127.0.0.1"],
             correlationID: UUID().uuidString.lowercased(),
             metadata: metadata
         )

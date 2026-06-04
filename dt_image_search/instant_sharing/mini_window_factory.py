@@ -102,6 +102,13 @@ class InstantShareMiniWindowFactory:
             state,
         )
 
+    def show_pin(self, pin_code: str) -> None:
+        dispatcher.post(lambda: self._show_pin(pin_code))
+
+    def _show_pin(self, pin_code: str) -> None:
+        if self._active_window is not None:
+            self._active_window.show_pin(pin_code)
+
     def _on_window_destroyed(self) -> None:
         self._active_window = None
 

@@ -14,7 +14,7 @@ The new architecture inverts the client-server relationship: **PC hosts the HTTP
 **Goals:**
 - PC hosts all trust and upload HTTP endpoints
 - iOS extension acts as a pure HTTP client (no server)
-- Extension flow is sequential: discover → bootstrap → handshake → apply → confirm → upload → done
+- Extension flow is sequential: discover → handshake (includes bootstrap) → apply → confirm → upload → done
 - Same security guarantees (DH key exchange, AES-GCM trust envelopes, PIN verification)
 - Same mDNS discovery mechanism
 - Trust confirmation is mobile-side only (user taps Confirm on iOS, not PC)
@@ -24,17 +24,17 @@ The new architecture inverts the client-server relationship: **PC hosts the HTTP
 - Change the trust envelope format
 - Change the mDNS advertisement format
 - Support bidirectional data transfer (only iOS→PC in this change)
-- Change the bootstrap flow (iOS still bootstraps to PC first)
+- Bootstrap endpoint removed (iOS drives trust directly via /trust/handshake)
 
 ## Decisions
 
-### Decision 1: Extend existing bootstrap server vs. new server
+### Decision 1: Bootstrap endpoint removed
 
-**Choice**: Extend the existing `InstantShareBootstrapServer` (port 9527) to also serve trust and upload endpoints.
+**Choice**: The bootstrap endpoint (`POST /api/instant-share/v1/sessions/bootstrap`) is removed. The `InstantShareHTTPServer` (port 9527) now serves only trust and transfer endpoints. Trust sessions are created on-demand by the `/trust/handshake` endpoint when iOS initiates the trust flow.
 
-**Rationale**: The PC already has an HTTP server on port 9527 for bootstrap. Adding trust/transfer endpoints to the same server avoids port management complexity and keeps all instant-share traffic on one port.
+**Rationale**: iOS drives the trust establishment directly via `/trust/handshake`, `/trust/apply`, and `/trust/confirm` endpoints. The separate bootstrap step is no longer necessary.
 
-**Alternative considered**: Separate server on a different port — rejected because it adds complexity with no benefit (all traffic is from the same iOS device).
+**Alternative considered**: Keeping the bootstrap endpoint — rejected because iOS now works as a client-only and initiates trust without a bootstrap step.
 
 ### Decision 2: Trust flow inversion details
 

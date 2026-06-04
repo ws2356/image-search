@@ -10,7 +10,6 @@ from uuid import UUID
 API_PREFIX = "/api/instant-share/v1"
 PROTOCOL_VERSION = "1.0"
 FLOW_ID = "instant_share"
-BOOTSTRAP_PATH = f"{API_PREFIX}/sessions/bootstrap"
 
 
 class PayloadClass(str, Enum):

@@ -13,7 +13,6 @@ from dt_image_search.instant_sharing.contracts import (
     TRUST_CONFIRM_PATH,
     TRANSFER_TEXT_PATH,
     TRANSFER_IMAGE_PATH,
-    BOOTSTRAP_PATH,
 )
 from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
@@ -169,8 +168,7 @@ class TestEndpointPaths(unittest.TestCase):
     def test_transfer_image_path(self):
         self.assertEqual(TRANSFER_IMAGE_PATH, "/api/instant-share/v1/transfer/image")
 
-    def test_bootstrap_path(self):
-        self.assertEqual(BOOTSTRAP_PATH, "/api/instant-share/v1/sessions/bootstrap")
+
 
 
 if __name__ == "__main__":

@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Callable
 
+from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
     API_PREFIX,
     TRUST_HANDSHAKE_PATH,
@@ -13,11 +15,14 @@ from dt_image_search.instant_sharing.contracts import (
     TRUST_CONFIRM_PATH,
     TRANSFER_TEXT_PATH,
     TRANSFER_IMAGE_PATH,
-    BOOTSTRAP_PATH,
+    InstantShareMetadata,
+    PayloadClass,
+    TargetIntent,
+    TrustMode,
 )
 from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.mdns import BootstrapRequest, ConnectionConfig, InstantShareBleService
-from dt_image_search.instant_sharing.trust_server import TrustSession, TrustSessionRegistry
+from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
+from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 from dt_image_search.instant_sharing.transfer_server import TransferHandler
 from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
 
@@ -25,29 +30,11 @@ from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
 _logger = logging.getLogger(__name__)
 
 
-def _bootstrap_request_to_connection_config(req: BootstrapRequest) -> ConnectionConfig:
-    from dt_image_search.instant_sharing.contracts import InstantShareMetadata, PayloadClass, TargetIntent, TrustMode
-
-    metadata = InstantShareMetadata(
-        flow_id="instant_share",
-        payload_class=PayloadClass(req.payload_class),
-        target_intent=TargetIntent(req.target_intent),
-        trust_mode=TrustMode.FIRST_SHARE,
-    )
-    return ConnectionConfig(
-        session_id=req.session_id,
-        mobile_port=req.mobile_port,
-        mobile_ip_list=req.mobile_ip_list,
-        correlation_id=req.correlation_id,
-        metadata=metadata,
-    )
-
-
 class _InstantShareHandler(BaseHTTPRequestHandler):
-    ble_service: InstantShareBleService | None = None
     on_error: Callable[[str], None] | None = None
     trust_session_registry: TrustSessionRegistry | None = None
     session_registry: InstantShareSessionRegistry | None = None
+    orchestrator: InstantShareReceiverOrchestrator | None = None
     transfer_handler: TransferHandler | None = None
     pin_display_callback: Callable[[str], None] | None = None
 
@@ -55,9 +42,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         _logger.debug("InstantShareHTTPServer: " + format % args)
 
     def do_POST(self) -> None:
-        if self.path == BOOTSTRAP_PATH:
-            self._handle_bootstrap()
-        elif self.path == TRUST_HANDSHAKE_PATH:
+        if self.path == TRUST_HANDSHAKE_PATH:
             self._handle_trust_handshake()
         elif self.path == TRUST_APPLY_PATH:
             self._handle_trust_apply()
@@ -70,63 +55,9 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         else:
             self._send_json(404, {"error_code": "NOT_FOUND", "message": "Unknown endpoint"})
 
-    def _handle_bootstrap(self) -> None:
-        service = self.__class__.ble_service
-        if service is None:
-            self._send_json(503, {"error_code": "SERVICE_UNAVAILABLE", "message": "BLE service not initialized"})
-            return
-        try:
-            content_length = int(self.headers.get("Content-Length", "0"))
-            raw_body = self.rfile.read(content_length) if content_length > 0 else b"{}"
-            payload: object = json.loads(raw_body.decode("utf-8"))
-        except Exception:
-            self._send_json(400, {"error_code": "INVALID_REQUEST", "message": "Invalid JSON body"})
-            return
-        if not isinstance(payload, dict):
-            self._send_json(400, {"error_code": "INVALID_REQUEST", "message": "Request body must be a JSON object"})
-            return
-        try:
-            bootstrap_req = BootstrapRequest.from_dict(payload)
-        except Exception as e:
-            self._send_json(400, {"error_code": "INVALID_BOOTSTRAP", "message": str(e)})
-            if self.__class__.on_error:
-                self.__class__.on_error(f"Bootstrap validation error: {e}")
-            return
-        try:
-            connection_config = _bootstrap_request_to_connection_config(bootstrap_req)
-            service.handle_bootstrap(connection_config)
-        except Exception as e:
-            self._send_json(
-                409,
-                {"error_code": "RECEIVER_BUSY_SINGLE_SESSION", "message": str(e)},
-            )
-            if self.__class__.on_error:
-                self.__class__.on_error(f"Bootstrap handler error: {e}")
-            return
-        trust_registry = self.__class__.trust_session_registry
-        if trust_registry is not None:
-            try:
-                trust_registry.create_session(
-                    session_id=connection_config.session_id,
-                    correlation_id=connection_config.correlation_id,
-                )
-            except Exception:
-                _logger.debug("Trust session already exists for session_id=%s", connection_config.session_id)
-        device_id = ""
-        try:
-            name_adv = service.read_characteristic("DeviceName")
-            device_id = str(name_adv.get("receiver_id", ""))
-        except Exception:
-            pass
-        self._send_json(200, {"accepted": True, "pc_device_id": device_id})
-        _logger.info(
-            "Bootstrap accepted: session_id=%s correlation_id=%s",
-            bootstrap_req.session_id,
-            bootstrap_req.correlation_id,
-        )
-
     def _handle_trust_handshake(self) -> None:
         trust_registry = self.__class__.trust_session_registry
+        session_registry = self.__class__.session_registry
         if trust_registry is None:
             self._send_json(503, {"error_code": "SERVICE_UNAVAILABLE", "message": "Trust service not initialized"})
             return
@@ -147,11 +78,55 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         if not mobile_dh_public_key or not mobile_nonce:
             self._send_json(400, {"error_code": "INVALID_REQUEST", "message": "Missing mobile_dh_public_key or mobile_nonce"})
             return
-        try:
-            trust_session = trust_registry.require_session(session_id)
-        except InstantShareError:
-            self._send_json(400, {"error_code": "HANDSHAKE_REQUIRED", "message": "No active session found for the provided session_id"})
-            return
+
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        trust_session = trust_registry.get_session(session_id)
+        if trust_session is None:
+            trust_session = trust_registry.create_session(
+                session_id=session_id,
+                correlation_id=correlation_id or session_id,
+            )
+            _logger.info(
+                "Auto-created trust session for handshake: session_id=%s",
+                session_id,
+            )
+
+        # Bootstrap the instant-share session from connection config in handshake body
+        orchestrator = self.__class__.orchestrator
+        if session_registry is not None and session_registry.get_active_session() is None:
+            try:
+                metadata = InstantShareMetadata(
+                    payload_class=PayloadClass(payload.get("payload_class", "text")),
+                    target_intent=TargetIntent(payload.get("target_intent", "clipboard_only")),
+                    trust_mode=TrustMode(payload.get("trust_mode", "first_share")),
+                )
+                connection_config = ConnectionConfig(
+                    session_id=session_id,
+                    mobile_port=payload.get("mobile_port", 1),
+                    mobile_ip_list=tuple(payload.get("mobile_ip_list", ["127.0.0.1"])),
+                    correlation_id=correlation_id,
+                    metadata=metadata,
+                )
+                if orchestrator is not None:
+                    orchestrator.handle_connection_config(connection_config)
+                    orchestrator.handle_trust_handshake_received(
+                        session_id=session_id,
+                        correlation_id=correlation_id,
+                    )
+                else:
+                    session_registry.bootstrap(connection_config)
+                _logger.info(
+                    "Instant-share session bootstrapped from handshake: session_id=%s",
+                    session_id,
+                )
+            except Exception as exc:
+                _logger.warning(
+                    "Failed to bootstrap instant-share session from handshake: %s",
+                    exc,
+                )
+
         try:
             trust_session.store_mobile_handshake(
                 mobile_dh_public_key=str(mobile_dh_public_key),
@@ -259,6 +234,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         trust_registry = self.__class__.trust_session_registry
         transfer_handler = self.__class__.transfer_handler
         session_registry = self.__class__.session_registry
+        orchestrator = self.__class__.orchestrator
         if trust_registry is None or transfer_handler is None or session_registry is None:
             self._send_json(503, {"error_code": "SERVICE_UNAVAILABLE", "message": "Transfer service not initialized"})
             return
@@ -279,6 +255,14 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                 correlation_id=correlation_id,
                 body=raw_body,
             )
+            if orchestrator is not None:
+                try:
+                    orchestrator.handle_transfer_received(
+                        session_id=session_id,
+                        correlation_id=correlation_id,
+                    )
+                except Exception as exc:
+                    _logger.warning("Failed to publish transfer lifecycle event: %s", exc)
             self._send_json(200, {"state": "delivered", **result.as_dict()})
         except InstantShareError as e:
             self._send_json(400, {"error_code": e.error_code.value, "message": e.message})
@@ -287,6 +271,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         trust_registry = self.__class__.trust_session_registry
         transfer_handler = self.__class__.transfer_handler
         session_registry = self.__class__.session_registry
+        orchestrator = self.__class__.orchestrator
         if trust_registry is None or transfer_handler is None or session_registry is None:
             self._send_json(503, {"error_code": "SERVICE_UNAVAILABLE", "message": "Transfer service not initialized"})
             return
@@ -311,6 +296,14 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
                 content_type=content_type,
                 filename=filename,
             )
+            if orchestrator is not None:
+                try:
+                    orchestrator.handle_transfer_received(
+                        session_id=session_id,
+                        correlation_id=correlation_id,
+                    )
+                except Exception as exc:
+                    _logger.warning("Failed to publish transfer lifecycle event: %s", exc)
             self._send_json(200, {"state": "delivered", **result.as_dict()})
         except InstantShareError as e:
             self._send_json(400, {"error_code": e.error_code.value, "message": e.message})
@@ -324,25 +317,25 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         self.wfile.write(resp)
 
 
-class InstantShareBootstrapServer:
+class InstantShareHTTPServer:
     def __init__(
         self,
         *,
-        ble_service: InstantShareBleService,
         host: str = "0.0.0.0",
         port: int = 9527,
         on_error: Callable[[str], None] | None = None,
         trust_session_registry: TrustSessionRegistry | None = None,
         session_registry: InstantShareSessionRegistry | None = None,
+        orchestrator: InstantShareReceiverOrchestrator | None = None,
         transfer_handler: TransferHandler | None = None,
         pin_display_callback: Callable[[str], None] | None = None,
     ) -> None:
-        self._ble_service = ble_service
         self._host = host
         self._port = port
         self._on_error = on_error
         self._trust_session_registry = trust_session_registry
         self._session_registry = session_registry
+        self._orchestrator = orchestrator
         self._transfer_handler = transfer_handler
         self._pin_display_callback = pin_display_callback
         self._http_server: HTTPServer | None = None
@@ -364,26 +357,26 @@ class InstantShareBootstrapServer:
             if self._thread is not None and self._thread.is_alive():
                 return True
             self._stop_event = threading.Event()
-            _InstantShareHandler.ble_service = self._ble_service
             _InstantShareHandler.on_error = self._on_error
             _InstantShareHandler.trust_session_registry = self._trust_session_registry
             _InstantShareHandler.session_registry = self._session_registry
+            _InstantShareHandler.orchestrator = self._orchestrator
             _InstantShareHandler.transfer_handler = self._transfer_handler
             _InstantShareHandler.pin_display_callback = self._pin_display_callback
             try:
                 self._http_server = HTTPServer((self._host, self._port), _InstantShareHandler)
             except OSError as exc:
-                _logger.error("Failed to bind bootstrap HTTP server: %s", exc)
+                _logger.error("Failed to bind instant-share HTTP server: %s", exc)
                 return False
             self._thread = threading.Thread(
                 target=self._http_server.serve_forever,
-                name="instant_share_bootstrap_http",
+                name="instant_share_http",
                 daemon=True,
             )
             thread = self._thread
         thread.start()
         _logger.info(
-            "Bootstrap HTTP server started on %s:%d",
+            "Instant-share HTTP server started on %s:%d",
             self._host,
             self._port,
         )
@@ -399,10 +392,10 @@ class InstantShareBootstrapServer:
             http_server.shutdown()
         if thread is not None:
             thread.join(timeout=5.0)
-        _InstantShareHandler.ble_service = None
         _InstantShareHandler.on_error = None
         _InstantShareHandler.trust_session_registry = None
         _InstantShareHandler.session_registry = None
+        _InstantShareHandler.orchestrator = None
         _InstantShareHandler.transfer_handler = None
         _InstantShareHandler.pin_display_callback = None
-        _logger.info("Bootstrap HTTP server stopped")
+        _logger.info("Instant-share HTTP server stopped")

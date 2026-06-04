@@ -100,8 +100,8 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         service.connectionConfig = config
 
         do {
-            InstantShareLog.info("[Extension VM] sending bootstrap to PC \(pc.host):\(pc.port)")
-            try await service.startSession(connectionConfig: config)
+            InstantShareLog.info("[Extension VM] storing connection config for PC \(pc.host):\(pc.port)")
+            await service.startSession(connectionConfig: config)
 
             InstantShareLog.info("[Extension VM] starting trust handshake...")
             let trustClient = InstantShareTrustClient(
@@ -115,7 +115,12 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 host: handshakeHost,
                 port: handshakePort,
                 sessionID: config.sessionID,
-                correlationID: config.correlationID
+                correlationID: config.correlationID,
+                mobilePort: config.mobilePort,
+                mobileIPList: config.mobileIPList,
+                payloadClass: config.metadata.payloadClass.rawValue,
+                targetIntent: config.metadata.targetIntent.rawValue,
+                trustMode: config.metadata.trustMode.rawValue
             )
             InstantShareLog.info("[Extension VM] handshake completed")
 
@@ -222,8 +227,8 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
         return InstantShareConnectionConfig(
             sessionID: UUID().uuidString.lowercased(),
-            mobilePort: 0,
-            mobileIPList: [pc.host],
+            mobilePort: 1,
+            mobileIPList: ["127.0.0.1"],
             correlationID: UUID().uuidString.lowercased(),
             metadata: metadata
         )

@@ -158,6 +158,8 @@ public final class InstantShareMDNSBrowser: ObservableObject {
     private func resolveResult(_ result: NWBrowser.Result) {
         let deviceID = deviceIDFromResult(result)
         let connection = NWConnection(to: result.endpoint, using: .tcp)
+        
+        print("[debug] NWBrowser result: \(result)")
 
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }

@@ -9,8 +9,9 @@ from dt_image_search.instant_sharing.mdns import (
     InstantShareBleService,
     InstantShareMDNSAdvertiser,
 )
+
 from dt_image_search.instant_sharing.https_bootstrap import (
-    InstantShareBootstrapServer,
+    InstantShareHTTPServer,
 )
 from dt_image_search.instant_sharing.mini_window import (
     InstantShareMiniWindow,
@@ -83,17 +84,15 @@ __all__ = [
     "ConnectionConfig",
     "DeliveryResult",
     "DeliveryTargetResult",
-    "DeviceNameAdvertisement",
-    "DeviceSignatureAdvertisement",
     "DownloadedImagePayload",
     "DownloadedTextPayload",
     "ErrorCode",
     "InstantShareBleDaemon",
     "InstantShareBleService",
-    "InstantShareBootstrapServer",
     "InstantShareDeliveryService",
     "InstantShareError",
     "InstantShareHeaders",
+    "InstantShareHTTPServer",
     "InstantShareHttpClient",
     "InstantShareHttpRequest",
     "InstantShareHttpResponse",

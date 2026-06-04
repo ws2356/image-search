@@ -15,7 +15,7 @@ from dt_image_search.instant_sharing.mdns import (
     InstantShareBleService,
     InstantShareMDNSAdvertiser,
 )
-from dt_image_search.instant_sharing.https_bootstrap import InstantShareBootstrapServer
+from dt_image_search.instant_sharing.https_bootstrap import InstantShareHTTPServer
 from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
 from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
@@ -90,10 +90,10 @@ class InstantShareRuntime:
             device_id=device_id,
             desktop_name=desktop_name,
         )
-        self._bootstrap_server = InstantShareBootstrapServer(
-            ble_service=self._ble_service,
+        self._http_server = InstantShareHTTPServer(
             trust_session_registry=self._trust_session_registry,
             session_registry=self._session_registry,
+            orchestrator=self._orchestrator,
             transfer_handler=self._transfer_handler,
             pin_display_callback=self._pin_display_callback,
         )
@@ -113,9 +113,7 @@ class InstantShareRuntime:
     def mdns_advertiser(self) -> InstantShareMDNSAdvertiser:
         return self._mdns_advertiser
 
-    @property
-    def bootstrap_server(self) -> InstantShareBootstrapServer:
-        return self._bootstrap_server
+
 
     @property
     def ble_daemon(self) -> InstantShareBleDaemon:
@@ -142,6 +140,10 @@ class InstantShareRuntime:
         return self._sender_identity
 
     @property
+    def http_server(self) -> InstantShareHTTPServer:
+        return self._http_server
+
+    @property
     def is_running(self) -> bool:
         return self._ble_daemon.is_running
 
@@ -163,17 +165,17 @@ class InstantShareRuntime:
             self._mdns_advertiser.is_advertising,
             self._mdns_advertiser.last_error,
         )
-        bs_ok = self._bootstrap_server.start()
+        http_ok = self._http_server.start()
         _logger.info(
-            "[InstantShareRuntime] bootstrap HTTP server started=%s",
-            bs_ok,
+            "[InstantShareRuntime] instant-share HTTP server started=%s",
+            http_ok,
         )
         return result
 
     def stop(self) -> None:
         _logger = logging.getLogger(__name__)
         _logger.info("[InstantShareRuntime] stop() called")
-        self._bootstrap_server.stop()
+        self._http_server.stop()
         self._ble_daemon.stop()
         _logger.info("[InstantShareRuntime] stop() complete")
 
@@ -184,7 +186,7 @@ class InstantShareRuntime:
         else:
             connection_config = ConnectionConfig.from_dict(payload)
             self._ble_service.handle_bootstrap(connection_config)
-        return self._session_registry.require_session(connection_config.session_id)
+        return self._session_registry.get_active_session()
 
     def _handle_connection_config(self, connection_config: ConnectionConfig) -> None:
         self._orchestrator.handle_connection_config(connection_config)

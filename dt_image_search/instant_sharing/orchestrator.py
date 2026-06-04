@@ -28,20 +28,16 @@ class InstantShareReceiverOrchestrator:
         self._trust_session_registry = trust_session_registry
 
     def handle_connection_config(self, connection_config) -> InstantShareSession:
-        with add_span(
-            "instant_share.session.bootstrap",
+        session = self._session_registry.bootstrap(connection_config)
+        session = self._session_registry.transition(connection_config.session_id, SessionState.QUEUED)
+        self._publish(session)
+        log(
+            "info",
+            message="Instant-share session accepted",
+            where="instant_share.orchestrator.handle_connection_config",
             attributes=_session_attributes(connection_config),
-        ):
-            session = self._session_registry.bootstrap(connection_config)
-            session = self._session_registry.transition(connection_config.session_id, SessionState.QUEUED)
-            self._publish(session)
-            log(
-                "info",
-                message="Instant-share session accepted",
-                where="instant_share.orchestrator.handle_connection_config",
-                attributes=_session_attributes(connection_config),
-            )
-            return session
+        )
+        return session
 
     def handle_trust_handshake_received(self, *, session_id: str, correlation_id: str) -> None:
         session = self._session_registry.require_session(session_id)

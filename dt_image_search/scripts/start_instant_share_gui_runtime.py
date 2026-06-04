@@ -83,9 +83,8 @@ def main() -> int:
 
     print(f"Starting instant share runtime with GUI...")
     print(f"  mDNS service:      {INSTANT_SHARE_MDNS_SERVICE_TYPE}")
-    print(f"  Bootstrap endpoint: POST /api/instant-share/v1/sessions/bootstrap (port {INSTANT_SHARE_MDNS_PORT})")
     print(f"  Image delivery:    {args.image_delivery_mode}")
-    print(f"  Auto-receive:      enabled (flow auto-starts on bootstrap)")
+    print(f"  Auto-receive:      enabled")
     if args.downloads_dir:
         print(f"  Downloads dir:     {args.downloads_dir}")
     else:
@@ -101,8 +100,8 @@ def main() -> int:
     status_label = QLabel(
         f"Instant Share runtime is active.\n"
         f"mDNS: {INSTANT_SHARE_MDNS_SERVICE_TYPE}\n"
-        f"Bootstrap: port {INSTANT_SHARE_MDNS_PORT}\n"
-        f"Waiting for mobile device to send bootstrap...\n"
+        f"HTTP server: port {INSTANT_SHARE_MDNS_PORT}\n"
+        f"Waiting for mobile device to connect...\n"
     )
     status_label.setWordWrap(True)
     layout.addWidget(status_label)
@@ -117,6 +116,7 @@ def main() -> int:
         image_delivery_mode=args.image_delivery_mode,
         downloads_dir=args.downloads_dir,
         auto_receive=True,
+        pin_display_callback=mini_window_factory.show_pin,
     )
 
     started = runtime.start()
@@ -128,7 +128,7 @@ def main() -> int:
     is_advertising = runtime.mdns_advertiser.is_advertising
     print(f"\nRuntime started.")
     print(f"  mDNS advertising: {is_advertising}")
-    print(f"  Bootstrap HTTP:   listening on port {runtime.bootstrap_server.port}")
+    print(f"  HTTP server:      listening on port {runtime.http_server.port}")
     if not is_advertising:
         print(
             "  NOTE: advertising may become active in a few seconds.",

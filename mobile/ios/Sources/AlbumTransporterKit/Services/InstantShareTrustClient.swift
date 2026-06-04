@@ -51,15 +51,25 @@ final class InstantShareTrustClient: @unchecked Sendable {
         host: String,
         port: Int,
         sessionID: String,
-        correlationID: String
+        correlationID: String,
+        mobilePort: Int = 1,
+        mobileIPList: [String] = ["127.0.0.1"],
+        payloadClass: String = "text",
+        targetIntent: String = "clipboard_only",
+        trustMode: String = "first_share"
     ) async throws -> InstantShareTrustHandshakeResponse {
         let mobileDHPublicKey = trustSessionManager.publicKeyBase64URL
         let mobileNonce = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
             .instantShareBase64URLEncodedString()
 
-        let requestBody: [String: String] = [
+        var requestBody: [String: Any] = [
             "mobile_dh_public_key": mobileDHPublicKey,
             "mobile_nonce": mobileNonce,
+            "mobile_port": mobilePort,
+            "mobile_ip_list": mobileIPList,
+            "payload_class": payloadClass,
+            "target_intent": targetIntent,
+            "trust_mode": trustMode,
         ]
 
         let urlString = "http://\(host):\(port)\(InstantShareProtocol.apiPrefix)/trust/handshake"
@@ -120,7 +130,9 @@ final class InstantShareTrustClient: @unchecked Sendable {
 
         let handshakeResponse = try trustSessionManager.handleHandshakeRequest(
             pcDHPublicKey: pcDHPublicKey,
-            pcNonce: pcNonce
+            pcNonce: pcNonce,
+            pcKdfContext: kdfContext,
+            mobileNonce: mobileNonce
         )
 
         return handshakeResponse

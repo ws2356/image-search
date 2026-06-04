@@ -22,10 +22,13 @@ final class InstantShareTrustSessionManager: @unchecked Sendable {
     }
 
     /// Returns the mobile-side handshake response payload, derived from the
-    /// PC's DH public key and nonce via X25519 + HKDF.
+    /// PC's DH public key, nonce, kdf context and the mobile's own nonce
+    /// via X25519 + HKDF.
     func handleHandshakeRequest(
         pcDHPublicKey: String,
-        pcNonce: String
+        pcNonce: String,
+        pcKdfContext: String,
+        mobileNonce: String
     ) throws -> InstantShareTrustHandshakeResponse {
         lock.lock()
         defer { lock.unlock() }
@@ -38,13 +41,11 @@ final class InstantShareTrustSessionManager: @unchecked Sendable {
         guard pcNonceData.count == 32 else {
             throw InstantShareServiceError.invalidTrustEnvelopeField("pc_nonce")
         }
+        let kdfContextData = try Data(instantShareBase64URLEncoded: pcKdfContext)
+        let mobileNonceData = try Data(instantShareBase64URLEncoded: mobileNonce)
 
         let pcPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: pcPublicKeyData)
         let sharedSecret = try privateKey.sharedSecretFromKeyAgreement(with: pcPublicKey)
-
-        // Generate mobile nonce and kdf_context
-        let mobileNonce = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
-        let kdfContext = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
 
         // Derive session key: HKDF-SHA256(
         //   ikm = sharedSecret,
@@ -54,16 +55,16 @@ final class InstantShareTrustSessionManager: @unchecked Sendable {
         // )
         let derivedKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
-            salt: pcNonceData + mobileNonce,
-            sharedInfo: Data("dtis.instant-share.trust-session.v1".utf8) + kdfContext,
+            salt: pcNonceData + mobileNonceData,
+            sharedInfo: Data("dtis.instant-share.trust-session.v1".utf8) + kdfContextData,
             outputByteCount: 32
         )
         self.sessionKey = derivedKey
 
         return InstantShareTrustHandshakeResponse(
             mobileDHPublicKey: privateKey.publicKey.rawRepresentation.instantShareBase64URLEncodedString(),
-            mobileNonce: mobileNonce.instantShareBase64URLEncodedString(),
-            kdfContext: kdfContext.instantShareBase64URLEncodedString()
+            mobileNonce: mobileNonce,
+            kdfContext: pcKdfContext
         )
     }
 

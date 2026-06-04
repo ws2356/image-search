@@ -117,7 +117,7 @@ class TrustSession:
             handshake_response = {
                 "mobile_dh_public_key": self._mobile_dh_public_key,
                 "mobile_nonce": self._mobile_nonce,
-                "kdf_context": self._kdf_context or "",
+                "kdf_context": self._derive_kdf_context(),
             }
             self._pc_protector.establish_from_handshake(
                 handshake_request=handshake_request,

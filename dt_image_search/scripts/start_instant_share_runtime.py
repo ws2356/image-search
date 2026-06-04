@@ -75,7 +75,6 @@ def main() -> int:
 
     print(f"Starting instant share runtime...")
     print(f"  mDNS service:      {INSTANT_SHARE_MDNS_SERVICE_TYPE}")
-    print(f"  Bootstrap endpoint: POST /api/instant-share/v1/sessions/bootstrap (port {INSTANT_SHARE_MDNS_PORT})")
     print(f"  Image delivery:    {args.image_delivery_mode}")
     if args.downloads_dir:
         print(f"  Downloads dir:     {args.downloads_dir}")
@@ -99,7 +98,7 @@ def main() -> int:
     is_advertising = runtime.mdns_advertiser.is_advertising
     print(f"\nRuntime started.")
     print(f"  mDNS advertising: {is_advertising}")
-    print(f"  Bootstrap HTTP:   listening on port {runtime.bootstrap_server.port}")
+    print(f"  HTTP server:      listening on port {runtime.http_server.port}")
     if not is_advertising:
         last_error = runtime.mdns_advertiser.last_error
         if last_error is not None:

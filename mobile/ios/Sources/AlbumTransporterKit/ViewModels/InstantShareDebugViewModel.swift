@@ -139,7 +139,7 @@ final class InstantShareDebugViewModel: ObservableObject {
             if let imageData = selectedImageData, let filename = selectedImageFilename, let contentType = selectedImageContentType {
                 service.setSharedImage(data: imageData, filename: filename, contentType: contentType)
             }
-            try await service.startSession(connectionConfig: config)
+            await service.startSession(connectionConfig: config)
             isSessionActive = true
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)

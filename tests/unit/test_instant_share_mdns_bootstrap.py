@@ -22,11 +22,7 @@ from dt_image_search.instant_sharing.contracts import (
     TargetIntent,
     TrustMode,
 )
-from dt_image_search.instant_sharing.https_bootstrap import (
-    InstantShareBootstrapServer,
-    BOOTSTRAP_PATH,
-    _bootstrap_request_to_connection_config,
-)
+
 
 
 def _default_metadata(**kwargs) -> InstantShareMetadata:
@@ -40,11 +36,6 @@ def _default_metadata(**kwargs) -> InstantShareMetadata:
     return InstantShareMetadata(**defaults)
 
 
-class TestDeviceNameAdvertisement:
-    def test_as_dict(self) -> None:
-        adv = DeviceNameAdvertisement(device_name="My Mac", receiver_id="abc123")
-        d = adv.as_dict()
-        assert d == {"device_name": "My Mac", "receiver_id": "abc123"}
 
 
 class TestDeviceSignatureAdvertisement:
@@ -172,27 +163,7 @@ class TestBootstrapRequest:
             BootstrapRequest.from_dict(raw)
 
 
-class TestBootstrapRequestToConnectionConfig:
-    def test_conversion(self) -> None:
-        from uuid import uuid4
-        sid = str(uuid4())
-        cid = str(uuid4())
-        req = BootstrapRequest(
-            session_id=sid,
-            mobile_port=8443,
-            mobile_ip_list=("10.0.0.1",),
-            correlation_id=cid,
-            payload_class="image",
-            target_intent="clipboard_or_file",
-        )
-        cc = _bootstrap_request_to_connection_config(req)
-        assert cc.session_id == sid
-        assert cc.mobile_port == 8443
-        assert cc.mobile_ip_list == ("10.0.0.1",)
-        assert cc.correlation_id == cid
-        assert cc.metadata.payload_class == PayloadClass.IMAGE
-        assert cc.metadata.target_intent == TargetIntent.CLIPBOARD_OR_FILE
-        assert cc.metadata.trust_mode == TrustMode.FIRST_SHARE
+
 
 
 class TestInstantShareBleService:
@@ -327,13 +298,7 @@ class TestConstants:
     def test_mdns_port(self) -> None:
         assert INSTANT_SHARE_MDNS_PORT == 9527
 
-    def test_bootstrap_path(self) -> None:
-        assert BOOTSTRAP_PATH == "/api/instant-share/v1/sessions/bootstrap"
 
 
-class TestInstantShareBootstrapServer:
-    def test_constructor(self) -> None:
-        svc = Mock(spec=InstantShareBleService)
-        server = InstantShareBootstrapServer(ble_service=svc)
-        assert server.port == 9527
-        assert not server.is_running
+
+

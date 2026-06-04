@@ -1,13 +1,13 @@
 import Foundation
 
-/// Top-level service that coordinates the mDNS browser, bootstrap client,
-/// and trust session for the mobile-side instant-share flow.
+/// Top-level service that coordinates the mDNS browser and trust session
+/// for the mobile-side instant-share flow.
 ///
 /// Lifecycle (PC-hosted architecture):
 /// 1. `startDiscovery()` — starts mDNS browse for PC services
 /// 2. `selectPC(_:)` — user picks a discovered PC
-/// 3. `startSession(connectionConfig:)` — sends HTTP bootstrap to the PC
-/// 4. Extension calls trust client: handshake → apply → confirm
+/// 3. `startSession(connectionConfig:)` — stores connection config (bootstrap is part of trust handshake)
+/// 4. Extension calls trust client: handshake (includes bootstrap) → apply → confirm
 /// 5. Extension calls upload client: upload text or image to PC
 @MainActor
 public final class InstantShareService: ObservableObject {
@@ -32,8 +32,6 @@ public final class InstantShareService: ObservableObject {
     var sharedImageContentType: String {
         sharedImage?.contentType ?? "application/octet-stream"
     }
-
-    private let bootstrapClient = InstantShareHTTPSessionBootstrapClient()
 
     public init() {
         let trustManager = InstantShareTrustSessionManager()
@@ -70,29 +68,11 @@ public final class InstantShareService: ObservableObject {
         log("Shared image set (\(data.count) bytes, \(filename))")
     }
 
-    /// Start the instant-share session by sending HTTP bootstrap to the PC.
-    func startSession(connectionConfig: InstantShareConnectionConfig) async throws {
+    /// Start the instant-share session by storing the connection config.
+    /// Bootstrap is now part of the trust handshake request to the PC.
+    func startSession(connectionConfig: InstantShareConnectionConfig) async {
         self.connectionConfig = connectionConfig
-        log("Starting instant-share session...")
-
-        guard let pc = selectedPC else {
-            log("No PC selected")
-            throw InstantShareBootstrapError.invalidURL
-        }
-
-        do {
-            try await bootstrapClient.sendBootstrap(
-                to: pc.host,
-                port: pc.port,
-                connectionConfig: connectionConfig
-            )
-            log("Bootstrap sent to PC \(pc.name)")
-        } catch {
-            log("Failed to send bootstrap: \(error.localizedDescription)")
-            throw error
-        }
-
-        log("Session started. Ready for trust handshake.")
+        log("Session connection config stored")
     }
 
     /// Stop the session and clean up.
