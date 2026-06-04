@@ -17,6 +17,7 @@ The new architecture inverts the client-server relationship: **PC hosts the HTTP
 - Extension flow is sequential: discover → bootstrap → handshake → apply → confirm → upload → done
 - Same security guarantees (DH key exchange, AES-GCM trust envelopes, PIN verification)
 - Same mDNS discovery mechanism
+- Trust confirmation is mobile-side only (user taps Confirm on iOS, not PC)
 
 **Non-Goals:**
 - Change the DH/HKDF key derivation protocol
@@ -47,23 +48,43 @@ PC → iOS: /payload/text     (download payload)
 
 **New flow** (iOS drives):
 ```
-iOS → PC: /trust/handshake  (DH exchange, iOS sends its DH public key)
-iOS → PC: /trust/apply      (PC generates PIN, encrypts, returns to iOS)
-iOS → PC: /trust/confirm    (long-poll, PC waits for iOS to confirm user action)
+iOS → PC: /trust/handshake  (plain DH key exchange, both sides derive session key)
+iOS → PC: /trust/apply      (encrypted request+response, PC returns PIN; both sides display)
+iOS → PC: /trust/confirm    (encrypted request+response, mobile-side confirmation)
 iOS → PC: /transfer/text    (upload payload to PC)
 ```
 
-**Key change in `/trust/apply`**: Currently PC generates the PIN, encrypts it, and sends it to iOS. In the new flow, iOS calls PC's `/trust/apply` endpoint, and the PC generates the PIN, encrypts it with the session key, and returns it in the response. iOS decrypts and displays it.
+### Decision 3: Three-step trust with clear semantics
 
-**Key change in `/trust/confirm`**: Currently PC long-polls iOS's `/trust/confirm`. In the new flow, iOS calls PC's `/trust/confirm` which long-polls internally. When the iOS UI calls `confirmTrust()`, the iOS client sends a confirmation request to PC, which resumes the long-poll.
+The trust flow has three distinct steps with clear boundaries:
 
-### Decision 3: PIN generation location
+1. **`/trust/handshake`** — Plain-text DH key exchange.
+   - iOS sends its X25519 DH public key and a 32-byte nonce.
+   - PC stores the iOS DH public key, generates its own nonce + kdf_context, returns them.
+   - Both sides derive the AES-GCM session key using HKDF-SHA256.
+   - **No encryption** — the session key is needed for encryption in the next step.
+   - **No PIN** — the PIN is generated only after the key is established.
 
-**Choice**: PC generates the PIN (unchanged from current behavior).
+2. **`/trust/apply`** — Encrypted PIN retrieval.
+   - iOS sends a request envelope (encrypted with the session key) — body is `{"action": "request_pin"}`.
+   - PC generates a 6-digit PIN, encrypts it in a trust envelope, returns the envelope.
+   - iOS decrypts the envelope and displays the PIN.
+   - PC also displays the PIN on its mini window.
+   - Both request and response are encrypted — this proves both sides have derived the same session key.
 
-**Rationale**: The PIN is a shared secret that both sides need to agree on. Having PC generate it (as it does now) keeps the protocol consistent. The encrypted PIN is returned to iOS via `/trust/apply` response.
+3. **`/trust/confirm`** — Encrypted confirmation.
+   - iOS sends an encrypted request — body is `{"action": "confirm", "pin_verified": true}`.
+   - PC decrypts, marks the trust session as `trusted`, returns encrypted `{"trust_status": "trusted"}`.
+   - **No long-polling** — iOS sends the confirmation after the user taps Confirm in the iOS UI.
+   - **Mobile-side only** — PC does not require a separate user action; iOS user is the trust authority.
 
-### Decision 4: Upload endpoint design
+### Decision 4: PIN generation location
+
+**Choice**: PC generates the PIN in response to `/trust/apply`.
+
+**Rationale**: The PIN is a shared secret that both sides need to agree on. PC generates it once and returns it encrypted to iOS. PC also displays the same PIN on its mini window.
+
+### Decision 5: Upload endpoint design
 
 **Choice**: New `/transfer/text` and `/transfer/image` endpoints on PC.
 
@@ -73,7 +94,7 @@ iOS → PC: /transfer/text    (upload payload to PC)
 - `POST /transfer/text`: JSON body `{"text_utf8": "...", "metadata": {...}}`
 - `POST /transfer/image`: Binary body with `Content-Type` and `X-Instant-Share-Filename` headers
 
-### Decision 5: Extension flow simplification
+### Decision 6: Extension flow simplification
 
 **Choice**: Remove `InstantShareHTTPServer` from iOS entirely. Extension becomes a pure client.
 
@@ -81,18 +102,19 @@ iOS → PC: /transfer/text    (upload payload to PC)
 1. Load payload
 2. mDNS browse → select PC
 3. Bootstrap to PC
-4. Call `/trust/handshake`
-5. Call `/trust/apply` → get encrypted PIN → display PIN
-6. Call `/trust/confirm` (long-poll) → wait for user confirmation
-7. Upload payload via `/transfer/text` or `/transfer/image`
-8. Done
+4. Call `/trust/handshake` (plain DH exchange)
+5. Call `/trust/apply` (encrypted) → get PIN → display PIN
+6. User taps Confirm on iOS
+7. Call `/trust/confirm` (encrypted) → trust established
+8. Upload payload via `/transfer/text` or `/transfer/image`
+9. Done
 
-No NWListener, no connection handling, no continuation-based user confirmation flow.
+No NWListener, no connection handling, no continuation-based long-poll.
 
 ## Risks / Trade-offs
 
 - **[Risk] PC firewall blocks inbound connections on port 9527** → Mitigation: Same risk as current bootstrap server. Document firewall requirements.
-- **[Risk] Long-poll timeout on `/trust/confirm`** → Mitigation: PC uses same 300-second timeout as current iOS implementation. iOS extension uses `performExpiringActivity` for additional time.
+- **[Risk] User has to look at two devices to verify PIN** → Mitigation: Both sides show the same 6-digit PIN. Standard pairing UX (like Bluetooth pairing).
 - **[Risk] Breaking change for existing installations** → Mitigation: Both PC and iOS must be updated together. No backward compatibility with old protocol.
 - **[Trade-off] PC must be reachable from iOS** → Same as current bootstrap flow. No new network requirements.
 
@@ -108,4 +130,4 @@ No NWListener, no connection handling, no continuation-based user confirmation f
 ## Open Questions
 
 - Should the PC's trust handler run on the same thread as the bootstrap server, or use a separate thread pool?
-- Should `/trust/confirm` use Server-Sent Events (SSE) instead of plain long-poll for better timeout handling?
+- Should the iOS client retry on transient network errors during handshake/apply/confirm?

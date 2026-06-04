@@ -8,7 +8,17 @@ The current instant-share protocol has iOS hosting 6 HTTP server endpoints while
 
 3. **Unreliable connection direction**: The PC connects TO the iOS device, which can fail due to iOS network sandboxing, NAT, or firewall issues. Having iOS initiate outbound HTTP requests to the PC is more reliable on constrained networks.
 
-By inverting the architecture so the **PC hosts the trust and upload endpoints** and the **iOS extension acts as the HTTP client**, the extension becomes a simple sequential caller: discover PC → call handshake → call apply → call confirm → upload data → done. No server, no long-polls, no waiting for the PC to connect.
+By inverting the architecture so the **PC hosts the trust and upload endpoints** and the **iOS extension acts as the HTTP client**, the extension becomes a simple sequential caller: discover PC → call handshake → call apply (get PIN) → call confirm (after user confirms on iOS) → upload data → done. No server, no long-polls, no waiting for the PC to connect.
+
+## Trust Flow
+
+The new trust flow has three clean steps:
+
+1. **`/trust/handshake` (plain text)**: iOS sends its DH public key + nonce. PC returns its DH public key + nonce + kdf_context. Both sides derive the same session key. No encryption.
+
+2. **`/trust/apply` (encrypted)**: iOS sends encrypted `{"action": "request_pin"}`. PC generates a 6-digit PIN, encrypts it with the session key, returns it. Both sides display the same PIN. The encryption proves both sides derived the same session key.
+
+3. **`/trust/confirm` (encrypted, mobile-side only)**: After the user taps "Confirm" in the iOS UI, iOS sends encrypted `{"action": "confirm", "pin_verified": true}`. PC marks the trust session as established. No long-polling — iOS sends the confirmation after the user acts. The user only confirms on iOS; PC does not require a separate user action.
 
 ## What Changes
 
@@ -16,7 +26,8 @@ By inverting the architecture so the **PC hosts the trust and upload endpoints**
 - **BREAKING**: iOS removes `InstantShareHTTPServer` NWListener-based server and all 6 endpoint handlers
 - **BREAKING**: iOS extension becomes an HTTP client that calls PC endpoints sequentially
 - **BREAKING**: Trust flow direction inverts: iOS calls PC's `/trust/handshake` (not PC calling iOS)
-- **BREAKING**: PIN generation moves to PC side (PC generates, encrypts, returns to iOS via `/trust/apply`)
+- **BREAKING**: PIN generation happens in response to `/trust/apply` (PC generates, encrypts, returns to iOS)
+- **BREAKING**: Trust confirmation is mobile-side only (no PC-side long-poll, no PC-side user action)
 - **BREAKING**: Data transfer inverts: iOS uploads to PC (not PC downloading from iOS)
 - Bootstrap flow unchanged: iOS still sends bootstrap to PC first
 - mDNS discovery unchanged: PC advertises `_instantshare._tcp`, iOS browses
@@ -26,7 +37,7 @@ By inverting the architecture so the **PC hosts the trust and upload endpoints**
 ## Capabilities
 
 ### New Capabilities
-- `pc-trust-endpoints`: PC-side HTTP endpoints for trust handshake, PIN apply, and confirmation long-poll
+- `pc-trust-endpoints`: PC-side HTTP endpoints for trust handshake (plain DH), encrypted PIN apply, and encrypted confirmation
 - `pc-upload-endpoints`: PC-side HTTP endpoints for receiving text and image payloads from iOS
 - `ios-trust-client`: iOS extension HTTP client that calls PC's trust endpoints sequentially
 - `ios-upload-client`: iOS extension HTTP client that uploads text/image to PC
