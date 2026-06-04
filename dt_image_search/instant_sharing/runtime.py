@@ -18,12 +18,11 @@ from dt_image_search.instant_sharing.mdns import (
 from dt_image_search.instant_sharing.https_bootstrap import InstantShareBootstrapServer
 from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
-from dt_image_search.instant_sharing.http_client import InstantShareHttpClient
-from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator, TrustHandshakeRequest
+from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
 from dt_image_search.instant_sharing.sender_validation import SenderIdentity
-from dt_image_search.instant_sharing.security import X25519TrustSessionKeyResolver
-from dt_image_search.instant_sharing.trust_crypto import AesGcmTrustSessionProtector
 from dt_image_search.instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
+from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
+from dt_image_search.instant_sharing.transfer_server import TransferHandler
 from dt_image_search.model.dt_device_id import get_device_id
 from dt_image_search.model.feature_flags import is_instant_share_enabled
 
@@ -46,6 +45,8 @@ class InstantShareRuntime:
         delivery_service: InstantShareDeliveryService | None = None,
         orchestrator: InstantShareReceiverOrchestrator | None = None,
         auto_receive: bool = False,
+        trust_session_registry: TrustSessionRegistry | None = None,
+        pin_display_callback: Callable[[str], None] | None = None,
     ) -> None:
         self._auto_receive = auto_receive
         self._is_enabled = is_enabled
@@ -62,14 +63,21 @@ class InstantShareRuntime:
                 downloads_dir=downloads_dir,
             )
         )
+        self._trust_session_registry = trust_session_registry if trust_session_registry is not None else TrustSessionRegistry()
+        self._transfer_handler = TransferHandler(
+            session_registry=self._session_registry,
+            delivery_service=self._delivery_service,
+        )
         self._orchestrator = (
             orchestrator
             if orchestrator is not None
             else InstantShareReceiverOrchestrator(
                 session_registry=self._session_registry,
                 delivery_service=self._delivery_service,
+                trust_session_registry=self._trust_session_registry,
             )
         )
+        self._pin_display_callback = pin_display_callback
         device_id = self._device_id_provider()
         desktop_name = self._desktop_name_provider()
         self._ble_service = InstantShareBleService(
@@ -84,6 +92,10 @@ class InstantShareRuntime:
         )
         self._bootstrap_server = InstantShareBootstrapServer(
             ble_service=self._ble_service,
+            trust_session_registry=self._trust_session_registry,
+            session_registry=self._session_registry,
+            transfer_handler=self._transfer_handler,
+            pin_display_callback=self._pin_display_callback,
         )
         self._ble_daemon = InstantShareBleDaemon(
             ble_service=self._ble_service,
@@ -120,6 +132,10 @@ class InstantShareRuntime:
     @property
     def orchestrator(self) -> InstantShareReceiverOrchestrator:
         return self._orchestrator
+
+    @property
+    def trust_session_registry(self) -> TrustSessionRegistry:
+        return self._trust_session_registry
 
     @property
     def sender_identity(self) -> SenderIdentity:
@@ -170,57 +186,12 @@ class InstantShareRuntime:
             self._ble_service.handle_bootstrap(connection_config)
         return self._session_registry.require_session(connection_config.session_id)
 
-    def create_http_client(self, connection_config: ConnectionConfig) -> tuple[InstantShareHttpClient, X25519TrustSessionKeyResolver, dict[str, object]]:
-        key_resolver = X25519TrustSessionKeyResolver()
-        trust_session_protector = AesGcmTrustSessionProtector(session_key_resolver=key_resolver)
-        handshake_payload = key_resolver.handshake_request_payload()
-        return InstantShareHttpClient(
-            connection_config=connection_config,
-            device_id=self._device_id_provider(),
-            session_signer=self._sender_identity.session_signer,
-            trust_session_protector=trust_session_protector,
-            correlation_id=connection_config.correlation_id,
-        ), key_resolver, handshake_payload
-
-    def run_receive_flow(self, connection_config: ConnectionConfig) -> object:
-        session = self._session_registry.require_session(connection_config.session_id)
-        client, key_resolver, handshake_payload = self.create_http_client(connection_config)
-        correlation_id = connection_config.correlation_id
-
-        if connection_config.metadata.trust_mode is TrustMode.FIRST_SHARE:
-            self._orchestrator.complete_trust(
-                session_id=connection_config.session_id,
-                client=client,
-                request=TrustHandshakeRequest(
-                    pc_dh_public_key=str(handshake_payload.get("pc_dh_public_key", "")),
-                    pc_nonce=str(handshake_payload.get("pc_nonce", "")),
-                ),
-                correlation_id=correlation_id,
-            )
-
-        return self._orchestrator.receive_payload(
-            session_id=connection_config.session_id,
-            client=client,
-            correlation_id=correlation_id,
-        )
-
     def _handle_connection_config(self, connection_config: ConnectionConfig) -> None:
         self._orchestrator.handle_connection_config(connection_config)
         if self._auto_receive:
             logging.getLogger(__name__).info(
-                "[InstantShareRuntime] auto_receive: starting receive flow in background thread"
+                "[InstantShareRuntime] auto_receive: session ready, waiting for inbound trust+upload from mobile"
             )
-            threading.Thread(
-                target=lambda: self._run_receive_flow_safely(connection_config),
-                name="instant_share_auto_receive",
-                daemon=True,
-            ).start()
-
-    def _run_receive_flow_safely(self, connection_config: ConnectionConfig) -> None:
-        try:
-            self.run_receive_flow(connection_config)
-        except Exception:
-            logging.getLogger(__name__).exception("[InstantShareRuntime] auto_receive failed")
 
     def _device_name_advertisement(self) -> DeviceNameAdvertisement:
         return DeviceNameAdvertisement(

@@ -62,8 +62,8 @@ from dt_image_search.instant_sharing.security import (
 from dt_image_search.instant_sharing.orchestrator import (
     INSTANT_SHARE_LIFECYCLE_EVENT,
     InstantShareReceiverOrchestrator,
-    TrustHandshakeRequest,
 )
+from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 from dt_image_search.instant_sharing.runtime import InstantShareRuntime
 from dt_image_search.instant_sharing.session import (
     InstantShareSession,
@@ -116,7 +116,7 @@ __all__ = [
     "SessionRequestSigner",
     "SessionState",
     "TargetIntent",
-    "TrustHandshakeRequest",
+    "TrustSessionRegistry",
     "TrustSessionProtector",
     "TrustMode",
     "X25519TrustSessionKeyResolver",

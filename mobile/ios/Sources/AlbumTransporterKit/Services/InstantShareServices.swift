@@ -10,6 +10,8 @@ enum InstantShareProtocol {
     static let trustHandshakePath = "/trust/handshake"
     static let trustApplyPath = "/trust/apply"
     static let trustConfirmPath = "/trust/confirm"
+    static let transferTextPath = "/transfer/text"
+    static let transferImagePath = "/transfer/image"
     static let payloadTextPath = "/payload/text"
     static let payloadImagePath = "/payload/image"
     static let deliveryResultPath = "/delivery-result"
@@ -216,6 +218,19 @@ public struct InstantShareConnectionConfig: Codable, Sendable, Equatable {
             }
             return url
         }
+    }
+
+    func pcEndpointURLs(path: String, pcHost: String, pcPort: Int = 9527) throws -> [URL] {
+        let normalizedPath = path.hasPrefix("/") ? path : "/\(path)"
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = pcHost
+        components.port = pcPort
+        components.path = InstantShareProtocol.apiPrefix + normalizedPath
+        guard let url = components.url else {
+            throw InstantShareServiceError.invalidIPAddress(pcHost)
+        }
+        return [url]
     }
 
     func endpointURLs(path: String) throws -> [URL] {

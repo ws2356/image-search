@@ -52,9 +52,29 @@ final class InstantShareResumeViewModel: ObservableObject {
     }
 
     func confirmPIN() async {
-        service.confirmTrust()
         state = .transferring(progress: 0)
-        await startTrustedTransfer()
+        guard let context = handoffContext,
+              let config = service.connectionConfig,
+              let pc = service.selectedPC else {
+            state = .failed("No active session to confirm")
+            return
+        }
+
+        let trustClient = InstantShareTrustClient(
+            trustSessionManager: service.trustSession
+        )
+
+        do {
+            try await trustClient.confirm(
+                host: pc.host,
+                port: pc.port,
+                sessionID: config.sessionID,
+                correlationID: config.correlationID
+            )
+            await startTrustedTransfer()
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
     }
 
     func rejectPIN() {
@@ -74,13 +94,34 @@ final class InstantShareResumeViewModel: ObservableObject {
     }
 
     private func startFirstUseTrust() async {
-        guard let context = handoffContext else { return }
+        guard let context = handoffContext,
+              let pc = service.selectedPC else {
+            state = .failed("No selected PC")
+            return
+        }
         do {
             let config = try buildConnectionConfig(from: context)
             try await service.startSession(connectionConfig: config)
-            if let pin = service.currentPIN {
-                state = .firstUseTrust(pin: pin)
-            }
+
+            let trustClient = InstantShareTrustClient(
+                trustSessionManager: service.trustSession
+            )
+
+            try await trustClient.handshake(
+                host: pc.host,
+                port: pc.port,
+                sessionID: config.sessionID,
+                correlationID: config.correlationID
+            )
+
+            let pin = try await trustClient.apply(
+                host: pc.host,
+                port: pc.port,
+                sessionID: config.sessionID,
+                correlationID: config.correlationID
+            )
+            service.currentPIN = pin
+            state = .firstUseTrust(pin: pin)
         } catch {
             state = .failed(error.localizedDescription)
         }

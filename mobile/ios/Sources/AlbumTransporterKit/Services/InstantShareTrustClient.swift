@@ -1,0 +1,303 @@
+import CryptoKit
+import Foundation
+
+enum InstantShareTrustClientError: Error, Sendable {
+    case handshakeFailed(String)
+    case applyFailed(String)
+    case confirmFailed(String)
+    case sessionKeyNotEstablished
+    case invalidResponse(String)
+    case httpError(statusCode: Int, errorCode: String, message: String)
+    case networkError(Error)
+}
+
+extension InstantShareTrustClientError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .handshakeFailed(let message):
+            return "Trust handshake failed: \(message)"
+        case .applyFailed(let message):
+            return "Trust apply (PIN retrieval) failed: \(message)"
+        case .confirmFailed(let message):
+            return "Trust confirm failed: \(message)"
+        case .sessionKeyNotEstablished:
+            return "Session key not established. Complete handshake first."
+        case .invalidResponse(let message):
+            return "Invalid response from PC: \(message)"
+        case .httpError(let statusCode, let errorCode, let message):
+            return "HTTP \(statusCode): [\(errorCode)] \(message)"
+        case .networkError(let error):
+            return "Network error: \(error.localizedDescription)"
+        }
+    }
+}
+
+final class InstantShareTrustClient: @unchecked Sendable {
+    private let trustSessionManager: InstantShareTrustSessionManager
+    private let urlSession: URLSession
+    private let timeoutInterval: TimeInterval
+
+    init(
+        trustSessionManager: InstantShareTrustSessionManager,
+        urlSession: URLSession = .shared,
+        timeoutInterval: TimeInterval = 15.0
+    ) {
+        self.trustSessionManager = trustSessionManager
+        self.urlSession = urlSession
+        self.timeoutInterval = timeoutInterval
+    }
+
+    func handshake(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String
+    ) async throws -> InstantShareTrustHandshakeResponse {
+        let mobileDHPublicKey = trustSessionManager.publicKeyBase64URL
+        let mobileNonce = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
+            .instantShareBase64URLEncodedString()
+
+        let requestBody: [String: String] = [
+            "mobile_dh_public_key": mobileDHPublicKey,
+            "mobile_nonce": mobileNonce,
+        ]
+
+        let urlString = "http://\(host):\(port)\(InstantShareProtocol.apiPrefix)/trust/handshake"
+        guard let url = URL(string: urlString) else {
+            throw InstantShareTrustClientError.handshakeFailed("Invalid URL: \(urlString)")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(sessionID, forHTTPHeaderField: "X-Session-Id")
+        request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
+        request.timeoutInterval = timeoutInterval
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            throw InstantShareTrustClientError.handshakeFailed("Failed to encode request body: \(error)")
+        }
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            throw InstantShareTrustClientError.networkError(error)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw InstantShareTrustClientError.handshakeFailed("Non-HTTP response")
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorInfo = tryParseErrorBody(data)
+            throw InstantShareTrustClientError.httpError(
+                statusCode: httpResponse.statusCode,
+                errorCode: errorInfo.errorCode,
+                message: errorInfo.message
+            )
+        }
+
+        let responseBody: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw InstantShareTrustClientError.invalidResponse("Response is not a JSON object")
+            }
+            responseBody = decoded
+        } catch let error as InstantShareTrustClientError {
+            throw error
+        } catch {
+            throw InstantShareTrustClientError.invalidResponse("Failed to decode response: \(error)")
+        }
+
+        guard let pcDHPublicKey = responseBody["pc_dh_public_key"] as? String,
+              let pcNonce = responseBody["pc_nonce"] as? String,
+              let kdfContext = responseBody["kdf_context"] as? String else {
+            throw InstantShareTrustClientError.invalidResponse("Missing pc_dh_public_key, pc_nonce, or kdf_context in handshake response")
+        }
+
+        let handshakeResponse = try trustSessionManager.handleHandshakeRequest(
+            pcDHPublicKey: pcDHPublicKey,
+            pcNonce: pcNonce
+        )
+
+        return handshakeResponse
+    }
+
+    func apply(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String
+    ) async throws -> String {
+        guard trustSessionManager.isEstablished else {
+            throw InstantShareTrustClientError.sessionKeyNotEstablished
+        }
+
+        let requestPayload: [String: Any] = ["action": "request_pin"]
+        let envelope = try trustSessionManager.encryptResponse(requestPayload)
+
+        let requestBody: [String: Any] = [
+            "schema": envelope.schema,
+            "nonce": envelope.nonce,
+            "ciphertext": envelope.ciphertext,
+            "encryption_alg": "aes-256-gcm",
+        ]
+
+        let urlString = "http://\(host):\(port)\(InstantShareProtocol.apiPrefix)/trust/apply"
+        guard let url = URL(string: urlString) else {
+            throw InstantShareTrustClientError.applyFailed("Invalid URL: \(urlString)")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(sessionID, forHTTPHeaderField: "X-Session-Id")
+        request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
+        request.timeoutInterval = timeoutInterval
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            throw InstantShareTrustClientError.applyFailed("Failed to encode request body: \(error)")
+        }
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            throw InstantShareTrustClientError.networkError(error)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw InstantShareTrustClientError.applyFailed("Non-HTTP response")
+        }
+
+        guard httpResponse.statusCode == 202 else {
+            let errorInfo = tryParseErrorBody(data)
+            throw InstantShareTrustClientError.httpError(
+                statusCode: httpResponse.statusCode,
+                errorCode: errorInfo.errorCode,
+                message: errorInfo.message
+            )
+        }
+
+        let responseBody: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw InstantShareTrustClientError.invalidResponse("Response is not a JSON object")
+            }
+            responseBody = decoded
+        } catch let error as InstantShareTrustClientError {
+            throw error
+        } catch {
+            throw InstantShareTrustClientError.invalidResponse("Failed to decode response: \(error)")
+        }
+
+        let responseEnvelope = InstantShareTrustEnvelope(
+            nonce: responseBody["nonce"] as? String ?? "",
+            ciphertext: responseBody["ciphertext"] as? String ?? ""
+        )
+
+        let decryptedPayload = try trustSessionManager.decryptEnvelope(responseEnvelope)
+        guard let pinCode = decryptedPayload["pin_code"] as? String else {
+            throw InstantShareTrustClientError.invalidResponse("Missing pin_code in apply response")
+        }
+
+        return pinCode
+    }
+
+    func confirm(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String
+    ) async throws {
+        guard trustSessionManager.isEstablished else {
+            throw InstantShareTrustClientError.sessionKeyNotEstablished
+        }
+
+        let requestPayload: [String: Any] = ["action": "confirm", "pin_verified": true]
+        let envelope = try trustSessionManager.encryptResponse(requestPayload)
+
+        let requestBody: [String: Any] = [
+            "schema": envelope.schema,
+            "nonce": envelope.nonce,
+            "ciphertext": envelope.ciphertext,
+            "encryption_alg": "aes-256-gcm",
+        ]
+
+        let urlString = "http://\(host):\(port)\(InstantShareProtocol.apiPrefix)/trust/confirm"
+        guard let url = URL(string: urlString) else {
+            throw InstantShareTrustClientError.confirmFailed("Invalid URL: \(urlString)")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(sessionID, forHTTPHeaderField: "X-Session-Id")
+        request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
+        request.timeoutInterval = timeoutInterval
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            throw InstantShareTrustClientError.confirmFailed("Failed to encode request body: \(error)")
+        }
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await urlSession.data(for: request)
+        } catch {
+            throw InstantShareTrustClientError.networkError(error)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw InstantShareTrustClientError.confirmFailed("Non-HTTP response")
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorInfo = tryParseErrorBody(data)
+            throw InstantShareTrustClientError.httpError(
+                statusCode: httpResponse.statusCode,
+                errorCode: errorInfo.errorCode,
+                message: errorInfo.message
+            )
+        }
+
+        let responseBody: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw InstantShareTrustClientError.invalidResponse("Response is not a JSON object")
+            }
+            responseBody = decoded
+        } catch let error as InstantShareTrustClientError {
+            throw error
+        } catch {
+            throw InstantShareTrustClientError.invalidResponse("Failed to decode response: \(error)")
+        }
+
+        let responseEnvelope = InstantShareTrustEnvelope(
+            nonce: responseBody["nonce"] as? String ?? "",
+            ciphertext: responseBody["ciphertext"] as? String ?? ""
+        )
+
+        let decryptedPayload = try trustSessionManager.decryptEnvelope(responseEnvelope)
+        guard let trustStatus = decryptedPayload["trust_status"] as? String,
+              trustStatus == "trusted" else {
+            throw InstantShareTrustClientError.confirmFailed("Expected trust_status=trusted, got \(decryptedPayload)")
+        }
+    }
+
+    private func tryParseErrorBody(_ data: Data) -> (errorCode: String, message: String) {
+        guard let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (errorCode: "UNKNOWN", message: "Unable to parse error response")
+        }
+        return (
+            errorCode: decoded["error_code"] as? String ?? "UNKNOWN",
+            message: decoded["message"] as? String ?? "Unknown error"
+        )
+    }
+}

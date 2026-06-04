@@ -8,60 +8,18 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
-    DownloadedTextPayload,
-    InstantShareMetadata,
     PayloadClass,
+    SessionState,
     TargetIntent,
     TrustMode,
 )
 from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
 from dt_image_search.instant_sharing.orchestrator import (
     InstantShareReceiverOrchestrator,
-    TrustHandshakeRequest,
     _session_attributes,
 )
 from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
-
-
-class _ClipboardRecorder:
-    def __init__(self):
-        self.texts = []
-
-    def write_text(self, text: str) -> None:
-        self.texts.append(text)
-
-    def write_image_bytes(self, image_bytes: bytes) -> None:
-        raise AssertionError("Image delivery is not expected in this test.")
-
-
-class _StubClient:
-    def __init__(self):
-        self.calls = []
-
-    def trust_handshake(self, **kwargs):
-        self.calls.append(("trust_handshake", kwargs))
-        return {"mobile_dh_public_key": "m", "mobile_nonce": "n", "kdf_context": "c"}
-
-    def trust_apply(self, **kwargs):
-        self.calls.append(("trust_apply", kwargs))
-        return "123456"
-
-    def trust_confirm(self, **kwargs):
-        self.calls.append(("trust_confirm", kwargs))
-        return {"mobile_public_key_pem": "mobile-public-key", "trust_status": "trusted"}
-
-    def download_text_payload(self, **kwargs):
-        self.calls.append(("download_text_payload", kwargs))
-        metadata = InstantShareMetadata(
-            payload_class=PayloadClass.TEXT,
-            target_intent=TargetIntent.CLIPBOARD_ONLY,
-            trust_mode=TrustMode.FIRST_SHARE,
-        )
-        return DownloadedTextPayload(metadata=metadata, text_utf8="hello")
-
-    def report_delivery_result(self, **kwargs):
-        self.calls.append(("report_delivery_result", kwargs))
-        return {"ack": True}
+from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 
 
 def _connection_config():
@@ -102,8 +60,7 @@ class TelemetrySpanTests(unittest.TestCase):
         mock_span.return_value.__enter__ = MagicMock(return_value=None)
         mock_span.return_value.__exit__ = MagicMock(return_value=False)
 
-        clipboard = _ClipboardRecorder()
-        delivery_service = InstantShareDeliveryService(clipboard_writer=clipboard)
+        delivery_service = InstantShareDeliveryService()
         orchestrator = InstantShareReceiverOrchestrator(
             session_registry=InstantShareSessionRegistry(),
             delivery_service=delivery_service,
@@ -122,34 +79,50 @@ class TelemetrySpanTests(unittest.TestCase):
 
     @patch("dt_image_search.instant_sharing.orchestrator.add_span")
     @patch("dt_image_search.instant_sharing.orchestrator.log")
-    def test_receive_payload_emits_span_and_log(self, mock_log, mock_span) -> None:
+    def test_handle_trust_handshake_received_emits_span_and_log(self, mock_log, mock_span) -> None:
         mock_span.return_value.__enter__ = MagicMock(return_value=None)
         mock_span.return_value.__exit__ = MagicMock(return_value=False)
 
-        clipboard = _ClipboardRecorder()
-        delivery_service = InstantShareDeliveryService(clipboard_writer=clipboard)
+        delivery_service = InstantShareDeliveryService()
         orchestrator = InstantShareReceiverOrchestrator(
             session_registry=InstantShareSessionRegistry(),
             delivery_service=delivery_service,
         )
-        client = _StubClient()
         config = _connection_config()
-
         orchestrator.handle_connection_config(config)
-        orchestrator.receive_payload(
+
+        orchestrator.handle_trust_handshake_received(
             session_id=config.session_id,
-            client=client,
             correlation_id=config.correlation_id,
-            requires_signature=False,
         )
 
         span_calls = mock_span.call_args_list
         span_names = [call[0][0] for call in span_calls]
-        self.assertIn("instant_share.payload.receive", span_names)
+        self.assertIn("instant_share.trust.handshake.received", span_names)
 
-        log_messages = [call[1].get("message", "") for call in mock_log.call_args_list]
-        self.assertTrue(any("downloaded" in msg.lower() for msg in log_messages))
-        self.assertTrue(any("delivery" in msg.lower() for msg in log_messages))
+    @patch("dt_image_search.instant_sharing.orchestrator.add_span")
+    @patch("dt_image_search.instant_sharing.orchestrator.log")
+    def test_handle_transfer_received_emits_span(self, mock_log, mock_span) -> None:
+        mock_span.return_value.__enter__ = MagicMock(return_value=None)
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        delivery_service = InstantShareDeliveryService()
+        orchestrator = InstantShareReceiverOrchestrator(
+            session_registry=InstantShareSessionRegistry(),
+            delivery_service=delivery_service,
+        )
+        config = _connection_config()
+        orchestrator.handle_connection_config(config)
+        orchestrator._session_registry.transition(config.session_id, SessionState.NEGOTIATING)
+
+        orchestrator.handle_transfer_received(
+            session_id=config.session_id,
+            correlation_id=config.correlation_id,
+        )
+
+        span_calls = mock_span.call_args_list
+        span_names = [call[0][0] for call in span_calls]
+        self.assertIn("instant_share.transfer.received", span_names)
 
 
 if __name__ == "__main__":

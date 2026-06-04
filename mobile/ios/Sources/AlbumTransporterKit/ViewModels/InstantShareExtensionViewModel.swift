@@ -96,42 +96,103 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         isProcessing = true
         errorMessage = nil
 
-        setPayloadOnService(from: envelope)
-
         let config = buildConnectionConfig(pc: pc, envelope: envelope)
         service.connectionConfig = config
 
         do {
-            InstantShareLog.info("[Extension VM] starting session on port \(config.mobilePort)")
+            InstantShareLog.info("[Extension VM] sending bootstrap to PC \(pc.host):\(pc.port)")
             try await service.startSession(connectionConfig: config)
-            isProcessing = false
 
-            if let pin = service.currentPIN {
-                InstantShareLog.info("[Extension VM] PIN: \(pin)")
-                sessionPhase = .verifying(pin: pin)
-            } else {
-                sessionPhase = .failed("PIN not generated")
-            }
+            InstantShareLog.info("[Extension VM] starting trust handshake...")
+            let trustClient = InstantShareTrustClient(
+                trustSessionManager: service.trustSession
+            )
+
+            let handshakePort = pc.port
+            let handshakeHost = pc.host
+
+            try await trustClient.handshake(
+                host: handshakeHost,
+                port: handshakePort,
+                sessionID: config.sessionID,
+                correlationID: config.correlationID
+            )
+            InstantShareLog.info("[Extension VM] handshake completed")
+
+            let pin = try await trustClient.apply(
+                host: handshakeHost,
+                port: handshakePort,
+                sessionID: config.sessionID,
+                correlationID: config.correlationID
+            )
+            InstantShareLog.info("[Extension VM] PIN received: \(pin)")
+            service.currentPIN = pin
+
+            isProcessing = false
+            sessionPhase = .verifying(pin: pin)
         } catch {
             isProcessing = false
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-            InstantShareLog.error("[Extension VM] startSession failed: \(msg)")
+            InstantShareLog.error("[Extension VM] send failed: \(msg)")
             sessionPhase = .failed(msg)
         }
     }
 
     public func confirmPIN() {
         InstantShareLog.info("[Extension VM] PIN confirmed")
-        service.confirmTrust()
         sessionPhase = .transferring
+
+        guard let pc = selectedDevice, let config = service.connectionConfig else {
+            sessionPhase = .failed("No connection config available")
+            return
+        }
+
         Task {
             do {
-                let result = try await waitForTransferCompletion()
-                InstantShareLog.info("[Extension VM] transfer result: \(result)")
+                let trustClient = InstantShareTrustClient(
+                    trustSessionManager: service.trustSession
+                )
+                let uploadClient = InstantShareUploadClient()
+
+                let handshakeHost = pc.host
+
+                try await trustClient.confirm(
+                    host: handshakeHost,
+                    port: pc.port,
+                    sessionID: config.sessionID,
+                    correlationID: config.correlationID
+                )
+                InstantShareLog.info("[Extension VM] trust confirmed")
+
+                switch service.sharedText.isEmpty {
+                case false:
+                    try await uploadClient.uploadText(
+                        host: handshakeHost,
+                        port: pc.port,
+                        sessionID: config.sessionID,
+                        correlationID: config.correlationID,
+                        text: service.sharedText
+                    )
+                    InstantShareLog.info("[Extension VM] text uploaded")
+                default:
+                    if let imageData = service.sharedImageData {
+                        try await uploadClient.uploadImage(
+                            host: handshakeHost,
+                            port: pc.port,
+                            sessionID: config.sessionID,
+                            correlationID: config.correlationID,
+                            imageData: imageData,
+                            contentType: service.sharedImageContentType,
+                            filename: service.sharedImageFilename
+                        )
+                        InstantShareLog.info("[Extension VM] image uploaded")
+                    }
+                }
+
                 sessionPhase = .success
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-                InstantShareLog.error("[Extension VM] transfer failed: \(msg)")
+                InstantShareLog.error("[Extension VM] confirm/transfer failed: \(msg)")
                 sessionPhase = .failed(msg)
             }
         }
@@ -148,22 +209,6 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         sessionPhase = .scanning
     }
 
-    private func setPayloadOnService(from envelope: InstantSharePayloadEnvelope) {
-        switch envelope.payloadType {
-        case .text:
-            service.setSharedText(envelope.textContent ?? "")
-        case .image:
-            if let url = envelope.fileURL,
-               let data = try? Data(contentsOf: url) {
-                let filename = envelope.filename ?? "shared-image.jpg"
-                let contentType = envelope.contentType ?? "image/jpeg"
-                service.setSharedImage(data: data, filename: filename, contentType: contentType)
-            }
-        default:
-            break
-        }
-    }
-
     private func buildConnectionConfig(pc: InstantShareDiscoveredPC, envelope: InstantSharePayloadEnvelope) -> InstantShareConnectionConfig {
         let payloadClass: InstantSharePayloadClass = envelope.payloadType == .text ? .text : .image
         let targetIntent: InstantShareTargetIntent = payloadClass == .text ? .clipboardOnly : .clipboardOrFile
@@ -177,28 +222,10 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
         return InstantShareConnectionConfig(
             sessionID: UUID().uuidString.lowercased(),
-            mobilePort: 8443,
+            mobilePort: 0,
             mobileIPList: [pc.host],
             correlationID: UUID().uuidString.lowercased(),
             metadata: metadata
         )
-    }
-
-    private func waitForTransferCompletion() async throws -> String {
-        let deadline = Date().addingTimeInterval(30)
-        let server = service.httpsServer
-        while Date() < deadline {
-            if server.sharedTextDelivered {
-                return "text-delivered"
-            }
-            if server.sharedImageDelivered {
-                return "image-delivered"
-            }
-            if let err = server.lastError, !err.isEmpty {
-                throw NSError(domain: "InstantShare", code: -1, userInfo: [NSLocalizedDescriptionKey: err])
-            }
-            try await Task.sleep(nanoseconds: 500_000_000)
-        }
-        throw NSError(domain: "InstantShare", code: -1, userInfo: [NSLocalizedDescriptionKey: "Transfer timed out"])
     }
 }

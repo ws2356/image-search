@@ -6,20 +6,13 @@ import threading
 from dt_image_search.instant_sharing.contracts import ErrorCode, SessionState
 from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
 from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.http_client import InstantShareHttpClient
 from dt_image_search.instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
+from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 from dt_image_search.telemetry.telemetry_client import add_span, log
 from dt_image_search.tools.dts_event_bus import default_bus
 
 
 INSTANT_SHARE_LIFECYCLE_EVENT = "instant_share.lifecycle"
-
-
-@dataclass(frozen=True)
-class TrustHandshakeRequest:
-    pc_dh_public_key: str
-    pc_nonce: str
-    key_id: str | None = None
 
 
 class InstantShareReceiverOrchestrator:
@@ -28,9 +21,11 @@ class InstantShareReceiverOrchestrator:
         *,
         session_registry: InstantShareSessionRegistry,
         delivery_service: InstantShareDeliveryService,
+        trust_session_registry: TrustSessionRegistry | None = None,
     ) -> None:
         self._session_registry = session_registry
         self._delivery_service = delivery_service
+        self._trust_session_registry = trust_session_registry
 
     def handle_connection_config(self, connection_config) -> InstantShareSession:
         with add_span(
@@ -48,142 +43,62 @@ class InstantShareReceiverOrchestrator:
             )
             return session
 
-    def complete_trust(
-        self,
-        *,
-        session_id: str,
-        client: InstantShareHttpClient,
-        request: TrustHandshakeRequest,
-        correlation_id: str,
-    ) -> dict[str, object]:
+    def handle_trust_handshake_received(self, *, session_id: str, correlation_id: str) -> None:
         session = self._session_registry.require_session(session_id)
         with add_span(
-            "instant_share.trust.complete",
+            "instant_share.trust.handshake.received",
             attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
         ):
-            session = self._session_registry.transition(session_id, SessionState.NEGOTIATING)
-            self._publish(session)
-            try:
-                client.trust_handshake(
-                    pc_dh_public_key=request.pc_dh_public_key,
-                    pc_nonce=request.pc_nonce,
-                    correlation_id=correlation_id,
-                )
-                log(
-                    "info",
-                    message="Instant-share trust handshake completed",
-                    where="instant_share.orchestrator.complete_trust",
-                    attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
-                )
-                confirm_payload_holder: dict[str, object] = {}
-                confirm_error_holder: list[BaseException] = []
-                confirm_completed = threading.Event()
-
-                def _run_trust_confirm() -> None:
-                    try:
-                        confirm_payload_holder.update(
-                            client.trust_confirm(
-                                correlation_id=correlation_id,
-                            )
-                        )
-                    except BaseException as exc:
-                        confirm_error_holder.append(exc)
-                    finally:
-                        confirm_completed.set()
-
-                confirm_thread = threading.Thread(
-                    target=_run_trust_confirm,
-                    name="instant_share_trust_confirm",
-                    daemon=True,
-                )
-                confirm_thread.start()
-
-                client.trust_apply(
-                    correlation_id=correlation_id,
-                    key_id=request.key_id,
-                )
-                confirm_completed.wait()
-                if confirm_error_holder:
-                    raise confirm_error_holder[0]
-                confirm_payload = dict(confirm_payload_holder)
-            except InstantShareError as error:
-                self._transition_on_error(session_id=session_id, error=error)
-                raise
+            updated = self._session_registry.transition(session_id, SessionState.NEGOTIATING)
+            self._publish(updated)
             log(
                 "info",
-                message="Instant-share trust established",
-                where="instant_share.orchestrator.complete_trust",
-                attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
+                message="Instant-share trust handshake received from mobile",
+                where="instant_share.orchestrator.handle_trust_handshake_received",
+                attributes=_session_attributes(updated.connection_config, correlation_id=correlation_id),
             )
-            return confirm_payload
 
-    def receive_payload(
-        self,
-        *,
-        session_id: str,
-        client: InstantShareHttpClient,
-        correlation_id: str,
-        requires_signature: bool = True,
-    ) -> object:
+    def handle_trust_confirmed(self, *, session_id: str, correlation_id: str) -> None:
         session = self._session_registry.require_session(session_id)
         with add_span(
-            "instant_share.payload.receive",
+            "instant_share.trust.confirmed",
             attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
         ):
-            session = self._session_registry.transition(session_id, SessionState.TRANSFERRING)
-            self._publish(session)
-
-            try:
-                if session.connection_config.metadata.payload_class.value == "text":
-                    downloaded_payload = client.download_text_payload(
-                        correlation_id=correlation_id,
-                        requires_signature=requires_signature,
-                    )
-                else:
-                    downloaded_payload = client.download_image_payload(
-                        correlation_id=correlation_id,
-                        requires_signature=requires_signature,
-                    )
-            except InstantShareError as error:
-                self._transition_on_error(session_id=session_id, error=error)
-                raise
-
+            updated = self._session_registry.transition(session_id, SessionState.NEGOTIATING)
+            self._publish(updated)
             log(
                 "info",
-                message="Instant-share payload downloaded",
-                where="instant_share.orchestrator.receive_payload",
-                attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
+                message="Instant-share trust confirmed by mobile",
+                where="instant_share.orchestrator.handle_trust_confirmed",
+                attributes=_session_attributes(updated.connection_config, correlation_id=correlation_id),
             )
 
-            session = self._session_registry.transition(session_id, SessionState.DELIVERING)
-            self._publish(session)
-            try:
-                delivery_result = self._delivery_service.deliver(downloaded_payload)
-            except InstantShareError as error:
-                self._transition_on_error(session_id=session_id, error=error)
-                raise
+    def handle_transfer_received(self, *, session_id: str, correlation_id: str) -> None:
+        session = self._session_registry.require_session(session_id)
+        with add_span(
+            "instant_share.transfer.received",
+            attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
+        ):
+            updated = self._session_registry.transition(session_id, SessionState.TRANSFERRING)
+            self._publish(updated)
 
-            terminal_state = delivery_result.state
-            session = self._session_registry.transition(session_id, terminal_state)
-            self._publish(session)
-            client.report_delivery_result(
-                result=delivery_result,
-                correlation_id=correlation_id,
-                requires_signature=requires_signature,
-            )
-            log(
-                "info",
-                message="Instant-share delivery complete",
-                where="instant_share.orchestrator.receive_payload",
-                attributes={
-                    **_session_attributes(session.connection_config, correlation_id=correlation_id),
-                    "instant_share.delivery_state": terminal_state.value,
-                },
-            )
-            return downloaded_payload
+    def handle_delivery_complete(self, *, session_id: str, correlation_id: str) -> None:
+        session = self._session_registry.require_session(session_id)
+        updated = self._session_registry.transition(session_id, SessionState.DONE)
+        self._publish(updated)
+        log(
+            "info",
+            message="Instant-share delivery complete",
+            where="instant_share.orchestrator.handle_delivery_complete",
+            attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
+        )
 
     def fail_session(self, *, session_id: str, error: InstantShareError) -> InstantShareSession:
-        session = self._session_registry.transition(session_id, SessionState.FAILED)
+        desired_state = self._desired_terminal_state_for_error(error)
+        try:
+            session = self._session_registry.transition(session_id, desired_state)
+        except InstantShareError:
+            session = self._session_registry.transition(session_id, SessionState.FAILED)
         self._publish(session, error=error)
         log(
             "error",
@@ -209,15 +124,6 @@ class InstantShareReceiverOrchestrator:
         )
         return session
 
-    def _transition_on_error(self, *, session_id: str, error: InstantShareError) -> InstantShareSession:
-        desired_state = self._desired_terminal_state_for_error(error)
-        try:
-            session = self._session_registry.transition(session_id, desired_state)
-        except InstantShareError:
-            session = self._session_registry.transition(session_id, SessionState.FAILED)
-        self._publish(session, error=error)
-        return session
-
     @staticmethod
     def _desired_terminal_state_for_error(error: InstantShareError) -> SessionState:
         if error.error_code is ErrorCode.USER_ABORTED:
@@ -240,6 +146,10 @@ class InstantShareReceiverOrchestrator:
             event["error_code"] = error.error_code.value
             event["error_message"] = error.message
         default_bus.publish(INSTANT_SHARE_LIFECYCLE_EVENT, **event)
+
+    @property
+    def trust_session_registry(self) -> TrustSessionRegistry | None:
+        return self._trust_session_registry
 
 
 def _session_attributes(connection_config, *, correlation_id: str | None = None) -> dict[str, object]:

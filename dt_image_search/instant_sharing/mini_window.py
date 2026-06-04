@@ -25,6 +25,7 @@ WINDOW_HEIGHT = 520
 class MiniWindowPhase(str, Enum):
     CONNECTING = "connecting"
     NEGOTIATING = "negotiating"
+    DISPLAYING_PIN = "displaying_pin"
     TRANSFERRING = "transferring"
     DELIVERING = "delivering"
     SUCCESS = "success"
@@ -50,14 +51,17 @@ class MiniWindowState:
     payload_label: str = "shared item"
     error_message: str = ""
     download_progress: float = 0.0
+    pin_code: str = ""
 
 
-def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str) -> str:
+def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str, pin_code: str = "") -> str:
     name = device_name or "your Mac"
     if phase == MiniWindowPhase.CONNECTING:
         return f"Connecting to {name}..."
     if phase == MiniWindowPhase.NEGOTIATING:
         return f"Verifying trust with {name}..."
+    if phase == MiniWindowPhase.DISPLAYING_PIN:
+        return f"Verify this PIN matches the one on your iPhone:\n{pin_code}"
     if phase == MiniWindowPhase.TRANSFERRING:
         return f"Receiving {payload_label} from iPhone..."
     if phase == MiniWindowPhase.DELIVERING:
@@ -89,6 +93,8 @@ class InstantShareMiniWindow(QDialog):
             return MiniWindowPhase.CONNECTING
         if state_lower == "negotiating":
             return MiniWindowPhase.NEGOTIATING
+        if state_lower == "displaying_pin":
+            return MiniWindowPhase.DISPLAYING_PIN
         if state_lower == "transferring":
             return MiniWindowPhase.TRANSFERRING
         if state_lower == "delivering":
@@ -121,11 +127,21 @@ class InstantShareMiniWindow(QDialog):
             payload_label=label,
             error_message=error_message,
             download_progress=1.0 if phase == MiniWindowPhase.SUCCESS else 0.0,
+            pin_code=self._state.pin_code,
         )
         self._refresh_ui()
 
         if phase in _TERMINAL_PHASES:
             self._schedule_auto_close()
+
+    def show_pin(self, pin_code: str) -> None:
+        self._state = MiniWindowState(
+            phase=MiniWindowPhase.DISPLAYING_PIN,
+            device_name=self._state.device_name,
+            payload_label=self._state.payload_label,
+            pin_code=pin_code,
+        )
+        self._refresh_ui()
 
     def _schedule_auto_close(self) -> None:
         if self._auto_close_timer is not None:
@@ -167,6 +183,17 @@ class InstantShareMiniWindow(QDialog):
         self._message_label.setWordWrap(True)
         self._message_label.setMinimumHeight(48)
         self._main_layout.addWidget(self._message_label)
+
+        self._pin_label = QLabel()
+        self._pin_label.setAlignment(Qt.AlignCenter)
+        self._pin_label.setWordWrap(False)
+        pin_font = self._pin_label.font()
+        pin_font.setPointSize(36)
+        pin_font.setBold(True)
+        self._pin_label.setFont(pin_font)
+        self._pin_label.setStyleSheet("letter-spacing: 8px;")
+        self._pin_label.hide()
+        self._main_layout.addWidget(self._pin_label)
 
         self._progress_bar = QProgressBar()
         self._progress_bar.setRange(0, 100)
@@ -215,8 +242,15 @@ class InstantShareMiniWindow(QDialog):
             phase,
             self._state.device_name,
             self._state.payload_label,
+            self._state.pin_code,
         )
         self._message_label.setText(message)
+
+        if phase == MiniWindowPhase.DISPLAYING_PIN:
+            self._pin_label.setText(self._state.pin_code)
+            self._pin_label.show()
+        else:
+            self._pin_label.hide()
 
         if phase in (MiniWindowPhase.TRANSFERRING, MiniWindowPhase.DELIVERING):
             self._progress_bar.setVisible(True)
@@ -236,7 +270,7 @@ class InstantShareMiniWindow(QDialog):
 
         is_terminal = phase in _TERMINAL_PHASES
         self._abort_button.setVisible(
-            phase in (MiniWindowPhase.CONNECTING, MiniWindowPhase.NEGOTIATING, MiniWindowPhase.TRANSFERRING)
+            phase in (MiniWindowPhase.CONNECTING, MiniWindowPhase.NEGOTIATING, MiniWindowPhase.DISPLAYING_PIN, MiniWindowPhase.TRANSFERRING)
             and not is_terminal
         )
         self._dismiss_button.setVisible(is_terminal)
@@ -259,6 +293,8 @@ def _phase_icon(phase: MiniWindowPhase) -> str:
         return "📡"
     if phase == MiniWindowPhase.NEGOTIATING:
         return "🔐"
+    if phase == MiniWindowPhase.DISPLAYING_PIN:
+        return "🔑"
     if phase == MiniWindowPhase.TRANSFERRING:
         return "⬇️"
     if phase == MiniWindowPhase.DELIVERING:
