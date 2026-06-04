@@ -3,10 +3,12 @@ import SwiftUI
 public struct InstantShareExtensionView: View {
     @ObservedObject var viewModel: InstantShareExtensionViewModel
     let onCancel: () -> Void
+    let onDone: () -> Void
 
-    public init(viewModel: InstantShareExtensionViewModel, onCancel: @escaping () -> Void) {
+    public init(viewModel: InstantShareExtensionViewModel, onCancel: @escaping () -> Void, onDone: @escaping () -> Void) {
         self.viewModel = viewModel
         self.onCancel = onCancel
+        self.onDone = onDone
     }
 
     public var body: some View {
@@ -147,7 +149,7 @@ public struct InstantShareExtensionView: View {
             Spacer()
             Button {
                 viewModel.dismissCompletion()
-                onCancel()
+                onDone()
             } label: {
                 Text("Done")
                     .fontWeight(.semibold)

@@ -136,6 +136,7 @@ class InstantShareMiniWindow(QDialog):
             file_path=file_path or self._state.file_path,
         )
         self._refresh_ui()
+        self._bring_to_front()
 
         if phase in _TERMINAL_PHASES:
             self._schedule_auto_close()
@@ -148,6 +149,11 @@ class InstantShareMiniWindow(QDialog):
             pin_code=pin_code,
         )
         self._refresh_ui()
+        self._bring_to_front()
+
+    def _bring_to_front(self) -> None:
+        self.raise_()
+        self.activateWindow()
 
     def _schedule_auto_close(self) -> None:
         if self._auto_close_timer is not None:

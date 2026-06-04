@@ -34,7 +34,8 @@ class ShareViewController: SLComposeServiceViewController {
         let hosting = UIHostingController(
             rootView: InstantShareExtensionView(
                 viewModel: viewModel,
-                onCancel: { [weak self] in self?.cancelAction() }
+                onCancel: { [weak self] in self?.cancelAction() },
+                onDone: { [weak self] in self?.doneAction() }
             )
         )
         addChild(hosting)
@@ -72,5 +73,10 @@ class ShareViewController: SLComposeServiceViewController {
             code: 0,
             userInfo: [NSLocalizedDescriptionKey: "User canceled"]
         ))
+    }
+
+    private func doneAction() {
+        viewModel.dismissCompletion()
+        extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
 }

@@ -15,7 +15,8 @@ class InstantShareExtensionViewController: UIViewController {
         let hostingController = UIHostingController(
             rootView: InstantShareExtensionView(
                 viewModel: viewModel,
-                onCancel: { [weak self] in self?.cancelAction() }
+                onCancel: { [weak self] in self?.cancelAction() },
+                onDone: { [weak self] in self?.doneAction() }
             )
         )
         addChild(hostingController)
@@ -42,5 +43,10 @@ class InstantShareExtensionViewController: UIViewController {
             code: 0,
             userInfo: [NSLocalizedDescriptionKey: "User canceled"]
         ))
+    }
+
+    private func doneAction() {
+        viewModel.dismissCompletion()
+        extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
 }
