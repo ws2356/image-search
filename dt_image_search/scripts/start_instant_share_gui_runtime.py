@@ -31,7 +31,6 @@ from PySide6.QtWidgets import QApplication
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE, INSTANT_SHARE_MDNS_PORT
 from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
-from dt_image_search.model.feature_flags import is_instant_share_enabled
 
 
 def _parse_args() -> argparse.Namespace:
@@ -72,13 +71,6 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     _logger = logging.getLogger(__name__)
-
-    if not args.force_enable and not is_instant_share_enabled():
-        print(
-            "Instant share feature is disabled. Use --force-enable to start anyway.",
-            file=sys.stderr,
-        )
-        return 1
 
     print(f"Starting instant share runtime with GUI...")
     print(f"  mDNS service:      {INSTANT_SHARE_MDNS_SERVICE_TYPE}")
