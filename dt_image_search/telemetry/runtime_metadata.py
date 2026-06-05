@@ -65,7 +65,7 @@ def resolve_service_version() -> str:
         return ""
 
 def _resolve_service_version_macos() -> str:
-    info_plist_path = Path(sys.executable).resolve().parent / "Info.plist"
+    info_plist_path = Path(sys.executable).resolve().parent.parent / "Info.plist"
     if not info_plist_path.exists():
         warnings.warn(
             f"Failed to resolve service.version because Info.plist was not found at {info_plist_path}",
