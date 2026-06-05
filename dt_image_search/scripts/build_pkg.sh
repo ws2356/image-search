@@ -19,7 +19,6 @@ set -euo pipefail
 #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
 #
 # Requires:
-#   - pkgbuild       (included with Xcode)
 #   - productbuild   (included with Xcode)
 #   - productsign    (included with Xcode, optional if --identity omitted)
 
@@ -50,50 +49,30 @@ APP_BUNDLE_NAME="$(basename "$APP_PATH" .app)"
 OUTPUT_PKG="${OUTPUT_PKG:-$(dirname "$APP_PATH")/${APP_BUNDLE_NAME}.pkg}"
 mkdir -p "$(dirname "$OUTPUT_PKG")"
 
-# ── Resources for PKG ─────────────────────────────────────────────────────────
-PKG_RESOURCES="$(mktemp -d)"
-trap 'rm -rf "$PKG_RESOURCES"' EXIT
+# ── Scripts for PKG ────────────────────────────────────────────────────────────
+PKG_SCRIPTS="$(mktemp -d)"
+trap 'rm -rf "$PKG_SCRIPTS"' EXIT
 
-# Copy postinstall script into the PKG scripts directory.
-mkdir -p "$PKG_RESOURCES/scripts"
-cp "$SCRIPT_DIR/pkg_scripts/postinstall" "$PKG_RESOURCES/scripts/"
-chmod +x "$PKG_RESOURCES/scripts/postinstall"
-
-# ── Component package ─────────────────────────────────────────────────────────
-COMPONENT_PKG="${PKG_RESOURCES}/AuSearchComponent.pkg"
-echo "Creating component package..."
-pkgbuild \
-    --component "$APP_PATH" \
-    --install-location "/Applications" \
-    --scripts "$PKG_RESOURCES/scripts" \
-    --ownership recommended \
-    "$COMPONENT_PKG"
-
-# ── Distribution XML ──────────────────────────────────────────────────────────
-# Explicit distribution XML ensures the PKG installs to /Applications
-# regardless of the installer's domain choice (user vs. system installation).
-DISTRIBUTION_XML="$SCRIPT_DIR/pkg_scripts/distribution.xml"
-cp "$DISTRIBUTION_XML" "$PKG_RESOURCES/distribution.xml"
+mkdir -p "$PKG_SCRIPTS"
+cp "$SCRIPT_DIR/pkg_scripts/postinstall" "$PKG_SCRIPTS/"
+chmod +x "$PKG_SCRIPTS/postinstall"
 
 # ── Distribution package ──────────────────────────────────────────────────────
+# productbuild --component creates a flat distribution PKG that installs the
+# .app bundle at /Applications with the postinstall script. This is simpler
+# and more reliable than pkgbuild + productbuild --distribution.
 echo "Creating distribution package..."
-productbuild \
-    --distribution "$PKG_RESOURCES/distribution.xml" \
-    --package-path "$PKG_RESOURCES" \
-    "$OUTPUT_PKG"
-
-# ── Sign the PKG ──────────────────────────────────────────────────────────────
 if [[ -n "$INSTALLER_IDENTITY" ]]; then
-    SIGNED_PKG="${OUTPUT_PKG%.*}-signed.pkg"
-    echo "Signing PKG with identity: $INSTALLER_IDENTITY"
-    productsign \
+    productbuild \
+        --component "$APP_PATH" "/Applications" \
+        --scripts "$PKG_SCRIPTS" \
         --sign "$INSTALLER_IDENTITY" \
-        --timestamp \
-        "$OUTPUT_PKG" \
-        "$SIGNED_PKG"
-    mv "$SIGNED_PKG" "$OUTPUT_PKG"
-    echo "PKG signed."
+        "$OUTPUT_PKG"
 else
+    productbuild \
+        --component "$APP_PATH" "/Applications" \
+        --scripts "$PKG_SCRIPTS" \
+        "$OUTPUT_PKG"
     echo "WARNING: No installer identity provided — PKG is unsigned."
     echo "         Set \$DEVELOPER_ID_INSTALLER or pass --identity."
     echo "         Note: This is the *Installer* identity, not the *Application* identity."
