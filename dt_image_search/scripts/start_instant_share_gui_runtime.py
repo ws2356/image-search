@@ -24,9 +24,6 @@ import sys
 import time
 from pathlib import Path
 
-if not getattr(sys, 'frozen', False):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 from PySide6.QtWidgets import QApplication
 
 from dt_image_search.instant_sharing import InstantShareRuntime

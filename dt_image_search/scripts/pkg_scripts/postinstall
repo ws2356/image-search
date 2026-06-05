@@ -70,6 +70,7 @@ if [[ -n "$CONSOLE_USER_HOME" ]] && [[ -f "$LAUNCH_AGENT_SRC" ]]; then
     # Bootstrap the agent for the current user session.
     CONSOLE_UID=$(/usr/bin/id -u "$CONSOLE_USER" 2>/dev/null || echo 0)
     if [[ "$CONSOLE_UID" -gt 0 ]]; then
+        /bin/launchctl bootout "gui/$CONSOLE_UID" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist" >> "$POSTINSTALL_LOG" 2>&1 || true
         /bin/launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist" >> "$POSTINSTALL_LOG" 2>&1 \
             && echo "LaunchAgent bootstrapped for user '$CONSOLE_USER' (UID $CONSOLE_UID)" | tee -a "$POSTINSTALL_LOG" \
             || echo "Note: LaunchAgent bootstrap deferred (will start on next login)" | tee -a "$POSTINSTALL_LOG"
