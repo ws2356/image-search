@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# TODO: revert this. only for debugging
-exit 0
-
 # Submits a DMG to Apple for notarization, waits for the result, and exits
 # non-zero if notarization is not accepted.  On failure the Apple log is
 # fetched and printed so you can diagnose the issue.
