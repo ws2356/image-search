@@ -98,10 +98,10 @@ def main() -> int:
     else:
         print(f"  Downloads dir:     ~/Downloads (default)")
 
-    from dt_image_search.model.feature_flags import is_instant_share_enabled
-    if not args.force_enable and not is_instant_share_enabled():
-        print("Instant Share feature is disabled by feature flag. Use --force-enable to bypass.")
-        return 0
+    # from dt_image_search.model.feature_flags import is_instant_share_enabled
+    # if not args.force_enable and not is_instant_share_enabled():
+    #     print("Instant Share feature is disabled by feature flag. Use --force-enable to bypass.")
+    #     return 0
 
     # 1. 在初始化 GUI 之前，先戴上“隐形斗篷”
     hide_dock_icon()
