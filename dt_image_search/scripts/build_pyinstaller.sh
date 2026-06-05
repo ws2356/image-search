@@ -41,7 +41,7 @@ if [ -z "$distpath" ]; then
 fi
 
 if [[ -d "$distpath" ]]; then
-    sudo rm -rf "$distpath/*.app"
+    (cd "$distpath" && sudo rm -rf ./*.app)
 fi
 
 (cd "$project_root" && pyinstaller "dt_image_search/DTImageSearch.spec"  --noconfirm --clean --distpath "$distpath")
