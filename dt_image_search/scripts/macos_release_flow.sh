@@ -65,6 +65,9 @@ export APPLE_APP_SPECIFIC_PASSWORD
 "$this_dir/create_distributable_pkg.sh" \
     --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
 
+sudo pkgutil --forget 'vip.wansong.dtimagesearch' || true
+(cd "$repo_root/pyinstaller-dist-${build_type}" && rm -rf ./AuSearch.app)
+
 if [[ "$skip_release" == true ]]; then
     echo "Skipping GitHub release creation and asset upload as --skip-release flag is set."
     exit 0
