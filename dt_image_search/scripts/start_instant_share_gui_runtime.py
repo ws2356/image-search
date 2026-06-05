@@ -26,8 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication
 
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE, INSTANT_SHARE_MDNS_PORT
@@ -91,21 +90,7 @@ def main() -> int:
         print(f"  Downloads dir:     ~/Downloads (default)")
 
     app = QApplication(sys.argv)
-    app.setApplicationName("AuSearch Instant Share Test")
-
-    status_window = QWidget()
-    status_window.setWindowTitle("Instant Share Runtime")
-    status_window.resize(400, 120)
-    layout = QVBoxLayout(status_window)
-    status_label = QLabel(
-        f"Instant Share runtime is active.\n"
-        f"mDNS: {INSTANT_SHARE_MDNS_SERVICE_TYPE}\n"
-        f"HTTP server: port {INSTANT_SHARE_MDNS_PORT}\n"
-        f"Waiting for mobile device to connect...\n"
-    )
-    status_label.setWordWrap(True)
-    layout.addWidget(status_label)
-    status_window.show()
+    app.setApplicationName("AuSearch Instant Share")
 
     mini_window_factory = InstantShareMiniWindowFactory()
     mini_window_factory.start()
@@ -144,23 +129,6 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
-
-    def _periodic_check() -> None:
-        nonlocal stop_requested
-        if stop_requested:
-            return
-        active_session = runtime.session_registry.get_active_session()
-        if active_session is not None:
-            state = active_session.state.value
-            status_label.setText(
-                f"Instant Share runtime is active.\n"
-                f"Session: {active_session.connection_config.session_id[:8]}...\n"
-                f"State: {state}\n"
-                f"Press Ctrl+C to stop.\n"
-            )
-        QTimer.singleShot(1000, _periodic_check)
-
-    QTimer.singleShot(0, _periodic_check)
 
     exit_code = app.exec()
 
