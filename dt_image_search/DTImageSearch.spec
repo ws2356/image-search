@@ -73,6 +73,7 @@ a = Analysis(
         # own libcrypto/libssl inside the app bundle and break import ssl.
         'pymobiledevice3.exceptions',
         'pymobiledevice3.usbmux',
+        'AppKit',
         *heif_hiddenimports,
     ],
     hookspath=[],

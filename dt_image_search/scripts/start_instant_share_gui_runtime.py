@@ -63,6 +63,19 @@ def _parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+def hide_dock_icon():
+    """动态隐藏当前进程在 macOS Dock 栏的图标"""
+    if sys.platform == "darwin":
+        try:
+            # 导入 macOS 原生 Cocoa 框架
+            from AppKit import NSApplication, NSApplicationActivationPolicyProhibited
+            
+            # 获取当前运行的 App 实例
+            ns_app = NSApplication.sharedApplication()
+            # 设置激活策略为 Prohibited（完全不在 Dock 和菜单栏显示）
+            ns_app.setActivationPolicy_(NSApplicationActivationPolicyProhibited)
+        except ImportError:
+            print("警告: 缺少 pyobjc 库，无法动态隐藏 Dock 图标")
 
 def main() -> int:
     args = _parse_args()
@@ -81,6 +94,9 @@ def main() -> int:
         print(f"  Downloads dir:     {args.downloads_dir}")
     else:
         print(f"  Downloads dir:     ~/Downloads (default)")
+
+    # 1. 在初始化 GUI 之前，先戴上“隐形斗篷”
+    hide_dock_icon()
 
     app = QApplication(sys.argv)
     app.setApplicationName("AuSearch Instant Share")
