@@ -13,6 +13,7 @@ platform_resource_includes = [
     "resources/ios_bitten_apple_gray.png",
     "resources/icon.png",
     "resources/appicon.icns",
+    "resources/net.boldman.ausearch.instantshare.plist",
 ]
 # The Apple mobile device installer payload is only used on Windows. Shipping it
 # in macOS bundles adds tens of megabytes of dead weight to the .app/.dmg.

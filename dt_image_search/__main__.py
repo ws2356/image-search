@@ -18,6 +18,7 @@ args = argparse.ArgumentParser()
 args.add_argument("--test-folder", type=str, help="Path to the test folder containing images for UI testing")
 args.add_argument("--ui-test", type=int, help="Flag to indicate running in UI test mode")
 args.add_argument("--hf-hub-offline", type=int, help="Run in offline mode using cached models from Hugging Face Hub")
+args.add_argument("--daemon", action="store_true", help="Run as background daemon (instant share only, no main window)")
 parsed_args, unknown = args.parse_known_args()
 if parsed_args.ui_test:
     os.environ['UI_TEST'] = '1'
@@ -879,7 +880,63 @@ def _publish_app_foreground_state(
         is_foreground=is_foreground,
     )
 
+def _daemon_main() -> int:
+    """Run the instant share runtime as a background daemon (no main window)."""
+    import signal
+    from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_PORT
+    from dt_image_search.telemetry.telemetry_client import log as _daemon_log
+
+    _daemon_log("info", message="Instant share daemon starting")
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("AuSearch Instant Share Daemon")
+
+    mini_window_factory = InstantShareMiniWindowFactory()
+    mini_window_factory.start()
+    _daemon_log("info", message="MiniWindowFactory started for daemon")
+
+    runtime = InstantShareRuntime(
+        is_enabled=lambda: True,
+        auto_receive=True,
+        pin_display_callback=mini_window_factory.show_pin,
+    )
+    _daemon_log("info", message="InstantShareRuntime created")
+
+    started = runtime.start()
+    if not started:
+        print("Failed to start instant share runtime.", file=sys.stderr)
+        _daemon_log("error", message="Failed to start instant share runtime")
+        mini_window_factory.stop()
+        return 1
+
+    _daemon_log(
+        "info",
+        message=f"Daemon running: mDNS port={INSTANT_SHARE_MDNS_PORT} http port={runtime.http_server.port}",
+    )
+
+    stop_requested = False
+
+    def _signal_handler(signum: int, frame: object) -> None:
+        nonlocal stop_requested
+        stop_requested = True
+        app.quit()
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+
+    exit_code = app.exec()
+
+    _daemon_log("info", message="Daemon shutting down")
+    mini_window_factory.stop()
+    runtime.stop()
+    _daemon_log("info", message="Daemon stopped")
+    return exit_code
+
+
 def main():
+    if parsed_args.daemon:
+        return _daemon_main()
+
     global _instant_share_runtime
 
     # Protect against multiprocessing import issues on Windows

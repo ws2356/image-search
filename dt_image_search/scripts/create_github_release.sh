@@ -16,12 +16,14 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Create or update a GitHub release and upload a DMG.
+Create or update a GitHub release and upload a PKG or DMG asset.
 
 Required:
   --tag <tag>               Release tag (for example: v1.2.3)
   --title <title>           Release title
-  --dmg-path <path>         DMG file to upload
+  --pkg-path <path>         PKG file to upload
+    or
+  --dmg-path <path>         DMG file to upload (legacy)
   --notes <text>            Release notes text
     or
   --notes-file <path>       Release notes file path
@@ -39,7 +41,7 @@ TAG=""
 TITLE=""
 NOTES=""
 NOTES_FILE=""
-DMG_PATH=""
+ASSET_PATH=""
 REPO="ws2356/image-search"
 TARGET=""
 DRAFT=false
@@ -52,7 +54,8 @@ while [[ $# -gt 0 ]]; do
         --title) TITLE="$2"; shift 2 ;;
         --notes) NOTES="$2"; shift 2 ;;
         --notes-file) NOTES_FILE="$2"; shift 2 ;;
-        --dmg-path) DMG_PATH="$2"; shift 2 ;;
+        --dmg-path) ASSET_PATH="$2"; shift 2 ;;
+        --pkg-path) ASSET_PATH="$2"; shift 2 ;;
         --repo) REPO="$2"; shift 2 ;;
         --target) TARGET="$2"; shift 2 ;;
         --draft) DRAFT=true; shift ;;
@@ -69,8 +72,8 @@ if [[ -z "$TITLE" ]]; then
     echo "Error: --title is required." >&2
     exit 1
 fi
-if [[ -z "$DMG_PATH" ]]; then
-    echo "Error: --dmg-path is required." >&2
+if [[ -z "$ASSET_PATH" ]]; then
+    echo "Error: --pkg-path (or --dmg-path) is required." >&2
     exit 1
 fi
 if [[ -n "$NOTES" && -n "$NOTES_FILE" ]]; then
@@ -82,14 +85,14 @@ if [[ -z "$NOTES" && -z "$NOTES_FILE" ]]; then
     exit 1
 fi
 
-if [[ "$DMG_PATH" != /* ]]; then
-    DMG_PATH="$(pwd)/$DMG_PATH"
+if [[ "$ASSET_PATH" != /* ]]; then
+    ASSET_PATH="$(pwd)/$ASSET_PATH"
 fi
 if [[ -n "$NOTES_FILE" && "$NOTES_FILE" != /* ]]; then
     NOTES_FILE="$(pwd)/$NOTES_FILE"
 fi
 
-[[ -f "$DMG_PATH" ]] || { echo "Error: DMG file not found: $DMG_PATH" >&2; exit 1; }
+[[ -f "$ASSET_PATH" ]] || { echo "Error: asset file not found: $ASSET_PATH" >&2; exit 1; }
 if [[ -n "$NOTES_FILE" ]]; then
     [[ -f "$NOTES_FILE" ]] || { echo "Error: notes file not found: $NOTES_FILE" >&2; exit 1; }
 fi
@@ -127,10 +130,10 @@ fi
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
     echo "Release '$TAG' already exists in $REPO. Updating metadata and replacing DMG..."
     gh release edit "$TAG" "${EDIT_FLAGS[@]}" --title "$TITLE" "${NOTES_ARGS[@]}"
-    gh release upload "$TAG" "$DMG_PATH" --repo "$REPO" --clobber
+    gh release upload "$TAG" "$ASSET_PATH" --repo "$REPO" --clobber
 else
     echo "Creating release '$TAG' in $REPO..."
-    gh release create "$TAG" "$DMG_PATH" "${COMMON_FLAGS[@]}" --title "$TITLE" "${NOTES_ARGS[@]}"
+    gh release create "$TAG" "$ASSET_PATH" "${COMMON_FLAGS[@]}" --title "$TITLE" "${NOTES_ARGS[@]}"
 fi
 
-echo "Release ready: $REPO@$TAG ($(basename "$DMG_PATH"))"
+echo "Release ready: $REPO@$TAG ($(basename "$ASSET_PATH"))"

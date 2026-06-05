@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# End-to-end macOS release flow.
+#
+# Builds the .app with PyInstaller, signs it, packages a notarized PKG
+# installer, creates a GitHub release, and uploads the PKG asset.
+#
+# The PKG installer includes a LaunchAgent that auto-starts the instant
+# share daemon at login.  The following permissions are requested from
+# the user at first launch via entitlements and Info.plist usage descriptions:
+#   - Local network access (mDNS advertising + HTTP server)
+#   - Internet access (telemetry)
+#   - Apple Events (Finder integration)
+
 this_file=$0
 if [[ "$this_file" != /* ]]; then
     this_file="$(pwd)/$this_file"
@@ -47,14 +59,16 @@ set -a; . "$repo_root/.env"; set +a
 APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
 export APPLE_APP_SPECIFIC_PASSWORD
 
-"$this_dir/create_distributable_dmg.sh" --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
+# Build and notarize the PKG distribution
+"$this_dir/create_distributable_pkg.sh" \
+    --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
 
 (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
     --repo "$parent_repo" --tag "$tag" \
     --title "Release $tag" --notes "Bug free code" \
-    --dmg-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.dmg" --target main)
+    --pkg-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.pkg" --target main)
 
 (cd "$repo_root/web" && \
-    export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/AuSearch.dmg" && \
+    export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/AuSearch.pkg" && \
     npm run build && \
     npm run sync)

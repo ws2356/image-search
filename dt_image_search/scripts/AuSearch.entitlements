@@ -24,6 +24,13 @@
     <true/>
 
     <!--
+      Required: Bonjour/mDNS service advertising for instant share discovery.
+      The service type matches what the mobile app browses for.
+    -->
+    <key>com.apple.security.network.multicast</key>
+    <true/>
+
+    <!--
       Required when Hardened Runtime app code triggers Apple Events checks.
       Without this entitlement, macOS logs a TCC warning and denies prompts.
     -->
