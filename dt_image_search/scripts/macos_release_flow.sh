@@ -23,9 +23,11 @@ parent_repo_root="$(dirname "$repo_root")"
 parent_repo="ws2356/ausearch-release"
 
 build_type=prod
+skip_release=false
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --build-type) build_type="$2"; shift 2;;
+        --skip-release) skip_release=true; shift;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
 done
@@ -62,6 +64,11 @@ export APPLE_APP_SPECIFIC_PASSWORD
 # Build and notarize the PKG distribution
 "$this_dir/create_distributable_pkg.sh" \
     --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
+
+if [[ "$skip_release" == true ]]; then
+    echo "Skipping GitHub release creation and asset upload as --skip-release flag is set."
+    exit 0
+fi
 
 (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
     --repo "$parent_repo" --tag "$tag" \
