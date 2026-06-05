@@ -34,6 +34,8 @@ if project_root not in sys.path:
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle, QSystemTrayIcon, QMessageBox, QLabel
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from dt_image_search.build_flavor import get_build_type
+_build_type = get_build_type()
 from dt_image_search.app_setting import initialize_app_settings
 
 initialize_app_settings()
