@@ -19,8 +19,7 @@ set -euo pipefail
 #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
 #
 # Requires:
-#   - productbuild   (included with Xcode)
-#   - productsign    (included with Xcode, optional if --identity omitted)
+#   - pkgbuild       (included with Xcode)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -57,22 +56,26 @@ mkdir -p "$PKG_SCRIPTS"
 cp "$SCRIPT_DIR/pkg_scripts/postinstall" "$PKG_SCRIPTS/"
 chmod +x "$PKG_SCRIPTS/postinstall"
 
-# ── Distribution package ──────────────────────────────────────────────────────
-# productbuild --component creates a flat distribution PKG that installs the
-# .app bundle at /Applications with the postinstall script. This is simpler
-# and more reliable than pkgbuild + productbuild --distribution.
-echo "Creating distribution package..."
+# ── Flat component package ─────────────────────────────────────────────────────
+# pkgbuild --component with --install-location creates a flat component package
+# that directly installs the .app at /Applications. Unlike productbuild, this
+# does NOT wrap the package in a Distribution XML, avoiding the
+# bundle-version/path conflict that caused previous PKGs to silently fail.
+echo "Creating flat component package..."
+SIGN_ARGS=()
 if [[ -n "$INSTALLER_IDENTITY" ]]; then
-    productbuild \
-        --component "$APP_PATH" "/Applications" \
-        --scripts "$PKG_SCRIPTS" \
-        --sign "$INSTALLER_IDENTITY" \
-        "$OUTPUT_PKG"
-else
-    productbuild \
-        --component "$APP_PATH" "/Applications" \
-        --scripts "$PKG_SCRIPTS" \
-        "$OUTPUT_PKG"
+    SIGN_ARGS=(--sign "$INSTALLER_IDENTITY")
+fi
+
+pkgbuild \
+    --component "$APP_PATH" \
+    --install-location "/Applications" \
+    --scripts "$PKG_SCRIPTS" \
+    --ownership recommended \
+    "${SIGN_ARGS[@]}" \
+    "$OUTPUT_PKG"
+
+if [[ -z "$INSTALLER_IDENTITY" ]]; then
     echo "WARNING: No installer identity provided — PKG is unsigned."
     echo "         Set \$DEVELOPER_ID_INSTALLER or pass --identity."
     echo "         Note: This is the *Installer* identity, not the *Application* identity."

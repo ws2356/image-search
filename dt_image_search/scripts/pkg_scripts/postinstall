@@ -75,8 +75,13 @@ if [[ -n "$CONSOLE_USER_HOME" ]] && [[ -f "$LAUNCH_AGENT_SRC" ]]; then
             || echo "Note: LaunchAgent bootstrap deferred (will start on next login)" | tee -a "$POSTINSTALL_LOG"
     fi
 else
-    echo "Note: LaunchAgent installation deferred (no console user)." | tee -a "$POSTINSTALL_LOG" >&2
-    echo "The agent will be activated on next login." | tee -a "$POSTINSTALL_LOG" >&2
+    if [[ -z "$CONSOLE_USER_HOME" ]]; then
+        echo "Note: LaunchAgent installation deferred (no console user detected)." | tee -a "$POSTINSTALL_LOG" >&2
+    else
+        echo "Warning: LaunchAgent source not found at ${LAUNCH_AGENT_SRC}" | tee -a "$POSTINSTALL_LOG" >&2
+        echo "The agent will not be installed until the app is placed at /Applications/AuSearch.app." | tee -a "$POSTINSTALL_LOG" >&2
+    fi
+    echo "The agent will be activated on next login if the app is in /Applications." | tee -a "$POSTINSTALL_LOG" >&2
 fi
 
 echo "--- postinstall complete ---" >> "$POSTINSTALL_LOG"

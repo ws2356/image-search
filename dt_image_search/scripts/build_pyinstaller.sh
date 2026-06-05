@@ -40,6 +40,8 @@ if [ -z "$distpath" ]; then
     distpath="$project_root/pyinstaller-dist-${build_type}"
 fi
 
+rm -rf "$distpath/*.app"
+
 (cd "$project_root" && pyinstaller "dt_image_search/DTImageSearch.spec"  --noconfirm --clean --distpath "$distpath")
 
 app_name="AuSearch"
