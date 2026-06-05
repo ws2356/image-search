@@ -7,8 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Applications/AuSearch.app/Contents/MacOS/AuSearch</string>
-        <string>--daemon</string>
+        <string>/Applications/AuSearch.app/Contents/MacOS/au-search-daemon</string>
     </array>
 
     <key>RunAtLoad</key>

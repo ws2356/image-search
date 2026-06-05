@@ -57,6 +57,19 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         echo "Expected app bundle not found: $app_path"
         exit 1
     fi
+
+    # Verify both binaries exist inside the app bundle
+    main_bin="${app_path}/Contents/MacOS/${app_name}"
+    daemon_bin="${app_path}/Contents/MacOS/au-search-daemon"
+    if [[ ! -f "$main_bin" ]]; then
+        echo "Expected desktop binary not found: $main_bin"
+        exit 1
+    fi
+    if [[ ! -f "$daemon_bin" ]]; then
+        echo "Expected daemon binary not found: $daemon_bin"
+        exit 1
+    fi
+
     bash "$this_dir/prune_macos_bundle.sh" --app-path "$app_path"
 fi
 
