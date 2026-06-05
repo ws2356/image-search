@@ -18,7 +18,6 @@ args = argparse.ArgumentParser()
 args.add_argument("--test-folder", type=str, help="Path to the test folder containing images for UI testing")
 args.add_argument("--ui-test", type=int, help="Flag to indicate running in UI test mode")
 args.add_argument("--hf-hub-offline", type=int, help="Run in offline mode using cached models from Hugging Face Hub")
-args.add_argument("--daemon", action="store_true", help="Run as background daemon (instant share only, no main window)")
 parsed_args, unknown = args.parse_known_args()
 if parsed_args.ui_test:
     os.environ['UI_TEST'] = '1'
@@ -48,7 +47,6 @@ from dt_image_search.model.feature_flags import (
     DesktopVersionFlag,
     get_version_update_requirement,
     initialize_feature_flags,
-    is_instant_share_enabled,
     is_mobile_folder_enabled,
 )
 from dt_image_search.model.dts_fs import get_app_data_path
@@ -73,10 +71,6 @@ from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch, remove_fol
 from dt_image_search.index.incremental_index_worker import init_incremental_index_workers, deinit_incremental_index_workers
 from dt_image_search.index.dts_index import init as index_init
 from dt_image_search.index.dts_model_downloader import init as model_downloader_init
-from dt_image_search.instant_sharing import InstantShareRuntime
-from dt_image_search.instant_sharing.lifecycle_notifications import build_instant_share_lifecycle_notification
-from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
-from dt_image_search.instant_sharing.orchestrator import INSTANT_SHARE_LIFECYCLE_EVENT
 from dt_image_search.mobile import MobileFolderCoordinator, MobileSourceType
 from dt_image_search.mobile.mobile_pairing_service import MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT
 from dt_image_search.mobile.mobile_transfer_service import MOBILE_TRANSFER_DISK_FULL_EVENT
@@ -90,8 +84,6 @@ _BrowseMode = 1
 _SearchMode = 2
 _app_lock = None
 _activation_server = None
-_instant_share_runtime: InstantShareRuntime | None = None
-_mini_window_factory: InstantShareMiniWindowFactory | None = None
 def _crash_support_log(severity: str, error_type: str = "", message: str = "", where: str = "") -> None:
     from dt_image_search.telemetry.telemetry_client import log
 
@@ -247,7 +239,6 @@ def setup_activation_server(ctx: BMContext, window: QMainWindow) -> None:
 class MainWindow(QMainWindow):
     show_update_prompt_signal = Signal(bool, str, str)
     show_mobile_transfer_disk_full_signal = Signal(str)
-    show_instant_share_notification_signal = Signal(str, str, str)
 
     def __init__(self, ctx: BMContext):
         super().__init__()
@@ -272,18 +263,8 @@ class MainWindow(QMainWindow):
         self.show_mobile_transfer_disk_full_signal.connect(
             self._show_mobile_transfer_disk_full_notification
         )
-        self._instant_share_lifecycle_subscription = default_bus.subscribe(
-            INSTANT_SHARE_LIFECYCLE_EVENT,
-            self._on_instant_share_lifecycle_requested,
-        )
-        self.show_instant_share_notification_signal.connect(
-            self._show_instant_share_notification
-        )
         self._notification_tray_icon: QSystemTrayIcon | None = None
-        should_enable_tray_notifications = QSystemTrayIcon.isSystemTrayAvailable() and (
-            sys.platform != "darwin" or is_instant_share_enabled()
-        )
-        if should_enable_tray_notifications:
+        if sys.platform != "darwin" and QSystemTrayIcon.isSystemTrayAvailable():
             tray_icon = QApplication.windowIcon()
             if tray_icon.isNull():
                 tray_icon = self.windowIcon()
@@ -426,49 +407,6 @@ class MainWindow(QMainWindow):
                 QSystemTrayIcon.MessageIcon.Warning,
                 15000,
             )
-
-    def _on_instant_share_lifecycle_requested(
-        self,
-        *,
-        state: object,
-        payload_class: object = None,
-        error_message: object = None,
-        **_: object,
-    ) -> None:
-        state_value = state if isinstance(state, str) else ""
-        payload_class_value = payload_class if isinstance(payload_class, str) else ""
-        error_message_value = error_message if isinstance(error_message, str) else None
-        notification = build_instant_share_lifecycle_notification(
-            state=state_value,
-            payload_class=payload_class_value,
-            error_message=error_message_value,
-        )
-        if notification is None:
-            return
-        self.show_instant_share_notification_signal.emit(
-            notification.title,
-            notification.message,
-            notification.severity,
-        )
-
-    @Slot(str, str, str)
-    def _show_instant_share_notification(self, title: str, message: str, severity: str) -> None:
-        self.statusBar().showMessage(message)
-        if self._notification_tray_icon is not None and self._notification_tray_icon.supportsMessages():
-            self._notification_tray_icon.showMessage(
-                title,
-                message,
-                self._tray_message_icon_for_severity(severity),
-                10000,
-            )
-
-    @staticmethod
-    def _tray_message_icon_for_severity(severity: str) -> QSystemTrayIcon.MessageIcon:
-        if severity == "error":
-            return QSystemTrayIcon.MessageIcon.Critical
-        if severity == "warning":
-            return QSystemTrayIcon.MessageIcon.Warning
-        return QSystemTrayIcon.MessageIcon.Information
 
     def _configure_app_menu(self) -> None:
         if sys.platform != "darwin":
@@ -787,9 +725,6 @@ class MainWindow(QMainWindow):
         if self._mobile_transfer_disk_full_subscription is not None:
             self._mobile_transfer_disk_full_subscription.dispose()
             self._mobile_transfer_disk_full_subscription = None
-        if self._instant_share_lifecycle_subscription is not None:
-            self._instant_share_lifecycle_subscription.dispose()
-            self._instant_share_lifecycle_subscription = None
         if self._notification_tray_icon is not None:
             self._notification_tray_icon.hide()
             self._notification_tray_icon = None
@@ -850,16 +785,7 @@ def qt_message_handler(mode, context, message):
         print(f"Qt FATAL: {message}")
 
 def cleanup():
-    global _instant_share_runtime
-    global _mini_window_factory
-
     _crash_recovery.disable_native_crash_dump_capture()
-    if _mini_window_factory is not None:
-        _mini_window_factory.stop()
-        _mini_window_factory = None
-    if _instant_share_runtime is not None:
-        _instant_share_runtime.stop()
-        _instant_share_runtime = None
     stop_watch()
     flush_telemetry()
     _crash_recovery.clear_run_marker()
@@ -880,65 +806,7 @@ def _publish_app_foreground_state(
         is_foreground=is_foreground,
     )
 
-def _daemon_main() -> int:
-    """Run the instant share runtime as a background daemon (no main window)."""
-    import signal
-    from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_PORT
-    from dt_image_search.telemetry.telemetry_client import log as _daemon_log
-
-    _daemon_log("info", message="Instant share daemon starting")
-
-    app = QApplication(sys.argv)
-    app.setApplicationName("AuSearch Instant Share Daemon")
-
-    mini_window_factory = InstantShareMiniWindowFactory()
-    mini_window_factory.start()
-    _daemon_log("info", message="MiniWindowFactory started for daemon")
-
-    runtime = InstantShareRuntime(
-        is_enabled=lambda: True,
-        auto_receive=True,
-        pin_display_callback=mini_window_factory.show_pin,
-    )
-    _daemon_log("info", message="InstantShareRuntime created")
-
-    started = runtime.start()
-    if not started:
-        print("Failed to start instant share runtime.", file=sys.stderr)
-        _daemon_log("error", message="Failed to start instant share runtime")
-        mini_window_factory.stop()
-        return 1
-
-    _daemon_log(
-        "info",
-        message=f"Daemon running: mDNS port={INSTANT_SHARE_MDNS_PORT} http port={runtime.http_server.port}",
-    )
-
-    stop_requested = False
-
-    def _signal_handler(signum: int, frame: object) -> None:
-        nonlocal stop_requested
-        stop_requested = True
-        app.quit()
-
-    signal.signal(signal.SIGINT, _signal_handler)
-    signal.signal(signal.SIGTERM, _signal_handler)
-
-    exit_code = app.exec()
-
-    _daemon_log("info", message="Daemon shutting down")
-    mini_window_factory.stop()
-    runtime.stop()
-    _daemon_log("info", message="Daemon stopped")
-    return exit_code
-
-
 def main():
-    if parsed_args.daemon:
-        return _daemon_main()
-
-    global _instant_share_runtime
-
     # Protect against multiprocessing import issues on Windows
     import multiprocessing
     multiprocessing.freeze_support()
@@ -985,11 +853,6 @@ def main():
     init_incremental_index_workers(ctx)  # Initialize incremental index workers
     init_index_workers(ctx)  # Initialize index workers
     start_watch(ctx)  # Start watching file system changes
-    _instant_share_runtime = InstantShareRuntime()
-    if is_instant_share_enabled():
-        _instant_share_runtime.start()
-    _mini_window_factory = InstantShareMiniWindowFactory()
-    _mini_window_factory.start()
     
     # Install Qt message handler
     from PySide6.QtCore import qInstallMessageHandler

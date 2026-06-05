@@ -62,7 +62,7 @@ if sys.platform == "darwin":
     ]
 
 a = Analysis(
-    ['__main__.py', 'dt_image_search/scripts/start_instant_share_gui_runtime.py'],
+    ['__main__.py', 'scripts/start_instant_share_gui_runtime.py'],
     pathex=[],
     binaries=heif_binaries,
     datas=datas,
