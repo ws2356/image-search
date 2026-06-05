@@ -34,12 +34,9 @@ if project_root not in sys.path:
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle, QSystemTrayIcon, QMessageBox, QLabel
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from dt_image_search.build_flavor import get_build_type
+from dt_image_search.app_setting import initialize_app_settings
 
-QCoreApplication.setOrganizationName("net.boldman")
-_build_type = get_build_type()
-_app_display_name = "imagesearch-dev" if _build_type == "dev" else "imagesearch"
-QCoreApplication.setApplicationName(_app_display_name)
+initialize_app_settings()
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache

@@ -24,12 +24,17 @@ import sys
 import time
 from pathlib import Path
 
+from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE, INSTANT_SHARE_MDNS_PORT
 from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
+from dt_image_search.app_setting import initialize_app_settings
 
+initialize_app_settings()
+
+print(f"data dir reading from daemon: {QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)}")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -71,6 +76,7 @@ def hide_dock_icon():
             ns_app = NSApplication.sharedApplication()
             # 设置激活策略为 Prohibited（完全不在 Dock 和菜单栏显示）
             ns_app.setActivationPolicy_(NSApplicationActivationPolicyProhibited)
+            print("Hiding Dock icon on macOS...")
         except ImportError:
             print("警告: 缺少 pyobjc 库，无法动态隐藏 Dock 图标")
 
@@ -91,6 +97,11 @@ def main() -> int:
         print(f"  Downloads dir:     {args.downloads_dir}")
     else:
         print(f"  Downloads dir:     ~/Downloads (default)")
+
+    from dt_image_search.model.feature_flags import is_instant_share_enabled
+    if not args.force_enable and not is_instant_share_enabled():
+        print("Instant Share feature is disabled by feature flag. Use --force-enable to bypass.")
+        return 0
 
     # 1. 在初始化 GUI 之前，先戴上“隐形斗篷”
     hide_dock_icon()

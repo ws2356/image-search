@@ -499,9 +499,7 @@ def is_strict_security_enabled() -> bool:
 
 
 def is_instant_share_enabled() -> bool:
-    # TODO: revert this
-    # return _feature_flag_store.is_instant_share_enabled()
-    return True
+    return _feature_flag_store.is_instant_share_enabled()
 
 
 def get_desktop_root_trace_sample_rate() -> float:
