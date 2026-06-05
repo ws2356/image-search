@@ -60,7 +60,7 @@ cp "$SCRIPT_DIR/pkg_scripts/postinstall" "$PKG_RESOURCES/scripts/"
 chmod +x "$PKG_RESOURCES/scripts/postinstall"
 
 # ── Component package ─────────────────────────────────────────────────────────
-COMPONENT_PKG="${PKG_RESOURCES}/component.pkg"
+COMPONENT_PKG="${PKG_RESOURCES}/AuSearchComponent.pkg"
 echo "Creating component package..."
 pkgbuild \
     --component "$APP_PATH" \
@@ -69,10 +69,17 @@ pkgbuild \
     --ownership recommended \
     "$COMPONENT_PKG"
 
+# ── Distribution XML ──────────────────────────────────────────────────────────
+# Explicit distribution XML ensures the PKG installs to /Applications
+# regardless of the installer's domain choice (user vs. system installation).
+DISTRIBUTION_XML="$SCRIPT_DIR/pkg_scripts/distribution.xml"
+cp "$DISTRIBUTION_XML" "$PKG_RESOURCES/distribution.xml"
+
 # ── Distribution package ──────────────────────────────────────────────────────
 echo "Creating distribution package..."
 productbuild \
-    --package "$COMPONENT_PKG" \
+    --distribution "$PKG_RESOURCES/distribution.xml" \
+    --package-path "$PKG_RESOURCES" \
     "$OUTPUT_PKG"
 
 # ── Sign the PKG ──────────────────────────────────────────────────────────────

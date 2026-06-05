@@ -7,9 +7,17 @@ set -euo pipefail
 # automatically when the user logs in.
 #
 # This script runs as root during installation.
+# All output is captured in the system installer log (see Console app →
+# Installer logs) and also written to a temp file for easy inspection.
 
+POSTINSTALL_LOG="/tmp/ausearch-pkg-postinstall.log"
+echo "--- AuSearch PKG postinstall $(date) ---" >> "$POSTINSTALL_LOG"
 LAUNCH_AGENT_SRC="/Applications/AuSearch.app/Contents/Resources/net.boldman.ausearch.instantshare.plist"
-LAUNCH_AGENT_LABEL="net.boldman.ausearch.instantshare"
+# Fallback: PyInstaller < v6 sometimes nests the file under the package path.
+ALT_LAUNCH_AGENT_SRC="/Applications/AuSearch.app/Contents/Resources/dt_image_search/resources/net.boldman.ausearch.instantshare.plist"
+if [[ ! -f "$LAUNCH_AGENT_SRC" ]] && [[ -f "$ALT_LAUNCH_AGENT_SRC" ]]; then
+    LAUNCH_AGENT_SRC="$ALT_LAUNCH_AGENT_SRC"
+fi
 
 # Discover the current console user (the one actively logged in via GUI).
 CONSOLE_USER=""
@@ -42,11 +50,12 @@ if [[ -z "$CONSOLE_USER" ]]; then
 fi
 
 if [[ -z "$CONSOLE_USER" ]]; then
-    echo "Warning: Could not determine console user. LaunchAgent not loaded." >&2
-    echo "The agent will be installed and activated on next login." >&2
+    echo "Warning: Could not determine console user. LaunchAgent not loaded." | tee -a "$POSTINSTALL_LOG" >&2
+    echo "The agent will be installed and activated on next login." | tee -a "$POSTINSTALL_LOG" >&2
     CONSOLE_USER_HOME=""
 else
     CONSOLE_USER_HOME=$(/usr/bin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | /usr/bin/awk '{print $2}')
+    echo "Console user: $CONSOLE_USER (home: $CONSOLE_USER_HOME)" >> "$POSTINSTALL_LOG"
 fi
 
 # Install the LaunchAgent.
@@ -56,18 +65,19 @@ if [[ -n "$CONSOLE_USER_HOME" ]] && [[ -f "$LAUNCH_AGENT_SRC" ]]; then
     /bin/cp -f "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENTS_DIR/"
     /usr/sbin/chown "$CONSOLE_USER:staff" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist"
     /bin/chmod 644 "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist"
-    echo "Installed LaunchAgent for user '$CONSOLE_USER'"
+    echo "Installed LaunchAgent for user '$CONSOLE_USER'" | tee -a "$POSTINSTALL_LOG"
 
     # Bootstrap the agent for the current user session.
     CONSOLE_UID=$(/usr/bin/id -u "$CONSOLE_USER" 2>/dev/null || echo 0)
     if [[ "$CONSOLE_UID" -gt 0 ]]; then
-        /bin/launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist" 2>/dev/null \
-            && echo "LaunchAgent bootstrapped for user '$CONSOLE_USER' (UID $CONSOLE_UID)" \
-            || echo "Note: LaunchAgent bootstrap deferred (will start on next login)"
+        /bin/launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist" >> "$POSTINSTALL_LOG" 2>&1 \
+            && echo "LaunchAgent bootstrapped for user '$CONSOLE_USER' (UID $CONSOLE_UID)" | tee -a "$POSTINSTALL_LOG" \
+            || echo "Note: LaunchAgent bootstrap deferred (will start on next login)" | tee -a "$POSTINSTALL_LOG"
     fi
 else
-    echo "Note: LaunchAgent installation deferred (no console user)." >&2
-    echo "The agent will be activated on next login." >&2
+    echo "Note: LaunchAgent installation deferred (no console user)." | tee -a "$POSTINSTALL_LOG" >&2
+    echo "The agent will be activated on next login." | tee -a "$POSTINSTALL_LOG" >&2
 fi
 
+echo "--- postinstall complete ---" >> "$POSTINSTALL_LOG"
 exit 0

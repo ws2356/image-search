@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>AuSearch</title>
+    <options customize="never" allow-external-scripts="no" hostArchitectures="x86_64,arm64" />
+    <domains enable_currentUserHome="no" enable_localSystem="yes" />
+    <choices-outline>
+        <line choice="default" />
+    </choices-outline>
+    <choice id="default" visible="false">
+        <pkg-ref id="net.boldman.ausearch" />
+    </choice>
+    <pkg-ref id="net.boldman.ausearch" installKBytes="500000" auth="root" version="1.0.0">#AuSearchComponent.pkg</pkg-ref>
+</installer-gui-script>

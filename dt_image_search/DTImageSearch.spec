@@ -13,8 +13,10 @@ platform_resource_includes = [
     "resources/ios_bitten_apple_gray.png",
     "resources/icon.png",
     "resources/appicon.icns",
-    "resources/net.boldman.ausearch.instantshare.plist",
 ]
+# Place the LaunchAgent plist at Resources root so the PKG postinstall script
+# can find it at a well-known path inside the .app bundle.
+datas += [("resources/net.boldman.ausearch.instantshare.plist", ".")]
 # The Apple mobile device installer payload is only used on Windows. Shipping it
 # in macOS bundles adds tens of megabytes of dead weight to the .app/.dmg.
 if sys.platform == "win32":
