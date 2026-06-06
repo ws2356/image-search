@@ -72,12 +72,12 @@ def hide_dock_icon():
     if sys.platform == "darwin":
         try:
             # 导入 macOS 原生 Cocoa 框架
-            from AppKit import NSApplication, NSApplicationActivationPolicyProhibited
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
             
             # 获取当前运行的 App 实例
             ns_app = NSApplication.sharedApplication()
-            # 设置激活策略为 Prohibited（完全不在 Dock 和菜单栏显示）
-            ns_app.setActivationPolicy_(NSApplicationActivationPolicyProhibited)
+            # 设置激活策略为 Accessory（在 Dock 和菜单栏中隐藏，但仍可接收事件）
+            ns_app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
             print("Hiding Dock icon on macOS...")
         except ImportError:
             print("警告: 缺少 pyobjc 库，无法动态隐藏 Dock 图标")
@@ -107,11 +107,11 @@ def main() -> int:
     #     print("Instant Share feature is disabled by feature flag. Use --force-enable to bypass.")
     #     return 0
 
-    # 1. 在初始化 GUI 之前，先戴上“隐形斗篷”
-    hide_dock_icon()
-
     app = QApplication(sys.argv)
     app.setApplicationName("AuSearch Instant Share")
+
+    # 1. 在初始化 GUI 之后，戴上“隐形斗篷”
+    hide_dock_icon()
 
     mini_window_factory = InstantShareMiniWindowFactory()
     mini_window_factory.start()
