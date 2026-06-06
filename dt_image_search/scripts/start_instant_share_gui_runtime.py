@@ -24,7 +24,6 @@ import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
 from dt_image_search.instant_sharing import InstantShareRuntime
@@ -34,7 +33,10 @@ from dt_image_search.app_setting import initialize_app_settings
 
 initialize_app_settings()
 
-print(f"data dir reading from daemon: {QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)}")
+_LOG_DIR = Path.home() / "Library/Application Support/net.boldman.ausearch"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_LOG_FILE = _LOG_DIR / "instantshare.log"
+print(f"Logging to: {_LOG_FILE}")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -86,6 +88,8 @@ def main() -> int:
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        filename=str(_LOG_FILE),
+        filemode="a",
     )
     _logger = logging.getLogger(__name__)
 

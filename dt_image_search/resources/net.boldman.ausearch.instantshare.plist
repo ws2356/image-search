@@ -23,10 +23,10 @@
     <integer>10</integer>
 
     <key>StandardOutPath</key>
-    <string>/tmp/ausearch-instantshare.log</string>
+    <string>/usr/local/var/log/net.boldman.ausearch/instantshare.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/tmp/ausearch-instantshare.log</string>
+    <string>/usr/local/var/log/net.boldman.ausearch/instantshare.log</string>
 
     <key>EnvironmentVariables</key>
     <dict>
