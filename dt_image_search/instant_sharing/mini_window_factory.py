@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any
 
 from dt_image_search.instant_sharing.mini_window import (
@@ -107,6 +108,7 @@ class InstantShareMiniWindowFactory:
         )
         window.destroyed.connect(self._on_window_destroyed)
         window.show()
+        self._set_activation_policy_regular()
         self._active_window = window
         _logger.info(
             "[InstantShareMiniWindowFactory] window shown: session=%s state=%s",
@@ -123,6 +125,7 @@ class InstantShareMiniWindowFactory:
 
     def _on_window_destroyed(self) -> None:
         self._active_window = None
+        self._set_activation_policy_accessory()
 
     def _close_window(self) -> None:
         if self._active_window is not None:
@@ -131,4 +134,25 @@ class InstantShareMiniWindowFactory:
             except RuntimeError:
                 pass
             self._active_window = None
+        self._set_activation_policy_accessory()
         self._current_session_id = None
+
+    @staticmethod
+    def _set_activation_policy_regular() -> None:
+        if sys.platform != "darwin":
+            return
+        try:
+            from AppKit import NSApplication, NSApplicationActivationPolicyRegular
+            NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyRegular)
+        except ImportError:
+            pass
+
+    @staticmethod
+    def _set_activation_policy_accessory() -> None:
+        if sys.platform != "darwin":
+            return
+        try:
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+            NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        except ImportError:
+            pass
