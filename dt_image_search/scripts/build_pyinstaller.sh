@@ -60,7 +60,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 
     # Verify both binaries exist inside the app bundle
     main_bin="${app_path}/Contents/MacOS/${app_name}"
-    daemon_bin="${app_path}/Contents/MacOS/au-search-daemon"
+    daemon_bin="${app_path}/Contents/MacOS/InstantShareAgent"
     if [[ ! -f "$main_bin" ]]; then
         echo "Expected desktop binary not found: $main_bin"
         exit 1
@@ -69,6 +69,16 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         echo "Expected daemon binary not found: $daemon_bin"
         exit 1
     fi
+
+    # Create a sub bundle for the agent inside the main bundle's Helpers directory
+    agent_bundle_path="${app_path}/Contents/Helpers/InstantShareAgent.app"
+    mkdir -p "${agent_bundle_path}/Contents/MacOS"
+    mv "$daemon_bin" "${agent_bundle_path}/Contents/MacOS/InstantShareAgent"
+    # soft link all Contents/* to the agent bundle so it can find the resources and plist
+    (cd "$agent_bundle_path/Contents" && ln -s "../../../Resources" . && ln -s "../../../Frameworks" .)
+    # copy Info.plist
+    cp "${project_root}/dt_image_search/resources/AppInfoInstantShare.plist" "${agent_bundle_path}/Contents/Info.plist"
+
 
     bash "$this_dir/prune_macos_bundle.sh" --app-path "$app_path"
 fi

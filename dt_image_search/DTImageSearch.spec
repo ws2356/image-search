@@ -125,7 +125,7 @@ exe_daemon = EXE(
     [_daemon_script],
     [],
     exclude_binaries=True,
-    name="au-search-daemon",
+    name="InstantShareAgent",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

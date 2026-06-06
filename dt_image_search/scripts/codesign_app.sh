@@ -38,7 +38,14 @@ done
 [[ -f "$ENTITLEMENTS" ]] || { echo "Error: entitlements file not found: $ENTITLEMENTS" >&2; exit 1; }
 [[ -d "$APP_PATH"   ]]  || { echo "Error: .app not found: $APP_PATH" >&2; exit 1; }
 
-echo "==> App:          $APP_PATH"
+AGENT_BUNDLE_PATH="${APP_PATH}/Contents/Helpers/InstantShareAgent.app"
+if [[ ! -d "$AGENT_BUNDLE_PATH" ]]; then
+    echo "Error: expected agent bundle not found at $AGENT_BUNDLE_PATH" >&2
+    exit 1
+fi
+ 
+echo "==> Main App:          $APP_PATH"
+echo "==> Agent App:         $AGENT_BUNDLE_PATH"
 echo "==> Identity:     $IDENTITY"
 echo "==> Entitlements: $ENTITLEMENTS"
 
@@ -76,7 +83,7 @@ echo "  ${bin_count} binary/binaries signed."
 # ── Step 3: Sign the outer .app bundle with entitlements ─────────────────────
 echo ""
 echo "Step 3: Signing app and service binaries with entitlements..."
-for binary in "$APP_PATH/Contents/MacOS"/*; do
+for binary in "$APP_PATH/Contents/MacOS"/* "$AGENT_BUNDLE_PATH/Contents/MacOS"/*; do
     if [[ -f "$binary" ]] && file "$binary" 2>/dev/null | grep -qE "Mach-O"; then
         echo "  signing binary with entitlements: $binary"
         codesign --sign "$IDENTITY" \
@@ -90,7 +97,16 @@ for binary in "$APP_PATH/Contents/MacOS"/*; do
 done
 
 echo ""
-echo "Step 4: Signing outer .app bundle with entitlements..."
+echo "Step 4: Signing inner .app bundle"
+codesign --sign "$IDENTITY" \
+         --timestamp \
+         --options runtime \
+         --force \
+         "$AGENT_BUNDLE_PATH"
+echo "  Inner bundle signed."
+
+echo ""
+echo "Step 5: Signing outer .app bundle"
 codesign --sign "$IDENTITY" \
          --timestamp \
          --options runtime \
@@ -98,9 +114,9 @@ codesign --sign "$IDENTITY" \
          "$APP_PATH"
 echo "  Bundle signed."
 
-# ── Step 5: Verify ────────────────────────────────────────────────────────────
+# ── Step 6: Verify ────────────────────────────────────────────────────────────
 echo ""
-echo "Step 5: Verifying..."
+echo "Step 6: Verifying..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 # spctl assessment only passes after notarization; print result without failing.
 echo "  spctl pre-notarization check:"

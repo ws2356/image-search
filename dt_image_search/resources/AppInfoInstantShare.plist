@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>InstantShareAgent</string>
+	<key>CFBundleDisplayName</key>
+	<string>InstantShareAgent</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1.0.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>InstantShareAgent uses Apple Events for Finder integration, such as revealing selected files.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_instant-share._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>InstantShareAgent uses your local network to receive photo backups from your iPhone.</string>
+</dict>
+</plist>
