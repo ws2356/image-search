@@ -10,6 +10,10 @@
 	<string>1.1.0</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>AuSearch uses Apple Events for Finder integration, such as revealing selected files.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_instant-share._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AuSearch uses your local network to receive photo backups from your iPhone.</string>
 </dict>
