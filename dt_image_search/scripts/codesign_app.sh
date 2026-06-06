@@ -80,7 +80,7 @@ done < <(find "${APP_PATH}/Contents" -type f \
              -print0)
 echo "  ${bin_count} binary/binaries signed."
 
-# ── Step 3: Sign the outer .app bundle with entitlements ─────────────────────
+# ── Step 3: Sign the bundle with entitlements ─────────────────────
 echo ""
 echo "Step 3: Signing app and service binaries with entitlements..."
 for binary in "$APP_PATH/Contents/MacOS"/* "$AGENT_BUNDLE_PATH/Contents/MacOS"/*; do
@@ -101,6 +101,7 @@ echo "Step 4: Signing inner .app bundle"
 codesign --sign "$IDENTITY" \
          --timestamp \
          --options runtime \
+        --entitlements "$ENTITLEMENTS" \
          --force \
          "$AGENT_BUNDLE_PATH"
 echo "  Inner bundle signed."
@@ -110,6 +111,7 @@ echo "Step 5: Signing outer .app bundle"
 codesign --sign "$IDENTITY" \
          --timestamp \
          --options runtime \
+        --entitlements "$ENTITLEMENTS" \
          --force \
          "$APP_PATH"
 echo "  Bundle signed."
