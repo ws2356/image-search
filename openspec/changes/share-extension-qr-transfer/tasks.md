@@ -26,11 +26,11 @@
 
 ## 3. Launch Agent: QR Display Mini-Window
 
-- [ ] 3.1 Create `QRTriggerMiniWindow` Qt dialog (based on `InstantShareMiniWindow` pattern) with QR code display, opt-code text fallback, PC name + port, and "Scan with AuBackup" instruction
-- [ ] 3.2 Integrate QR code generation using existing `qrcode` library — encode `ausearch://claim?ips=...&port=9527&stash=<id>&opt=<code>`
-- [ ] 3.3 Wire QR window lifecycle: show on stash, invalidate on cancel, update on claim/expiry, auto-close
-- [ ] 3.4 Add LAN IP discovery utility to populate the QR with the PC's LAN IP addresses
-- [ ] 3.5 Wire the QR trigger flow into `InstantShareRuntime` as an alternative receive mode (triggered by stash endpoint, not by mDNS/BLE)
+- [x] 3.1 Create `QRTriggerMiniWindow` Qt dialog (based on `InstantShareMiniWindow` pattern) with QR code display, opt-code text fallback, PC name + port, and "Scan with AuBackup" instruction
+- [x] 3.2 Integrate QR code generation using existing `qrcode` library — encode `ausearch://claim?ips=...&port=9527&stash=<id>&opt=<code>`
+- [x] 3.3 Wire QR window lifecycle: show on stash, invalidate on cancel, update on claim/expiry, auto-close
+- [x] 3.4 Add LAN IP discovery utility to populate the QR with the PC's LAN IP addresses
+- [x] 3.5 Wire the QR trigger flow into `InstantShareRuntime` as an alternative receive mode (triggered by stash endpoint, not by mDNS/BLE)
 
 ## 4. iOS AuBackup: QR Download Client
 
