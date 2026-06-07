@@ -6,18 +6,21 @@ import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+from fastapi.testclient import TestClient
+
 from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
-    TRUST_HANDSHAKE_PATH,
+    TRANSFER_IMAGE_PATH,
+    TRANSFER_TEXT_PATH,
     TRUST_APPLY_PATH,
     TRUST_CONFIRM_PATH,
-    TRANSFER_TEXT_PATH,
-    TRANSFER_IMAGE_PATH,
+    TRUST_HANDSHAKE_PATH,
 )
 from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
+from dt_image_search.instant_sharing.https_bootstrap import _Deps, _build_app
 from dt_image_search.instant_sharing.security import X25519TrustSessionKeyResolver
 from dt_image_search.instant_sharing.trust_crypto import AesGcmTrustSessionProtector
+from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 
 
 def _config(session_id: str | None = None):
@@ -169,6 +172,93 @@ class TestEndpointPaths(unittest.TestCase):
         self.assertEqual(TRANSFER_IMAGE_PATH, "/api/instant-share/v1/transfer/image")
 
 
+class TestFastAPIBootstrap(unittest.TestCase):
+    """Smoke tests for the FastAPI app built by `https_bootstrap._build_app`."""
+
+    def _valid_handshake_body(self):
+        import base64
+        return {
+            "mobile_dh_public_key": base64.urlsafe_b64encode(os.urandom(32)).decode("ascii").rstrip("="),
+            "mobile_nonce": base64.urlsafe_b64encode(os.urandom(32)).decode("ascii").rstrip("="),
+            "payload_class": "text",
+            "target_intent": "clipboard_only",
+            "trust_mode": "first_share",
+            "mobile_port": 1,
+            "mobile_ip_list": ["127.0.0.1"],
+        }
+
+    def test_handshake_returns_pc_dh_public_key(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client:
+            resp = client.post(TRUST_HANDSHAKE_PATH, json=self._valid_handshake_body())
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("pc_dh_public_key", body)
+        self.assertIn("pc_nonce", body)
+        self.assertIn("kdf_context", body)
+
+    def test_handshake_without_deps_returns_503(self):
+        app = _build_app(_Deps(trust_session_registry=None))
+        with TestClient(app) as client:
+            resp = client.post(TRUST_HANDSHAKE_PATH, json=self._valid_handshake_body())
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["error_code"], "SERVICE_UNAVAILABLE")
+
+    def test_malformed_json_returns_422(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client:
+            resp = client.post(
+                TRUST_HANDSHAKE_PATH,
+                content=b"not json",
+                headers={"Content-Type": "application/json"},
+            )
+        self.assertEqual(resp.status_code, 422)
+
+    def test_unknown_path_returns_404(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client:
+            resp = client.post("/api/instant-share/v1/does-not-exist", json={})
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.json()["error_code"], "NOT_FOUND")
+
+    def test_apply_before_handshake_returns_handshake_required(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client:
+            resp = client.post(TRUST_APPLY_PATH, json={"schema": "x", "nonce": "y", "ciphertext": "z"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error_code"], "HANDSHAKE_REQUIRED")
+
+    def test_transfer_text_without_transfer_handler_returns_503(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client:
+            resp = client.post(TRANSFER_TEXT_PATH, json={"text_utf8": "hello"})
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["error_code"], "SERVICE_UNAVAILABLE")
+
+    def test_transfer_image_without_transfer_handler_returns_503(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client:
+            resp = client.post(
+                TRANSFER_IMAGE_PATH,
+                content=b"\x89PNG\r\n\x1a\n",
+                headers={"Content-Type": "image/png", "X-Instant-Share-Filename": "x.png"},
+            )
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["error_code"], "SERVICE_UNAVAILABLE")
+
+    def test_confirm_before_handshake_returns_handshake_required(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client:
+            resp = client.post(TRUST_CONFIRM_PATH, json={"schema": "x", "nonce": "y", "ciphertext": "z"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error_code"], "HANDSHAKE_REQUIRED")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ class InstantShareError(Exception):
     correlation_id: str | None = None
     retryable: bool = False
     details: Mapping[str, object] = field(default_factory=dict)
+    status_code: int = 400
 
     def __post_init__(self) -> None:
         super().__init__(self.message)

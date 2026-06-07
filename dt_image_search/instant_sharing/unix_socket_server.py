@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
-import os
-import socket
 import threading
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
+
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 _logger = logging.getLogger(__name__)
 
@@ -16,10 +18,49 @@ SOCKET_RELATIVE_PATH = "Library/Application Support/au-search/qr-transfer.sock"
 
 def _extension_socket_path(container_dir: Path | None = None) -> Path:
     home = container_dir or Path.home()
-    return home / "Library/Containers" / EXTENSION_BUNDLE_ID / "Data" / SOCKET_RELATIVE_PATH
+    return home / "Library" / "Containers" / EXTENSION_BUNDLE_ID / "Data" / SOCKET_RELATIVE_PATH
+
+
+def _build_app(
+    request_handler: Callable[[dict[str, object]], dict[str, object]],
+) -> FastAPI:
+    """Build a single-endpoint FastAPI app that delegates each request to a sync
+    `request_handler` callable (off-loaded to a worker thread so the event loop
+    stays free). The handler's return dict may carry a `_status` key to override
+    the default HTTP 201; any leading-underscore keys are stripped from the body
+    before serialization — preserving the wire shape of the previous implementation.
+    """
+    app = FastAPI()
+    app.state.request_handler = request_handler
+
+    @app.post("/")
+    async def trigger(request: Request) -> JSONResponse:
+        body = await request.json()
+        result = await asyncio.to_thread(request_handler, body)
+        status_code = 201
+        payload: dict[str, object] = {}
+        if isinstance(result, dict):
+            extra_status = result.get("_status")
+            if isinstance(extra_status, int):
+                status_code = extra_status
+            payload = {k: v for k, v in result.items() if not k.startswith("_")}
+        return JSONResponse(payload, status_code=status_code)
+
+    return app
 
 
 class UnixSocketHttpServer:
+    """Unix-domain-socket HTTP server that hosts a FastAPI app via uvicorn.
+
+    The server runs on a daemon thread; `start()` returns once uvicorn has
+    bound the UDS path (or `False` on bind failure / timeout). The public
+    surface (`start` / `stop` / `is_running` / `socket_path`) is unchanged
+    from the previous `socket.socket`-based implementation.
+    """
+
+    _STARTUP_TIMEOUT_SECONDS = 2.0
+    _STARTUP_POLL_INTERVAL = 0.05
+
     def __init__(
         self,
         *,
@@ -28,121 +69,85 @@ class UnixSocketHttpServer:
     ) -> None:
         self._request_handler = request_handler
         self._socket_path = socket_path or _extension_socket_path()
-        self._server_socket: socket.socket | None = None
+        self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
-        self._stop_event = threading.Event()
 
     @property
     def socket_path(self) -> Path:
         return self._socket_path
 
+    @property
+    def is_running(self) -> bool:
+        if self._thread is None or not self._thread.is_alive():
+            return False
+        if self._server is not None and self._server.should_exit:
+            return False
+        return True
+
     def start(self) -> bool:
         sock_path = self._socket_path
         if sock_path.exists():
-            os.remove(str(sock_path))
+            try:
+                sock_path.unlink()
+            except OSError as exc:
+                _logger.error("Failed to remove stale socket at %s: %s", sock_path, exc)
+                return False
         sock_path.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            server_sock.bind(str(sock_path))
-            server_sock.listen(5)
-            server_sock.settimeout(1.0)
-        except OSError as exc:
-            _logger.error("Failed to create Unix socket at %s: %s", sock_path, exc)
+        if self._request_handler is None:
+            _logger.error("No request_handler provided to UnixSocketHttpServer")
             return False
 
-        self._server_socket = server_sock
-        self._stop_event.clear()
+        app = _build_app(self._request_handler)
+        config = uvicorn.Config(
+            app,
+            uds=str(sock_path),
+            lifespan="off",
+            access_log=False,
+            log_level="warning",
+            loop="asyncio",
+        )
+        self._server = uvicorn.Server(config)
         self._thread = threading.Thread(
-            target=self._serve_forever,
+            target=self._server.run,
             name="qr_unix_socket",
             daemon=True,
         )
         self._thread.start()
+
+        if not self._wait_for_started():
+            _logger.error("Unix socket server failed to bind %s within %.1fs",
+                          sock_path, self._STARTUP_TIMEOUT_SECONDS)
+            self.stop()
+            return False
+
         _logger.info("Unix socket HTTP server listening on %s", sock_path)
         return True
 
+    def _wait_for_started(self) -> bool:
+        server = self._server
+        if server is None:
+            return False
+        deadline = self._STARTUP_TIMEOUT_SECONDS
+        elapsed = 0.0
+        while elapsed < deadline:
+            if server.started:
+                return True
+            threading.Event().wait(self._STARTUP_POLL_INTERVAL)
+            elapsed += self._STARTUP_POLL_INTERVAL
+        return bool(server.started)
+
     def stop(self) -> None:
-        self._stop_event.set()
-        if self._server_socket is not None:
+        server = self._server
+        thread = self._thread
+        self._server = None
+        self._thread = None
+        if server is not None:
+            server.should_exit = True
+        if thread is not None:
+            thread.join(timeout=3.0)
+        if self._socket_path.exists():
             try:
-                self._server_socket.shutdown(socket.SHUT_RDWR)
+                self._socket_path.unlink()
             except OSError:
                 pass
-            self._server_socket.close()
-            self._server_socket = None
-        if self._thread is not None:
-            self._thread.join(timeout=3.0)
-            self._thread = None
-        if self._socket_path.exists():
-            os.remove(str(self._socket_path))
-
-    @property
-    def is_running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
-
-    def _serve_forever(self) -> None:
-        server_sock = self._server_socket
-        if server_sock is None:
-            return
-        while not self._stop_event.is_set():
-            try:
-                client, _ = server_sock.accept()
-            except socket.timeout:
-                continue
-            except OSError:
-                break
-            with client:
-                self._handle_client(client)
-
-    def _handle_client(self, client: socket.socket) -> None:
-        try:
-            data = client.recv(65536)
-        except OSError:
-            return
-        if not data:
-            return
-        try:
-            body = self._parse_http_body(data)
-        except ValueError:
-            client.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 2\r\n\r\n{}")
-            return
-        raw = self._request_handler(body) if self._request_handler is not None else {"status": "no_handler"}
-        response_body: dict[str, object] = {}
-        status_code = 201
-        if isinstance(raw, dict):
-            response_body = {k: v for k, v in raw.items() if not k.startswith("_")}
-            extra_status = raw.get("_status")
-            if isinstance(extra_status, int):
-                status_code = extra_status
-        self._send_http_response(client, status_code, response_body)
-
-    @staticmethod
-    def _parse_http_body(data: bytes) -> dict[str, object]:
-        parts = data.split(b"\r\n\r\n", 1)
-        if len(parts) < 2:
-            raise ValueError("No body found")
-        body_bytes = parts[1]
-        if not body_bytes:
-            raise ValueError("Empty body")
-        parsed = json.loads(body_bytes.decode("utf-8"))
-        if not isinstance(parsed, dict):
-            raise ValueError("Body must be a JSON object")
-        return parsed
-
-    @staticmethod
-    def _send_http_response(client: socket.socket, status: int, body: dict[str, object]) -> None:
-        resp = json.dumps(body).encode("utf-8")
-        status_text = {200: "OK", 201: "Created", 400: "Bad Request", 401: "Unauthorized",
-                       404: "Not Found", 410: "Gone", 500: "Internal Server Error"}.get(status, "Unknown")
-        response = (
-            f"HTTP/1.1 {status} {status_text}\r\n"
-            f"Content-Type: application/json\r\n"
-            f"Content-Length: {len(resp)}\r\n"
-            f"Connection: close\r\n"
-            f"\r\n"
-        ).encode("utf-8") + resp
-        try:
-            client.sendall(response)
-        except OSError:
-            pass

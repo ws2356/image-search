@@ -3,10 +3,17 @@ import sys
 import time
 import tempfile
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+from fastapi.testclient import TestClient
+
 from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry
+from dt_image_search.instant_sharing.unix_socket_server import (
+    UnixSocketHttpServer,
+    _build_app as build_uds_app,
+)
 
 
 class TestQRTriggerHandler(unittest.TestCase):
@@ -174,6 +181,84 @@ class TestQRTriggerHandler(unittest.TestCase):
         self.assertEqual(QRTriggerHandler._detect_mime("photo.webp"), "image/webp")
         self.assertEqual(QRTriggerHandler._detect_mime("photo.bmp"), "image/bmp")
         self.assertEqual(QRTriggerHandler._detect_mime("photo.unknown"), "application/octet-stream")
+
+
+class TestFastAPIUDSTrigger(unittest.TestCase):
+    """Smoke tests for the FastAPI app hosted by `UnixSocketHttpServer`."""
+
+    def test_trigger_routes_to_handler(self):
+        captured: dict = {}
+        captured["body"] = None
+
+        def handler(body: dict) -> dict:
+            captured["body"] = body
+            return {"_status": 201, "stash_id": "x", "content_type": "text/plain"}
+
+        app = build_uds_app(handler)
+        with TestClient(app) as client:
+            resp = client.post("/", json={"type": "text", "content": "hi"})
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json(), {"stash_id": "x", "content_type": "text/plain"})
+        self.assertEqual(captured["body"], {"type": "text", "content": "hi"})
+
+    def test_trigger_strips_underscore_keys_and_uses_status(self):
+        def handler(_body: dict) -> dict:
+            return {"_status": 400, "status": "error", "error": "boom"}
+
+        app = build_uds_app(handler)
+        with TestClient(app) as client:
+            resp = client.post("/", json={"type": "text"})
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"status": "error", "error": "boom"})
+
+    def test_lifecycle_start_stop_binds_real_uds(self):
+        """End-to-end: start binds the UDS, stop tears it down and removes the file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            sock_path = Path(tmp) / "qr.sock"
+            captured: dict = {}
+
+            def handler(body: dict) -> dict:
+                captured["body"] = body
+                return {"_status": 201, "stash_id": "abc"}
+
+            server = UnixSocketHttpServer(
+                request_handler=handler, socket_path=sock_path
+            )
+
+            self.assertTrue(server.start())
+            self.assertTrue(server.is_running)
+            self.assertTrue(sock_path.exists())
+
+            # Raw HTTP/1.1 over the bound UDS — confirms uvicorn really served it
+            import socket as _socket
+            body = b'{"type":"text","content":"yo"}'
+            with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as raw:
+                raw.connect(str(sock_path))
+                raw.sendall(
+                    b"POST / HTTP/1.1\r\n"
+                    b"Host: localhost\r\n"
+                    b"Content-Type: application/json\r\n"
+                    b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+                    b"Connection: close\r\n"
+                    b"\r\n" + body
+                )
+                chunks = []
+                while True:
+                    buf = raw.recv(4096)
+                    if not buf:
+                        break
+                    chunks.append(buf)
+
+            response_bytes = b"".join(chunks)
+            self.assertIn(b"201", response_bytes)
+            self.assertIn(b"abc", response_bytes)
+            self.assertEqual(captured["body"], {"type": "text", "content": "yo"})
+
+            server.stop()
+            self.assertFalse(server.is_running)
+            self.assertFalse(sock_path.exists())
 
 
 if __name__ == "__main__":
