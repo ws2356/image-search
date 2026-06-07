@@ -10,7 +10,7 @@
 - [x] 1.8 Update `build_pyinstaller.sh` to call `build_share_extension.sh` before PyInstaller, then copy the built `.appex` into `Contents/PlugIns/ShareExtension.appex` within the AuSearch bundle
 - [x] 1.9 Update `codesign_app.sh` to codesign `Contents/PlugIns/ShareExtension.appex` with `--entitlements ShareExtension.entitlements`
 - [x] 1.10 Update `build_pkg.sh` / `package_dmg.sh` to include and sign `Contents/PlugIns/ShareExtension.appex` in the distribution package
-- [ ] 1.11 Update `create_distributable_pkg.sh` to ensure the extension is included in the PKG installer
+- [x] 1.11 Update `create_distributable_pkg.sh` to ensure the extension is included in the PKG installer
 
 ## 2. Launch Agent: Unix Socket + QR Trigger Endpoints
 
