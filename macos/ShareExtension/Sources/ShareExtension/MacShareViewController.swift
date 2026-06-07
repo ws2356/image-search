@@ -11,7 +11,8 @@ class MacShareViewController: SLComposeServiceViewController {
             cancel()
             return
         }
-        processExtensionItems(context.inputItems)
+        let items = context.inputItems as? [NSExtensionItem] ?? []
+        processExtensionItems(items)
     }
 
     private func processExtensionItems(_ items: [NSExtensionItem]) {
@@ -95,7 +96,7 @@ class MacShareViewController: SLComposeServiceViewController {
         addr.sun_family = sa_family_t(AF_UNIX)
         let path = sockURL.path
         let pathLen = min(path.utf8.count, MemoryLayout.size(ofValue: addr.sun_path) - 1)
-        path.withCString { src in
+        _ = path.withCString { src in
             withUnsafeMutablePointer(to: &addr.sun_path) { dst in
                 dst.withMemoryRebound(to: CChar.self, capacity: pathLen) { ptr in
                     strncpy(ptr, src, pathLen)
@@ -146,11 +147,12 @@ class MacShareViewController: SLComposeServiceViewController {
         extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
 
-    private func cancel() {
+    override func cancel() {
         extensionContext?.cancelRequest(withError: NSError(
             domain: "ShareExtension",
             code: 0,
             userInfo: [NSLocalizedDescriptionKey: "User canceled"]
         ))
+        super.cancel()
     }
 }
