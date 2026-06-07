@@ -2,10 +2,23 @@ import AppKit
 import Social
 import os.log
 
-private let socketPath = "Application Support/au-search/qr-transfer.sock"
+private let socketRelativePath = "Application Support/au-search/qr-transfer.sock"
 private let log = OSLog(subsystem: "net.boldman.ausearch.share-extension", category: "ShareExtension")
 
 class MacShareViewController: SLComposeServiceViewController {
+
+    private lazy var httpClient: UDSHTTPClient = {
+        guard let containerURL = FileManager.default.urls(
+            for: .libraryDirectory,
+            in: .userDomainMask
+        ).first else {
+            os_log("Failed to resolve container URL", log: log, type: .error)
+            return UDSHTTPClient(socketPath: "")
+        }
+        let fullPath = containerURL.appendingPathComponent(socketRelativePath).path
+        os_log("UDS endpoint: %{public}@", log: log, type: .info, fullPath)
+        return UDSHTTPClient(socketPath: fullPath)
+    }()
 
     override func viewDidAppear() {
         super.viewDidAppear()
@@ -98,93 +111,21 @@ class MacShareViewController: SLComposeServiceViewController {
     }
 
     private func sendStashRequest(_ body: [String: String], completion: @escaping (Bool) -> Void) {
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-            os_log("Failed to serialize stash JSON", log: log, type: .error)
-            completion(false)
-            return
-        }
-        os_log("Sending stash request (%d bytes)", log: log, type: .info, jsonData.count)
-
-        guard let containerURL = FileManager.default.urls(
-            for: .libraryDirectory,
-            in: .userDomainMask
-        ).first else {
-            os_log("Failed to resolve container URL", log: log, type: .error)
-            completion(false)
-            return
-        }
-
-        let sockURL = containerURL.appendingPathComponent(socketPath)
-        os_log("Connecting to socket: %{public}@", log: log, type: .info, sockURL.path)
-
-        let sock = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard sock >= 0 else {
-            os_log("Failed to create Unix socket (errno=%d)", log: log, type: .error, errno)
-            completion(false)
-            return
-        }
-        defer { close(sock) }
-
-        var addr = sockaddr_un()
-        addr.sun_family = sa_family_t(AF_UNIX)
-        let path = sockURL.path
-        let pathLen = min(path.utf8.count, MemoryLayout.size(ofValue: addr.sun_path) - 1)
-        _ = path.withCString { src in
-            withUnsafeMutablePointer(to: &addr.sun_path) { dst in
-                dst.withMemoryRebound(to: CChar.self, capacity: pathLen) { ptr in
-                    strncpy(ptr, src, pathLen)
-                }
+        os_log("Sending stash request via URLSession over UDS", log: log, type: .info)
+        httpClient.postJSON(path: "/api/instant-share/v1/qr-trigger", body: body) { result in
+            switch result {
+            case .success(let (data, response)):
+                let success = response.statusCode == 201
+                let preview = String(data: data, encoding: .utf8) ?? "<binary>"
+                os_log("Stash response (status=%d, success=%{bool}d, %d bytes): %{public}@",
+                       log: log, type: .info, response.statusCode, success, data.count,
+                       String(preview.prefix(200)))
+                completion(success)
+            case .failure(let error):
+                os_log("Stash request failed: %{public}@", log: log, type: .error, error.localizedDescription)
+                completion(false)
             }
         }
-
-        let connectResult = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(sock, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard connectResult == 0 else {
-            os_log("Socket connect failed (errno=%d)", log: log, type: .error, errno)
-            completion(false)
-            return
-        }
-        os_log("Socket connected", log: log, type: .info)
-
-        let request = """
-        POST /api/instant-share/v1/qr-trigger HTTP/1.1\r
-        Host: localhost\r
-        Content-Type: application/json\r
-        Content-Length: \(jsonData.count)\r
-        Connection: close\r
-        \r
-        """ + String(data: jsonData, encoding: .utf8)!
-
-        let requestData = Data(request.utf8)
-        requestData.withUnsafeBytes { ptr in
-            var sent = 0
-            while sent < requestData.count {
-                let n = send(sock, ptr.baseAddress! + sent, requestData.count - sent, 0)
-                if n <= 0 {
-                    os_log("Send failed after %d bytes (errno=%d)", log: log, type: .error, sent, errno)
-                    break
-                }
-                sent += n
-            }
-        }
-        os_log("Sent %d bytes to agent", log: log, type: .info, jsonData.count)
-
-        var response = Data()
-        var buf = [UInt8](repeating: 0, count: 4096)
-        while true {
-            let n = recv(sock, &buf, buf.count, 0)
-            if n <= 0 { break }
-            response.append(contentsOf: buf[..<n])
-        }
-
-        let responseStr = String(data: response, encoding: .utf8) ?? ""
-        let success = responseStr.contains("201") || responseStr.contains("\"stashed\"")
-        os_log("Stash response (%d bytes, success=%{bool}d): %{public}@",
-               log: log, type: .info, response.count, success, String(responseStr.prefix(200)))
-        completion(success)
     }
 
     private func completeRequest() {
