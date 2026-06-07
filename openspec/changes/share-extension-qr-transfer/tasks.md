@@ -14,15 +14,15 @@
 
 ## 2. Launch Agent: Unix Socket + QR Trigger Endpoints
 
-- [ ] 2.1 Determine extension's sandbox container path from bundle ID; create Unix domain socket listener inside the extension's sandbox container at `~/Library/Containers/<bundle-id>/Data/Library/Application Support/au-search/qr-transfer.sock`
-- [ ] 2.2 Implement `QRTriggerHandler` class with in-memory stash registry (stash_id, content/file_path, content_type, filename, opt_code, expiry, attempt_count)
-- [ ] 2.3 Implement `POST /api/instant-share/v1/qr-trigger` handler on Unix socket — accept JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`, generate stash_id, return 201
-- [ ] 2.4 Implement opt-code generation (6-digit CSPRNG, 5-min TTL, 3-attempt invalidation)
-- [ ] 2.5 Implement `POST /api/instant-share/v1/qr-claim` handler on TCP — validate opt-code, return text inline or stream image file, invalidate on success or 3 failed attempts
-- [ ] 2.6 Use oneshot timer per stash (5-min TTL) for expiry cleanup instead of periodic loop
-- [ ] 2.7 Register new endpoints in both the Unix socket listener and the TCP HTTP server
-- [ ] 2.8 Update `InstantShareRuntime.start()` to initialize `QRTriggerHandler`, create Unix socket, and register QR trigger routes
-- [ ] 2.9 Add unit tests for stash/claim/opt-code/expiry/file-path handling
+- [x] 2.1 Determine extension's sandbox container path from bundle ID; create Unix domain socket listener inside the extension's sandbox container at `~/Library/Containers/<bundle-id>/Data/Library/Application Support/au-search/qr-transfer.sock`
+- [x] 2.2 Implement `QRTriggerHandler` class with in-memory stash registry (stash_id, content/file_path, content_type, filename, opt_code, expiry, attempt_count)
+- [x] 2.3 Implement `POST /api/instant-share/v1/qr-trigger` handler on Unix socket — accept JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`, generate stash_id, return 201
+- [x] 2.4 Implement opt-code generation (6-digit CSPRNG, 5-min TTL, 3-attempt invalidation)
+- [x] 2.5 Implement `POST /api/instant-share/v1/qr-claim` handler on TCP — validate opt-code, return text inline or stream image file, invalidate on success or 3 failed attempts
+- [x] 2.6 Use oneshot timer per stash (5-min TTL) for expiry cleanup instead of periodic loop
+- [x] 2.7 Register new endpoints in both the Unix socket listener and the TCP HTTP server
+- [x] 2.8 Update `InstantShareRuntime.start()` to initialize `QRTriggerHandler`, create Unix socket, and register QR trigger routes
+- [x] 2.9 Add unit tests for stash/claim/opt-code/expiry/file-path handling
 
 ## 3. Launch Agent: QR Display Mini-Window
 
