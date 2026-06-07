@@ -19,14 +19,14 @@ AuBackup iOS app SHALL provide a QR code scanner view that, when a QR containing
 - **THEN** the scanner SHALL show a permission prompt directing the user to Settings
 
 ### Requirement: Claim HTTP request
-AuBackup SHALL send `POST /api/qr-transfer/v1/claim` to one of the IPs extracted from the QR code with the stash_id and opt_code in the request body.
+AuBackup SHALL send `POST /api/instant-share/v1/qr-trigger/claim` to one of the IPs extracted from the QR code with the stash_id and opt_code in the request body.
 
 #### Scenario: Successful claim of text
-- **WHEN** AuBackup POSTs to `http://<ip>:<port>/api/qr-transfer/v1/claim` with `{stash_id: "<uuid>", opt: "<code>"}` and the server returns `200` with `Content-Type: text/plain`
+- **WHEN** AuBackup POSTs to `http://<ip>:<port>/api/instant-share/v1/qr-trigger/claim` with `{stash_id: "<uuid>", opt: "<code>"}` and the server returns `200` with `Content-Type: text/plain`
 - **THEN** AuBackup SHALL display the received text in a view with a "Copy to Clipboard" button
 
 #### Scenario: Successful claim of image
-- **WHEN** AuBackup POSTs to the claim endpoint and the server returns `200` with `Content-Type: image/*`
+- **WHEN** AuBackup POSTs to `http://<ip>:<port>/api/instant-share/v1/qr-trigger/claim` and the server returns `200` with `Content-Type: image/*`
 - **THEN** AuBackup SHALL display the received image in a view with a "Save to Photo Library" button
 
 #### Scenario: Claim with network failure
@@ -62,11 +62,11 @@ AuBackup SHALL provide a view to display a received image and allow the user to 
 - **THEN** the app SHALL show a permission prompt directing the user to Settings
 
 ### Requirement: Deep link entry
-AuBackup SHALL register and handle the `aubackup://qr-claim?data=<base64-encoded-qr-data>` URL scheme as an alternative entry point to the QR download flow.
+AuBackup SHALL register and handle the `aubackup://qr-claim` URL scheme as an alternative entry point to the QR download flow. The URL SHALL carry the same params as the QR code as raw query parameters, not base64-encoded.
 
 #### Scenario: Open from deep link
-- **WHEN** AuBackup is opened via `aubackup://qr-claim?data=<base64>`
-- **THEN** it SHALL decode the base64 data and extract the claim URL parameters
+- **WHEN** AuBackup is opened via `aubackup://qr-claim?ips=<ips>&port=<port>&stash=<stash_id>&opt=<opt_code>`
+- **THEN** it SHALL extract the claim URL parameters from the query string
 - **THEN** it SHALL proceed with the claim flow as if the QR was scanned
 
 ### Requirement: Error handling and user feedback
