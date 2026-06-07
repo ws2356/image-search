@@ -133,6 +133,79 @@ class QRTriggerHandler:
             self._on_stash_created(entry)
         return entry
 
+    def handle_claim(self, body: dict[str, object]) -> dict[str, object]:
+        stash_id = body.get("stash_id")
+        opt_code = body.get("opt")
+        if not isinstance(stash_id, str) or not isinstance(opt_code, str):
+            return {"_status": 400, "status": "error", "error": "Missing stash_id or opt"}
+
+        with self._lock:
+            entry = self._stashes.get(stash_id)
+
+        if entry is None:
+            return {"_status": 404, "status": "not_found", "error": "Stash not found"}
+
+        if entry.expired:
+            return {"_status": 410, "status": "expired", "error": "Stash has expired"}
+
+        if entry.claimed:
+            return {"_status": 410, "status": "expired", "error": "Stash already claimed"}
+
+        if time.time() > entry.expires_at:
+            self._invalidate_stash(entry, expired=True)
+            return {"_status": 410, "status": "expired", "error": "Stash has expired"}
+
+        if entry.opt_code != opt_code:
+            entry.attempt_count += 1
+            remaining = entry.max_attempts - entry.attempt_count
+            _logger.warning("Invalid opt-code for stash %s (attempt %d/%d)", stash_id, entry.attempt_count, entry.max_attempts)
+            if entry.attempt_count >= entry.max_attempts:
+                self._invalidate_stash(entry, expired=True)
+                return {"_status": 410, "status": "expired", "error": "Too many failed attempts"}
+            return {"_status": 401, "status": "unauthorized", "error": "Invalid opt-code"}
+
+        self._cancel_timer(stash_id)
+        entry.claimed = True
+        if self._on_stash_claimed is not None:
+            self._on_stash_claimed(stash_id)
+
+        _logger.info("Stash claimed: id=%s type=%s", stash_id, entry.content_type)
+
+        if entry.content is not None:
+            return {
+                "status": "claimed",
+                "content_type": entry.content_type,
+                "content": entry.content,
+            }
+
+        if entry.file_path is not None:
+            try:
+                with open(entry.file_path, "rb") as f:
+                    file_bytes = f.read()
+            except FileNotFoundError:
+                self._invalidate_stash(entry, expired=True)
+                return {"_status": 410, "status": "expired", "error": "Source file no longer available"}
+            return {
+                "status": "claimed",
+                "content_type": entry.content_type,
+                "filename": entry.filename or "",
+                "file_bytes_base64": file_bytes,
+            }
+
+        return {"_status": 500, "status": "error", "error": "Invalid stash state"}
+
+    def _invalidate_stash(self, entry: StashEntry, *, expired: bool) -> None:
+        entry.expired = expired
+        entry.claimed = False
+        self._cancel_timer(entry.stash_id)
+        if self._on_stash_expired is not None:
+            self._on_stash_expired(entry.stash_id)
+
+    def _cancel_timer(self, stash_id: str) -> None:
+        timer = self._timers.pop(stash_id, None)
+        if timer is not None:
+            timer.cancel()
+
     @staticmethod
     def _generate_opt_code() -> str:
         return f"{secrets.randbelow(1_000_000):06d}"
