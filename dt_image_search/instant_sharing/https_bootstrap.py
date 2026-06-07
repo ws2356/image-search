@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import threading
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Callable
+from typing import Any, Callable
 
 from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
@@ -15,6 +16,7 @@ from dt_image_search.instant_sharing.contracts import (
     TRUST_CONFIRM_PATH,
     TRANSFER_TEXT_PATH,
     TRANSFER_IMAGE_PATH,
+    QR_CLAIM_PATH,
     InstantShareMetadata,
     PayloadClass,
     TargetIntent,
@@ -37,6 +39,7 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
     orchestrator: InstantShareReceiverOrchestrator | None = None
     transfer_handler: TransferHandler | None = None
     pin_display_callback: Callable[[str], None] | None = None
+    qr_trigger_handler: Any = None
 
     def log_message(self, format: str, *args: object) -> None:
         _logger.debug("InstantShareHTTPServer: " + format % args)
@@ -52,6 +55,8 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
             self._handle_transfer_text()
         elif self.path == TRANSFER_IMAGE_PATH:
             self._handle_transfer_image()
+        elif self.path == QR_CLAIM_PATH:
+            self._handle_qr_claim()
         else:
             self._send_json(404, {"error_code": "NOT_FOUND", "message": "Unknown endpoint"})
 
@@ -336,6 +341,52 @@ class _InstantShareHandler(BaseHTTPRequestHandler):
         except InstantShareError as e:
             self._send_json(400, {"error_code": e.error_code.value, "message": e.message})
 
+    def _handle_qr_claim(self) -> None:
+        qr_handler = self.__class__.qr_trigger_handler
+        if qr_handler is None:
+            self._send_json(503, {"error_code": "SERVICE_UNAVAILABLE", "message": "QR trigger service not initialized"})
+            return
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            raw_body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            payload = json.loads(raw_body.decode("utf-8"))
+        except Exception:
+            self._send_json(400, {"error_code": "INVALID_REQUEST", "message": "Invalid JSON body"})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error_code": "INVALID_REQUEST", "message": "Request body must be a JSON object"})
+            return
+        result = qr_handler.handle_claim(payload)
+        result_status = result.get("_status", 200)
+        if not isinstance(result_status, int):
+            result_status = 200
+        if result.get("status") == "claimed" and "content" in result:
+            text_content = result.get("content", "")
+            resp_bytes = str(text_content).encode("utf-8")
+            self.send_response(result_status)
+            self.send_header("Content-Type", result.get("content_type", "text/plain"))
+            self.send_header("Content-Length", str(len(resp_bytes)))
+            if result.get("filename"):
+                self.send_header("X-Original-Filename", str(result["filename"]))
+            self.end_headers()
+            self.wfile.write(resp_bytes)
+        elif result.get("status") == "claimed" and "file_bytes_base64" in result:
+            raw = result["file_bytes_base64"]
+            if isinstance(raw, bytes):
+                resp_bytes = raw
+            else:
+                resp_bytes = base64.b64decode(str(raw))
+            self.send_response(result_status)
+            self.send_header("Content-Type", result.get("content_type", "application/octet-stream"))
+            self.send_header("Content-Length", str(len(resp_bytes)))
+            if result.get("filename"):
+                self.send_header("X-Original-Filename", str(result["filename"]))
+            self.end_headers()
+            self.wfile.write(resp_bytes)
+        else:
+            safe = {k: v for k, v in result.items() if not k.startswith("_")}
+            self._send_json(result_status, safe)
+
     def _send_json(self, status: int, body: dict) -> None:
         resp = json.dumps(body).encode("utf-8")
         self.send_response(status)
@@ -357,6 +408,7 @@ class InstantShareHTTPServer:
         orchestrator: InstantShareReceiverOrchestrator | None = None,
         transfer_handler: TransferHandler | None = None,
         pin_display_callback: Callable[[str], None] | None = None,
+        qr_trigger_handler: Any = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -366,6 +418,7 @@ class InstantShareHTTPServer:
         self._orchestrator = orchestrator
         self._transfer_handler = transfer_handler
         self._pin_display_callback = pin_display_callback
+        self._qr_trigger_handler = qr_trigger_handler
         self._http_server: HTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -391,6 +444,7 @@ class InstantShareHTTPServer:
             _InstantShareHandler.orchestrator = self._orchestrator
             _InstantShareHandler.transfer_handler = self._transfer_handler
             _InstantShareHandler.pin_display_callback = self._pin_display_callback
+            _InstantShareHandler.qr_trigger_handler = self._qr_trigger_handler
             try:
                 self._http_server = HTTPServer((self._host, self._port), _InstantShareHandler)
             except OSError as exc:
@@ -426,4 +480,5 @@ class InstantShareHTTPServer:
         _InstantShareHandler.orchestrator = None
         _InstantShareHandler.transfer_handler = None
         _InstantShareHandler.pin_display_callback = None
+        _InstantShareHandler.qr_trigger_handler = None
         _logger.info("Instant-share HTTP server stopped")
