@@ -96,8 +96,26 @@ echo "  ${bin_count} binary/binaries signed."
 #     fi
 # done
 
+# ── Step 3a: Sign plug-in bundles ─────────────────────────────────────────────
 echo ""
-echo "Step 3: Signing inner .app bundle"
+echo "Step 3a: Signing ShareExtension.appex plug-in"
+SHARE_EXT_ENTITLEMENTS="${SCRIPT_DIR}/../../macos/ShareExtension/ShareExtension.entitlements"
+SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
+if [[ -f "$SHARE_EXT_ENTITLEMENTS" ]]; then
+    codesign --sign "$IDENTITY" \
+                --timestamp \
+                --options runtime \
+                --entitlements "$SHARE_EXT_ENTITLEMENTS" \
+                --force \
+                "$SHARE_EXTENSION_PATH"
+else
+    echo "ShareExtension entitlements file not found at $SHARE_EXT_ENTITLEMENTS; signing without entitlements"
+    exit 1
+fi
+echo "  ShareExtension.appex signed."
+
+echo ""
+echo "Step 3b: Signing inner .app bundle"
 codesign --sign "$IDENTITY" \
          --timestamp \
          --options runtime \
@@ -106,28 +124,6 @@ codesign --sign "$IDENTITY" \
          "$AGENT_BUNDLE_PATH"
 echo "  Inner bundle signed."
 
-# ── Step 3b: Sign plug-in bundles ─────────────────────────────────────────────
-SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
-if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
-    echo ""
-    echo "Step 3b: Signing ShareExtension.appex plug-in"
-    SHARE_EXT_ENTITLEMENTS="${SCRIPT_DIR}/../macos/ShareExtension/ShareExtension.entitlements"
-    if [[ -f "$SHARE_EXT_ENTITLEMENTS" ]]; then
-        codesign --sign "$IDENTITY" \
-                 --timestamp \
-                 --options runtime \
-                 --entitlements "$SHARE_EXT_ENTITLEMENTS" \
-                 --force \
-                 "$SHARE_EXTENSION_PATH"
-    else
-        codesign --sign "$IDENTITY" \
-                 --timestamp \
-                 --options runtime \
-                 --force \
-                 "$SHARE_EXTENSION_PATH"
-    fi
-    echo "  ShareExtension.appex signed."
-fi
 
 echo ""
 echo "Step 4: Signing outer .app bundle"
