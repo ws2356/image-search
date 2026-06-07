@@ -15,10 +15,10 @@ The Launch Agent SHALL determine the macOS Share Extension's sandbox container p
 - **THEN** the agent SHALL accept the connection and process HTTP requests
 
 ### Requirement: Stash endpoint
-The Launch Agent SHALL expose `POST /api/instant-share/v1/qr-trigger/stash` on the Unix domain socket to receive payloads from the macOS Share Extension.
+The Launch Agent SHALL expose `POST /api/instant-share/v1/qr-trigger` on the Unix domain socket to receive payloads from the macOS Share Extension.
 
 #### Scenario: Stash text payload
-- **WHEN** a POST request arrives at `/api/instant-share/v1/qr-trigger/stash` with JSON body `{type: "text", content: "<text>"}`
+- **WHEN** a POST request arrives at `/api/instant-share/v1/qr-trigger` with JSON body `{type: "text", content: "<text>"}`
 - **THEN** the server SHALL store the text in memory with a generated UUID `stash_id`
 - **THEN** it SHALL return `201` with JSON `{status: "stashed", stash_id: "<uuid>", content_type: "text/plain"}`
 
@@ -59,15 +59,15 @@ After generating the opt-code, the Launch Agent SHALL display a mini-window with
 - **THEN** the window SHALL show "Delivered" and auto-close after 4 seconds
 
 ### Requirement: QR claim endpoint (TCP)
-The Launch Agent HTTP server SHALL expose `POST /api/instant-share/v1/qr-trigger/claim` on the TCP listener (port 9527) for the iOS app to download the stashed payload. This endpoint SHALL accept connections from any LAN IP.
+The Launch Agent HTTP server SHALL expose `POST /api/instant-share/v1/qr-claim` on the TCP listener (port 9527) for the iOS app to download the stashed payload. This endpoint SHALL accept connections from any LAN IP.
 
 #### Scenario: Claim text payload
-- **WHEN** a POST request arrives at `/api/instant-share/v1/qr-trigger/claim` with JSON body `{stash_id: "<uuid>", opt: "<6-digit-code>"}` and the stash exists with matching opt-code not expired
+- **WHEN** a POST request arrives at `/api/instant-share/v1/qr-claim` with JSON body `{stash_id: "<uuid>", opt: "<6-digit-code>"}` and the stash exists with matching opt-code not expired
 - **THEN** the server SHALL return `200` with headers `Content-Type: text/plain` and body containing the stashed UTF-8 text
 - **THEN** the stash SHALL be marked as claimed
 
 #### Scenario: Claim image payload
-- **WHEN** a POST request arrives at `/api/instant-share/v1/qr-trigger/claim` with matching stash_id and opt-code for an image payload
+- **WHEN** a POST request arrives at `/api/instant-share/v1/qr-claim` with matching stash_id and opt-code for an image payload
 - **THEN** the server SHALL open the file at the stored file path and stream it as the response body
 - **THEN** it SHALL return `200` with headers `Content-Type: <detected-mime>` and `X-Original-Filename: <filename>`
 - **THEN** the stash SHALL be marked as claimed

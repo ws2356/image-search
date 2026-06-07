@@ -19,14 +19,14 @@ AuBackup iOS app SHALL provide a QR code scanner view that, when a QR containing
 - **THEN** the scanner SHALL show a permission prompt directing the user to Settings
 
 ### Requirement: Claim HTTP request
-AuBackup SHALL send `POST /api/instant-share/v1/qr-trigger/claim` to one of the IPs extracted from the QR code with the stash_id and opt_code in the request body.
+AuBackup SHALL send `POST /api/instant-share/v1/qr-claim` to one of the IPs extracted from the QR code with the stash_id and opt_code in the request body.
 
 #### Scenario: Successful claim of text
-- **WHEN** AuBackup POSTs to `http://<ip>:<port>/api/instant-share/v1/qr-trigger/claim` with `{stash_id: "<uuid>", opt: "<code>"}` and the server returns `200` with `Content-Type: text/plain`
+- **WHEN** AuBackup POSTs to `http://<ip>:<port>/api/instant-share/v1/qr-claim` with `{stash_id: "<uuid>", opt: "<code>"}` and the server returns `200` with `Content-Type: text/plain`
 - **THEN** AuBackup SHALL display the received text in a view with a "Copy to Clipboard" button
 
 #### Scenario: Successful claim of image
-- **WHEN** AuBackup POSTs to `http://<ip>:<port>/api/instant-share/v1/qr-trigger/claim` and the server returns `200` with `Content-Type: image/*`
+- **WHEN** AuBackup POSTs to `http://<ip>:<port>/api/instant-share/v1/qr-claim` and the server returns `200` with `Content-Type: image/*`
 - **THEN** AuBackup SHALL display the received image in a view with a "Save to Photo Library" button
 
 #### Scenario: Claim with network failure

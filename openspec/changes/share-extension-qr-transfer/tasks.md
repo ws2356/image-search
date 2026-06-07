@@ -2,7 +2,7 @@
 
 - [ ] 1.1 Create `macOSShareExtension` native Swift target in Xcode with `com.apple.share-services` extension point
 - [ ] 1.2 Create `MacShareViewController.swift` — receive text/file from `NSExtensionItem`, extract payload
-- [ ] 1.3 Implement HTTP POST over Unix domain socket to `http://localhost/api/instant-share/v1/qr-trigger/stash` — send JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`
+- [ ] 1.3 Implement HTTP POST over Unix domain socket to `http://localhost/api/instant-share/v1/qr-trigger` — send JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`
 - [ ] 1.4 Extension shows no UI of its own — it stashes the payload and exits; the Launch Agent owns all user-facing UI
 - [ ] 1.5 Configure `NSExtensionActivationRule` for text and file URL types only
 - [ ] 1.6 Create `ShareExtension.entitlements` file with `com.apple.security.app-sandbox` (true) and `com.apple.security.application-groups` (array containing the app group ID) and check it into the repo
@@ -16,9 +16,9 @@
 
 - [ ] 2.1 Determine extension's sandbox container path from bundle ID; create Unix domain socket listener inside the extension's sandbox container at `~/Library/Containers/<bundle-id>/Data/Library/Application Support/au-search/qr-transfer.sock`
 - [ ] 2.2 Implement `QRTriggerHandler` class with in-memory stash registry (stash_id, content/file_path, content_type, filename, opt_code, expiry, attempt_count)
-- [ ] 2.3 Implement `POST /api/instant-share/v1/qr-trigger/stash` handler on Unix socket — accept JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`, generate stash_id, return 201
+- [ ] 2.3 Implement `POST /api/instant-share/v1/qr-trigger` handler on Unix socket — accept JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`, generate stash_id, return 201
 - [ ] 2.4 Implement opt-code generation (6-digit CSPRNG, 5-min TTL, 3-attempt invalidation)
-- [ ] 2.5 Implement `POST /api/instant-share/v1/qr-trigger/claim` handler on TCP — validate opt-code, return text inline or stream image file, invalidate on success or 3 failed attempts
+- [ ] 2.5 Implement `POST /api/instant-share/v1/qr-claim` handler on TCP — validate opt-code, return text inline or stream image file, invalidate on success or 3 failed attempts
 - [ ] 2.6 Use oneshot timer per stash (5-min TTL) for expiry cleanup instead of periodic loop
 - [ ] 2.7 Register new endpoints in both the Unix socket listener and the TCP HTTP server
 - [ ] 2.8 Update `InstantShareRuntime.start()` to initialize `QRTriggerHandler`, create Unix socket, and register QR trigger routes
@@ -34,7 +34,7 @@
 
 ## 4. iOS AuBackup: QR Download Client
 
-- [ ] 4.1 Create `QRTriggerDownloadClient` Swift class with `claim(host:port:stashId:optCode:completion:)` method calling `POST /api/instant-share/v1/qr-trigger/claim`
+- [ ] 4.1 Create `QRTriggerDownloadClient` Swift class with `claim(host:port:stashId:optCode:completion:)` method calling `POST /api/instant-share/v1/qr-claim`
 - [ ] 4.2 Implement claim response handling: parse `Content-Type` header, extract text data or image data
 - [ ] 4.3 Handle failover — iterate through IP list from QR code on connection failure
 - [ ] 4.4 Handle all error responses (401, 410, 404, 5xx) with user-visible error strings

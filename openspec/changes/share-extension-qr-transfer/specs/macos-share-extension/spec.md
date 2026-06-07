@@ -16,16 +16,16 @@ The macOS Share Extension SHALL register as an NSExtension with `NSExtensionPoin
 - **THEN** the extension SHALL receive the file URL as an `NSItemProvider` with type `public.file-url`
 
 ### Requirement: Payload stashing to Launch Agent via Unix socket
-The Share Extension SHALL send the received payload to the Launch Agent via HTTP POST over a Unix domain socket inside the extension's own sandbox container. The socket path SHALL be derived from the extension's container directory (e.g., `~/Library/Containers/<bundle-id>/Data/Library/Application Support/au-search/qr-transfer.sock`). The stash endpoint is `POST /api/instant-share/v1/qr-trigger/stash`.
+The Share Extension SHALL send the received payload to the Launch Agent via HTTP POST over a Unix domain socket inside the extension's own sandbox container. The socket path SHALL be derived from the extension's container directory (e.g., `~/Library/Containers/<bundle-id>/Data/Library/Application Support/au-search/qr-transfer.sock`). The endpoint is `POST /api/instant-share/v1/qr-trigger`.
 
 #### Scenario: Stash text payload
 - **WHEN** the extension receives a text payload from the Share menu
-- **THEN** it SHALL POST a JSON body `{type: "text", content: "<text>"}` with `Content-Type: application/json` to the stash endpoint over the Unix socket
+- **THEN** it SHALL POST a JSON body `{type: "text", content: "<text>"}` with `Content-Type: application/json` to `/api/instant-share/v1/qr-trigger` over the Unix socket
 - **THEN** it SHALL receive a JSON response with `{status: "stashed", stash_id: "<uuid>"}`
 
 #### Scenario: Stash image payload (file path)
 - **WHEN** the extension receives an image file from the Share menu
-- **THEN** it SHALL POST a JSON body `{type: "image", file_path: "<absolute-path-to-file>", filename: "<original-filename>"}` with `Content-Type: application/json` to the stash endpoint over the Unix socket
+- **THEN** it SHALL POST a JSON body `{type: "image", file_path: "<absolute-path-to-file>", filename: "<original-filename>"}` with `Content-Type: application/json` to `/api/instant-share/v1/qr-trigger` over the Unix socket
 - **THEN** it SHALL receive a JSON response with `{status: "stashed", stash_id: "<uuid>"}`
 
 #### Scenario: Stash failure handling

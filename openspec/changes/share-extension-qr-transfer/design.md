@@ -54,15 +54,15 @@ The inversion requires a new share trigger on macOS, a simplified trust model (o
 
 **Alternatives considered**: Push via WebSocket (too complex for a single payload), Notification-based (requires APNs setup, intermittent), Push via mDNS reverse (creates unnecessary coupling with existing discovery).
 
-### Decision 4: Endpoint prefix `/api/instant-share/v1/qr-trigger`
+### Decision 4: Endpoint structure `/api/instant-share/v1/qr-trigger` and `/api/instant-share/v1/qr-claim`
 
-**Choice**: New endpoints under `/api/instant-share/v1/qr-trigger/` — a sub-path under the existing v1 namespace rather than a separate prefix.
+**Choice**: Two distinct top-level paths under the v1 namespace — one for triggering the share from the macOS extension, one for claiming it from the mobile client.
 
-**Rationale**: Keeps the QR trigger flow logically grouped under the existing instant-share API namespace. The v1 trust endpoints (`/api/instant-share/v1/`) are separate from QR trigger, but both are part of the same instant share protocol family.
+**Rationale**: The trigger path lives under the `qr-trigger` namespace (extension-specific). The claim path lives directly under `qr-claim` since it's a public-facing API consumed by a different client (iOS). This keeps the trigger internals separated from the public claim surface.
 
 **Endpoints:**
-- `POST /api/instant-share/v1/qr-trigger/stash` — macOS Extension → Agent (Unix socket only)
-- `POST /api/instant-share/v1/qr-trigger/claim` — iOS → Agent (TCP, LAN)
+- `POST /api/instant-share/v1/qr-trigger` — macOS Extension → Agent (Unix socket only)
+- `POST /api/instant-share/v1/qr-claim` — iOS → Agent (TCP, LAN)
 
 ### Decision 5: Unix domain socket inside extension's sandbox container
 
