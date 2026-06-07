@@ -19,10 +19,12 @@ from dt_image_search.instant_sharing.https_bootstrap import InstantShareHTTPServ
 from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
 from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
+from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler
 from dt_image_search.instant_sharing.sender_validation import SenderIdentity
 from dt_image_search.instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 from dt_image_search.instant_sharing.transfer_server import TransferHandler
+from dt_image_search.instant_sharing.unix_socket_server import UnixSocketHttpServer
 from dt_image_search.model.dt_device_id import get_device_id
 from dt_image_search.model.feature_flags import is_instant_share_enabled
 
@@ -90,12 +92,17 @@ class InstantShareRuntime:
             device_id=device_id,
             desktop_name=desktop_name,
         )
+        self._qr_trigger_handler = QRTriggerHandler()
+        self._unix_socket_server = UnixSocketHttpServer(
+            request_handler=self._qr_trigger_handler.handle_trigger,
+        )
         self._http_server = InstantShareHTTPServer(
             trust_session_registry=self._trust_session_registry,
             session_registry=self._session_registry,
             orchestrator=self._orchestrator,
             transfer_handler=self._transfer_handler,
             pin_display_callback=self._pin_display_callback,
+            qr_trigger_handler=self._qr_trigger_handler,
         )
         self._ble_daemon = InstantShareBleDaemon(
             ble_service=self._ble_service,
@@ -140,6 +147,14 @@ class InstantShareRuntime:
         return self._sender_identity
 
     @property
+    def qr_trigger_handler(self) -> QRTriggerHandler:
+        return self._qr_trigger_handler
+
+    @property
+    def unix_socket_server(self) -> UnixSocketHttpServer:
+        return self._unix_socket_server
+
+    @property
     def http_server(self) -> InstantShareHTTPServer:
         return self._http_server
 
@@ -170,11 +185,18 @@ class InstantShareRuntime:
             "[InstantShareRuntime] instant-share HTTP server started=%s",
             http_ok,
         )
+        unix_ok = self._unix_socket_server.start()
+        _logger.info(
+            "[InstantShareRuntime] QR Unix socket server started=%s (path=%s)",
+            unix_ok,
+            self._unix_socket_server.socket_path,
+        )
         return result
 
     def stop(self) -> None:
         _logger = logging.getLogger(__name__)
         _logger.info("[InstantShareRuntime] stop() called")
+        self._unix_socket_server.stop()
         self._http_server.stop()
         self._ble_daemon.stop()
         _logger.info("[InstantShareRuntime] stop() complete")
