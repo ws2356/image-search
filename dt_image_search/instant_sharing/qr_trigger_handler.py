@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 import threading
 import time
 import uuid
@@ -58,3 +59,7 @@ class QRTriggerHandler:
     def get_stash(self, stash_id: str) -> StashEntry | None:
         with self._lock:
             return self._stashes.get(stash_id)
+
+    @staticmethod
+    def _generate_opt_code() -> str:
+        return f"{secrets.randbelow(1_000_000):06d}"
