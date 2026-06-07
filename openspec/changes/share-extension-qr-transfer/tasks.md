@@ -1,12 +1,12 @@
 ## 1. macOS Share Extension (Native Swift)
 
-- [ ] 1.1 Create `macOSShareExtension` native Swift target in Xcode with `com.apple.share-services` extension point
-- [ ] 1.2 Create `MacShareViewController.swift` — receive text/file from `NSExtensionItem`, extract payload
-- [ ] 1.3 Implement HTTP POST over Unix domain socket to `http://localhost/api/instant-share/v1/qr-trigger` — send JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`
-- [ ] 1.4 Extension shows no UI of its own — it stashes the payload and exits; the Launch Agent owns all user-facing UI
-- [ ] 1.5 Configure `NSExtensionActivationRule` for text and file URL types only
-- [ ] 1.6 Create `ShareExtension.entitlements` file with `com.apple.security.app-sandbox` (true) and `com.apple.security.application-groups` (array containing the app group ID) and check it into the repo
-- [ ] 1.7 Create `build_share_extension.sh` script that uses `xcodebuild` to compile the Swift extension target and produce `ShareExtension.appex`
+- [x] 1.1 Create `macOSShareExtension` native Swift target in Xcode with `com.apple.share-services` extension point
+- [x] 1.2 Create `MacShareViewController.swift` — receive text/file from `NSExtensionItem`, extract payload
+- [x] 1.3 Implement HTTP POST over Unix domain socket to `http://localhost/api/instant-share/v1/qr-trigger` — send JSON `{type: "text", content: "..."}` or `{type: "image", file_path: "...", filename: "..."}`
+- [x] 1.4 Extension shows no UI of its own — it stashes the payload and exits; the Launch Agent owns all user-facing UI
+- [x] 1.5 Configure `NSExtensionActivationRule` for text and file URL types only
+- [x] 1.6 Create `ShareExtension.entitlements` file with `com.apple.security.app-sandbox` (true) and `com.apple.security.application-groups` (array containing the app group ID) and check it into the repo
+- [x] 1.7 Create `build_share_extension.sh` script that uses `swift build` to compile the Swift extension target and produce `ShareExtension.appex`
 - [ ] 1.8 Update `build_pyinstaller.sh` to call `build_share_extension.sh` before PyInstaller, then copy the built `.appex` into `Contents/PlugIns/ShareExtension.appex` within the AuSearch bundle
 - [ ] 1.9 Update `codesign_app.sh` to codesign `Contents/PlugIns/ShareExtension.appex` with `--entitlements ShareExtension.entitlements --deep`
 - [ ] 1.10 Update `build_pkg.sh` / `package_dmg.sh` to include and sign `Contents/PlugIns/ShareExtension.appex` in the distribution package
