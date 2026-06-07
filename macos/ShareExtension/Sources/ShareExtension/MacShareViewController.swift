@@ -111,14 +111,14 @@ class MacShareViewController: SLComposeServiceViewController {
     }
 
     private func sendStashRequest(_ body: [String: String], completion: @escaping (Bool) -> Void) {
-        os_log("Sending stash request via URLSession over UDS", log: log, type: .info)
+        os_log("Sending stash request via async-http-client over UDS", log: log, type: .info)
         httpClient.postJSON(path: "/api/instant-share/v1/qr-trigger", body: body) { result in
             switch result {
-            case .success(let (data, response)):
-                let success = response.statusCode == 201
+            case .success(let (data, statusCode)):
+                let success = statusCode == 201
                 let preview = String(data: data, encoding: .utf8) ?? "<binary>"
                 os_log("Stash response (status=%d, success=%{bool}d, %d bytes): %{public}@",
-                       log: log, type: .info, response.statusCode, success, data.count,
+                       log: log, type: .info, statusCode, success, data.count,
                        String(preview.prefix(200)))
                 completion(success)
             case .failure(let error):
