@@ -61,7 +61,6 @@ private struct FirstTimeHomeContent: View {
             HomeHeroSection()
             HomeSetupSection(setupSteps: setupSteps)
             HomePrimaryActionButton(action: onScan)
-            HomeInstantShareDebugLink()
 
             if summary.permissionScope.isIncomplete {
                 HomeWarningBanner(
@@ -103,7 +102,6 @@ private struct ReturningHomeContent: View {
                 }
 
                 HomePrimaryActionButton(action: onScan)
-                HomeInstantShareDebugLink()
                 HomeUSBHintBanner()
 
                 if summary.permissionScope.isIncomplete {
@@ -373,40 +371,6 @@ private struct HomePrimaryActionButton: View {
             height: 56,
             action: action
         )
-    }
-}
-
-private struct HomeInstantShareDebugLink: View {
-    var body: some View {
-        NavigationLink {
-            InstantShareDebugView()
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.system(size: 17, weight: .semibold))
-                    Text("Instant Share Debug")
-                        .font(.system(size: 17, weight: .semibold))
-                }
-                .foregroundStyle(Color(hex: 0x007AFF))
-
-                Text("Preview BLE connection config validation and the exact HTTPS endpoints the desktop receiver will call.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(hex: 0x6E6E73))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color(hex: 0xE5E5EA), lineWidth: 1.5)
-            )
-            .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
-        }
-        .buttonStyle(.plain)
     }
 }
 
