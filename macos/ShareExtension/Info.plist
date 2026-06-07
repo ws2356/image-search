@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>ShareExtension</string>
 	<key>CFBundleIdentifier</key>
-	<string>net.boldman.ausearch.share-extension</string>
+	<string>vip.wansong.dtimagesearch.share-extension</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
+	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<string>1.1.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 	<key>NSExtension</key>
