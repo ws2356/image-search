@@ -20,7 +20,12 @@
       "type": "debugpy",
       "request": "launch",
       "module": "PyQtInspect",
-      "args": ["--direct", "--qt-support=pyside6", "--file", "${workspaceFolder}/main_non_module.py"],
+      "args": [
+        "--direct",
+        "--qt-support=pyside6",
+        "--file",
+        "${workspaceFolder}/main_non_module.py"
+      ],
       "justMyCode": false,
       "logToFile": true
     },
@@ -74,6 +79,26 @@
         "host": "127.0.0.1",
         "port": 5678
       }
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:src}/macos/ShareExtension",
+      "name": "Debug ShareExtension (macos/ShareExtension)",
+      "target": "ShareExtension",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug ShareExtension (macos/ShareExtension)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:src}/macos/ShareExtension",
+      "name": "Release ShareExtension (macos/ShareExtension)",
+      "target": "ShareExtension",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release ShareExtension (macos/ShareExtension)"
     }
   ]
 }
