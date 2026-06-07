@@ -13,12 +13,13 @@ from fastapi.responses import JSONResponse
 _logger = logging.getLogger(__name__)
 
 EXTENSION_BUNDLE_ID = "net.boldman.ausearch.share-extension"
-SOCKET_RELATIVE_PATH = "Library/Application Support/au-search/qr-transfer.sock"
+SOCKET_RELATIVE_PATH = "is.sock"
+_MACOS_SUN_PATH_MAX = 104
 
 
 def _extension_socket_path(container_dir: Path | None = None) -> Path:
     home = container_dir or Path.home()
-    return home / "Library" / "Containers" / EXTENSION_BUNDLE_ID / "Data" / SOCKET_RELATIVE_PATH
+    return home / "Library" / "Containers" / EXTENSION_BUNDLE_ID / "Data" / "Library" / SOCKET_RELATIVE_PATH
 
 
 def _build_app(
@@ -93,6 +94,14 @@ class UnixSocketHttpServer:
                 _logger.error("Failed to remove stale socket at %s: %s", sock_path, exc)
                 return False
         sock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        path_len = len(str(sock_path).encode("utf-8"))
+        if path_len > _MACOS_SUN_PATH_MAX:
+            _logger.error(
+                "Socket path %s is %d bytes — exceeds AF_UNIX sun_path limit of %d bytes",
+                sock_path, path_len, _MACOS_SUN_PATH_MAX,
+            )
+            return False
 
         if self._request_handler is None:
             _logger.error("No request_handler provided to UnixSocketHttpServer")

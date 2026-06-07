@@ -2,7 +2,7 @@ import AppKit
 import Social
 import os.log
 
-private let socketRelativePath = "Application Support/au-search/qr-transfer.sock"
+private let socketRelativePath = "is.sock"
 private let log = OSLog(subsystem: "net.boldman.ausearch.share-extension", category: "ShareExtension")
 
 class MacShareViewController: SLComposeServiceViewController {
