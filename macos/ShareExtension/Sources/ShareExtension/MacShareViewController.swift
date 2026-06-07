@@ -1,7 +1,7 @@
 import AppKit
 import Social
 
-private let socketPath = "Library/Application Support/au-search/qr-transfer.sock"
+private let socketPath = "Application Support/au-search/qr-transfer.sock"
 
 class MacShareViewController: SLComposeServiceViewController {
 
