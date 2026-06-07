@@ -7,7 +7,7 @@
 - [x] 1.5 Configure `NSExtensionActivationRule` for text and file URL types only
 - [x] 1.6 Create `ShareExtension.entitlements` file with `com.apple.security.app-sandbox` (true) and `com.apple.security.application-groups` (array containing the app group ID) and check it into the repo
 - [x] 1.7 Create `build_share_extension.sh` script that uses `swift build` to compile the Swift extension target and produce `ShareExtension.appex`
-- [ ] 1.8 Update `build_pyinstaller.sh` to call `build_share_extension.sh` before PyInstaller, then copy the built `.appex` into `Contents/PlugIns/ShareExtension.appex` within the AuSearch bundle
+- [x] 1.8 Update `build_pyinstaller.sh` to call `build_share_extension.sh` before PyInstaller, then copy the built `.appex` into `Contents/PlugIns/ShareExtension.appex` within the AuSearch bundle
 - [ ] 1.9 Update `codesign_app.sh` to codesign `Contents/PlugIns/ShareExtension.appex` with `--entitlements ShareExtension.entitlements --deep`
 - [ ] 1.10 Update `build_pkg.sh` / `package_dmg.sh` to include and sign `Contents/PlugIns/ShareExtension.appex` in the distribution package
 - [ ] 1.11 Update `create_distributable_pkg.sh` to ensure the extension is included in the PKG installer

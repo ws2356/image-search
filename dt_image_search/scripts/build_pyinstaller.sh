@@ -80,6 +80,16 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     cp "${project_root}/dt_image_search/resources/AppInfoInstantShare.plist" "${agent_bundle_path}/Contents/Info.plist"
 
 
+    # Build and embed Share Extension
+    echo "==> Building Share Extension..."
+    bash "$this_dir/build_share_extension.sh" --app-path "$app_path"
+    share_appex="${app_path}/Contents/PlugIns/ShareExtension.appex"
+    if [[ ! -d "$share_appex" ]]; then
+        echo "Expected ShareExtension.appex not found at $share_appex"
+        exit 1
+    fi
+    echo "  ShareExtension.appex bundled at $share_appex"
+
     bash "$this_dir/prune_macos_bundle.sh" --app-path "$app_path"
 fi
 
