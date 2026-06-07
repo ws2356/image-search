@@ -106,6 +106,29 @@ codesign --sign "$IDENTITY" \
          "$AGENT_BUNDLE_PATH"
 echo "  Inner bundle signed."
 
+# ── Step 3b: Sign plug-in bundles ─────────────────────────────────────────────
+SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
+if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
+    echo ""
+    echo "Step 3b: Signing ShareExtension.appex plug-in"
+    SHARE_EXT_ENTITLEMENTS="${SCRIPT_DIR}/../macos/ShareExtension/ShareExtension.entitlements"
+    if [[ -f "$SHARE_EXT_ENTITLEMENTS" ]]; then
+        codesign --sign "$IDENTITY" \
+                 --timestamp \
+                 --options runtime \
+                 --entitlements "$SHARE_EXT_ENTITLEMENTS" \
+                 --force \
+                 "$SHARE_EXTENSION_PATH"
+    else
+        codesign --sign "$IDENTITY" \
+                 --timestamp \
+                 --options runtime \
+                 --force \
+                 "$SHARE_EXTENSION_PATH"
+    fi
+    echo "  ShareExtension.appex signed."
+fi
+
 echo ""
 echo "Step 4: Signing outer .app bundle"
 codesign --sign "$IDENTITY" \
