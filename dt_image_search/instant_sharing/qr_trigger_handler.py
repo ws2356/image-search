@@ -194,6 +194,19 @@ class QRTriggerHandler:
 
         return {"_status": 500, "status": "error", "error": "Invalid stash state"}
 
+    def cancel_stash(self, stash_id: str) -> bool:
+        with self._lock:
+            entry = self._stashes.get(stash_id)
+            if entry is None or entry.claimed or entry.expired:
+                return False
+            entry.expired = True
+            entry.claimed = False
+            self._cancel_timer(stash_id)
+        _logger.info("Stash cancelled by user: id=%s", stash_id)
+        if self._on_stash_expired is not None:
+            self._on_stash_expired(stash_id)
+        return True
+
     def _invalidate_stash(self, entry: StashEntry, *, expired: bool) -> None:
         entry.expired = expired
         entry.claimed = False
