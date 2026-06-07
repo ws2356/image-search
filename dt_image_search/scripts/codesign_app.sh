@@ -80,24 +80,24 @@ done < <(find "${APP_PATH}/Contents" -type f \
              -print0)
 echo "  ${bin_count} binary/binaries signed."
 
-# ── Step 3: Sign the bundle with entitlements ─────────────────────
-echo ""
-echo "Step 3: Signing app and service binaries with entitlements..."
-for binary in "$APP_PATH/Contents/MacOS"/* "$AGENT_BUNDLE_PATH/Contents/MacOS"/*; do
-    if [[ -f "$binary" ]] && file "$binary" 2>/dev/null | grep -qE "Mach-O"; then
-        echo "  signing binary with entitlements: $binary"
-        codesign --sign "$IDENTITY" \
-                 --timestamp \
-                 --options runtime \
-                 --entitlements "$ENTITLEMENTS" \
-                 --force \
-                 "$binary" 2>/dev/null \
-            || echo "  WARNING: could not sign '$binary' (skipping)"
-    fi
-done
+# # ── Step 3: Sign the bundle with entitlements ─────────────────────
+# echo ""
+# echo "Step 3: Signing app and service binaries with entitlements..."
+# for binary in "$APP_PATH/Contents/MacOS"/* "$AGENT_BUNDLE_PATH/Contents/MacOS"/*; do
+#     if [[ -f "$binary" ]] && file "$binary" 2>/dev/null | grep -qE "Mach-O"; then
+#         echo "  signing binary with entitlements: $binary"
+#         codesign --sign "$IDENTITY" \
+#                  --timestamp \
+#                  --options runtime \
+#                  --entitlements "$ENTITLEMENTS" \
+#                  --force \
+#                  "$binary" 2>/dev/null \
+#             || echo "  WARNING: could not sign '$binary' (skipping)"
+#     fi
+# done
 
 echo ""
-echo "Step 4: Signing inner .app bundle"
+echo "Step 3: Signing inner .app bundle"
 codesign --sign "$IDENTITY" \
          --timestamp \
          --options runtime \
@@ -107,7 +107,7 @@ codesign --sign "$IDENTITY" \
 echo "  Inner bundle signed."
 
 echo ""
-echo "Step 5: Signing outer .app bundle"
+echo "Step 4: Signing outer .app bundle"
 codesign --sign "$IDENTITY" \
          --timestamp \
          --options runtime \
@@ -116,9 +116,9 @@ codesign --sign "$IDENTITY" \
          "$APP_PATH"
 echo "  Bundle signed."
 
-# ── Step 6: Verify ────────────────────────────────────────────────────────────
+# ── Step 5: Verify ────────────────────────────────────────────────────────────
 echo ""
-echo "Step 6: Verifying..."
+echo "Step 5: Verifying..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 # spctl assessment only passes after notarization; print result without failing.
 echo "  spctl pre-notarization check:"
