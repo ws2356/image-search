@@ -4,8 +4,9 @@ import logging
 import socket
 from typing import Callable
 
+from PIL import Image
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -20,11 +21,53 @@ from PySide6.QtWidgets import (
 from dt_image_search.instant_sharing.lan_discovery import get_lan_ip_addresses
 from dt_image_search.instant_sharing.qr_trigger_handler import StashEntry
 
+try:
+    import qrcode
+except Exception:
+    qrcode = None
+
 _logger = logging.getLogger(__name__)
 
 WINDOW_WIDTH = 400
 WINDOW_HEIGHT = 580
 QR_SIZE = 240
+
+
+def build_qr_url(
+    *,
+    ips: list[str],
+    port: int,
+    stash_id: str,
+    opt_code: str,
+) -> str:
+    ips_str = ",".join(ips)
+    return f"ausearch://claim?ips={ips_str}&port={port}&stash={stash_id}&opt={opt_code}"
+
+
+def render_qr_pixmap(payload: str, size: int) -> QPixmap:
+    pixmap = QPixmap(size, size)
+    if qrcode is not None:
+        try:
+            qr = qrcode.QRCode(border=2, box_size=8)
+            qr.add_data(payload)
+            qr.make(fit=True)
+            qr_image = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
+            qr_image = qr_image.resize((size, size), Image.Resampling.NEAREST)
+            rgba = qr_image.tobytes("raw", "RGBA")
+            qimage = QImage(rgba, size, size, QImage.Format_RGBA8888).copy()
+            pixmap = QPixmap.fromImage(qimage)
+        except Exception as exc:
+            _logger.warning("Failed to render QR code: %s", exc)
+    if pixmap.isNull():
+        pixmap.fill(Qt.GlobalColor.white)
+        painter = QPainter(pixmap)
+        painter.setPen(Qt.GlobalColor.gray)
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        painter.drawText(pixmap.rect(), Qt.AlignCenter, "QR Unavailable")
+        painter.end()
+    return pixmap
 
 
 class QRTriggerMiniWindow(QDialog):
@@ -156,6 +199,16 @@ class QRTriggerMiniWindow(QDialog):
         if self._on_cancel is not None:
             self._on_cancel(self._stash.stash_id)
         self.close()
+
+    def show_qr(self) -> None:
+        payload = build_qr_url(
+            ips=self._lan_ips,
+            port=self._pc_port,
+            stash_id=self._stash.stash_id,
+            opt_code=self._stash.opt_code,
+        )
+        pixmap = render_qr_pixmap(payload, QR_SIZE)
+        self.set_qr_pixmap(pixmap)
 
     def set_qr_pixmap(self, pixmap: QPixmap) -> None:
         self._qr_label.setPixmap(pixmap)
