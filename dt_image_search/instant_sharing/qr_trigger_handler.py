@@ -201,6 +201,22 @@ class QRTriggerHandler:
         if self._on_stash_expired is not None:
             self._on_stash_expired(entry.stash_id)
 
+    def _start_expiry_timer(self, stash_id: str) -> None:
+        timer = threading.Timer(OPT_CODE_TTL_SECONDS, self._on_expiry_timer_fired, args=[stash_id])
+        timer.daemon = True
+        self._timers[stash_id] = timer
+        timer.start()
+
+    def _on_expiry_timer_fired(self, stash_id: str) -> None:
+        with self._lock:
+            entry = self._stashes.get(stash_id)
+            if entry is None or entry.claimed:
+                return
+            entry.expired = True
+        _logger.info("Stash expired: id=%s", stash_id)
+        if self._on_stash_expired is not None:
+            self._on_stash_expired(stash_id)
+
     def _cancel_timer(self, stash_id: str) -> None:
         timer = self._timers.pop(stash_id, None)
         if timer is not None:
