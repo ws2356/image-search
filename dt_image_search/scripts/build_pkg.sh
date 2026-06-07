@@ -48,6 +48,15 @@ APP_BUNDLE_NAME="$(basename "$APP_PATH" .app)"
 OUTPUT_PKG="${OUTPUT_PKG:-$(dirname "$APP_PATH")/${APP_BUNDLE_NAME}.pkg}"
 mkdir -p "$(dirname "$OUTPUT_PKG")"
 
+# Verify ShareExtension.appex is bundled in PlugIns
+SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
+if [[ ! -d "$SHARE_EXTENSION_PATH" ]]; then
+    echo "Error: ShareExtension.appex not found at $SHARE_EXTENSION_PATH" >&2
+    echo "       Ensure build_share_extension.sh ran during the build." >&2
+    exit 1
+fi
+echo "  ShareExtension.appex found at $SHARE_EXTENSION_PATH"
+
 # ── Scripts for PKG ────────────────────────────────────────────────────────────
 PKG_SCRIPTS="$(mktemp -d)"
 trap 'rm -rf "$PKG_SCRIPTS"' EXIT
