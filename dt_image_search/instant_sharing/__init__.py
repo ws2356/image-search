@@ -21,6 +21,14 @@ from dt_image_search.instant_sharing.mini_window import (
 from dt_image_search.instant_sharing.mini_window_factory import (
     InstantShareMiniWindowFactory,
 )
+from dt_image_search.instant_sharing.qr_trigger_mini_window import (
+    QRTriggerMiniWindow,
+    build_qr_url,
+    render_qr_pixmap,
+)
+from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import (
+    QRTriggerMiniWindowFactory,
+)
 from dt_image_search.instant_sharing.contracts import (
     API_PREFIX,
     FLOW_ID,
@@ -108,6 +116,8 @@ __all__ = [
     "MiniWindowState",
     "PayloadClass",
     "PlainHttpRequester",
+    "QRTriggerMiniWindow",
+    "QRTriggerMiniWindowFactory",
     "PersistentEd25519SessionSigner",
     "QtClipboardWriter",
     "RetryPolicy",

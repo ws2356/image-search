@@ -20,6 +20,7 @@ from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
 from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
 from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler
+from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
 from dt_image_search.instant_sharing.sender_validation import SenderIdentity
 from dt_image_search.instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
@@ -49,6 +50,7 @@ class InstantShareRuntime:
         auto_receive: bool = False,
         trust_session_registry: TrustSessionRegistry | None = None,
         pin_display_callback: Callable[[str], None] | None = None,
+        qr_window_factory: QRTriggerMiniWindowFactory | None = None,
     ) -> None:
         self._auto_receive = auto_receive
         self._is_enabled = is_enabled
@@ -93,6 +95,7 @@ class InstantShareRuntime:
             desktop_name=desktop_name,
         )
         self._qr_trigger_handler = QRTriggerHandler()
+        self._qr_window_factory = qr_window_factory
         self._unix_socket_server = UnixSocketHttpServer(
             request_handler=self._qr_trigger_handler.handle_trigger,
         )
@@ -151,6 +154,10 @@ class InstantShareRuntime:
         return self._qr_trigger_handler
 
     @property
+    def qr_window_factory(self) -> QRTriggerMiniWindowFactory | None:
+        return self._qr_window_factory
+
+    @property
     def unix_socket_server(self) -> UnixSocketHttpServer:
         return self._unix_socket_server
 
@@ -191,6 +198,9 @@ class InstantShareRuntime:
             unix_ok,
             self._unix_socket_server.socket_path,
         )
+        if self._qr_window_factory is not None:
+            self._qr_window_factory.start()
+            _logger.info("[InstantShareRuntime] QR window factory started")
         return result
 
     def stop(self) -> None:
@@ -199,6 +209,9 @@ class InstantShareRuntime:
         self._unix_socket_server.stop()
         self._http_server.stop()
         self._ble_daemon.stop()
+        if self._qr_window_factory is not None:
+            self._qr_window_factory.stop()
+            _logger.info("[InstantShareRuntime] QR window factory stopped")
         _logger.info("[InstantShareRuntime] stop() complete")
 
     def bootstrap_connection_config(self, payload: Mapping[str, object] | ConnectionConfig) -> InstantShareSession:
