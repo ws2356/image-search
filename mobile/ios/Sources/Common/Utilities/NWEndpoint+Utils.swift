@@ -9,7 +9,7 @@ import Network
 
 extension NWEndpoint.Host {
     /// 转换为纯净的字符串形式（完美剔除 IPv4/IPv6 的 %en0 等本地作用域后缀）
-    var cleanString: String? {
+    public var cleanString: String? {
         switch self {
         case .ipv4(let ipv4Address):
             // 声明一个 C 语言风格的缓冲区

@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import Combine
 import Network
+import Common
+
 
 @MainActor
 public enum ExtensionSessionPhase {
@@ -34,14 +36,14 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     public init(mdnsBrowser: InstantShareMDNSBrowser, service: InstantShareService) {
         self.mdnsBrowser = mdnsBrowser
         self.service = service
-        InstantShareLog.info("[Extension VM] init, subscribing to mdnsBrowser")
+        LocalLog.info("[Extension VM] init, subscribing to mdnsBrowser")
         mdnsBrowser.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 let count = self.mdnsBrowser.discovered.count
                 if count != self.discoveredDevices.count {
-                    InstantShareLog.info("[Extension VM] mDNS: \(count) PCs discovered")
+                    LocalLog.info("[Extension VM] mDNS: \(count) PCs discovered")
                 }
                 self.discoveredDevices = self.mdnsBrowser.discovered
             }
@@ -49,7 +51,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     }
 
     public func startDiscovery() {
-        InstantShareLog.info("[Extension VM] startDiscovery")
+        LocalLog.info("[Extension VM] startDiscovery")
         sessionPhase = .scanning
         mdnsBrowser.startBrowsing()
     }
@@ -59,19 +61,19 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     }
 
     public func loadPayload(from extensionItems: [NSExtensionItem]) async {
-        InstantShareLog.info("[Extension VM] loadPayload: \(extensionItems.count) items")
+        LocalLog.info("[Extension VM] loadPayload: \(extensionItems.count) items")
         isProcessing = true
         defer { isProcessing = false }
         do {
             nonisolated(unsafe) let items = extensionItems
             let envelope = try await InstantSharePayloadExtractor.extract(from: items)
             self.payloadEnvelope = envelope
-            InstantShareLog.info("[Extension VM] payload extracted: type=\(envelope.payloadType)")
+            LocalLog.info("[Extension VM] payload extracted: type=\(envelope.payloadType)")
             if envelope.payloadType == .text, let text = envelope.textContent {
                 self.sharedText = text
             }
         } catch {
-            InstantShareLog.error("[Extension VM] loadPayload failed: \(error.localizedDescription)")
+            LocalLog.error("[Extension VM] loadPayload failed: \(error.localizedDescription)")
             self.errorMessage = error.localizedDescription
         }
     }
@@ -79,7 +81,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     public func selectDevice(_ device: InstantShareDiscoveredPC) {
         self.selectedDevice = device
         service.selectPC(device)
-        InstantShareLog.info("[Extension VM] selected PC: \(device.name)")
+        LocalLog.info("[Extension VM] selected PC: \(device.name)")
     }
 
     public var canSend: Bool {
@@ -118,10 +120,10 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         service.connectionConfig = config
 
         do {
-            InstantShareLog.info("[Extension VM] storing connection config for PC \(pc.host):\(pc.port)")
+            LocalLog.info("[Extension VM] storing connection config for PC \(pc.host):\(pc.port)")
             await service.startSession(connectionConfig: config)
 
-            InstantShareLog.info("[Extension VM] starting trust handshake...")
+            LocalLog.info("[Extension VM] starting trust handshake...")
             let trustClient = InstantShareTrustClient(
                 trustSessionManager: service.trustSession
             )
@@ -140,7 +142,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 targetIntent: config.metadata.targetIntent.rawValue,
                 trustMode: config.metadata.trustMode.rawValue
             )
-            InstantShareLog.info("[Extension VM] handshake completed")
+            LocalLog.info("[Extension VM] handshake completed")
 
             let pin = try await trustClient.apply(
                 host: handshakeHost,
@@ -148,7 +150,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 sessionID: config.sessionID,
                 correlationID: config.correlationID
             )
-            InstantShareLog.info("[Extension VM] PIN received: \(pin)")
+            LocalLog.info("[Extension VM] PIN received: \(pin)")
             service.currentPIN = pin
 
             isProcessing = false
@@ -156,13 +158,13 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         } catch {
             isProcessing = false
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-            InstantShareLog.error("[Extension VM] send failed: \(msg)")
+            LocalLog.error("[Extension VM] send failed: \(msg)")
             sessionPhase = .failed(msg)
         }
     }
 
     public func confirmPIN() {
-        InstantShareLog.info("[Extension VM] PIN confirmed")
+        LocalLog.info("[Extension VM] PIN confirmed")
         sessionPhase = .transferring
 
         guard let pc = selectedDevice, let config = service.connectionConfig else {
@@ -185,7 +187,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     sessionID: config.sessionID,
                     correlationID: config.correlationID
                 )
-                InstantShareLog.info("[Extension VM] trust confirmed")
+                LocalLog.info("[Extension VM] trust confirmed")
 
                 switch service.sharedText.isEmpty {
                 case false:
@@ -196,7 +198,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                         correlationID: config.correlationID,
                         text: service.sharedText
                     )
-                    InstantShareLog.info("[Extension VM] text uploaded")
+                    LocalLog.info("[Extension VM] text uploaded")
                 default:
                     if let imageData = service.sharedImageData {
                         try await uploadClient.uploadImage(
@@ -208,21 +210,21 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                             contentType: service.sharedImageContentType,
                             filename: service.sharedImageFilename
                         )
-                        InstantShareLog.info("[Extension VM] image uploaded")
+                        LocalLog.info("[Extension VM] image uploaded")
                     }
                 }
 
                 sessionPhase = .success
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-                InstantShareLog.error("[Extension VM] confirm/transfer failed: \(msg)")
+                LocalLog.error("[Extension VM] confirm/transfer failed: \(msg)")
                 sessionPhase = .failed(msg)
             }
         }
     }
 
     public func rejectPIN() {
-        InstantShareLog.info("[Extension VM] PIN rejected")
+        LocalLog.info("[Extension VM] PIN rejected")
         service.rejectTrust()
         sessionPhase = .failed("Trust verification rejected.")
     }

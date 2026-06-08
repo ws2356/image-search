@@ -10,7 +10,7 @@ import os.log
 ///
 /// This is intentionally separate from the production telemetry pipeline —
 /// diagnostic logs are only for development debugging.
-public enum InstantShareLog {
+public enum LocalLog {
     private static let logger = OSLog(subsystem: "com.aubackup.instant-share", category: "diagnostic")
 
     public static func info(_ message: String) {

@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import Common
 
 @available(iOS 15.0, *)
 public struct InstantShareDiscoveredPC: Identifiable, Equatable, @unchecked Sendable {
@@ -58,7 +59,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
     public init() {}
 
     public func startBrowsing() {
-        InstantShareLog.debug("[MDNS Browser] startBrowsing")
+        LocalLog.debug("[MDNS Browser] startBrowsing")
         stopBrowsing()
 
         let parameters = NWParameters()
@@ -78,16 +79,16 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                     switch change {
                     case .added(let result):
                         self.browseResults.insert(result)
-                        InstantShareLog.debug("[MDNS Browser] result added: \(self.nameFromResult(result))")
+                        LocalLog.debug("[MDNS Browser] result added: \(self.nameFromResult(result))")
                         self.resolveResult(result)
                     case .removed(let result):
                         self.browseResults.remove(result)
-                        InstantShareLog.debug("[MDNS Browser] result removed: \(self.nameFromResult(result))")
+                        LocalLog.debug("[MDNS Browser] result removed: \(self.nameFromResult(result))")
                         self.removeResult(result)
                     case .changed(let old, let new, flags: _):
                         self.browseResults.remove(old)
                         self.browseResults.insert(new)
-                        InstantShareLog.debug("[MDNS Browser] result changed: \(self.nameFromResult(new))")
+                        LocalLog.debug("[MDNS Browser] result changed: \(self.nameFromResult(new))")
                         self.resolveResult(new)
                     @unknown default:
                         break
@@ -102,16 +103,16 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                 switch newState {
                 case .ready:
                     self.state = .browsing
-                    InstantShareLog.debug("[MDNS Browser] state: ready (browsing)")
+                    LocalLog.debug("[MDNS Browser] state: ready (browsing)")
                 case .failed(let error):
                     self.state = .stopped
-                    InstantShareLog.error("[MDNS Browser] state: failed \(error.localizedDescription)")
+                    LocalLog.error("[MDNS Browser] state: failed \(error.localizedDescription)")
                 case .cancelled:
                     self.state = .stopped
-                    InstantShareLog.debug("[MDNS Browser] state: cancelled")
+                    LocalLog.debug("[MDNS Browser] state: cancelled")
                 case .waiting(let error):
                     self.state = .idle
-                    InstantShareLog.debug("[MDNS Browser] state: waiting \(error.localizedDescription)")
+                    LocalLog.debug("[MDNS Browser] state: waiting \(error.localizedDescription)")
                 @unknown default:
                     break
                 }
@@ -120,7 +121,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
         browser.start(queue: queue)
         self.state = .browsing
-        InstantShareLog.debug("[MDNS Browser] browse started for _instantshare._tcp")
+        LocalLog.debug("[MDNS Browser] browse started for _instantshare._tcp")
     }
 
     public func stopBrowsing() {
@@ -132,7 +133,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         resolvedPCs.removeAll()
         discovered = []
         state = .stopped
-        InstantShareLog.debug("[MDNS Browser] stopped")
+        LocalLog.debug("[MDNS Browser] stopped")
     }
 
     private func nameFromResult(_ result: NWBrowser.Result) -> String {
@@ -171,7 +172,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                 }
             case .failed:
                 connection.cancel()
-                InstantShareLog.debug("[MDNS Browser] connection failed for \(deviceID)")
+                LocalLog.debug("[MDNS Browser] connection failed for \(deviceID)")
             case .cancelled:
                 break
             default:
@@ -186,15 +187,15 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         
         switch endpoint {
         case .hostPort(let host, let port):
-            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .hostPort host: \(host), port: \(port)")
+            LocalLog.debug("[MDNS Debug] state: \(connection.state) .hostPort host: \(host), port: \(port)")
         case .service(let name, let type, let domain, let interface):
-            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) service name: \(name), type: \(type), domain: \(domain), interface: \(interface)")
+            LocalLog.debug("[MDNS Debug] state: \(connection.state) service name: \(name), type: \(type), domain: \(domain), interface: \(interface)")
         case .url(let url):
-            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .url: \(url)")
+            LocalLog.debug("[MDNS Debug] state: \(connection.state) .url: \(url)")
         case .unix(let path):
-            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .unix: \(path)")
+            LocalLog.debug("[MDNS Debug] state: \(connection.state) .unix: \(path)")
         case .opaque(let endpoint_t):
-            InstantShareLog.debug("[MDNS Debug] state: \(connection.state) .opaque: \(endpoint_t)")
+            LocalLog.debug("[MDNS Debug] state: \(connection.state) .opaque: \(endpoint_t)")
         @unknown default:
             fatalError()
         }
@@ -208,10 +209,10 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                 resolveWithEndpoint(host: "\(host)", port: Int(port.rawValue), result: result, fallbackID: deviceID)
                 return
             }
-            InstantShareLog.debug("[MDNS Browser] extractPCInfo: could not determine host for \(deviceID)")
-            InstantShareLog.debug("[MDNS Browser] currentPath: \(connection.currentPath)")
-            InstantShareLog.debug("[MDNS Browser] point: \(endpoint)")
-            InstantShareLog.debug("[MDNS Browser] remoteEndpoint: \(connection.currentPath?.remoteEndpoint)")
+            LocalLog.debug("[MDNS Browser] extractPCInfo: could not determine host for \(deviceID)")
+            LocalLog.debug("[MDNS Browser] currentPath: \(connection.currentPath)")
+            LocalLog.debug("[MDNS Browser] point: \(endpoint)")
+            LocalLog.debug("[MDNS Browser] remoteEndpoint: \(connection.currentPath?.remoteEndpoint)")
             
             return
         }
@@ -221,16 +222,16 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
     private func resolveWithEndpoint(host: String, port: Int, result: NWBrowser.Result, fallbackID: String) {
         let txtRecord = extractTXTRecord(from: result)
-        InstantShareLog.debug("[MDNS Browser] TXT record: \(txtRecord?.description ?? "nil")")
-        InstantShareLog.debug("[MDNS Browser] TXT keys: \(txtRecord?.keys.sorted().joined(separator: ", ") ?? "none")")
+        LocalLog.debug("[MDNS Browser] TXT record: \(txtRecord?.description ?? "nil")")
+        LocalLog.debug("[MDNS Browser] TXT keys: \(txtRecord?.keys.sorted().joined(separator: ", ") ?? "none")")
         
         let deviceID: String
         if let idFromTXT = txtRecord?["device_id"], !idFromTXT.isEmpty {
             deviceID = idFromTXT
-            InstantShareLog.debug("[MDNS Browser] Using device_id from TXT: \(deviceID)")
+            LocalLog.debug("[MDNS Browser] Using device_id from TXT: \(deviceID)")
         } else {
             // TXT record missing device_id — use fallback (service name) with warning
-            InstantShareLog.debug("[MDNS Browser] No device_id in TXT, using fallback: \(fallbackID)")
+            LocalLog.debug("[MDNS Browser] No device_id in TXT, using fallback: \(fallbackID)")
             deviceID = fallbackID
         }
         let deviceName = txtRecord?["device_name"] ?? deviceID
@@ -252,27 +253,27 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
         resolvedPCs[deviceID] = pc
         refreshDiscovered()
-        InstantShareLog.debug("[MDNS Browser] resolved \(pc.name) (\(pc.id)) at \(host):\(port)")
+        LocalLog.debug("[MDNS Browser] resolved \(pc.name) (\(pc.id)) at \(host):\(port)")
     }
 
     private func extractTXTRecord(from result: NWBrowser.Result) -> [String: String]? {
         guard case .bonjour(let txtRecord) = result.metadata else {
-            InstantShareLog.debug("[MDNS Browser] extractTXTRecord: metadata is not .bonjour, got: \(result.metadata)")
+            LocalLog.debug("[MDNS Browser] extractTXTRecord: metadata is not .bonjour, got: \(result.metadata)")
             return nil
         }
         let dict = txtRecord.dictionary
-        InstantShareLog.debug("[MDNS Browser] extractTXTRecord: raw dictionary has \(dict.count) entries")
+        LocalLog.debug("[MDNS Browser] extractTXTRecord: raw dictionary has \(dict.count) entries")
         var resultDict: [String: String] = [:]
         for (key, value) in dict {
             if let stringValue = value as? String {
                 resultDict[key] = stringValue
-                InstantShareLog.debug("[MDNS Browser] TXT key '\(key)' = '\(stringValue)' (String)")
+                LocalLog.debug("[MDNS Browser] TXT key '\(key)' = '\(stringValue)' (String)")
             } else if let dataValue = value as? Data {
                 let str = String(data: dataValue, encoding: .utf8) ?? ""
                 resultDict[key] = str
-                InstantShareLog.debug("[MDNS Browser] TXT key '\(key)' = '\(str)' (Data, \(dataValue.count) bytes)")
+                LocalLog.debug("[MDNS Browser] TXT key '\(key)' = '\(str)' (Data, \(dataValue.count) bytes)")
             } else {
-                InstantShareLog.debug("[MDNS Browser] TXT key '\(key)' has unknown type: \(type(of: value))")
+                LocalLog.debug("[MDNS Browser] TXT key '\(key)' has unknown type: \(type(of: value))")
             }
         }
         return resultDict
@@ -280,6 +281,6 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
     private func refreshDiscovered() {
         discovered = Array(resolvedPCs.values).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        InstantShareLog.debug("[MDNS Browser] refreshDiscovered: \(discovered.count) PCs")
+        LocalLog.debug("[MDNS Browser] refreshDiscovered: \(discovered.count) PCs")
     }
 }

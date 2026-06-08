@@ -2,6 +2,7 @@ import Social
 import UIKit
 import SwiftUI
 import AlbumTransporterKit
+import Common
 
 class ShareViewController: SLComposeServiceViewController {
     private let viewModel = InstantShareExtensionViewModel(
@@ -14,7 +15,7 @@ class ShareViewController: SLComposeServiceViewController {
     }
 
     override func didSelectPost() {
-        InstantShareLog.info("[Share VC] didSelectPost — starting transfer in extension")
+        LocalLog.info("[Share VC] didSelectPost — starting transfer in extension")
         Task { await viewModel.send() }
     }
 
@@ -24,12 +25,12 @@ class ShareViewController: SLComposeServiceViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        InstantShareLog.info("[Share VC] viewDidLoad")
+        LocalLog.info("[Share VC] viewDidLoad")
 
         beginRequestExtensionTime()
 
         let extensionItems = extensionContext?.inputItems as? [NSExtensionItem] ?? []
-        InstantShareLog.info("[Share VC] \(extensionItems.count) extension items")
+        LocalLog.info("[Share VC] \(extensionItems.count) extension items")
 
         let hosting = UIHostingController(
             rootView: InstantShareExtensionView(
@@ -51,7 +52,7 @@ class ShareViewController: SLComposeServiceViewController {
 
         Task {
             await viewModel.loadPayload(from: extensionItems)
-            InstantShareLog.info("[Share VC] payload loaded, starting mDNS discovery")
+            LocalLog.info("[Share VC] payload loaded, starting mDNS discovery")
             viewModel.startDiscovery()
         }
     }
@@ -60,7 +61,7 @@ class ShareViewController: SLComposeServiceViewController {
         let processInfo = ProcessInfo.processInfo
         processInfo.performExpiringActivity(withReason: "Trust handshake and data transfer") { [weak self] expired in
             if expired {
-                InstantShareLog.info("[Share VC] extension time expired")
+                LocalLog.info("[Share VC] extension time expired")
                 self?.viewModel.stopDiscovery()
             }
         }

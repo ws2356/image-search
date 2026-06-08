@@ -1,5 +1,6 @@
 import CoreBluetooth
 import Foundation
+import Common
 
 /// Scans for PC-side instant-share BLE peripherals and provides a list of
 /// discovered candidates for the debug UI to display.
@@ -45,13 +46,13 @@ public final class InstantShareBLEScanner: NSObject, ObservableObject {
     /// Initialize the BLE central manager. Must be called before `startScanning()`.
     /// On the first call, iOS will prompt the user for Bluetooth permission.
     func initialize() {
-        InstantShareLog.info("[BLE Scanner] initialize() called, existing manager: \(centralManager != nil)")
+        LocalLog.info("[BLE Scanner] initialize() called, existing manager: \(centralManager != nil)")
         guard centralManager == nil else { return }
         let manager = CBCentralManager(delegate: self, queue: .main, options: [
             CBCentralManagerOptionShowPowerAlertKey: NSNumber(value: true),
         ])
         centralManager = manager
-        InstantShareLog.info("[BLE Scanner] CBCentralManager created, current state: \(manager.state.rawValue)")
+        LocalLog.info("[BLE Scanner] CBCentralManager created, current state: \(manager.state.rawValue)")
     }
 
     /// Start scanning for instant-share peripherals.
@@ -60,7 +61,7 @@ public final class InstantShareBLEScanner: NSObject, ObservableObject {
     /// called, the request is queued and fulfilled when the state transition
     /// arrives via `centralManagerDidUpdateState`.
     func startScanning() {
-        InstantShareLog.info("[BLE Scanner] startScanning() called")
+        LocalLog.info("[BLE Scanner] startScanning() called")
         initialize()
         pendingScanRequest = true
         attemptStartScan()
@@ -68,42 +69,42 @@ public final class InstantShareBLEScanner: NSObject, ObservableObject {
 
     private func attemptStartScan() {
         guard pendingScanRequest else {
-            InstantShareLog.info("[BLE Scanner] attemptStartScan: no pending request, ignoring")
+            LocalLog.info("[BLE Scanner] attemptStartScan: no pending request, ignoring")
             return
         }
         guard let manager = centralManager else {
-            InstantShareLog.error("[BLE Scanner] attemptStartScan: centralManager is nil")
+            LocalLog.error("[BLE Scanner] attemptStartScan: centralManager is nil")
             return
         }
 
         let stateName = centralManagerStateName(manager.state)
-        InstantShareLog.info("[BLE Scanner] attemptStartScan: current central state: \(stateName)")
+        LocalLog.info("[BLE Scanner] attemptStartScan: current central state: \(stateName)")
 
         switch manager.state {
         case .poweredOn:
             break
         case .poweredOff:
-            InstantShareLog.error("[BLE Scanner] Bluetooth is powered off")
+            LocalLog.error("[BLE Scanner] Bluetooth is powered off")
             state = .poweredOff
             return
         case .unauthorized:
-            InstantShareLog.error("[BLE Scanner] Bluetooth permission denied")
+            LocalLog.error("[BLE Scanner] Bluetooth permission denied")
             state = .unauthorized
             return
         case .unsupported:
-            InstantShareLog.error("[BLE Scanner] Bluetooth LE not supported on this device")
+            LocalLog.error("[BLE Scanner] Bluetooth LE not supported on this device")
             state = .unsupported
             return
         case .resetting, .unknown:
-            InstantShareLog.info("[BLE Scanner] state is \(stateName); will retry on next state update")
+            LocalLog.info("[BLE Scanner] state is \(stateName); will retry on next state update")
             return
         @unknown default:
-            InstantShareLog.error("[BLE Scanner] Unknown central state")
+            LocalLog.error("[BLE Scanner] Unknown central state")
             return
         }
 
         guard !isScanning else {
-            InstantShareLog.info("[BLE Scanner] already scanning; skipping duplicate start")
+            LocalLog.info("[BLE Scanner] already scanning; skipping duplicate start")
             return
         }
         isScanning = true
@@ -115,13 +116,13 @@ public final class InstantShareBLEScanner: NSObject, ObservableObject {
         serviceUUIDsByPeripheralID = [:]
         discoveredAtByPeripheralID = [:]
 
-        InstantShareLog.info("[BLE Scanner] starting scan for service UUID: \(serviceUUID.uuidString)")
+        LocalLog.info("[BLE Scanner] starting scan for service UUID: \(serviceUUID.uuidString)")
         manager.scanForPeripherals(
             withServices: [serviceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: NSNumber(value: true)]
         )
         state = .scanning
-        InstantShareLog.info("[BLE Scanner] scan started, state set to .scanning")
+        LocalLog.info("[BLE Scanner] scan started, state set to .scanning")
     }
 
     private func centralManagerStateName(_ state: CBManagerState) -> String {
@@ -138,7 +139,7 @@ public final class InstantShareBLEScanner: NSObject, ObservableObject {
 
     /// Stop scanning.
     func stopScanning() {
-        InstantShareLog.info("[BLE Scanner] stopScanning() called")
+        LocalLog.info("[BLE Scanner] stopScanning() called")
         pendingScanRequest = false
         guard let manager = centralManager else { return }
         manager.stopScan()
@@ -168,7 +169,7 @@ extension InstantShareBLEScanner: CBCentralManagerDelegate {
         case .unknown: stateName = "unknown"; centralIsPoweredOn = false
         @unknown default: stateName = "unknown(\(central.state.rawValue))"; centralIsPoweredOn = false
         }
-        InstantShareLog.info("[BLE Scanner] centralManagerDidUpdateState: \(stateName)")
+        LocalLog.info("[BLE Scanner] centralManagerDidUpdateState: \(stateName)")
         let newState: InstantShareBLEScannerState
         switch central.state {
         case .poweredOn:
@@ -196,10 +197,10 @@ extension InstantShareBLEScanner: CBCentralManagerDelegate {
             default:
                 self.state = newState
             }
-            InstantShareLog.info("[BLE Scanner] scanner.state set to: \(self.state)")
+            LocalLog.info("[BLE Scanner] scanner.state set to: \(self.state)")
 
             if centralIsPoweredOn && self.pendingScanRequest {
-                InstantShareLog.info("[BLE Scanner] central is poweredOn and scan is pending, fulfilling request")
+                LocalLog.info("[BLE Scanner] central is poweredOn and scan is pending, fulfilling request")
                 self.attemptStartScan()
             }
         }
@@ -219,7 +220,7 @@ extension InstantShareBLEScanner: CBCentralManagerDelegate {
         let discoveredAt = Date()
         let advertisedUUIDStrings = advertisedServiceUUIDs.map { $0.uuidString }
 
-        InstantShareLog.info(
+        LocalLog.info(
             "[BLE Scanner] didDiscover: id=\(peripheralID.uuidString.prefix(8))... " +
             "name=\(peripheralName ?? "<nil>") rssi=\(rssiValue) " +
             "serviceUUIDs=\(advertisedUUIDStrings.joined(separator: ","))"
@@ -255,7 +256,7 @@ extension InstantShareBLEScanner: CBCentralManagerDelegate {
                 self.discovered.append(entry)
                 self.discovered.sort { $0.rssi > $1.rssi }
             }
-            InstantShareLog.info("[BLE Scanner] discovered count now: \(self.discovered.count)")
+            LocalLog.info("[BLE Scanner] discovered count now: \(self.discovered.count)")
         }
     }
 }

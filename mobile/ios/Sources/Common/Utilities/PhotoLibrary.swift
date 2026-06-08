@@ -10,7 +10,7 @@ import Photos
 import PhotosUI
 
 extension PHPhotoLibrary {
-    static func showLimitedPicker(_ completionHandler: @escaping @Sendable ([String]) -> Void) {
+    public static func showLimitedPicker(_ completionHandler: @escaping @Sendable ([String]) -> Void) {
         DispatchQueue.main.async {
             // 获取 RootVC 的健壮写法
             let scenes = UIApplication.shared.connectedScenes

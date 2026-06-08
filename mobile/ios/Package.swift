@@ -11,7 +11,7 @@ let package = Package(
         .library(
             name: "AlbumTransporterKit",
             targets: ["AlbumTransporterKit"]
-        ),
+        )
     ],
     dependencies: [
         .package(url: "https://github.com/hmlongco/Factory.git", from: "2.4.12"),
@@ -24,9 +24,17 @@ let package = Package(
                 .product(name: "Factory", package: "Factory"),
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
                 .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+                "Common"
             ],
             resources: []
         ),
+        .target(name: "Common",
+               dependencies: [
+                .product(name: "Factory", package: "Factory"),
+                .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+                .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+               ],
+               resources: []),
         .testTarget(
             name: "AlbumTransporterKitTests",
             dependencies: [
