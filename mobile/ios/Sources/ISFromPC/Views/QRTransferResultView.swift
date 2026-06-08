@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import Photos
 
-struct QRTransferResultView: View {
+public struct QRTransferResultView: View {
     let result: QRClaimResult
     let onDismiss: () -> Void
 
@@ -13,7 +13,12 @@ struct QRTransferResultView: View {
     @State private var showFileError = false
     @State private var fileErrorMessage = ""
 
-    var body: some View {
+    public init(result: QRClaimResult, onDismiss: @escaping () -> Void) {
+        self.result = result
+        self.onDismiss = onDismiss
+    }
+
+    public var body: some View {
         NavigationView {
             content
                 .navigationTitle("Received")

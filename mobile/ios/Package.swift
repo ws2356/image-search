@@ -11,6 +11,10 @@ let package = Package(
         .library(
             name: "AlbumTransporterKit",
             targets: ["AlbumTransporterKit"]
+        ),
+        .library(
+            name: "ISFromPC",
+            targets: ["ISFromPC"]
         )
     ],
     dependencies: [
@@ -24,7 +28,8 @@ let package = Package(
                 .product(name: "Factory", package: "Factory"),
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
                 .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-                "Common"
+                "Common",
+                "ISFromPC"
             ],
             resources: []
         ),
@@ -34,6 +39,9 @@ let package = Package(
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
                 .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
                ],
+               resources: []),
+        .target(name: "ISFromPC",
+               dependencies: [],
                resources: []),
         .testTarget(
             name: "AlbumTransporterKitTests",

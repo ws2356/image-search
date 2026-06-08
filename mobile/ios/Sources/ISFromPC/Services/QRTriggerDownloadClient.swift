@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-enum QRTriggerDownloadClientError: Error, Sendable {
+public enum QRTriggerDownloadClientError: Error, Sendable {
     case invalidURL
     case networkError(Error)
     case httpError(statusCode: Int, message: String)
@@ -14,7 +14,7 @@ enum QRTriggerDownloadClientError: Error, Sendable {
 }
 
 extension QRTriggerDownloadClientError: LocalizedError {
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Invalid URL"
@@ -38,18 +38,18 @@ extension QRTriggerDownloadClientError: LocalizedError {
     }
 }
 
-enum QRClaimResult: Sendable {
+public enum QRClaimResult: Sendable {
     case text(String)
     case image(fileURL: URL, contentType: String, filename: String?)
     case file(fileURL: URL, contentType: String, filename: String?)
 }
 
-final class QRTriggerDownloadClient: Sendable {
+public final class QRTriggerDownloadClient: Sendable {
     private let urlSession: URLSession
     private let timeoutInterval: TimeInterval
     private let apiPath = "/api/instant-share/v1/qr-claim"
 
-    init(
+    public init(
         urlSession: URLSession = .shared,
         timeoutInterval: TimeInterval = 30.0
     ) {
@@ -57,7 +57,7 @@ final class QRTriggerDownloadClient: Sendable {
         self.timeoutInterval = timeoutInterval
     }
 
-    func claim(
+    public func claim(
         hosts: [String],
         port: Int,
         stashId: String,

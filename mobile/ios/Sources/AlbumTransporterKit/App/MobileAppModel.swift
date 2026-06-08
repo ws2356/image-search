@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Combine
+import ISFromPC
 
 @MainActor
 final class MobileAppModel: ObservableObject {
