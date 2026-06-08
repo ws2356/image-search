@@ -101,7 +101,11 @@ struct QRTransferResultView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Button(action: saveImageToLibrary(fileURL)) {
+            Button(action: {
+                Task {
+                    await saveImageToLibrary(fileURL: fileURL)
+                }
+            }) {
                 Label("Save to Photo Library", systemImage: "photo.badge.plus")
                     .frame(maxWidth: .infinity)
             }
@@ -135,7 +139,11 @@ struct QRTransferResultView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Button(action: openFile(fileURL)) {
+            Button(action: {
+                Task {
+                    await saveImageToLibrary(fileURL: fileURL)
+                }
+            }) {
                 Label("Open in Files", systemImage: "folder")
                     .frame(maxWidth: .infinity)
             }
@@ -155,31 +163,35 @@ struct QRTransferResultView: View {
         }
     }
 
-    private func saveImageToLibrary(_ fileURL: URL) -> () -> Void {
-        {
-            PHPhotoLibrary.requestAuthorization { status in
-                DispatchQueue.main.async {
-                    switch status {
-                    case .authorized, .limited:
-                        PHPhotoLibrary.shared().performChanges {
-                            let creationRequest = PHAssetCreationRequest.forAsset()
-                            creationRequest.addResource(with: .photo, fileURL: fileURL, options: nil)
-                        } completionHandler: { success, error in
-                            DispatchQueue.main.async {
-                                if success {
-                                    showSavedToast = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                        showSavedToast = false
-                                    }
-                                } else {
-                                    showPermissionAlert = true
-                                }
-                            }
-                        }
-                    default:
-                        showPermissionAlert = true
+    // 2. 现代化的异步保存函数
+    nonisolated private func saveImageToLibrary(fileURL: URL) async {
+        // 现代异步权限申请
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        
+        switch status {
+        case .authorized, .limited:
+            do {
+                // performChanges 也有现代的异步版本
+                try await PHPhotoLibrary.shared().performChanges {
+                    let creationRequest = PHAssetCreationRequest.forAsset()
+                    creationRequest.addResource(with: .photo, fileURL: fileURL, options: nil)
+                }
+                // 成功后，明确切回主线程更新 UI
+                await MainActor.run {
+                    showSavedToast = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        showSavedToast = false
                     }
                 }
+            } catch {
+                await MainActor.run {
+                    showPermissionAlert = true
+                }
+            }
+            
+        default:
+            await MainActor.run {
+                showPermissionAlert = true
             }
         }
     }
