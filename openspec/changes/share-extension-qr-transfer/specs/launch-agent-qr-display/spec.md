@@ -47,7 +47,7 @@ After generating the opt-code, the Launch Agent SHALL display a mini-window with
 #### Scenario: Show QR mini-window
 - **WHEN** a payload is stashed and opt-code generated
 - **THEN** the Launch Agent SHALL create a mini-window (similar to `InstantShareMiniWindow` but for QR display)
-- **THEN** the QR code SHALL encode a URL in the format: `ausearch://claim?ips=<comma-separated-ips>&port=<port>&stash=<stash_id>&opt=<opt-code>`
+- **THEN** the QR code SHALL encode a URL in the format: `https://dl.boldman.net/share?ips=<comma-separated-ips>&port=<port>&stash=<stash_id>&opt=<opt-code>`
 - **THEN** the window SHALL display the QR code prominently, along with the opt-code as fallback text, PC name (and port), and "Scan with AuBackup" instructions
 
 #### Scenario: QR window lifecycle

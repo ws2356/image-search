@@ -45,16 +45,6 @@
 	<string>LaunchScreen</string>
 	<key>UIRequiresFullScreen</key>
 	<true/>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>net.boldman.aubackup</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>aubackup</string>
-			</array>
-		</dict>
-	</array>
+
 </dict>
 </plist>

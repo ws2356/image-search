@@ -350,6 +350,14 @@ final class MobileAppModel: ObservableObject {
         guard isSupportedUniversalLink(url) else {
             return
         }
+
+        // Check if this is a /share link (instant share / QR claim)
+        if let claimPayload = QRClaimPayload(universalLinkURL: url) {
+            await onQRClaimScanned(claimPayload)
+            return
+        }
+
+        // Otherwise treat as pairing universal link
         let payload = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !payload.isEmpty else {
             return

@@ -204,6 +204,8 @@ private final class SnapshotAppPageModel: AppPageModeling {
     func onTransferCompleted(with result: TransferPageResult) async {}
     func onCompletionCompleted(with result: CompletionPageResult) async {}
     func onErrorCompleted(with result: ErrorPageResult) async {}
+    func onQRClaimScanned(_ payload: QRClaimPayload) async {}
+    func onQRClaimDismissed() async {}
 }
 
 @MainActor
@@ -234,6 +236,8 @@ private final class SnapshotTransferPageModel: TransferPageModeling {
     func onTransferCompleted(with result: TransferPageResult) async {}
     func onCompletionCompleted(with result: CompletionPageResult) async {}
     func onErrorCompleted(with result: ErrorPageResult) async {}
+    func onQRClaimScanned(_ payload: QRClaimPayload) async {}
+    func onQRClaimDismissed() async {}
 }
 
 private actor SnapshotTransferService: TransferService {

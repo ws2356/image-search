@@ -17,15 +17,18 @@ struct QRClaimPayload: Equatable, Sendable {
     var stashId: String
     var optCode: String
 
-    init?(urlString: String) {
-        let lowercased = urlString.lowercased()
-        guard lowercased.hasPrefix("ausearch://claim?") || lowercased.hasPrefix("aubackup://qr-claim?") else {
+    /// Parse from a universal link URL: https://dl.boldman.net/share?ips=...&port=...&stash=...&opt=...
+    init?(universalLinkURL: URL) {
+        guard let host = universalLinkURL.host?.lowercased(),
+              host == "dl.boldman.net" else {
             return nil
         }
-        guard let components = URLComponents(string: urlString) else {
+        let path = universalLinkURL.path.lowercased()
+        guard path == "/share" || path.hasPrefix("/share?") || path == "/share" else {
             return nil
         }
-        guard let queryItems = components.queryItems else {
+        guard let components = URLComponents(url: universalLinkURL, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems else {
             return nil
         }
 

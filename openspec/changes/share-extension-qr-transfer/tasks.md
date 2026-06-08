@@ -27,7 +27,7 @@
 ## 3. Launch Agent: QR Display Mini-Window
 
 - [x] 3.1 Create `QRTriggerMiniWindow` Qt dialog (based on `InstantShareMiniWindow` pattern) with QR code display, opt-code text fallback, PC name + port, and "Scan with AuBackup" instruction
-- [x] 3.2 Integrate QR code generation using existing `qrcode` library — encode `ausearch://claim?ips=...&port=9527&stash=<id>&opt=<code>`
+- [x] 3.2 Integrate QR code generation using existing `qrcode` library — encode `https://dl.boldman.net/share?ips=...&port=9527&stash=<id>&opt=<code>` (universal link format)
 - [x] 3.3 Wire QR window lifecycle: show on stash, invalidate on cancel, update on claim/expiry, auto-close
 - [x] 3.4 Add LAN IP discovery utility to populate the QR with the PC's LAN IP addresses
 - [x] 3.5 Wire the QR trigger flow into `InstantShareRuntime` as an alternative receive mode (triggered by stash endpoint, not by mDNS/BLE)
@@ -38,8 +38,8 @@
 - [x] 4.2 Implement claim response handling: parse `Content-Type` header, extract text data or image data
 - [x] 4.3 Handle failover — iterate through IP list from QR code on connection failure
 - [x] 4.4 Handle all error responses (401, 410, 404, 5xx) with user-visible error strings
-- [x] 4.5 Register `aubackup://qr-claim` URL scheme handling in `AlbumTransporterApp` with raw query params (no base64)
-- [x] 4.6 Update existing `LiveQRCodeScannerView` to detect `ausearch://claim?` format and route to claim flow
+- [x] 4.5 Handle universal link (`https://dl.boldman.net/share?...`) and `onOpenURL` in `AlbumTransporterApp` — route to QR claim flow
+- [x] 4.6 Update `QRClaimPayload` to parse universal link format (`https://dl.boldman.net/share?ips=...&port=...&stash=...&opt=...`)
 - [x] 4.7 Create `QRTransferResultView` SwiftUI view — text mode (scrollable text + "Copy to Clipboard") and image mode (image display + "Save to Photo Library")
 - [x] 4.8 Add pasteboard copy for text and photo library save for image (with permission handling)
 - [x] 4.9 Add the new Swift files to the iOS Xcode project (AlbumTransporterKit target)

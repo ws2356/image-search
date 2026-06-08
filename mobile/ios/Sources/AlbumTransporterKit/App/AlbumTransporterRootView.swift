@@ -87,13 +87,7 @@ public struct AlbumTransporterRootView: View {
             }
             .onOpenURL { url in
                 Task {
-                    if url.scheme == "aubackup", url.host == "qr-claim" {
-                        if let payload = QRClaimPayload(urlString: url.absoluteString) {
-                            await model.onQRClaimScanned(payload)
-                        }
-                    } else {
-                        await model.handleIncomingUniversalLink(url)
-                    }
+                    await model.handleIncomingUniversalLink(url)
                 }
             }
             .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { userActivity in

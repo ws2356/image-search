@@ -41,7 +41,7 @@ def build_qr_url(
     opt_code: str,
 ) -> str:
     ips_str = ",".join(ips)
-    return f"ausearch://claim?ips={ips_str}&port={port}&stash={stash_id}&opt={opt_code}"
+    return f"https://dl.boldman.net/share?ips={ips_str}&port={port}&stash={stash_id}&opt={opt_code}"
 
 
 def render_qr_pixmap(payload: str, size: int) -> QPixmap:

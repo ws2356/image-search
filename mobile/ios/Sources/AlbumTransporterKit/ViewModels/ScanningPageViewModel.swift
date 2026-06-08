@@ -11,7 +11,7 @@ struct ScanningPageViewModel {
     }
 
     func onQRScanned(scannedValue: String) async {
-        if let payload = QRClaimPayload(urlString: scannedValue) {
+        if let url = URL(string: scannedValue), let payload = QRClaimPayload(universalLinkURL: url) {
             await model.onQRClaimScanned(payload)
             return
         }
