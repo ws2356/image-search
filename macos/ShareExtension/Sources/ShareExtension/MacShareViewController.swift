@@ -6,6 +6,8 @@ private let log = OSLog(subsystem: "net.boldman.ausearch.share-extension", categ
 
 // 1. 改为继承自 NSViewController
 class MacShareViewController: NSViewController {
+// 用来在生命周期之间传递和持有 context
+    private var extensionContextRef: NSExtensionContext?
 
     private lazy var httpClient: UDSHTTPClient = {
         guard let containerURL = FileManager.default.urls(
@@ -20,17 +22,32 @@ class MacShareViewController: NSViewController {
         return UDSHTTPClient(socketPath: fullPath)
     }()
 
-    // 2. 覆盖 loadView，提供一个绝对隐形的空视图
+
+// 1. 扔给 Finder 一个 1x1 像素、完全透明的微型 View
     override func loadView() {
-        self.view = NSView(frame: .zero)
+        let dummyView = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+        dummyView.wantsLayer = true
+        dummyView.layer?.backgroundColor = NSColor.clear.cgColor
+        self.view = dummyView
     }
 
-    // 3. 核心：在系统准备渲染 UI 之前拦截并处理数据
+    // 2. beginRequest 只负责存下 context，绝不在这里调用 loadItem
     override func beginRequest(with context: NSExtensionContext) {
         super.beginRequest(with: context)
+        self.extensionContextRef = context
+    }
+
+// 3. 此时 Finder 的 UI 握手已彻底结束，主线程恢复响应！开始安全地拉取数据
+    override func viewDidAppear() {
+        super.viewDidAppear()
         
-        os_log("ShareExtension activated (Headless Mode)", log: log, type: .info)
+        os_log("ShareExtension viewDidAppear — Ready to safely load items", log: log, type: .info)
         
+        guard let context = self.extensionContextRef else {
+            os_log("No extensionContext available", log: log, type: .error)
+            return
+        }
+
         let items = context.inputItems as? [NSExtensionItem] ?? []
         os_log("Received %d extension items", log: log, type: .info, items.count)
         
