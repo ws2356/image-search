@@ -133,7 +133,7 @@ All instant-share events include:
 
 Use the PC CLI script:
 ```bash
-python dt_image_search/scripts/start_instant_share_runtime.py
+python dt_image_search/scripts/start_instant_share_gui_runtime.py
 ```
 
 Use the iOS debug view (HomeView → Instant Share Debug) for full discovery → select → connect → trust → transfer flow.

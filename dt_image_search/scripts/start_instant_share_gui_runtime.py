@@ -11,7 +11,7 @@ Usage:
 The script runs until the window is closed or Ctrl+C is pressed. Requires
 PySide6 (Qt) — uses the same QApplication as the main AuSearch app.
 
-For headless testing without GUI, use `start_instant_share_runtime.py`.
+For headless testing without GUI, use `start_instant_share_gui_runtime.py`.
 """
 
 from __future__ import annotations

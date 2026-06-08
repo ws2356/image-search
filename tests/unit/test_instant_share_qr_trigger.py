@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from fastapi.testclient import TestClient
 
-from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry
+from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry, TRIGGER_PATH
 from dt_image_search.instant_sharing.unix_socket_server import (
     UnixSocketHttpServer,
     _build_app as build_uds_app,
@@ -196,7 +196,7 @@ class TestFastAPIUDSTrigger(unittest.TestCase):
 
         app = build_uds_app(handler)
         with TestClient(app) as client:
-            resp = client.post("/", json={"type": "text", "content": "hi"})
+            resp = client.post(TRIGGER_PATH, json={"type": "text", "content": "hi"})
 
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json(), {"stash_id": "x", "content_type": "text/plain"})
@@ -208,7 +208,7 @@ class TestFastAPIUDSTrigger(unittest.TestCase):
 
         app = build_uds_app(handler)
         with TestClient(app) as client:
-            resp = client.post("/", json={"type": "text"})
+            resp = client.post(TRIGGER_PATH, json={"type": "text"})
 
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"status": "error", "error": "boom"})
@@ -237,12 +237,12 @@ class TestFastAPIUDSTrigger(unittest.TestCase):
             with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as raw:
                 raw.connect(str(sock_path))
                 raw.sendall(
-                    b"POST / HTTP/1.1\r\n"
-                    b"Host: localhost\r\n"
-                    b"Content-Type: application/json\r\n"
-                    b"Content-Length: " + str(len(body)).encode() + b"\r\n"
-                    b"Connection: close\r\n"
-                    b"\r\n" + body
+                    f"POST {TRIGGER_PATH} HTTP/1.1\r\n".encode()
+                    + b"Host: localhost\r\n"
+                    + b"Content-Type: application/json\r\n"
+                    + b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+                    + b"Connection: close\r\n"
+                    + b"\r\n" + body
                 )
                 chunks = []
                 while True:

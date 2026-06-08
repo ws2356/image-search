@@ -10,6 +10,8 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from dt_image_search.instant_sharing.qr_trigger_handler import TRIGGER_PATH
+
 _logger = logging.getLogger(__name__)
 
 EXTENSION_BUNDLE_ID = "net.boldman.ausearch.share-extension"
@@ -34,7 +36,7 @@ def _build_app(
     app = FastAPI()
     app.state.request_handler = request_handler
 
-    @app.post("/")
+    @app.post(TRIGGER_PATH)
     async def trigger(request: Request) -> JSONResponse:
         body = await request.json()
         result = await asyncio.to_thread(request_handler, body)

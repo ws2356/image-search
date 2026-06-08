@@ -4,13 +4,19 @@ import logging
 import socket
 from typing import Any
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QObject, Qt, Signal
 
 from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry
 from dt_image_search.instant_sharing.qr_trigger_mini_window import QRTriggerMiniWindow
 from dt_image_search.tools.dts_dispatcher import dispatcher
 
 _logger = logging.getLogger(__name__)
+
+
+class _Bridge(QObject):
+    stash_created = Signal(object)  # StashEntry
+    stash_claimed = Signal(str)
+    stash_expired = Signal(str)
 
 
 class QRTriggerMiniWindowFactory:
@@ -28,6 +34,10 @@ class QRTriggerMiniWindowFactory:
         self._stash_created_sub: Any = None
         self._stash_claimed_sub: Any = None
         self._stash_expired_sub: Any = None
+        self._bridge = _Bridge()
+        self._bridge.stash_created.connect(self._show_window, Qt.QueuedConnection)
+        self._bridge.stash_claimed.connect(self._mark_claimed, Qt.QueuedConnection)
+        self._bridge.stash_expired.connect(self._mark_expired, Qt.QueuedConnection)
 
     def start(self) -> None:
         if self._stash_created_sub is not None:
@@ -56,13 +66,13 @@ class QRTriggerMiniWindowFactory:
         _logger.info("[QRTriggerMiniWindowFactory] stopped")
 
     def _on_stash_created(self, stash: StashEntry) -> None:
-        QTimer.singleShot(0, lambda: self._show_window(stash))
+        self._bridge.stash_created.emit(stash)
 
     def _on_stash_claimed(self, stash_id: str) -> None:
-        QTimer.singleShot(0, lambda: self._mark_claimed(stash_id))
+        self._bridge.stash_claimed.emit(stash_id)
 
     def _on_stash_expired(self, stash_id: str) -> None:
-        QTimer.singleShot(0, lambda: self._mark_expired(stash_id))
+        self._bridge.stash_expired.emit(stash_id)
 
     def _show_window(self, stash: StashEntry) -> None:
         window = QRTriggerMiniWindow(
