@@ -23,12 +23,43 @@ class MacShareViewController: NSViewController {
     }()
 
 
-// 1. 扔给 Finder 一个 1x1 像素、完全透明的微型 View
     override func loadView() {
-        let dummyView = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
-        dummyView.wantsLayer = true
-        dummyView.layer?.backgroundColor = NSColor.clear.cgColor
-        self.view = dummyView
+        // 设置一个合适的大小（类似于系统原装输入框面板的体量，或者更精简一点）
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 120, height: 120))
+        containerView.wantsLayer = true
+        containerView.layer?.cornerRadius = 16
+        // 使用自带的材质特效或者圆角半透明，让它看起来很原生
+        containerView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95).cgColor
+        
+        // 配置菊花 (Progress Indicator)
+        spinner.style = .spinning
+        spinner.controlSize = .regular // 使用标准大小的菊花
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.isDisplayedWhenStopped = false
+        
+        containerView.addSubview(spinner)
+        
+        // 将菊花居中约束
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+            spinner.widthAnchor.constraint(equalToConstant: 32),
+            spinner.heightAnchor.constraint(equalToConstant: 32)
+        ])
+        
+        self.view = containerView
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        // 让宿主窗口去除多余的阴影和边框，只保留我们自己画的圆角面板
+        if let window = self.view.window {
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
+        }
+        // 让菊花开始转动
+        spinner.startAnimation(nil)
     }
 
     // 2. beginRequest 只负责存下 context，绝不在这里调用 loadItem
