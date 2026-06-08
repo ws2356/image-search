@@ -14,7 +14,7 @@ from dt_image_search.instant_sharing.qr_trigger_handler import TRIGGER_PATH
 
 _logger = logging.getLogger(__name__)
 
-EXTENSION_BUNDLE_ID = "net.boldman.ausearch.share-extension"
+EXTENSION_BUNDLE_ID = "vip.wansong.dtimagesearch.share-extension"
 SOCKET_RELATIVE_PATH = "is.sock"
 _MACOS_SUN_PATH_MAX = 104
 

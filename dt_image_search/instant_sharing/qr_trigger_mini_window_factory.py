@@ -6,6 +6,11 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Qt, Signal
 
+from dt_image_search.instant_sharing.activation_policy import (
+    acquire_activation_policy,
+    bring_to_front,
+    release_activation_policy,
+)
 from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry
 from dt_image_search.instant_sharing.qr_trigger_mini_window import QRTriggerMiniWindow
 from dt_image_search.tools.dts_dispatcher import dispatcher
@@ -57,12 +62,15 @@ class QRTriggerMiniWindowFactory:
         self._stash_created_sub = None
         self._stash_claimed_sub = None
         self._stash_expired_sub = None
+        window_count = len(self._windows)
         for window in list(self._windows.values()):
             try:
                 window.close()
             except RuntimeError:
                 pass
         self._windows.clear()
+        for _ in range(window_count):
+            release_activation_policy()
         _logger.info("[QRTriggerMiniWindowFactory] stopped")
 
     def _on_stash_created(self, stash: StashEntry) -> None:
@@ -83,7 +91,9 @@ class QRTriggerMiniWindowFactory:
         )
         window.show_qr()
         window.show()
+        bring_to_front(window)
         self._windows[stash.stash_id] = window
+        acquire_activation_policy()
         _logger.info(
             "[QRTriggerMiniWindowFactory] window shown: stash=%s type=%s",
             stash.stash_id,
@@ -92,14 +102,17 @@ class QRTriggerMiniWindowFactory:
 
     def _on_cancel(self, stash_id: str) -> None:
         self._handler.cancel_stash(stash_id)
-        self._windows.pop(stash_id, None)
+        if self._windows.pop(stash_id, None) is not None:
+            release_activation_policy()
 
     def _mark_claimed(self, stash_id: str) -> None:
         window = self._windows.pop(stash_id, None)
         if window is not None:
             window.on_claimed()
+            release_activation_policy()
 
     def _mark_expired(self, stash_id: str) -> None:
         window = self._windows.pop(stash_id, None)
         if window is not None:
             window.on_expired()
+            release_activation_policy()

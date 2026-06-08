@@ -127,14 +127,17 @@ class MacShareViewController: NSViewController {
                             return
                         }
                         
-                        // 开启沙盒扩展访问权限（虽然 Extension 不读，但这是合规获取真实路径的标准动作）
                         let isSecurityScoped = safeURL.startAccessingSecurityScopedResource()
                         
-                        // 此时 safeURL.path 就是原文件的真实路径（如: /Users/ws2356/Downloads/huge_video.mp4）
-                        os_log("Successfully grabbed original path: %{public}@", log: log, type: .info, safeURL.path)
+                        os_log("Successfully grabbed original path: %{public}@, isInPlace: %{bool}d", log: log, type: .info, safeURL.path, isInPlace)
                         
-                        // 将真实的绝对路径直接丢给 Agent 
-                        self?.stashFilePayload(safeURL, with: context)
+                        if isInPlace {
+                            os_log("In-place file — sending original URL directly", log: log, type: .info)
+                            self?.stashFilePayload(safeURL, with: context)
+                        } else {
+                            os_log("Non-in-place file — creating hard link in sandbox", log: log, type: .info)
+                            self?.createHardLinkAndSend(originalURL: safeURL, with: context)
+                        }
                         
                         if isSecurityScoped {
                             safeURL.stopAccessingSecurityScopedResource()
@@ -162,6 +165,24 @@ class MacShareViewController: NSViewController {
                 os_log("Text stash failed — cancelling extension", log: log, type: .error)
                 self?.cancel(with: context)
             }
+        }
+    }
+
+    private func createHardLinkAndSend(originalURL: URL, with context: NSExtensionContext) {
+        let containerURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let hardLinkURL = containerURL.appendingPathComponent(originalURL.lastPathComponent)
+        
+        do {
+            if FileManager.default.fileExists(atPath: hardLinkURL.path) {
+                try FileManager.default.removeItem(at: hardLinkURL)
+            }
+            try FileManager.default.linkItem(at: originalURL, to: hardLinkURL)
+            os_log("Hard link created: %{public}@", log: log, type: .info, hardLinkURL.path)
+            stashFilePayload(hardLinkURL, with: context)
+        } catch {
+            os_log("Failed to create hard link: %{public}@ — falling back to original URL", log: log, type: .error, error.localizedDescription)
+            stashFilePayload(originalURL, with: context)
         }
     }
 
