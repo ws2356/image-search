@@ -110,6 +110,7 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("AuSearch Instant Share")
+    app.setQuitOnLastWindowClosed(False)
 
     # 1. 在初始化 GUI 之后，戴上“隐形斗篷”
     hide_dock_icon()
