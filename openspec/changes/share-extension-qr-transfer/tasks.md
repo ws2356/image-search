@@ -34,17 +34,17 @@
 
 ## 4. iOS AuBackup: QR Download Client
 
-- [ ] 4.1 Create `QRTriggerDownloadClient` Swift class with `claim(host:port:stashId:optCode:completion:)` method calling `POST /api/instant-share/v1/qr-claim`
-- [ ] 4.2 Implement claim response handling: parse `Content-Type` header, extract text data or image data
-- [ ] 4.3 Handle failover — iterate through IP list from QR code on connection failure
-- [ ] 4.4 Handle all error responses (401, 410, 404, 5xx) with user-visible error strings
-- [ ] 4.5 Register `aubackup://qr-claim` URL scheme handling in `AlbumTransporterApp` with raw query params (no base64)
-- [ ] 4.6 Update existing `LiveQRCodeScannerView` to detect `ausearch://claim?` format and route to claim flow
-- [ ] 4.7 Create `QRTransferResultView` SwiftUI view — text mode (scrollable text + "Copy to Clipboard") and image mode (image display + "Save to Photo Library")
-- [ ] 4.8 Add pasteboard copy for text and photo library save for image (with permission handling)
-- [ ] 4.9 Add the new Swift files to the iOS Xcode project (AlbumTransporterKit target)
-- [ ] 4.10 Update `mobile/ios/AlbumTransporterApp.xcodeproj` to include the QR transfer views and client
-- [ ] 4.11 Add unit tests for `QRTriggerDownloadClient`
+- [x] 4.1 Create `QRTriggerDownloadClient` Swift class with `claim(host:port:stashId:optCode:completion:)` method calling `POST /api/instant-share/v1/qr-claim`
+- [x] 4.2 Implement claim response handling: parse `Content-Type` header, extract text data or image data
+- [x] 4.3 Handle failover — iterate through IP list from QR code on connection failure
+- [x] 4.4 Handle all error responses (401, 410, 404, 5xx) with user-visible error strings
+- [x] 4.5 Register `aubackup://qr-claim` URL scheme handling in `AlbumTransporterApp` with raw query params (no base64)
+- [x] 4.6 Update existing `LiveQRCodeScannerView` to detect `ausearch://claim?` format and route to claim flow
+- [x] 4.7 Create `QRTransferResultView` SwiftUI view — text mode (scrollable text + "Copy to Clipboard") and image mode (image display + "Save to Photo Library")
+- [x] 4.8 Add pasteboard copy for text and photo library save for image (with permission handling)
+- [x] 4.9 Add the new Swift files to the iOS Xcode project (AlbumTransporterKit target)
+- [x] 4.10 Update `mobile/ios/AlbumTransporterApp.xcodeproj` to include the QR transfer views and client
+- [x] 4.11 Add unit tests for `QRTriggerDownloadClient`
 
 ## 5. Verification
 

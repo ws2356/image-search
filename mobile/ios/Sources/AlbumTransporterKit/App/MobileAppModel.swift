@@ -235,6 +235,29 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
+    func onQRClaimScanned(_ payload: QRClaimPayload) async {
+        telemetryService.recordInteraction(name: "qr_claim_scanned", location: "qr_transfer")
+        let client = QRTriggerDownloadClient()
+        do {
+            let result = try await client.claim(
+                hosts: payload.ips,
+                port: payload.port,
+                stashId: payload.stashId,
+                optCode: payload.optCode
+            )
+            route = .qrTransferResult(QRClaimResultBox(result))
+        } catch {
+            presentErrorSummary(
+                title: "Transfer failed",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    func onQRClaimDismissed() async {
+        route = .home
+    }
+
     var navigationTitle: String {
         switch route {
         case .home:
@@ -251,6 +274,8 @@ final class MobileAppModel: ObservableObject {
             return "Backup Complete"
         case .error(_):
             return "Backup Error"
+        case .qrTransferResult:
+            return "Received"
         }
     }
 
@@ -270,6 +295,8 @@ final class MobileAppModel: ObservableObject {
             return "completed"
         case .error(_):
             return "error"
+        case .qrTransferResult:
+            return "qr_transfer_result"
         }
     }
 

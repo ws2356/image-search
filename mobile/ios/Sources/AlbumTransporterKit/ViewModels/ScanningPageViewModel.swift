@@ -11,6 +11,11 @@ struct ScanningPageViewModel {
     }
 
     func onQRScanned(scannedValue: String) async {
+        if let payload = QRClaimPayload(urlString: scannedValue) {
+            await model.onQRClaimScanned(payload)
+            return
+        }
+
         telemetryService.recordInteraction(name: "start_pairing_tapped", location: "pairing")
         let result = ScanningPageResult(result: .success(scannedValue))
         await model.onScanningCompleted(with: result)
