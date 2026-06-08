@@ -252,6 +252,8 @@ final class TransferPageViewModel: ObservableObject {
             return "completed"
         case .error:
             return "error"
+        case .qrTransferResult:
+            return "qrTransferResult"
         }
     }
 }

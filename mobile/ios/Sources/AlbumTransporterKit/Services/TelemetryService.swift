@@ -254,6 +254,8 @@ final class DefaultTelemetryService: TelemetryService {
             return "completed"
             case .error(_):
             return "error"
+        case .qrTransferResult:
+            return "qrTransferResult"
         }
     }
 }

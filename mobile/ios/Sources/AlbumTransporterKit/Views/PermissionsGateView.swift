@@ -191,6 +191,8 @@ private final class PermissionsGatePreviewModel: PermissionsPageModeling {
     func onTransferCompleted(with result: TransferPageResult) async {}
     func onCompletionCompleted(with result: CompletionPageResult) async {}
     func onErrorCompleted(with result: ErrorPageResult) async {}
+    func onQRClaimScanned(_ payload: QRClaimPayload) async {}
+    func onQRClaimDismissed() async {}
 }
 
 private actor PermissionsGatePreviewPermissionService: PermissionService {

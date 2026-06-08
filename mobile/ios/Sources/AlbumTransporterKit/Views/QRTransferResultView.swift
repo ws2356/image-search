@@ -140,7 +140,7 @@ struct QRTransferResultView: View {
 
     private func toast(_ message: String) -> some View {
         Text(message)
-            .font(.system(.subheadline))
+            .font(.system(size: 15, weight: .medium))
             .foregroundStyle(.white)
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
