@@ -5,24 +5,11 @@ import AlbumTransporterKit
 import Common
 import ISFromMobile
 
-class ShareViewController: SLComposeServiceViewController {
+class ShareViewController: UIViewController {
     private let viewModel = InstantShareExtensionViewModel(
         mdnsBrowser: InstantShareMDNSBrowser(),
         service: InstantShareService()
     )
-
-    override func isContentValid() -> Bool {
-        return viewModel.canSend
-    }
-
-    override func didSelectPost() {
-        LocalLog.info("[Share VC] didSelectPost — starting transfer in extension")
-        Task { await viewModel.send() }
-    }
-
-    override func configurationItems() -> [Any]! {
-        return []
-    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
