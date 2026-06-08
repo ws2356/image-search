@@ -6,7 +6,7 @@ private let log = OSLog(subsystem: "net.boldman.ausearch.share-extension", categ
 
 // 1. 改为继承自 NSViewController
 class MacShareViewController: NSViewController {
-// 用来在生命周期之间传递和持有 context
+    private let spinner = NSProgressIndicator()
     private var extensionContextRef: NSExtensionContext?
 
     private lazy var httpClient: UDSHTTPClient = {
@@ -95,34 +95,49 @@ class MacShareViewController: NSViewController {
         for item in items {
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
+                // 1. 处理文本（保持不变）
                 if provider.hasItemConformingToTypeIdentifier("public.plain-text") {
                     os_log("Matched text attachment", log: log, type: .info)
                     provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { [weak self] data, error in
-                        if let error = error {
-                            os_log("Failed to load text: %{public}@", log: log, type: .error, error.localizedDescription)
+                        if error != nil {
                             self?.cancel(with: context)
                             return
                         }
                         guard let text = data as? String else { return }
-                        os_log("Loaded text payload (%d chars)", log: log, type: .info, text.count)
                         self?.stashTextPayload(text, with: context)
                     }
                     return
                 }
+                
+                // 2. 核心优化：针对文件/图片，开启【零拷贝】模式
                 if provider.hasItemConformingToTypeIdentifier("public.file-url") {
-                    os_log("Matched file URL attachment", log: log, type: .info)
-                    provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { [weak self] data, error in
+                    os_log("Matched file URL (Zero-Copy Mode)", log: log, type: .info)
+                    
+                    // 使用 loadInPlaceFileRepresentation 明确告知系统：我不需要拷贝，只要原位访问权限
+                    provider.loadInPlaceFileRepresentation(forTypeIdentifier: "public.file-url") { [weak self] (originalURL, isInPlace, error) in
                         if let error = error {
-                            os_log("Failed to load file URL: %{public}@", log: log, type: .error, error.localizedDescription)
+                            os_log("Failed to get in-place URL: %{public}@", log: log, type: .error, error.localizedDescription)
                             self?.cancel(with: context)
                             return
                         }
-                        if let url = data as? URL {
-                            os_log("Loaded file URL: %{public}@", log: log, type: .info, url.path)
-                            self?.stashFilePayload(url, with: context)
-                        } else if let path = data as? String {
-                            os_log("Loaded file path: %{public}@", log: log, type: .info, path)
-                            self?.stashFilePayload(URL(fileURLWithPath: path), with: context)
+                        
+                        guard let safeURL = originalURL else {
+                            os_log("Original URL is nil", log: log, type: .error)
+                            self?.cancel(with: context)
+                            return
+                        }
+                        
+                        // 开启沙盒扩展访问权限（虽然 Extension 不读，但这是合规获取真实路径的标准动作）
+                        let isSecurityScoped = safeURL.startAccessingSecurityScopedResource()
+                        
+                        // 此时 safeURL.path 就是原文件的真实路径（如: /Users/ws2356/Downloads/huge_video.mp4）
+                        os_log("Successfully grabbed original path: %{public}@", log: log, type: .info, safeURL.path)
+                        
+                        // 将真实的绝对路径直接丢给 Agent 
+                        self?.stashFilePayload(safeURL, with: context)
+                        
+                        if isSecurityScoped {
+                            safeURL.stopAccessingSecurityScopedResource()
                         }
                     }
                     return
