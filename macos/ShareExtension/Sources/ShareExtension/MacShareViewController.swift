@@ -1,4 +1,6 @@
 import AppKit
+import Foundation
+import UniformTypeIdentifiers
 import os.log
 
 private let socketRelativePath = "is.sock"
@@ -96,9 +98,9 @@ class MacShareViewController: NSViewController {
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
                 // 1. 处理文本（保持不变）
-                if provider.hasItemConformingToTypeIdentifier("public.plain-text") {
+                if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                     os_log("Matched text attachment", log: log, type: .info)
-                    provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { [weak self] data, error in
+                    provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] data, error in
                         if error != nil {
                             self?.cancel(with: context)
                             return
@@ -110,11 +112,11 @@ class MacShareViewController: NSViewController {
                 }
                 
                 // 2. 核心优化：针对文件/图片，开启【零拷贝】模式
-                if provider.hasItemConformingToTypeIdentifier("public.file-url") {
+                if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
                     os_log("Matched file URL (Zero-Copy Mode)", log: log, type: .info)
                     
                     // 使用 loadInPlaceFileRepresentation 明确告知系统：我不需要拷贝，只要原位访问权限
-                    provider.loadInPlaceFileRepresentation(forTypeIdentifier: "public.file-url") { [weak self] (originalURL, isInPlace, error) in
+                    provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.data.identifier) { [weak self] (originalURL, isInPlace, error) in
                         if let error = error {
                             os_log("Failed to get in-place URL: %{public}@", log: log, type: .error, error.localizedDescription)
                             self?.cancel(with: context)
@@ -126,7 +128,17 @@ class MacShareViewController: NSViewController {
                             self?.cancel(with: context)
                             return
                         }
-                        
+
+                        let attrs = try? FileManager.default.attributesOfItem(
+                            atPath: safeURL.path
+                        )
+                        os_log("url=%{public}@ size=%{public}@", log: log, type: .info, safeURL.path, String(describing: attrs?[.size]))
+                        let values = try? safeURL.resourceValues(forKeys: [
+                            .contentTypeKey,
+                            .fileSizeKey,
+                            .isAliasFileKey])
+                        os_log("url=%{public}@ contentType=%{public}@ size=%{public}@ isAlias=%{public}@", log: log, type: .info, safeURL.path, String(describing: values?.contentType), String(describing: values?.fileSize), String(describing: values?.isAliasFile))
+                                        
                         let isSecurityScoped = safeURL.startAccessingSecurityScopedResource()
                         
                         os_log("Successfully grabbed original path: %{public}@, isInPlace: %{bool}d", log: log, type: .info, safeURL.path, isInPlace)

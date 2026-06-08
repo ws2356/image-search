@@ -172,6 +172,7 @@ class QRTriggerHandler:
         _logger.info("Stash claimed: id=%s type=%s", stash_id, entry.content_type)
 
         if entry.content is not None:
+            _logger.info("Stash content delivered: id=%s content_type=%s", stash_id, entry.content_type)
             return {
                 "status": "claimed",
                 "content_type": entry.content_type,
@@ -185,6 +186,7 @@ class QRTriggerHandler:
             except FileNotFoundError:
                 self._invalidate_stash(entry, expired=True)
                 return {"_status": 410, "status": "expired", "error": "Source file no longer available"}
+            _logger.info("Stash file delivered: id=%s content_type=%s filename=%s path=%s filesize=%d", stash_id, entry.content_type, entry.filename, entry.file_path, len(file_bytes))
             return {
                 "status": "claimed",
                 "content_type": entry.content_type,

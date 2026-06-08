@@ -9,6 +9,9 @@ struct QRTransferResultView: View {
     @State private var showCopiedToast = false
     @State private var showSavedToast = false
     @State private var showPermissionAlert = false
+    @State private var showFileSavedToast = false
+    @State private var showFileError = false
+    @State private var fileErrorMessage = ""
 
     var body: some View {
         NavigationView {
@@ -26,6 +29,8 @@ struct QRTransferResultView: View {
                 toast("Copied to clipboard")
             } else if showSavedToast {
                 toast("Saved to Photos")
+            } else if showFileSavedToast {
+                toast("Saved to Files")
             }
         }
         .alert("Photo Library Access", isPresented: $showPermissionAlert) {
@@ -37,6 +42,11 @@ struct QRTransferResultView: View {
         } message: {
             Text("AuBackup needs photo library write access to save images.")
         }
+        .alert("File Error", isPresented: $showFileError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(fileErrorMessage)
+        }
     }
 
     @ViewBuilder
@@ -44,8 +54,10 @@ struct QRTransferResultView: View {
         switch result {
         case .text(let text):
             textContentView(text: text)
-        case .image(let data, let contentType, let filename):
-            imageContentView(data: data, contentType: contentType, filename: filename)
+        case .image(let fileURL, let contentType, let filename):
+            imageContentView(fileURL: fileURL, contentType: contentType, filename: filename)
+        case .file(let fileURL, let contentType, let filename):
+            fileContentView(fileURL: fileURL, contentType: contentType, filename: filename)
         }
     }
 
@@ -72,9 +84,9 @@ struct QRTransferResultView: View {
         }
     }
 
-    private func imageContentView(data: Data, contentType: String, filename: String?) -> some View {
+    private func imageContentView(fileURL: URL, contentType: String, filename: String?) -> some View {
         VStack(spacing: 16) {
-            if let uiImage = UIImage(data: data) {
+            if let uiImage = UIImage(contentsOfFile: fileURL.path) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -89,8 +101,42 @@ struct QRTransferResultView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Button(action: saveImageToLibrary(data)) {
+            Button(action: saveImageToLibrary(fileURL)) {
                 Label("Save to Photo Library", systemImage: "photo.badge.plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal)
+            .padding(.bottom)
+        }
+    }
+
+    private func fileContentView(fileURL: URL, contentType: String, filename: String?) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "doc.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.secondary)
+                .padding(.top, 32)
+
+            if let filename {
+                Text(filename)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+            } else {
+                Text("Received File")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+            }
+
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+               let fileSize = attrs[.size] as? Int64 {
+                Text("\(fileSize) bytes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(action: openFile(fileURL)) {
+                Label("Open in Files", systemImage: "folder")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -109,7 +155,7 @@ struct QRTransferResultView: View {
         }
     }
 
-    private func saveImageToLibrary(_ data: Data) -> () -> Void {
+    private func saveImageToLibrary(_ fileURL: URL) -> () -> Void {
         {
             PHPhotoLibrary.requestAuthorization { status in
                 DispatchQueue.main.async {
@@ -117,7 +163,7 @@ struct QRTransferResultView: View {
                     case .authorized, .limited:
                         PHPhotoLibrary.shared().performChanges {
                             let creationRequest = PHAssetCreationRequest.forAsset()
-                            creationRequest.addResource(with: .photo, data: data, options: nil)
+                            creationRequest.addResource(with: .photo, fileURL: fileURL, options: nil)
                         } completionHandler: { success, error in
                             DispatchQueue.main.async {
                                 if success {
@@ -135,6 +181,17 @@ struct QRTransferResultView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func openFile(_ fileURL: URL) -> () -> Void {
+        {
+            guard UIApplication.shared.canOpenURL(fileURL) else {
+                fileErrorMessage = "Cannot open file"
+                showFileError = true
+                return
+            }
+            UIApplication.shared.open(fileURL)
         }
     }
 

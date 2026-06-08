@@ -66,6 +66,7 @@ final class QRClaimResultBox: @unchecked Sendable, Equatable {
         switch (lhs.result, rhs.result) {
         case (.text(let a), .text(let b)): return a == b
         case (.image(let a, _, _), .image(let b, _, _)): return a == b
+        case (.file(let a, _, _), .file(let b, _, _)): return a == b
         default: return false
         }
     }

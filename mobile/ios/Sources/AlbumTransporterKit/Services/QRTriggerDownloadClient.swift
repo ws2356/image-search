@@ -40,7 +40,8 @@ extension QRTriggerDownloadClientError: LocalizedError {
 
 enum QRClaimResult: Sendable {
     case text(String)
-    case image(Data, contentType: String, filename: String?)
+    case image(fileURL: URL, contentType: String, filename: String?)
+    case file(fileURL: URL, contentType: String, filename: String?)
 }
 
 final class QRTriggerDownloadClient: Sendable {
@@ -111,9 +112,9 @@ final class QRTriggerDownloadClient: Sendable {
             throw QRTriggerDownloadClientError.httpError(statusCode: 0, message: "Failed to encode request")
         }
 
-        let (data, response): (Data, URLResponse)
+        let (tempFileURL, response): (URL, URLResponse)
         do {
-            (data, response) = try await urlSession.data(for: request)
+            (tempFileURL, response) = try await urlSession.download(for: request)
         } catch {
             throw QRTriggerDownloadClientError.networkError(error)
         }
@@ -126,42 +127,83 @@ final class QRTriggerDownloadClient: Sendable {
         case 200:
             break
         case 401:
+            cleanupTempFile(tempFileURL)
             throw QRTriggerDownloadClientError.invalidOptCode
         case 404:
+            cleanupTempFile(tempFileURL)
             throw QRTriggerDownloadClientError.stashNotFound
         case 410:
+            cleanupTempFile(tempFileURL)
             throw QRTriggerDownloadClientError.stashExpired
         case 400..<500:
-            let message = parseErrorMessage(data) ?? "Client error"
+            let tempData = try? Data(contentsOf: tempFileURL)
+            cleanupTempFile(tempFileURL)
+            let message = parseErrorMessage(tempData ?? Data()) ?? "Client error"
             throw QRTriggerDownloadClientError.httpError(statusCode: httpResponse.statusCode, message: message)
         default:
-            let message = parseErrorMessage(data) ?? "Server error"
+            let tempData = try? Data(contentsOf: tempFileURL)
+            cleanupTempFile(tempFileURL)
+            let message = parseErrorMessage(tempData ?? Data()) ?? "Server error"
             throw QRTriggerDownloadClientError.serverError(message)
         }
 
-        return try parseClaimResponse(data: data, response: httpResponse)
+        return try await parseClaimResponse(tempFileURL: tempFileURL, response: httpResponse)
     }
 
-    private func parseClaimResponse(data: Data, response: HTTPURLResponse) throws -> QRClaimResult {
+    private func parseClaimResponse(tempFileURL: URL, response: HTTPURLResponse) async throws -> QRClaimResult {
         guard let contentType = response.value(forHTTPHeaderField: "Content-Type") else {
+            cleanupTempFile(tempFileURL)
             throw QRTriggerDownloadClientError.invalidResponse
         }
 
         let lowercasedContentType = contentType.lowercased()
 
         if lowercasedContentType.hasPrefix("text/") {
+            let data = try Data(contentsOf: tempFileURL)
+            cleanupTempFile(tempFileURL)
             guard let text = String(data: data, encoding: .utf8) else {
                 throw QRTriggerDownloadClientError.invalidResponse
             }
             return .text(text)
         }
 
+        let filename = response.value(forHTTPHeaderField: "X-Original-Filename")
+
         if lowercasedContentType.hasPrefix("image/") {
-            let filename = response.value(forHTTPHeaderField: "X-Original-Filename")
-            return .image(data, contentType: contentType, filename: filename)
+            let fileURL = try persistToDocuments(tempFileURL, filename: filename, prefix: "image")
+            return .image(fileURL: fileURL, contentType: contentType, filename: filename)
         }
 
+        if lowercasedContentType == "application/octet-stream" {
+            let fileURL = try persistToDocuments(tempFileURL, filename: filename, prefix: "file")
+            return .file(fileURL: fileURL, contentType: contentType, filename: filename)
+        }
+
+        cleanupTempFile(tempFileURL)
         throw QRTriggerDownloadClientError.invalidResponse
+    }
+
+    private func persistToDocuments(_ tempFileURL: URL, filename: String?, prefix: String) throws -> URL {
+        guard let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            throw QRTriggerDownloadClientError.invalidResponse
+        }
+
+        let subDir = documentsDir.appendingPathComponent("QRDownloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: subDir, withIntermediateDirectories: true)
+
+        let fileName = filename ?? "\(prefix)_\(Int(Date().timeIntervalSince1970))"
+        let destURL = subDir.appendingPathComponent(fileName)
+
+        if FileManager.default.fileExists(atPath: destURL.path) {
+            try FileManager.default.removeItem(at: destURL)
+        }
+
+        try FileManager.default.moveItem(at: tempFileURL, to: destURL)
+        return destURL
+    }
+
+    private func cleanupTempFile(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
     }
 
     private func parseErrorMessage(_ data: Data) -> String? {

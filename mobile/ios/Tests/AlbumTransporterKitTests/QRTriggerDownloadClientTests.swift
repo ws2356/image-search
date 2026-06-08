@@ -14,16 +14,19 @@ final class QRTriggerDownloadClientTests: XCTestCase {
 
     func testClaimTextSuccess() async throws {
         let expectedText = "Hello from Mac!"
-        let config = URLProtocolMock.config(
-            statusCode: 200,
-            headers: ["Content-Type": "text/plain; charset=utf-8"],
-            body: expectedText.data(using: .utf8)!
-        )
-        URLProtocolMock.requestHandler = { _ in
-            return config
+        DownloadMock.responseHandler = { _ in
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "text/plain; charset=utf-8"]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try expectedText.data(using: .utf8)!.write(to: tempURL)
+            return (response, tempURL)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         let result = try await client.claim(
@@ -38,24 +41,29 @@ final class QRTriggerDownloadClientTests: XCTestCase {
             XCTAssertEqual(text, expectedText)
         case .image:
             XCTFail("Expected text result but got image")
+        case .file:
+            XCTFail("Expected text result but got file")
         }
     }
 
     func testClaimImageSuccess() async throws {
         let imageData = Data([0x89, 0x50, 0x4E, 0x47])  // PNG magic bytes
-        let config = URLProtocolMock.config(
-            statusCode: 200,
-            headers: [
-                "Content-Type": "image/png",
-                "X-Original-Filename": "photo.png",
-            ],
-            body: imageData
-        )
-        URLProtocolMock.requestHandler = { _ in
-            return config
+        DownloadMock.responseHandler = { _ in
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: [
+                    "Content-Type": "image/png",
+                    "X-Original-Filename": "photo.png",
+                ]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try imageData.write(to: tempURL)
+            return (response, tempURL)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         let result = try await client.claim(
@@ -68,24 +76,68 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         switch result {
         case .text:
             XCTFail("Expected image result but got text")
-        case .image(let data, let contentType, let filename):
-            XCTAssertEqual(data, imageData)
+        case .image(let fileURL, let contentType, let filename):
+            XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
             XCTAssertEqual(contentType, "image/png")
             XCTAssertEqual(filename, "photo.png")
+        case .file:
+            XCTFail("Expected image result but got file")
+        }
+    }
+
+    func testClaimFileSuccess() async throws {
+        let fileData = Data([0x00, 0x01, 0x02, 0x03])
+        DownloadMock.responseHandler = { _ in
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: [
+                    "Content-Type": "application/octet-stream",
+                    "X-Original-Filename": "document.bin",
+                ]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try fileData.write(to: tempURL)
+            return (response, tempURL)
+        }
+
+        urlSession = DownloadMock.session()
+        client = QRTriggerDownloadClient(urlSession: urlSession)
+
+        let result = try await client.claim(
+            hosts: ["192.168.1.10"],
+            port: 9527,
+            stashId: "test-stash-id",
+            optCode: "123456"
+        )
+
+        switch result {
+        case .text:
+            XCTFail("Expected file result but got text")
+        case .image:
+            XCTFail("Expected file result but got image")
+        case .file(let fileURL, let contentType, let filename):
+            XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+            XCTAssertEqual(contentType, "application/octet-stream")
+            XCTAssertEqual(filename, "document.bin")
         }
     }
 
     func testClaimInvalidOptCode() async {
-        let config = URLProtocolMock.config(
-            statusCode: 401,
-            headers: ["Content-Type": "application/json"],
-            body: Data("{\"error\":\"Invalid opt-code\"}".utf8)
-        )
-        URLProtocolMock.requestHandler = { _ in
-            return config
+        DownloadMock.responseHandler = { _ in
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
+                statusCode: 401,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try Data("{\"error\":\"Invalid opt-code\"}".utf8).write(to: tempURL)
+            return (response, tempURL)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         do {
@@ -108,16 +160,19 @@ final class QRTriggerDownloadClientTests: XCTestCase {
     }
 
     func testClaimStashExpired() async {
-        let config = URLProtocolMock.config(
-            statusCode: 410,
-            headers: ["Content-Type": "application/json"],
-            body: Data("{\"error\":\"Stash has expired\"}".utf8)
-        )
-        URLProtocolMock.requestHandler = { _ in
-            return config
+        DownloadMock.responseHandler = { _ in
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
+                statusCode: 410,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try Data("{\"error\":\"Stash has expired\"}".utf8).write(to: tempURL)
+            return (response, tempURL)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         do {
@@ -140,16 +195,19 @@ final class QRTriggerDownloadClientTests: XCTestCase {
     }
 
     func testClaimStashNotFound() async {
-        let config = URLProtocolMock.config(
-            statusCode: 404,
-            headers: ["Content-Type": "application/json"],
-            body: Data("{\"error\":\"Stash not found\"}".utf8)
-        )
-        URLProtocolMock.requestHandler = { _ in
-            return config
+        DownloadMock.responseHandler = { _ in
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
+                statusCode: 404,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try Data("{\"error\":\"Stash not found\"}".utf8).write(to: tempURL)
+            return (response, tempURL)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         do {
@@ -172,16 +230,19 @@ final class QRTriggerDownloadClientTests: XCTestCase {
     }
 
     func testClaimServerError() async {
-        let config = URLProtocolMock.config(
-            statusCode: 500,
-            headers: ["Content-Type": "application/json"],
-            body: Data("{\"error\":\"Internal error\"}".utf8)
-        )
-        URLProtocolMock.requestHandler = { _ in
-            return config
+        DownloadMock.responseHandler = { _ in
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
+                statusCode: 500,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try Data("{\"error\":\"Internal error\"}".utf8).write(to: tempURL)
+            return (response, tempURL)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         do {
@@ -205,12 +266,12 @@ final class QRTriggerDownloadClientTests: XCTestCase {
 
     func testClaimFailoverAllHostsFail() async {
         var callCount = 0
-        URLProtocolMock.requestHandler = { _ in
+        DownloadMock.responseHandler = { _ in
             callCount += 1
             throw URLError(.cannotConnectToHost)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         do {
@@ -234,19 +295,23 @@ final class QRTriggerDownloadClientTests: XCTestCase {
 
     func testClaimFailoverSecondHostSucceeds() async throws {
         var callCount = 0
-        URLProtocolMock.requestHandler = { _ in
+        DownloadMock.responseHandler = { _ in
             callCount += 1
             if callCount == 1 {
                 throw URLError(.cannotConnectToHost)
             }
-            return URLProtocolMock.config(
+            let response = HTTPURLResponse(
+                url: URL(string: "http://test")!,
                 statusCode: 200,
-                headers: ["Content-Type": "text/plain"],
-                body: Data("Hello".utf8)
-            )
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": "text/plain"]
+            )!
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try Data("Hello".utf8).write(to: tempURL)
+            return (response, tempURL)
         }
 
-        urlSession = URLProtocolMock.session()
+        urlSession = DownloadMock.session()
         client = QRTriggerDownloadClient(urlSession: urlSession)
 
         let result = try await client.claim(
@@ -261,47 +326,54 @@ final class QRTriggerDownloadClientTests: XCTestCase {
             XCTAssertEqual(text, "Hello")
         case .image:
             XCTFail("Expected text result")
+        case .file:
+            XCTFail("Expected text result but got file")
         }
 
         XCTAssertEqual(callCount, 2)
     }
 }
 
-final class URLProtocolMock: URLProtocol {
-    nonisolated(unsafe) static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
-
-    static func config(statusCode: Int, headers: [String: String], body: Data) -> (HTTPURLResponse, Data) {
-        let response = HTTPURLResponse(
-            url: URL(string: "http://test")!,
-            statusCode: statusCode,
-            httpVersion: "HTTP/1.1",
-            headerFields: headers
-        )!
-        return (response, body)
-    }
+final class DownloadMock: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    nonisolated(unsafe) static var responseHandler: ((URLRequest) throws -> (HTTPURLResponse, URL))?
+    private var completionData: Data?
+    private var completionError: Error?
 
     static func session() -> URLSession {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [URLProtocolMock.self]
-        return URLSession(configuration: config)
+        let delegate = DownloadMock()
+        return URLSession(
+            configuration: .ephemeral,
+            delegate: delegate,
+            delegateQueue: nil
+        )
     }
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        guard let handler = URLProtocolMock.requestHandler else {
-            fatalError("URLProtocolMock.requestHandler not set")
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {
+        guard let handler = DownloadMock.responseHandler else {
+            fatalError("DownloadMock.responseHandler not set")
         }
         do {
-            let (response, data) = try handler(request)
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
+            let (response, tempURL) = try handler(downloadTask.originalRequest!)
+            let data = try Data(contentsOf: tempURL)
+            try data.write(to: location)
         } catch {
-            client?.urlProtocol(self, didFailWithError: error)
+            completionError = error
         }
     }
 
-    override func stopLoading() {}
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {}
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        completionError = error
+    }
 }
