@@ -3,6 +3,7 @@ import UIKit
 import SwiftUI
 import AlbumTransporterKit
 import Common
+import ISFromMobile
 
 class ShareViewController: SLComposeServiceViewController {
     private let viewModel = InstantShareExtensionViewModel(
