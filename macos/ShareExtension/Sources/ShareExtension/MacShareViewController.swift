@@ -146,8 +146,8 @@ class MacShareViewController: NSViewController {
                             return
                         }
                         os_log("Type of data: %{public}@", log: log, type: .info, String(describing: type(of: data)))
-                        guard let text = data as? String else {
-                            os_log("Failed to load text: %{public}@", log: log, type: .error, "Data is not a string")
+                        guard let text = data as? String ?? (data as? Data).flatMap({ String(data: $0, encoding: .utf8) }) else {
+                            os_log("Failed to load text: data is neither String nor UTF-8 Data", log: log, type: .error)
                             self?.cancel(with: context)
                             return
                         }

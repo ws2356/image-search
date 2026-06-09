@@ -113,7 +113,7 @@ class QRTriggerMiniWindow(QDialog):
         QTimer.singleShot(10000, self.close)
 
     def _setup_ui(self) -> None:
-        self.setWindowTitle("Send to Phone")
+        self.setWindowTitle("Send to Your Phone")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setAttribute(Qt.WA_DeleteOnClose)
 
