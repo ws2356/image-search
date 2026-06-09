@@ -1,11 +1,21 @@
+import Common
+
 @MainActor
-struct ErrorPageViewModel {
+struct ErrorPageViewModel: ErrorPageViewDelegate {
     private let model: any AppPageModeling
     private let telemetryService: TelemetryService
 
     init(model: any AppPageModeling, telemetryService: TelemetryService) {
         self.model = model
         self.telemetryService = telemetryService
+    }
+    
+    var title: String {
+        return summary.title
+    }
+    
+    var message: String {
+        return summary.message
     }
 
     var summary: ErrorSummary {

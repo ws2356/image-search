@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 struct TransferSessionView: View {
     @ObservedObject var viewModel: TransferPageViewModel

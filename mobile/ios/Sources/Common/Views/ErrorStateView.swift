@@ -1,9 +1,23 @@
 import SwiftUI
 
-struct ErrorStateView: View {
-    let viewModel: ErrorPageViewModel
+@MainActor
+public protocol ErrorPageViewDelegate {
+    var title: String { get }
+    var message: String { get }
 
-    var body: some View {
+    func retryTapped() async
+
+    func cancelTapped() async
+}
+
+public struct ErrorStateView: View {
+    let viewModel: ErrorPageViewDelegate
+    
+    public init(viewModel: ErrorPageViewDelegate) {
+        self.viewModel = viewModel
+    }
+
+    public var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 VStack(spacing: 14) {
@@ -12,11 +26,11 @@ struct ErrorStateView: View {
                         gradient: [Color(hex: 0xFF453A), Color(hex: 0xC02020)]
                     )
 
-                    Text(viewModel.summary.title)
+                    Text(viewModel.title)
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(Color(hex: 0x1C1C1E))
 
-                    Text(viewModel.summary.message)
+                    Text(viewModel.message)
                         .font(.system(size: 15))
                         .foregroundStyle(Color(hex: 0x6E6E73))
                         .multilineTextAlignment(.center)

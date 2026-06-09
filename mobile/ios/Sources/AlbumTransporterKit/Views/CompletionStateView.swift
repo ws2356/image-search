@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 struct CompletionStateView: View {
     @ObservedObject var viewModel: CompletionPageViewModel

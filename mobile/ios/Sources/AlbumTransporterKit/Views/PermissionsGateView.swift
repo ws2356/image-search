@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import Common
 
 struct PermissionsGateView: View {
     @ObservedObject var viewModel: PermissionsPageViewModel

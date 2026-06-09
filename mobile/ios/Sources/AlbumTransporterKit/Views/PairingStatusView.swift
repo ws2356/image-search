@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 struct PairingStatusView: View {
     @ObservedObject var viewModel: PairingPageViewModel
