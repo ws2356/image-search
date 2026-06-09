@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QTimer
 
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE, INSTANT_SHARE_MDNS_PORT
@@ -157,6 +158,10 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
+
+    signal_timer = QTimer()
+    signal_timer.start(2000)
+    signal_timer.timeout.connect(lambda: None)
 
     exit_code = app.exec()
 
