@@ -36,10 +36,11 @@ APPEX_NAME="ShareExtension.appex"
 
 echo "==> Building ShareExtension from: $SHARED_EXTENSION_SRC"
 
+_configuration="$(printf "%s" "${CONFIGURATION:-release}" | tr '[:upper:]' '[:lower:]')"
 # ── Step 1: Build with SwiftPM ─────────────────────────────────────────────────
-(cd "$SHARED_EXTENSION_SRC" && swift build -c release --disable-sandbox)
+(cd "$SHARED_EXTENSION_SRC" && swift build -c "$_configuration" --disable-sandbox)
 
-BUILD_DIR="$SHARED_EXTENSION_SRC/.build/release"
+BUILD_DIR="$SHARED_EXTENSION_SRC/.build/$_configuration"
 BINARY_PATH="$BUILD_DIR/ShareExtension"
 if [[ ! -f "$BINARY_PATH" ]]; then
     echo "Error: Build succeeded but binary not found at $BINARY_PATH" >&2
@@ -63,7 +64,7 @@ cp "$SHARED_EXTENSION_SRC/Info.plist" "$APPEX_PATH/Contents/Info.plist"
 echo "  Bundle assembled at: $APPEX_PATH"
 
 # ── Step 3: Codesign ───────────────────────────────────────────────────────────
-ENTITLEMENTS="$SHARED_EXTENSION_SRC/ShareExtension.entitlements"
+ENTITLEMENTS="$SHARED_EXTENSION_SRC/ShareExtension.${_configuration}.entitlements"
 if [[ -n "$IDENTITY" ]]; then
     echo "  Signing with identity: $IDENTITY"
     codesign --sign "$IDENTITY" \

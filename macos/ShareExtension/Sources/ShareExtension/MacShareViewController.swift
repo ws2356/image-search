@@ -97,6 +97,7 @@ class MacShareViewController: NSViewController {
         for item in items {
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
+                os_log("supported types: %{public}@", log: log, type: .info, provider.registeredTypeIdentifiers)
                 // 1. Check for rich text (RTF, HTML) before plain text fallback
                 let richTextTypes = [UTType.rtf.identifier, UTType.html.identifier, "com.apple.flat-rtfd"]
                 for richType in richTextTypes {
