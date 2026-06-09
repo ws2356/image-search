@@ -669,9 +669,6 @@ private final class StubPageModel: PermissionsPageModeling, TransferPageModeling
         }
     }
 
-    func onQRClaimScanned(_ payload: QRClaimPayload) async {}
-    func onQRClaimDismissed() async {}
-
 }
 
 private actor StubPermissionService: PermissionService {

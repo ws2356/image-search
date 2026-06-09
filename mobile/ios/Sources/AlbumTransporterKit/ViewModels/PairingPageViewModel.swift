@@ -147,8 +147,6 @@ final class PairingPageViewModel: ObservableObject {
             return "completed"
         case .error:
             return "error"
-        case .qrTransferResult:
-            return "qrTransferResult"
         }
     }
 }

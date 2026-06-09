@@ -118,6 +118,9 @@ public struct AlbumTransporterRootView: View {
             } message: { prompt in
                 Text(prompt.message)
             }
+            .fullScreenCover(item: $model.instantShareQRPayload) { payload in
+                ISQRRootView(qrPayload: payload)
+            }
     }
 
     @ViewBuilder
@@ -164,10 +167,6 @@ public struct AlbumTransporterRootView: View {
                 telemetryService: container.telemetryService()
             )
             ErrorStateView(viewModel: errorViewModel)
-        case .qrTransferResult(let box):
-            QRTransferResultView(result: box.result) {
-                Task { await model.onQRClaimDismissed() }
-            }
         }
     }
 

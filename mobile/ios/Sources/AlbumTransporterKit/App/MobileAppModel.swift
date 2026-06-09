@@ -11,6 +11,7 @@ final class MobileAppModel: ObservableObject {
 
     @Published var isShowingIncomingLinkReplacementConfirmation = false
     @Published private(set) var activeUpdatePrompt: AppUpdatePrompt?
+    @Published var instantShareQRPayload: QRClaimPayload?
 
     private var hasLoaded = false
     private var hasFinishedLoad = false
@@ -88,6 +89,10 @@ final class MobileAppModel: ObservableObject {
     func onScanningCompleted(with result: ScanningPageResult) async {
         switch result.result {
         case .success(let qrString):
+            if let url = URL(string: qrString), let payload = QRClaimPayload(universalLinkURL: url) {
+                self.instantShareQRPayload = payload
+                return
+            }
             await showPairingPage(qrString: qrString)
         case .failure(.cancel):
             await returnHome()
@@ -236,29 +241,6 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
-    func onQRClaimScanned(_ payload: QRClaimPayload) async {
-        telemetryService.recordInteraction(name: "qr_claim_scanned", location: "qr_transfer")
-        let client = QRTriggerDownloadClient()
-        do {
-            let result = try await client.claim(
-                hosts: payload.ips,
-                port: payload.port,
-                stashId: payload.stashId,
-                optCode: payload.optCode
-            )
-            route = .qrTransferResult(QRClaimResultBox(result))
-        } catch {
-            presentErrorSummary(
-                title: "Transfer failed",
-                message: error.localizedDescription
-            )
-        }
-    }
-
-    func onQRClaimDismissed() async {
-        route = .home
-    }
-
     var routeName: String {
         switch route {
         case .home:
@@ -275,8 +257,6 @@ final class MobileAppModel: ObservableObject {
             return "completed"
         case .error(_):
             return "error"
-        case .qrTransferResult:
-            return "qr_transfer_result"
         }
     }
 
@@ -306,7 +286,9 @@ final class MobileAppModel: ObservableObject {
         // Process any universal link that arrived before load completed.
         if let pendingPayload = pendingIncomingUniversalLinkPayload {
             pendingIncomingUniversalLinkPayload = nil
-            await processIncomingUniversalLinkPayload(pendingPayload)
+            if let url = URL(string: pendingPayload) {
+                await handleIncomingUniversalLink(url)
+            }
         }
 
         let pairingService = pairingService
@@ -331,12 +313,6 @@ final class MobileAppModel: ObservableObject {
             return
         }
 
-        // Check if this is a /share link (instant share / QR claim)
-        if let claimPayload = QRClaimPayload(universalLinkURL: url) {
-            await onQRClaimScanned(claimPayload)
-            return
-        }
-
         // Otherwise treat as pairing universal link
         let payload = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !payload.isEmpty else {
@@ -346,6 +322,12 @@ final class MobileAppModel: ObservableObject {
         // Stash the link if load() hasn't completed yet — it will process it after setting route = .home.
         if !hasFinishedLoad {
             pendingIncomingUniversalLinkPayload = payload
+            return
+        }
+
+        // Check if this is a /share link (instant share / QR claim)
+        if let claimPayload = QRClaimPayload(universalLinkURL: url) {
+            self.instantShareQRPayload = claimPayload
             return
         }
 
