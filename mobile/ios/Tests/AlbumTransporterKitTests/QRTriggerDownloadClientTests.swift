@@ -39,6 +39,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         switch result {
         case .text(let text):
             XCTAssertEqual(text, expectedText)
+        case .html:
+            XCTFail("Expected text result but got html")
         case .image:
             XCTFail("Expected text result but got image")
         case .file:
@@ -76,6 +78,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         switch result {
         case .text:
             XCTFail("Expected image result but got text")
+        case .html:
+            XCTFail("Expected image result but got html")
         case .image(let fileURL, let contentType, let filename):
             XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
             XCTAssertEqual(contentType, "image/png")
@@ -115,6 +119,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         switch result {
         case .text:
             XCTFail("Expected file result but got text")
+        case .html:
+            XCTFail("Expected file result but got html")
         case .image:
             XCTFail("Expected file result but got image")
         case .file(let fileURL, let contentType, let filename):
@@ -324,6 +330,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         switch result {
         case .text(let text):
             XCTAssertEqual(text, "Hello")
+        case .html:
+            XCTFail("Expected text result but got html")
         case .image:
             XCTFail("Expected text result")
         case .file:

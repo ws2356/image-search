@@ -97,7 +97,24 @@ class MacShareViewController: NSViewController {
         for item in items {
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
-                // 1. 处理文本（保持不变）
+                // 1. Check for rich text (RTF, HTML) before plain text fallback
+                let richTextTypes = [UTType.rtf.identifier, UTType.html.identifier, "com.apple.flat-rtfd"]
+                for richType in richTextTypes {
+                    if provider.hasItemConformingToTypeIdentifier(richType) {
+                        os_log("Matched rich text type: %{public}@", log: log, type: .info, richType)
+                        provider.loadItem(forTypeIdentifier: richType, options: nil) { [weak self] data, error in
+                            if let error = error {
+                                os_log("Failed to load rich text: %{public}@", log: log, type: .error, error.localizedDescription)
+                                self?.cancel(with: context)
+                                return
+                            }
+                            self?.processRichTextData(data, type: richType, with: context)
+                        }
+                        return
+                    }
+                }
+                
+                // 2. Plain text
                 if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                     os_log("Matched text attachment", log: log, type: .info)
                     provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] data, error in
@@ -111,7 +128,7 @@ class MacShareViewController: NSViewController {
                     return
                 }
                 
-                // 2. 核心优化：针对文件/图片，开启【零拷贝】模式
+                // 3. File/Image — zero-copy mode
                 if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
                     os_log("Matched file URL (Zero-Copy Mode)", log: log, type: .info)
                     
@@ -163,6 +180,56 @@ class MacShareViewController: NSViewController {
         cancel(with: context)
     }
 
+    private func processRichTextData(_ data: Any?, type: String, with context: NSExtensionContext) {
+        var attributedString: NSAttributedString?
+        
+        if let attributed = data as? NSAttributedString {
+            attributedString = attributed
+        } else if let data = data as? Data {
+            attributedString = try? NSAttributedString(data: data, options: [:], documentAttributes: nil)
+        } else if let string = data as? String, let data = string.data(using: .utf8) {
+            attributedString = try? NSAttributedString(data: data, options: [:], documentAttributes: nil)
+        }
+        
+        guard let finalAttributedString = attributedString else {
+            os_log("Failed to convert data to NSAttributedString", log: log, type: .error)
+            cancel(with: context)
+            return
+        }
+        
+        // Convert to HTML
+        let htmlData = try? finalAttributedString.data(
+            from: NSRange(location: 0, length: finalAttributedString.length),
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.html]
+        )
+        
+        guard let htmlContent = htmlData, let htmlString = String(data: htmlContent, encoding: .utf8) else {
+            os_log("Failed to convert NSAttributedString to HTML", log: log, type: .error)
+            cancel(with: context)
+            return
+        }
+        
+        os_log("Stashing HTML payload (%d chars)", log: log, type: .info, htmlString.count)
+        stashHTMLPayload(htmlString, with: context)
+    }
+    
+    private func stashHTMLPayload(_ html: String, with context: NSExtensionContext) {
+        os_log("Stashing HTML payload (%d chars)", log: log, type: .info, html.count)
+        let body: [String: String] = [
+            "type": "html",
+            "content": html
+        ]
+        sendStashRequest(body) { [weak self] success in
+            if success {
+                os_log("HTML stash succeeded — completing extension", log: log, type: .info)
+                self?.completeRequest(with: context)
+            } else {
+                os_log("HTML stash failed — cancelling extension", log: log, type: .error)
+                self?.cancel(with: context)
+            }
+        }
+    }
+    
     private func stashTextPayload(_ text: String, with context: NSExtensionContext) {
         os_log("Stashing text payload (%d chars)", log: log, type: .info, text.count)
         let body: [String: String] = [

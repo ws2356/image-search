@@ -40,6 +40,7 @@ extension QRTriggerDownloadClientError: LocalizedError {
 
 public enum QRClaimResult: Sendable {
     case text(String)
+    case html(String)
     case image(fileURL: URL, contentType: String, filename: String?)
     case file(fileURL: URL, contentType: String, filename: String?)
 }
@@ -157,6 +158,15 @@ public final class QRTriggerDownloadClient: Sendable {
         }
 
         let lowercasedContentType = contentType.lowercased()
+
+        if lowercasedContentType.hasPrefix("text/html") {
+            let data = try Data(contentsOf: tempFileURL)
+            cleanupTempFile(tempFileURL)
+            guard let html = String(data: data, encoding: .utf8) else {
+                throw QRTriggerDownloadClientError.invalidResponse
+            }
+            return .html(html)
+        }
 
         if lowercasedContentType.hasPrefix("text/") {
             let data = try Data(contentsOf: tempFileURL)

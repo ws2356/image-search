@@ -59,6 +59,8 @@ public struct QRTransferResultView: View {
         switch result {
         case .text(let text):
             textContentView(text: text)
+        case .html(let html):
+            RichTextReceiveView(html: html)
         case .image(let fileURL, let contentType, let filename):
             imageContentView(fileURL: fileURL, contentType: contentType, filename: filename)
         case .file(let fileURL, let contentType, let filename):
