@@ -113,7 +113,7 @@ class QRTriggerMiniWindow(QDialog):
         QTimer.singleShot(10000, self.close)
 
     def _setup_ui(self) -> None:
-        self.setWindowTitle("Share with AuBackup")
+        self.setWindowTitle("Send to Phone")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setAttribute(Qt.WA_DeleteOnClose)
 
@@ -163,9 +163,10 @@ class QRTriggerMiniWindow(QDialog):
 
         layout.addSpacing(4)
 
-        self._message_label = QLabel("Scan this QR code with your iPhone or the AuBackup app to receive the shared content.")
+        self._message_label = QLabel('Scan this QR code with your iPhone or the <b>AuBackup</b> app to receive the shared content.')
         self._message_label.setAlignment(Qt.AlignCenter)
         self._message_label.setWordWrap(True)
+        self._message_label.setTextFormat(Qt.RichText)
         layout.addWidget(self._message_label)
 
         layout.addStretch()
