@@ -161,11 +161,6 @@ class QRTriggerMiniWindow(QDialog):
         self._opt_code_label.setText(self._stash.opt_code)
         layout.addWidget(self._opt_code_label)
 
-        fallback_label = QLabel("Or enter code above")
-        fallback_label.setAlignment(Qt.AlignCenter)
-        fallback_label.setStyleSheet("color: #6B7280; font-size: 12px;")
-        layout.addWidget(fallback_label)
-
         layout.addSpacing(4)
 
         self._message_label = QLabel("Scan this QR code with your iPhone or the AuBackup app to receive the shared content.")
