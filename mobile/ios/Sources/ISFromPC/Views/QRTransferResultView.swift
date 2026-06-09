@@ -12,6 +12,8 @@ public struct QRTransferResultView: View {
     @State private var showFileSavedToast = false
     @State private var showFileError = false
     @State private var fileErrorMessage = ""
+    @State private var showShareSheet = false
+    @State private var shareItems: [Any] = []
 
     public init(result: QRClaimResult, onDismiss: @escaping () -> Void) {
         self.result = result
@@ -26,6 +28,9 @@ public struct QRTransferResultView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { onDismiss() }
                 }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: shareItems)
             }
             .overlay(alignment: .bottom) {
             if showCopiedToast {
@@ -58,11 +63,21 @@ public struct QRTransferResultView: View {
         case .text(let text):
             textContentView(text: text)
         case .html(let html):
-            RichTextReceiveView(html: html)
+            htmlContentView(html: html)
         case .image(let fileURL, let contentType, let filename):
             imageContentView(fileURL: fileURL, contentType: contentType, filename: filename)
         case .file(let fileURL, let contentType, let filename):
             fileContentView(fileURL: fileURL, contentType: contentType, filename: filename)
+        }
+    }
+
+    private func htmlContentView(html: String) -> some View {
+        VStack(spacing: 16) {
+            RichTextReceiveView(html: html)
+
+            shareButton
+                .padding(.horizontal)
+                .padding(.bottom)
         }
     }
 
@@ -85,8 +100,47 @@ public struct QRTransferResultView: View {
             }
             .buttonStyle(.borderedProminent)
             .padding(.horizontal)
-            .padding(.bottom)
+
+            shareButton
+                .padding(.horizontal)
+                .padding(.bottom)
         }
+    }
+
+    private var shareButton: some View {
+        Button(action: { shareCurrentContent() }) {
+            Label("Share", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .tint(.accentColor)
+    }
+
+    private func shareCurrentContent() {
+        var items: [Any] = []
+        switch result {
+        case .text(let text):
+            items = [text]
+        case .html(let html):
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).html")
+            try? html.data(using: .utf8)?.write(to: tempURL)
+            items = [tempURL]
+        case .image(let fileURL, _, _):
+            items = [sanitizedFileURL(fileURL)]
+        case .file(let fileURL, _, _):
+            items = [sanitizedFileURL(fileURL)]
+        }
+        shareItems = items
+        showShareSheet = true
+    }
+
+    private func sanitizedFileURL(_ url: URL) -> URL {
+        let filename = url.lastPathComponent
+        let sanitized = filename.drop(while: { $0 == "." })
+        guard sanitized.isEmpty == false, sanitized.count != filename.count else { return url }
+        let newURL = url.deletingLastPathComponent().appendingPathComponent(String(sanitized))
+        try? FileManager.default.moveItem(at: url, to: newURL)
+        return newURL
     }
 
     private func imageContentView(fileURL: URL, contentType: String, filename: String?) -> some View {
@@ -116,7 +170,10 @@ public struct QRTransferResultView: View {
             }
             .buttonStyle(.borderedProminent)
             .padding(.horizontal)
-            .padding(.bottom)
+
+            shareButton
+                .padding(.horizontal)
+                .padding(.bottom)
         }
     }
 
@@ -154,7 +211,10 @@ public struct QRTransferResultView: View {
             }
             .buttonStyle(.borderedProminent)
             .padding(.horizontal)
-            .padding(.bottom)
+
+            shareButton
+                .padding(.horizontal)
+                .padding(.bottom)
         }
     }
 
@@ -222,4 +282,14 @@ public struct QRTransferResultView: View {
             .padding(.bottom, 32)
             .transition(.move(edge: .bottom).combined(with: .opacity))
     }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

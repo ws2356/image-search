@@ -201,7 +201,8 @@ public final class QRTriggerDownloadClient: Sendable {
         let subDir = documentsDir.appendingPathComponent("QRDownloads", isDirectory: true)
         try FileManager.default.createDirectory(at: subDir, withIntermediateDirectories: true)
 
-        let fileName = filename ?? "\(prefix)_\(Int(Date().timeIntervalSince1970))"
+        let rawName = filename ?? "\(prefix)_\(Int(Date().timeIntervalSince1970))"
+        let fileName = rawName.drop(while: { $0 == "." }).isEmpty ? rawName : String(rawName.drop(while: { $0 == "." }))
         let destURL = subDir.appendingPathComponent(fileName)
 
         if FileManager.default.fileExists(atPath: destURL.path) {
