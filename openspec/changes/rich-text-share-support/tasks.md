@@ -27,4 +27,4 @@
 ## 5. Integration & Navigation
 
 - [x] 5.1 Update `MobileAppModel` to navigate to `RichTextReceiveView` for `.html` case
-- [ ] 5.2 Verify end-to-end flow: macOS Share → PC → iOS HTML display + copy
+- [x] 5.2 Verify end-to-end flow: macOS Share → PC → iOS HTML display + copy

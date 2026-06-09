@@ -168,7 +168,7 @@ class QRTriggerMiniWindow(QDialog):
 
         layout.addSpacing(4)
 
-        self._message_label = QLabel("Open AuBackup on your iPhone and scan this QR code")
+        self._message_label = QLabel("Scan this QR code with your iPhone or the AuBackup app to receive the shared content.")
         self._message_label.setAlignment(Qt.AlignCenter)
         self._message_label.setWordWrap(True)
         layout.addWidget(self._message_label)

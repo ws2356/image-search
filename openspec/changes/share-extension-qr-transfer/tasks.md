@@ -48,7 +48,7 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Test end-to-end flow: share text from macOS → scan QR with iOS → copy to clipboard on iOS
-- [ ] 5.2 Test end-to-end flow: share image from macOS → scan QR with iOS → save to photo library on iOS
-- [ ] 5.3 Test error cases: invalid opt-code, expired stash, source file deleted, Launch Agent unreachable
-- [ ] 5.4 Test concurrent flow: second stash while first is pending (single-user mode — second replaces or shows busy)
+- [x] 5.1 Test end-to-end flow: share text from macOS → scan QR with iOS → copy to clipboard on iOS
+- [x] 5.2 Test end-to-end flow: share image from macOS → scan QR with iOS → save to photo library on iOS
+- [x] 5.3 Test error cases: invalid opt-code, expired stash, source file deleted, Launch Agent unreachable
+- [x] 5.4 Test concurrent flow: second stash while first is pending (single-user mode — second replaces or shows busy)
