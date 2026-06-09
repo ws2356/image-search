@@ -1,0 +1,22 @@
+# Xcode user-specific settings (causes merge conflicts)
+xcuserdata/
+*.xcuserdatad
+*.xcuserstate
+
+# Derived Data and Build artifacts
+DerivedData/
+build/
+*.build
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager (SPM) 临时文件
+.build/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+
+# Playgrounds
+*.playground/xcuserdata/
+
+# Localization logs
+*.swp
+*.lock
