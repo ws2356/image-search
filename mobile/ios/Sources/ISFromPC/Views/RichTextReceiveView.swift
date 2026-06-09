@@ -3,7 +3,6 @@ import WebKit
 
 public struct RichTextReceiveView: View {
     let html: String
-    @Environment(\.dismiss) private var dismiss
     @State private var showCopiedToast = false
     
     public init(html: String) {
@@ -11,39 +10,28 @@ public struct RichTextReceiveView: View {
     }
     
     public var body: some View {
-        NavigationView {
-            VStack(spacing: 16) {
-                RichTextWebView(html: html)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
-                
-                Button(action: copyToClipboard) {
-                    Label("Copy to Clipboard", systemImage: "doc.on.doc")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
+        VStack(spacing: 16) {
+            RichTextWebView(html: html)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
-                .padding(.bottom, 8)
+            
+            Button(action: copyToClipboard) {
+                Label("Copy to Clipboard", systemImage: "doc.on.doc")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
             }
-            .padding(.top, 16)
-            .navigationTitle("Received")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if showCopiedToast {
-                    ToastView(message: "Copied to clipboard")
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .padding(.bottom, 100)
-                }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+        .padding(.top, 16)
+        .overlay(alignment: .bottom) {
+            if showCopiedToast {
+                ToastView(message: "Copied to clipboard")
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.bottom, 100)
             }
         }
     }
