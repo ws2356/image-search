@@ -95,6 +95,27 @@ class MacShareViewController: NSViewController {
 
     private func processExtensionItems(_ items: [NSExtensionItem], with context: NSExtensionContext) {
         for item in items {
+            // Check for NSAttributedString properties directly (no attachments)
+            let hasTitle = item.attributedTitle?.length ?? 0 > 0
+            let hasContent = item.attributedContentText?.length ?? 0 > 0
+            
+            if hasTitle || hasContent {
+                let combined = NSMutableAttributedString()
+                if let title = item.attributedTitle, title.length > 0 {
+                    os_log("Found attributedTitle on extension item (%d chars)", log: log, type: .info, title.length)
+                    combined.append(title)
+                }
+                if let content = item.attributedContentText, content.length > 0 {
+                    if combined.length > 0 {
+                        combined.append(NSAttributedString(string: "\n\n"))
+                    }
+                    os_log("Found attributedContentText on extension item (%d chars)", log: log, type: .info, content.length)
+                    combined.append(content)
+                }
+                convertAndStashRichText(combined, with: context)
+                return
+            }
+            
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
                 os_log("supported types: %{public}@", log: log, type: .info, provider.registeredTypeIdentifiers)
@@ -181,6 +202,23 @@ class MacShareViewController: NSViewController {
         cancel(with: context)
     }
 
+    private func convertAndStashRichText(_ attributedString: NSAttributedString, with context: NSExtensionContext) {
+        // Convert to HTML
+        let htmlData = try? attributedString.data(
+            from: NSRange(location: 0, length: attributedString.length),
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.html]
+        )
+        
+        guard let htmlContent = htmlData, let htmlString = String(data: htmlContent, encoding: .utf8) else {
+            os_log("Failed to convert NSAttributedString to HTML", log: log, type: .error)
+            cancel(with: context)
+            return
+        }
+        
+        os_log("Stashing HTML payload (%d chars)", log: log, type: .info, htmlString.count)
+        stashHTMLPayload(htmlString, with: context)
+    }
+    
     private func processRichTextData(_ data: Any?, type: String, with context: NSExtensionContext) {
         var attributedString: NSAttributedString?
         
