@@ -140,11 +140,17 @@ class MacShareViewController: NSViewController {
                 if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                     os_log("Matched text attachment", log: log, type: .info)
                     provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] data, error in
-                        if error != nil {
+                        if let error = error {
+                            os_log("Failed to load text: %{public}@", log: log, type: .error, error.localizedDescription)
                             self?.cancel(with: context)
                             return
                         }
-                        guard let text = data as? String else { return }
+                        os_log("Type of data: %{public}@", log: log, type: .info, String(describing: type(of: data)))
+                        guard let text = data as? String else {
+                            os_log("Failed to load text: %{public}@", log: log, type: .error, "Data is not a string")
+                            self?.cancel(with: context)
+                            return
+                        }
                         self?.stashTextPayload(text, with: context)
                     }
                     return
