@@ -126,8 +126,6 @@ public struct AlbumTransporterRootView: View {
             NavigationStack {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .navigationTitle(model.navigationTitle)
-                    .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(.visible, for: .navigationBar)
                     .toolbarBackground(navigationBarBackground, for: .navigationBar)
                     .toolbarColorScheme(.light, for: .navigationBar)
@@ -136,8 +134,6 @@ public struct AlbumTransporterRootView: View {
             NavigationView {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .navigationTitle(model.navigationTitle)
-                    .navigationBarTitleDisplayMode(.inline)
             }
             .navigationViewStyle(.stack)
         }

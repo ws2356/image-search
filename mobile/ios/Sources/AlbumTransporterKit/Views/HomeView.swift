@@ -21,6 +21,7 @@ struct HomeView: View {
             content
         }
         .compatibleScrollBounceBasedOnSize()
+        .appNavigationBar(title: "AuBackup")
     }
 
     @ViewBuilder

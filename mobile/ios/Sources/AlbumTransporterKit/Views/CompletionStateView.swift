@@ -45,6 +45,7 @@ struct CompletionStateView: View {
         .task {
             await viewModel.reloadSummary()
         }
+        .appNavigationBar(title: "Backup Complete")
     }
 
     private var summary: CompletionViewState {

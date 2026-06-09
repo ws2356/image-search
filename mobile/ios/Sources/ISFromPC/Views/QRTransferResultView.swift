@@ -19,17 +19,15 @@ public struct QRTransferResultView: View {
     }
 
     public var body: some View {
-        NavigationView {
-            content
-                .navigationTitle("Received")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") { onDismiss() }
-                    }
+        content
+            .navigationTitle("Received")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { onDismiss() }
                 }
-        }
-        .overlay(alignment: .bottom) {
+            }
+            .overlay(alignment: .bottom) {
             if showCopiedToast {
                 toast("Copied to clipboard")
             } else if showSavedToast {

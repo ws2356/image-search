@@ -9,6 +9,7 @@ struct PermissionsGateView: View {
             PermissionsGateContent()
         }
         .compatibleScrollBounceBasedOnSize()
+        .appNavigationBar(title: "Permissions")
         .task {
             await viewModel.startPreflight()
         }

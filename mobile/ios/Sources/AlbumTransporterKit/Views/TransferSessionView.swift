@@ -16,6 +16,7 @@ struct TransferSessionView: View {
             )
         }
         .compatibleScrollBounceBasedOnSize()
+        .appNavigationBar(title: "Backup in Progress")
         .task {
             await viewModel.orchestrateTransfer()
         }

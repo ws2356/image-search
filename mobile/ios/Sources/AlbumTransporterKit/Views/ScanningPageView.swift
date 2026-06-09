@@ -18,6 +18,7 @@ struct ScanningPageView: View {
                 },
                 onBack: {
                     Task {
+
                         await viewModel.backTapped()
                     }
                 },

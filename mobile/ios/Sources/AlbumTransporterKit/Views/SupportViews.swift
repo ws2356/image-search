@@ -1,5 +1,37 @@
 import SwiftUI
 
+// MARK: - Navigation Bar Styling
+
+extension View {
+    @ViewBuilder
+    func appNavigationBar(title: String) -> some View {
+        if #available(iOS 16.0, *) {
+            self
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarBackground(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.95, green: 0.97, blue: 1.0),
+                            Color.white,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    for: .navigationBar
+                )
+                .toolbarColorScheme(.light, for: .navigationBar)
+        } else {
+            self
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+// MARK: - Shared Components
+
 func heroCircle(icon: String, gradient: [Color], size: CGFloat = 100) -> some View {
     ZStack {
         Circle()

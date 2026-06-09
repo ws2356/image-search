@@ -259,27 +259,6 @@ final class MobileAppModel: ObservableObject {
         route = .home
     }
 
-    var navigationTitle: String {
-        switch route {
-        case .home:
-            return "AuBackup"
-        case .scan:
-            return "Scan QR"
-        case .pair:
-            return "Pairing"
-        case .permissions:
-            return "Permissions"
-        case .transfer:
-            return "Backup in Progress"
-        case .completed:
-            return "Backup Complete"
-        case .error(_):
-            return "Backup Error"
-        case .qrTransferResult:
-            return "Received"
-        }
-    }
-
     var routeName: String {
         switch route {
         case .home:
