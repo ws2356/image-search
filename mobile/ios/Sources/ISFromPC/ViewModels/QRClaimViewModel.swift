@@ -1,30 +1,26 @@
-//
-//  QRClaimViewModel.swift
-//  AlbumTransporterKit
-//
-//  Created by Song Wan on 2026/6/10.
-//
-
 import SwiftUI
 
 @MainActor
 public class QRClaimViewModel: ObservableObject {
     let qrClaimPayload: QRClaimPayload
+    var onCompletion: ((Result<QRClaimResult, Error>) -> Void)?
+
     init(qrClaimPayload: QRClaimPayload) {
         self.qrClaimPayload = qrClaimPayload
     }
-    
-    func claimQR(_ payload: QRClaimPayload) async {
+
+    func claim() async {
         let client = QRTriggerDownloadClient()
         do {
             let result = try await client.claim(
-                hosts: payload.ips,
-                port: payload.port,
-                stashId: payload.stashId,
-                optCode: payload.optCode
+                hosts: qrClaimPayload.ips,
+                port: qrClaimPayload.port,
+                stashId: qrClaimPayload.stashId,
+                optCode: qrClaimPayload.optCode
             )
+            onCompletion?(.success(result))
         } catch {
+            onCompletion?(.failure(error))
         }
     }
-
 }

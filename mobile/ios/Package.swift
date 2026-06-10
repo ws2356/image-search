@@ -46,7 +46,7 @@ let package = Package(
                ],
                resources: []),
         .target(name: "ISFromPC",
-               dependencies: [],
+               dependencies: ["Common"],
                resources: []),
         .target(name: "ISFromMobile",
                dependencies: [

@@ -64,6 +64,6 @@ public struct ErrorStateView: View {
             .padding(.vertical, 16)
         }
         .compatibleScrollBounceBasedOnSize()
-        .appNavigationBar(title: "Backup Error")
+        .appNavigationBar(title: viewModel.title)
     }
 }

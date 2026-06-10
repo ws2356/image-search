@@ -1,14 +1,14 @@
-//
-//  QRClaimView.swift
-//  AlbumTransporterKit
-//
-//  Created by Song Wan on 2026/6/10.
-//
-
 import SwiftUI
 
 struct QRClaimView: View {
+    @ObservedObject var viewModel: QRClaimViewModel
+
     var body: some View {
-        
+        ProgressView()
+            .scaleEffect(1.5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            await viewModel.claim()
+        }
     }
 }
