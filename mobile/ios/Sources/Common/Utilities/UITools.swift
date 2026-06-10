@@ -175,3 +175,21 @@ extension View {
     }
 }
 
+public struct CornerRadiusShape: Shape {
+    public init(radius: CGFloat, corners: UIRectCorner) {
+        self.radius = radius
+        self.corners = corners
+    }
+    
+    let radius: CGFloat
+    let corners: UIRectCorner
+
+    public func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}

@@ -13,17 +13,19 @@ struct ScanningPageView: View {
                     Text("        1. Open https://aurora.boldman.net on your PC browser then install and launch AuSearch.")
                     Text("        2. Click 'Add Folder'.")
                     Text("        3. Select 'Mobile Device'.")
+                    
+                    Text("Quickly share from your PC:")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("        1. Download and install AuSearch from https://aurora.boldman.net")
+                    Text("        2. (Optionally) Enable InstantShare extension: System Settings > General > Login Items & Extensions > Sharing > InstantShare.")
+                    Text("        3. Right click text or file, then ‘Share > InstantShare’ to show the QR code.")
                 }
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.black.opacity(0.60))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 24)
-                .padding(.bottom, max(geometry.safeAreaInsets.bottom + 24, 32))
             }
         }
     }

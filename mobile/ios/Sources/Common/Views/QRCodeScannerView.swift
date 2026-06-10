@@ -32,20 +32,36 @@ public struct LiveQRCodeScannerView<Instructions: View>: View {
     @Environment(\.openURL) private var openURL
     @State private var accessState: QRCodeScannerAccessState = .requesting
     @State private var lastSubmittedValue = ""
+    @State private var scannerGlobalFrame: CGRect = .zero
 
     public var body: some View {
         GeometryReader { geometry in
-            let scanRect = scannerRect(in: geometry)
+            let scannerSize = min(geometry.size.width * 0.5, 200)
 
-            let stack = ZStack {
+            let content = ZStack {
                 scannerBackground
-
-                ScannerMaskOverlay(size: geometry.size, scanRect: scanRect)
 
                 VStack(spacing: 0) {
                     topBar(topInset: geometry.safeAreaInsets.top)
-                    Spacer()
-                    instructions
+
+                    scannerSquare(size: scannerSize)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 20)
+                        .padding(.bottom, 20)
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.onAppear {
+                                    scannerGlobalFrame = proxy.frame(in: .global)
+                                }
+                            }
+                        )
+
+                    ScrollView {
+                        instructions
+                    }
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black.opacity(0.60))
+                    .clipShape(CornerRadiusShape(radius: 12, corners: [.topLeft, .topRight]))
                 }
 
                 switch accessState {
@@ -87,10 +103,10 @@ public struct LiveQRCodeScannerView<Instructions: View>: View {
                 }
             }
             if #available(iOS 16.0, *) {
-                stack
+                content
                 .toolbar(.hidden, for: .navigationBar)
             } else {
-                stack
+                content
                 .navigationBarHidden(true)
             }
         }
@@ -148,24 +164,24 @@ public struct LiveQRCodeScannerView<Instructions: View>: View {
         )
     }
 
-    private func instructionBanner(bottomInset: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Start a QR code based backup session on your pc:")
-                .font(.system(size: 15, weight: .semibold))
-            Text("        1. Open https://aurora.boldman.net on your PC browser then install and launch AuSearch.")
-            Text("        2. Click 'Add Folder'.")
-            Text("        3. Select 'Mobile Device'.")
+    private func scannerSquare(size: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+
+            CornerMarker()
+                .position(x: 14, y: 14)
+            CornerMarker()
+                .rotationEffect(.degrees(90))
+                .position(x: size - 14, y: 14)
+            CornerMarker()
+                .rotationEffect(.degrees(180))
+                .position(x: size - 14, y: size - 14)
+            CornerMarker()
+                .rotationEffect(.degrees(270))
+                .position(x: 14, y: size - 14)
         }
-        .font(.system(size: 14, weight: .medium))
-        .foregroundStyle(.white)
-        .multilineTextAlignment(.leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Color.black.opacity(0.60))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal, 24)
-        .padding(.bottom, max(bottomInset + 24, 32))
+        .frame(width: size, height: size)
     }
 
     private func statusPanel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -181,13 +197,6 @@ public struct LiveQRCodeScannerView<Instructions: View>: View {
                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .padding(.horizontal, 28)
-    }
-
-    private func scannerRect(in geometry: GeometryProxy) -> CGRect {
-        let frameWidth = min(geometry.size.width * 0.62, 240)
-        let originX = (geometry.size.width - frameWidth) / 2
-        let originY = max(geometry.safeAreaInsets.top + 120, geometry.size.height * 0.24)
-        return CGRect(x: originX, y: originY, width: frameWidth, height: frameWidth)
     }
 
     private func handleScannedValue(_ value: String) {
@@ -237,43 +246,6 @@ public struct LiveQRCodeScannerView<Instructions: View>: View {
         @unknown default:
             accessState = .unavailable("Camera scanning is unavailable right now.")
         }
-    }
-}
-
-private struct ScannerMaskOverlay: View {
-    let size: CGSize
-    let scanRect: CGRect
-
-    var body: some View {
-        ZStack {
-            Path { path in
-                path.addRect(CGRect(origin: .zero, size: size))
-                path.addRoundedRect(
-                    in: scanRect,
-                    cornerSize: CGSize(width: 16, height: 16),
-                    style: .continuous
-                )
-            }
-            .fill(Color.black.opacity(0.45), style: FillStyle(eoFill: true))
-
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                .frame(width: scanRect.width, height: scanRect.height)
-                .position(x: scanRect.midX, y: scanRect.midY)
-
-            CornerMarker()
-                .position(x: scanRect.minX + 14, y: scanRect.minY + 14)
-            CornerMarker()
-                .rotationEffect(.degrees(90))
-                .position(x: scanRect.maxX - 14, y: scanRect.minY + 14)
-            CornerMarker()
-                .rotationEffect(.degrees(180))
-                .position(x: scanRect.maxX - 14, y: scanRect.maxY - 14)
-            CornerMarker()
-                .rotationEffect(.degrees(270))
-                .position(x: scanRect.minX + 14, y: scanRect.maxY - 14)
-        }
-        .allowsHitTesting(false)
     }
 }
 
