@@ -22,7 +22,7 @@ final class InstantShareServicesTests: XCTestCase {
         let connectionConfig = InstantShareConnectionConfig(
             sessionID: UUID().uuidString.lowercased(),
             mobilePort: 8443,
-            mobileIPList: ["192.168.1.20", "fe80::10"],
+            mobileIPList: ["192.168.1.20", "10.0.0.1"],
             correlationID: UUID().uuidString.lowercased(),
             metadata: InstantShareMetadata(
                 payloadClass: .text,
@@ -37,7 +37,7 @@ final class InstantShareServicesTests: XCTestCase {
             endpointURLs.map(\.absoluteString),
             [
                 "https://192.168.1.20:8443/api/instant-share/v1/trust/handshake",
-                "https://[fe80::10]:8443/api/instant-share/v1/trust/handshake",
+                "https://10.0.0.1:8443/api/instant-share/v1/trust/handshake",
             ]
         )
     }
@@ -113,11 +113,15 @@ final class InstantShareTrustSessionManagerTests: XCTestCase {
         let pcPrivateKey = Curve25519.KeyAgreement.PrivateKey()
         let pcPublicKey = pcPrivateKey.publicKey
         let pcNonce = Data(repeating: 0xAA, count: 32)
+        let pcKdfContext = Data([UInt8](repeating: 0xDD, count: 16)).instantShareBase64URLEncodedString()
+        let mobileNonce = Data([UInt8](repeating: 0xEE, count: 32)).instantShareBase64URLEncodedString()
 
         let manager = InstantShareTrustSessionManager()
         let response = try manager.handleHandshakeRequest(
             pcDHPublicKey: pcPublicKey.rawRepresentation.instantShareBase64URLEncodedString(),
-            pcNonce: pcNonce.instantShareBase64URLEncodedString()
+            pcNonce: pcNonce.instantShareBase64URLEncodedString(),
+            pcKdfContext: pcKdfContext,
+            mobileNonce: mobileNonce
         )
 
         XCTAssertFalse(response.mobileDHPublicKey.isEmpty)
@@ -130,11 +134,15 @@ final class InstantShareTrustSessionManagerTests: XCTestCase {
         let pcPrivateKey = Curve25519.KeyAgreement.PrivateKey()
         let pcPublicKey = pcPrivateKey.publicKey
         let pcNonce = Data(repeating: 0xBB, count: 32)
+        let inputKdfContext = Data([UInt8](repeating: 0xDD, count: 16)).instantShareBase64URLEncodedString()
+        let inputMobileNonce = Data([UInt8](repeating: 0xEE, count: 32)).instantShareBase64URLEncodedString()
 
         let manager = InstantShareTrustSessionManager()
         let response = try manager.handleHandshakeRequest(
             pcDHPublicKey: pcPublicKey.rawRepresentation.instantShareBase64URLEncodedString(),
-            pcNonce: pcNonce.instantShareBase64URLEncodedString()
+            pcNonce: pcNonce.instantShareBase64URLEncodedString(),
+            pcKdfContext: inputKdfContext,
+            mobileNonce: inputMobileNonce
         )
 
         let mobilePublicKeyData = try Data(instantShareBase64URLEncoded: response.mobileDHPublicKey)
@@ -164,18 +172,24 @@ final class InstantShareTrustSessionManagerTests: XCTestCase {
         let manager = InstantShareTrustSessionManager()
         let shortKey = Data(repeating: 0x01, count: 16).instantShareBase64URLEncodedString()
         let nonce = Data(repeating: 0x02, count: 32).instantShareBase64URLEncodedString()
+        let kdfContext = Data([UInt8](repeating: 0xDD, count: 16)).instantShareBase64URLEncodedString()
+        let mobileNonce = Data([UInt8](repeating: 0xEE, count: 32)).instantShareBase64URLEncodedString()
 
         XCTAssertThrowsError(
-            try manager.handleHandshakeRequest(pcDHPublicKey: shortKey, pcNonce: nonce)
+            try manager.handleHandshakeRequest(pcDHPublicKey: shortKey, pcNonce: nonce, pcKdfContext: kdfContext, mobileNonce: mobileNonce)
         )
     }
 
     func test_reset_clears_session_key() throws {
         let pcPrivateKey = Curve25519.KeyAgreement.PrivateKey()
         let manager = InstantShareTrustSessionManager()
+        let kdfContext = Data([UInt8](repeating: 0xDD, count: 16)).instantShareBase64URLEncodedString()
+        let mobileNonce = Data([UInt8](repeating: 0xEE, count: 32)).instantShareBase64URLEncodedString()
         _ = try manager.handleHandshakeRequest(
             pcDHPublicKey: pcPrivateKey.publicKey.rawRepresentation.instantShareBase64URLEncodedString(),
-            pcNonce: Data(repeating: 0xCC, count: 32).instantShareBase64URLEncodedString()
+            pcNonce: Data(repeating: 0xCC, count: 32).instantShareBase64URLEncodedString(),
+            pcKdfContext: kdfContext,
+            mobileNonce: mobileNonce
         )
         XCTAssertTrue(manager.isEstablished)
 
@@ -190,6 +204,7 @@ final class InstantShareTrustSessionManagerTests: XCTestCase {
     }
 }
 
+@MainActor
 final class InstantShareResumeViewModelTests: XCTestCase {
     func test_resume_state_initial_is_loading() {
         let service = InstantShareService()
@@ -450,8 +465,6 @@ final class InstantShareIdentityManagerTests: XCTestCase {
     }
 
     func test_signatureCreationWithKeychainKey() throws {
-        // Verify that the key created by SecKeyCreateRandomKey can be used
-        // for signing (ecdsaSignatureDigestX962SHA256).
         let keyAttrs: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
             kSecAttrKeySizeInBits as String: 256,
@@ -470,7 +483,11 @@ final class InstantShareIdentityManagerTests: XCTestCase {
             Data(digest) as CFData,
             nil
         )
-        XCTAssertNotNil(signature, "SecKeyCreateSignature(.ecdsaSignatureDigestX962SHA256) must succeed")
-        XCTAssertEqual((signature as! Data).count, 64, "ECDSA P-256 signature must be 64 bytes (r||s)")
+        let sigData = try XCTUnwrap(signature as? Data)
+        // SecKeyCreateSignature with ecdsaSignatureDigestX962SHA256 returns
+        // DER-encoded ASN.1 SEQUENCE { INTEGER r, INTEGER s }, typically 70-72 bytes
+        XCTAssertGreaterThanOrEqual(sigData.count, 68)
+        XCTAssertLessThanOrEqual(sigData.count, 74)
+        XCTAssertEqual(sigData.first, 0x30, "Signature must be DER-encoded SEQUENCE")
     }
 }

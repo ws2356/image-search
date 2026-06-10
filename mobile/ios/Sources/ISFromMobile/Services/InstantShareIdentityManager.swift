@@ -27,36 +27,86 @@ final class InstantShareIdentityManager {
         let publicKeyPEM: String
     }
 
+    private static let keyLabel = "AuBackup Instant Share TLS Identity"
+
     static func getOrCreateIdentity() throws -> Identity {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassIdentity,
+            kSecAttrLabel as String: keyLabel,
+            kSecReturnRef as String: true,
+        ]
+        var identityRef: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &identityRef)
+        if status == errSecSuccess, let secIdent = identityRef as! SecIdentity? {
+            var cert: SecCertificate?
+            SecIdentityCopyCertificate(secIdent, &cert)
+            if let certificate = cert {
+                let pem = try publicKeyPEM(from: certificate)
+                return Identity(secIdentity: secIdent, publicKeyPEM: pem)
+            }
+        }
         return try buildEphemeralIdentity()
     }
 
     private static func buildEphemeralIdentity() throws -> Identity {
-        let cryptoPrivateKey = P256.Signing.PrivateKey()
-        let rawPubKey = cryptoPrivateKey.publicKey.x963Representation
-        let certificate = try buildCert(privateKey: cryptoPrivateKey, rawPubKey: rawPubKey)
-        let certDER = SecCertificateCopyData(certificate) as Data
-        let ecPrivateKey = encodeECPrivateKey(
-            scalarData: cryptoPrivateKey.rawRepresentation,
-            rawPubKey: rawPubKey
-        )
-        let p12Data = buildPKCS12(ecPrivateKey: ecPrivateKey, certificate: certificate)
-        os_log(.info, log: log, "[IdentityMgr] PKCS#12: %{public}ld bytes, hex=%{public}@",
-               p12Data.count, p12Data.hexString())
+        for secClass in [kSecClassIdentity, kSecClassCertificate, kSecClassKey] {
+            SecItemDelete([kSecClass: secClass, kSecAttrLabel: keyLabel] as CFDictionary)
+        }
 
-        let options: [String: Any] = [kSecImportExportPassphrase as String: ""]
-        var items: CFArray?
-        let status = SecPKCS12Import(p12Data as CFData, options as CFDictionary, &items)
-        guard status == errSecSuccess,
-              let itemList = items as? [[String: Any]],
-              let first = itemList.first,
-              let secIdent = first[kSecImportItemIdentity as String] else {
-            os_log(.error, log: log, "[IdentityMgr] SecPKCS12Import status=%{public}d", status)
+        let keyAttrs: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeySizeInBits as String: 256,
+            kSecPrivateKeyAttrs as String: [
+                kSecAttrIsPermanent as String: true,
+                kSecAttrLabel as String: keyLabel,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            ],
+        ]
+        guard let privateSecKey = SecKeyCreateRandomKey(keyAttrs as CFDictionary, nil) else {
+            throw Error.keyGenerationFailed
+        }
+        guard let publicSecKey = SecKeyCopyPublicKey(privateSecKey) else {
+            throw Error.keyGenerationFailed
+        }
+        guard let rawPubKey = SecKeyCopyExternalRepresentation(publicSecKey, nil) as Data? else {
+            throw Error.keyGenerationFailed
+        }
+
+        let certificate = try buildCertWithSecKey(privateKey: privateSecKey, rawPubKey: rawPubKey)
+        SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: certificate, kSecAttrLabel: keyLabel] as CFDictionary, nil)
+
+        let identityQuery: [String: Any] = [
+            kSecClass as String: kSecClassIdentity,
+            kSecAttrLabel as String: keyLabel,
+            kSecReturnRef as String: true,
+        ]
+        var identityRef: CFTypeRef?
+        let status = SecItemCopyMatching(identityQuery as CFDictionary, &identityRef)
+        guard status == errSecSuccess, let secIdent = identityRef as! SecIdentity? else {
             throw Error.identityNotFound
         }
-        let identity = secIdent as! SecIdentity
         let pem = try publicKeyPEM(from: certificate)
-        return Identity(secIdentity: identity, publicKeyPEM: pem)
+        return Identity(secIdentity: secIdent, publicKeyPEM: pem)
+    }
+
+    private static func buildCertWithSecKey(privateKey: SecKey, rawPubKey: Data) throws -> SecCertificate {
+        let issuer = DistinguishedName(commonName: "AuBackup Instant Share")
+        let notBefore = Date()
+        let notAfter = Calendar.current.date(byAdding: .day, value: 3650, to: notBefore)!
+        let serial = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
+        let spki = X509SelfSignedCertificate.encodeSubjectPublicKeyInfo(rawPubKey)
+        let tbs = encTBSCert(serial: serial, issuer: issuer, nb: notBefore, na: notAfter, subj: issuer, spki: spki)
+        let sigAlgo = encSigAlgo()
+        let digest = SHA256.hash(data: tbs)
+        guard let signature = SecKeyCreateSignature(privateKey, .ecdsaSignatureDigestX962SHA256, Data(digest) as CFData, nil) as Data? else {
+            throw Error.certificateCreationFailed
+        }
+        let sigVal = tlv(0x03, Data([0x00]) + signature)
+        let derCert = tlv(0x30, tbs + sigAlgo + sigVal)
+        guard let cert = SecCertificateCreateWithData(nil, derCert as CFData) else {
+            throw Error.certificateCreationFailed
+        }
+        return cert
     }
 
     // MARK: - Certificate
@@ -101,6 +151,7 @@ final class InstantShareIdentityManager {
     private static let ecPubOID = Data([0x06,0x07,0x2A,0x86,0x48,0xCE,0x3D,0x02,0x01])
     private static let p256OID = Data([0x06,0x08,0x2A,0x86,0x48,0xCE,0x3D,0x03,0x01,0x07])
     private static let sha256OID = Data([0x06,0x09,0x60,0x86,0x48,0x01,0x65,0x03,0x04,0x02,0x01])
+    private static let sha1OID = Data([0x06, 0x05, 0x2B, 0x0E, 0x03, 0x02, 0x1A])
 
     private static func buildPKCS12(ecPrivateKey: Data, certificate: SecCertificate) -> Data {
         let certDER = SecCertificateCopyData(certificate) as Data
@@ -126,8 +177,40 @@ final class InstantShareIdentityManager {
 
         let pfxBody = tlv(0x02, Data([0x03])) + authCI
 
-        // MacData
-        return tlv(0x30, pfxBody)
+        let macSalt = Data((0..<8).map { _ in UInt8.random(in: 0...255) })
+        let macIterations: UInt32 = 1024
+        let mac = computePKCS12Mac(password: Data([0x00, 0x00]), authSafeContent: authCI, salt: macSalt, iterations: macIterations)
+        let macData = buildMacData(mac: mac, salt: macSalt, iterations: macIterations)
+
+        return tlv(0x30, pfxBody + macData)
+    }
+
+    private static func computePKCS12Mac(password: Data, authSafeContent: Data, salt: Data, iterations: UInt32) -> Data {
+        let hashLen = 20
+        let id: UInt8 = 0x3D
+        let d = Data(repeating: id, count: hashLen)
+
+        var iData = salt
+        withUnsafeBytes(of: UInt32(1).bigEndian) { iData.append(contentsOf: $0) }
+
+        var key = Data(HMAC<Insecure.SHA1>.authenticationCode(for: d + iData, using: SymmetricKey(data: password)))
+        for _ in 1..<iterations {
+            key = Data(HMAC<Insecure.SHA1>.authenticationCode(for: key, using: SymmetricKey(data: password)))
+        }
+
+        return Data(HMAC<Insecure.SHA1>.authenticationCode(for: authSafeContent, using: SymmetricKey(data: key)))
+    }
+
+    private static func buildMacData(mac: Data, salt: Data, iterations: UInt32) -> Data {
+        let sha1Algorithm = tlv(0x30, sha1OID + tlv(0x05, Data()))
+        let digestInfo = tlv(0x30, sha1Algorithm + tlv(0x04, mac))
+        let macSaltEncoded = tlv(0x04, salt)
+        var iterBytes = withUnsafeBytes(of: iterations.bigEndian) { Data($0) }
+        while iterBytes.first == 0, iterBytes.count > 1 {
+            iterBytes = iterBytes.dropFirst()
+        }
+        let iterationsEncoded = tlv(0x02, iterBytes)
+        return digestInfo + macSaltEncoded + iterationsEncoded
     }
 
     private static func pbkdf2(pwd: Data, salt: Data, iter: Int, len: Int) -> Data {
