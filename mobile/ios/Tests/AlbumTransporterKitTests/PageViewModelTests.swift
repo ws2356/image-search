@@ -114,9 +114,9 @@ final class PageViewModelTests: XCTestCase {
         let viewModel = ScanningPageViewModel(model: model, telemetryService: telemetryService)
 
         await viewModel.onQRScanned(scannedValue: "qr-value")
-        await viewModel.backTapped()
-        await viewModel.openSettingsTapped()
-        await viewModel.scannerFailed()
+        await viewModel.onBackTapped()
+        await viewModel.onOpenSettingsTapped()
+        await viewModel.onScannerFailed()
 
         XCTAssertEqual(model.route, .pair(qrString: "qr-value"))
         XCTAssertEqual(model.beginPairingCallCount, 1)

@@ -2,6 +2,15 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
+@MainActor
+public protocol ScanningBaseViewModel {
+    func onQRScanned(scannedValue: String) async
+    func onScannerFailed() async
+    func onBackTapped() async
+    func onOpenSettingsTapped() async
+}
+
+
 private enum QRCodeScannerAccessState: Equatable {
     case requesting
     case ready
@@ -9,21 +18,26 @@ private enum QRCodeScannerAccessState: Equatable {
     case unavailable(String)
 }
 
-struct LiveQRCodeScannerView: View {
-    let onScanComplete: (_ scannedValue: String) -> Void
-    let onScanFailure: () -> Void
-    let onBack: () -> Void
-    let onOpenSettings: () -> Void
+public struct LiveQRCodeScannerView<Instructions: View>: View {
+    public let viewModel: ScanningBaseViewModel
+    
+    public init(viewModel: ScanningBaseViewModel, @ViewBuilder instructions: () -> Instructions) {
+        self.viewModel = viewModel
+        self.instructions = instructions()
+        self.accessState = accessState
+        self.lastSubmittedValue = lastSubmittedValue
+    }
 
+    private let instructions: Instructions
     @Environment(\.openURL) private var openURL
     @State private var accessState: QRCodeScannerAccessState = .requesting
     @State private var lastSubmittedValue = ""
 
-    var body: some View {
+    public var body: some View {
         GeometryReader { geometry in
             let scanRect = scannerRect(in: geometry)
 
-            ZStack {
+            let stack = ZStack {
                 scannerBackground
 
                 ScannerMaskOverlay(size: geometry.size, scanRect: scanRect)
@@ -31,7 +45,7 @@ struct LiveQRCodeScannerView: View {
                 VStack(spacing: 0) {
                     topBar(topInset: geometry.safeAreaInsets.top)
                     Spacer()
-                    instructionBanner(bottomInset: geometry.safeAreaInsets.bottom)
+                    instructions
                 }
 
                 switch accessState {
@@ -55,8 +69,10 @@ struct LiveQRCodeScannerView: View {
                             guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else {
                                 return
                             }
-                            onOpenSettings()
-                            openURL(settingsURL)
+                            Task {
+                                await viewModel.onOpenSettingsTapped()
+                                openURL(settingsURL)
+                            }
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color(hex: 0x007AFF))
@@ -69,6 +85,13 @@ struct LiveQRCodeScannerView: View {
                             .multilineTextAlignment(.center)
                     }
                 }
+            }
+            if #available(iOS 16.0, *) {
+                stack
+                .toolbar(.hidden, for: .navigationBar)
+            } else {
+                stack
+                .navigationBarHidden(true)
             }
         }
         .task {
@@ -98,7 +121,9 @@ struct LiveQRCodeScannerView: View {
 
             HStack {
                 Button("Cancel") {
-                    onBack()
+                    Task {
+                        await viewModel.onBackTapped()
+                    }
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 17))
@@ -176,12 +201,16 @@ struct LiveQRCodeScannerView: View {
         }
 
         lastSubmittedValue = trimmedValue
-        onScanComplete(trimmedValue)
+        Task {
+            await viewModel.onQRScanned(scannedValue: trimmedValue)
+        }
     }
 
     private func handleScannerError(_ message: String) {
         accessState = .unavailable(message)
-        onScanFailure()
+        Task {
+            await viewModel.onScannerFailed()
+        }
     }
 
     private func prepareCameraAccess() async {

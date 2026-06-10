@@ -1324,7 +1324,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
         XCTAssertEqual(model.route, .scan)
 
-        await scanningViewModel.backTapped()
+        await scanningViewModel.onBackTapped()
         XCTAssertEqual(model.route, .home)
     }
 
@@ -1346,7 +1346,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
         XCTAssertEqual(model.route, .scan)
 
-        await scanningViewModel.openSettingsTapped()
+        await scanningViewModel.onOpenSettingsTapped()
         XCTAssertEqual(model.route, .home)
     }
 
