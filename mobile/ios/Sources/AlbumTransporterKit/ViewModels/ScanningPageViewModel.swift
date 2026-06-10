@@ -12,11 +12,6 @@ struct ScanningPageViewModel: ScanningBaseViewModel {
     }
 
     func onQRScanned(scannedValue: String) async {
-//        if let url = URL(string: scannedValue), let payload = QRClaimPayload(universalLinkURL: url) {
-//            await model.onQRClaimScanned(payload)
-//            return
-//        }
-//
         telemetryService.recordInteraction(name: "start_pairing_tapped", location: "pairing")
         let result = ScanningPageResult(result: .success(scannedValue))
         await model.onScanningCompleted(with: result)
@@ -34,7 +29,7 @@ struct ScanningPageViewModel: ScanningBaseViewModel {
         await model.onScanningCompleted(with: result)
     }
 
-    func onScannerFailed() async {
+    func onScannerFailed(error: Error) async {
         telemetryService.recordInteraction(name: "scanner_failed", location: "pairing_scanner")
         let result = ScanningPageResult(result: .failure(.scannerFailed))
         await model.onScanningCompleted(with: result)

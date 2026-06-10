@@ -2,11 +2,12 @@ import SwiftUI
 import Common
 
 public struct ISQRRootView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: ISQRRootViewModel
+    let navigator: Navigator
 
-    public init(qrPayload: QRClaimPayload) {
-        _viewModel = StateObject(wrappedValue: ISQRRootViewModel(qrClaimPayload: qrPayload))
+    public init(qrPayload: QRClaimPayload, navigator: Navigator) {
+        _viewModel = StateObject(wrappedValue: ISQRRootViewModel(qrClaimPayload: qrPayload, navigator: navigator))
+        self.navigator = navigator
     }
 
     public var body: some View {
@@ -30,18 +31,21 @@ public struct ISQRRootView: View {
     @ViewBuilder
     private var contentView: some View {
         switch viewModel.state {
+        case .scan:
+            ISQRScanPageView(delegate: viewModel)
         case .claiming:
-            QRClaimView(viewModel: viewModel.claimViewModel)
+            QRClaimView(qrClaimPayload: viewModel.qrClaimPayload, delegate: viewModel)
         case .result(let result):
-            QRTransferResultView(result: result, onDismiss: { dismiss() })
+            QRTransferResultView(result: result, delegate: viewModel)
         case .error(let title, let message):
-            let errorVM = ISQRErrorViewModel(
-                title: title,
-                message: message,
-                onRetry: { await viewModel.retry() },
-                onDismiss: { dismiss() }
-            )
-            ErrorStateView(viewModel: errorVM)
+            let errorVMFactory = {
+                ISQRErrorViewModel(
+                    title: title,
+                    message: message,
+                    delegate: viewModel
+                )
+            }
+            ErrorStateView(viewModelFactory: errorVMFactory)
         }
     }
 }

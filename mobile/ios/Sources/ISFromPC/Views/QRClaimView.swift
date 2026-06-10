@@ -1,8 +1,16 @@
 import SwiftUI
 
 struct QRClaimView: View {
-    @ObservedObject var viewModel: QRClaimViewModel
-
+    let qrClaimPayload: QRClaimPayload
+    let delegate: QRClaimDelegate
+    @StateObject var viewModel: QRClaimViewModel
+    
+    init(qrClaimPayload: QRClaimPayload, delegate: QRClaimDelegate) {
+        self.qrClaimPayload = qrClaimPayload
+        self.delegate = delegate
+        self._viewModel = StateObject(wrappedValue: QRClaimViewModel(qrClaimPayload: qrClaimPayload, delegate: delegate))
+    }
+    
     var body: some View {
         ProgressView()
             .scaleEffect(1.5)

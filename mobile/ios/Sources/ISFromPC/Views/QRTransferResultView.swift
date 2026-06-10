@@ -2,9 +2,9 @@ import SwiftUI
 import UIKit
 import Photos
 
-public struct QRTransferResultView: View {
+struct QRTransferResultView: View {
     let result: QRClaimResult
-    let onDismiss: () -> Void
+    @StateObject var viewModel: ISQRResultViewModel
 
     @State private var showCopiedToast = false
     @State private var showSavedToast = false
@@ -15,18 +15,18 @@ public struct QRTransferResultView: View {
     @State private var showShareSheet = false
     @State private var shareItems: [Any] = []
 
-    public init(result: QRClaimResult, onDismiss: @escaping () -> Void) {
+    init(result: QRClaimResult, delegate: ISQRDeliverDelegate) {
         self.result = result
-        self.onDismiss = onDismiss
+        self._viewModel = StateObject(wrappedValue: ISQRResultViewModel(delegate: delegate))
     }
 
-    public var body: some View {
+    var body: some View {
         content
             .navigationTitle("Received")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { onDismiss() }
+                    Button("Done") { viewModel.onComplete() }
                 }
             }
             .sheet(isPresented: $showShareSheet) {

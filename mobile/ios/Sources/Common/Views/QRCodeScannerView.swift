@@ -5,7 +5,7 @@ import UIKit
 @MainActor
 public protocol ScanningBaseViewModel {
     func onQRScanned(scannedValue: String) async
-    func onScannerFailed() async
+    func onScannerFailed(error: Error) async
     func onBackTapped() async
     func onOpenSettingsTapped() async
 }
@@ -218,7 +218,7 @@ public struct LiveQRCodeScannerView<Instructions: View>: View {
     private func handleScannerError(_ message: String) {
         accessState = .unavailable(message)
         Task {
-            await viewModel.onScannerFailed()
+            await viewModel.onScannerFailed(error: QRScanError(message: message))
         }
     }
 
@@ -426,4 +426,11 @@ private enum ScannerConfigurationError: Error {
     case noCamera
     case invalidInput
     case invalidOutput
+}
+
+final class QRScanError: Error {
+    let message: String
+    init(message: String) {
+        self.message = message
+    }
 }

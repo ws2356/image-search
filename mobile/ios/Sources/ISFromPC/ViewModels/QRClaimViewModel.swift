@@ -1,12 +1,19 @@
 import SwiftUI
 
 @MainActor
-public class QRClaimViewModel: ObservableObject {
+protocol QRClaimDelegate {
+    func onClaimCompletion(_ result: Result<QRClaimResult, Error>) -> Void
+}
+
+@MainActor
+class QRClaimViewModel: ObservableObject {
     let qrClaimPayload: QRClaimPayload
+    let delegate: QRClaimDelegate
     var onCompletion: ((Result<QRClaimResult, Error>) -> Void)?
 
-    init(qrClaimPayload: QRClaimPayload) {
+    init(qrClaimPayload: QRClaimPayload, delegate: QRClaimDelegate) {
         self.qrClaimPayload = qrClaimPayload
+        self.delegate = delegate
     }
 
     func claim() async {
@@ -18,9 +25,9 @@ public class QRClaimViewModel: ObservableObject {
                 stashId: qrClaimPayload.stashId,
                 optCode: qrClaimPayload.optCode
             )
-            onCompletion?(.success(result))
+            self.delegate.onClaimCompletion(.success(result))
         } catch {
-            onCompletion?(.failure(error))
+            self.delegate.onClaimCompletion(.failure(error))
         }
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 @MainActor
-public protocol ErrorPageViewDelegate {
+public protocol ErrorPageViewDelegate: ObservableObject {
     var title: String { get }
     var message: String { get }
 
@@ -10,11 +10,11 @@ public protocol ErrorPageViewDelegate {
     func cancelTapped() async
 }
 
-public struct ErrorStateView: View {
-    let viewModel: ErrorPageViewDelegate
+public struct ErrorStateView<DelegateType: ErrorPageViewDelegate>: View {
+    @StateObject private var viewModel: DelegateType
     
-    public init(viewModel: ErrorPageViewDelegate) {
-        self.viewModel = viewModel
+    public init(viewModelFactory: @escaping () -> DelegateType) {
+        self._viewModel = StateObject(wrappedValue: viewModelFactory())
     }
 
     public var body: some View {

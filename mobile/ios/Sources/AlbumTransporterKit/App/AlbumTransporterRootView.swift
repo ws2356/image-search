@@ -120,7 +120,7 @@ public struct AlbumTransporterRootView: View {
                 Text(prompt.message)
             }
             .fullScreenCover(item: $model.instantShareQRPayload) { payload in
-                ISQRRootView(qrPayload: payload)
+                ISQRRootView(qrPayload: payload, navigator: model.createNavigator())
             }
     }
 
@@ -163,11 +163,13 @@ public struct AlbumTransporterRootView: View {
         case .completed:
             CompletionStateView(viewModel: completionViewModel)
         case .error(_):
-            let errorViewModel = ErrorPageViewModel(
-                model: model,
-                telemetryService: container.telemetryService()
-            )
-            ErrorStateView(viewModel: errorViewModel)
+            let errorViewModelFactory = {
+                BackupErrorPageViewModel(
+                    model: model,
+                    telemetryService: container.telemetryService()
+                )
+            }
+            ErrorStateView(viewModelFactory: errorViewModelFactory)
         }
     }
 

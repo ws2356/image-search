@@ -1,24 +1,32 @@
 import Common
 
+enum ErrorHandlingResult {
+    case retry
+    case cancel
+}
+
+@MainActor
+protocol ISQRErrorDelegate {
+    func onErrorHandlingResult(_ result: ErrorHandlingResult) -> Void
+}
+
 @MainActor
 class ISQRErrorViewModel: ErrorPageViewDelegate {
     let title: String
     let message: String
-    private let onRetry: () async -> Void
-    private let onDismiss: () async -> Void
+    let delegate: ISQRErrorDelegate
 
-    init(title: String, message: String, onRetry: @escaping () async -> Void, onDismiss: @escaping () async -> Void) {
+    init(title: String, message: String, delegate: ISQRErrorDelegate) {
         self.title = title
         self.message = message
-        self.onRetry = onRetry
-        self.onDismiss = onDismiss
+        self.delegate = delegate
     }
 
     func retryTapped() async {
-        await onRetry()
+        await delegate.onErrorHandlingResult(.retry)
     }
 
     func cancelTapped() async {
-        await onDismiss()
+        await delegate.onErrorHandlingResult(.cancel)
     }
 }

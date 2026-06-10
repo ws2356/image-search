@@ -4,7 +4,7 @@ import Combine
 import ISFromPC
 
 @MainActor
-final class MobileAppModel: ObservableObject {
+final class MobileAppModel: ObservableObject, NavigatorFactory {
     @Published private(set) var route: AppRoute = .home {
         didSet { pushTelemetryContext() }
     }
@@ -75,6 +75,21 @@ final class MobileAppModel: ObservableObject {
     deinit {
         memoryWarningObservationTask?.cancel()
         appLifecycleObservationTask?.cancel()
+    }
+    
+    /// protocol NavigatorFactory
+    func createNavigator() -> Navigator {
+        return NavigatorImpl(vm: self)
+    }
+    
+    class NavigatorImpl: Navigator {
+        private weak var vm: MobileAppModel?
+        init(vm: MobileAppModel? = nil) {
+            self.vm = vm
+        }
+        func requestExit() {
+            vm?.instantShareQRPayload = nil
+        }
     }
     
     func onHomeCompleted(with result: HomePageResult) async {

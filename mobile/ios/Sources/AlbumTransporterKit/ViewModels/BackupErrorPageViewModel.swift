@@ -1,7 +1,7 @@
 import Common
 
 @MainActor
-struct ErrorPageViewModel: ErrorPageViewDelegate {
+class BackupErrorPageViewModel: ErrorPageViewDelegate {
     private let model: any AppPageModeling
     private let telemetryService: TelemetryService
 
