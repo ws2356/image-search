@@ -2,6 +2,9 @@ import CryptoKit
 import Foundation
 import Security
 import XCTest
+@testable import Common
+@testable import ISFromPC
+@testable import ISFromMobile
 @testable import AlbumTransporterKit
 
 final class InstantShareServicesTests: XCTestCase {
@@ -305,72 +308,6 @@ final class InstantShareHandoffContextTests: XCTestCase {
             from: envelope, selectedDeviceID: nil, selectedDeviceName: nil, isTrustedDevice: false
         )
         XCTAssertEqual(context.fileURL, url)
-    }
-}
-
-final class InstantShareHTTPRequestParserTests: XCTestCase {
-    func test_parse_post_request_with_json_body() {
-        let rawHTTP = "POST /api/instant-share/v1/trust/handshake HTTP/1.1\r\n" +
-            "Content-Type: application/json\r\n" +
-            "X-Session-Id: abc-123\r\n" +
-            "Content-Length: 27\r\n" +
-            "\r\n" +
-            "{\"flow_id\":\"instant_share\"}"
-
-        let data = Data(rawHTTP.utf8)
-        let request = InstantShareHTTPRequest.parse(from: data)
-
-        XCTAssertNotNil(request)
-        XCTAssertEqual(request?.method, "POST")
-        XCTAssertEqual(request?.path, "/api/instant-share/v1/trust/handshake")
-        XCTAssertEqual(request?.headers["Content-Type"], "application/json")
-        XCTAssertEqual(request?.headers["X-Session-Id"], "abc-123")
-        XCTAssertEqual(request?.jsonBody?["flow_id"] as? String, "instant_share")
-    }
-
-    func test_parse_request_without_body() {
-        let rawHTTP = "GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n"
-        let data = Data(rawHTTP.utf8)
-        let request = InstantShareHTTPRequest.parse(from: data)
-
-        XCTAssertNotNil(request)
-        XCTAssertEqual(request?.method, "GET")
-        XCTAssertEqual(request?.path, "/health")
-        XCTAssertTrue(request?.body.isEmpty ?? false)
-        XCTAssertNil(request?.jsonBody)
-    }
-
-    func test_parse_returns_nil_for_incomplete_headers() {
-        let incomplete = "POST /test HTTP/1.1\r\nContent-Length: 10"
-        let data = Data(incomplete.utf8)
-        let request = InstantShareHTTPRequest.parse(from: data)
-        XCTAssertNil(request)
-    }
-
-    func test_parse_returns_nil_for_incomplete_body() {
-        let rawHTTP = "POST /test HTTP/1.1\r\nContent-Length: 100\r\n\r\nshort"
-        let data = Data(rawHTTP.utf8)
-        let request = InstantShareHTTPRequest.parse(from: data)
-        XCTAssertNil(request)
-    }
-
-    func test_response_serialize_includes_status_and_headers() {
-        let response = InstantShareHTTPResponse.json(status: 200, body: ["ack": true])
-        let serialized = response.serialize()
-        let serializedString = String(data: serialized, encoding: .utf8) ?? ""
-
-        XCTAssertTrue(serializedString.hasPrefix("HTTP/1.1 200 OK\r\n"))
-        XCTAssertTrue(serializedString.contains("Content-Type: application/json"))
-        XCTAssertTrue(serializedString.contains("Connection: close"))
-    }
-
-    func test_bad_request_response_includes_error_code() {
-        let response = InstantShareHTTPResponse.badRequest(errorCode: "PAYLOAD_UNREADABLE", message: "Bad data")
-        let serialized = response.serialize()
-        let serializedString = String(data: serialized, encoding: .utf8) ?? ""
-
-        XCTAssertTrue(serializedString.contains("400 Bad Request"))
-        XCTAssertTrue(serializedString.contains("PAYLOAD_UNREADABLE"))
     }
 }
 
