@@ -1,7 +1,8 @@
 import SwiftUI
+import Common
 
 @MainActor
-public class ISQRRootViewModel: ObservableObject, QRClaimDelegate, QRScanDelegate, ISQRDeliverDelegate, ISQRErrorDelegate {
+public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate, QRScanDelegate, ISQRDeliverDelegate, ISQRErrorDelegate {
     public enum State {
         case scan
         case claiming
@@ -12,6 +13,16 @@ public class ISQRRootViewModel: ObservableObject, QRClaimDelegate, QRScanDelegat
     @Published public private(set) var state: State = .claiming
     let navigator: Navigator
     let qrClaimPayload: QRClaimPayload
+    
+    var qrClaimResult: QRClaimResult? {
+        didSet {
+            if let oldFile = oldValue?.fileUrl, oldFile != qrClaimResult?.fileUrl {
+                Task {
+                    await self.cleanupStashedFile(oldFile)
+                }
+            }
+        }
+    }
 
     public init(qrClaimPayload: QRClaimPayload, navigator: Navigator) {
         self.qrClaimPayload = qrClaimPayload
@@ -34,6 +45,7 @@ public class ISQRRootViewModel: ObservableObject, QRClaimDelegate, QRScanDelegat
     func onClaimCompletion(_ result: Result<QRClaimResult, any Error>) {
         switch result {
         case .success(let claimResult):
+            self.qrClaimResult = claimResult
             state = .result(claimResult)
         case .failure(let error):
             let title = "Transfer Failed"
@@ -55,6 +67,17 @@ public class ISQRRootViewModel: ObservableObject, QRClaimDelegate, QRScanDelegat
         }
     }
     
+    func onAppear() {
+    }
+    
+    func onDisappear() {
+        if let oldFile = qrClaimResult?.fileUrl {
+            Task {
+                await self.cleanupStashedFile(oldFile)
+            }
+        }
+    }
+    
     private func handleScannedQRCode(_ scannedValue: String) async {
         guard let url = URL(string: scannedValue),
               let payload = QRClaimPayload(universalLinkURL: url) else {
@@ -62,5 +85,27 @@ public class ISQRRootViewModel: ObservableObject, QRClaimDelegate, QRScanDelegat
             return
         }
         state = .claiming
+    }
+    
+    private func cleanupStashedFile(_ fileUrl: URL) async {
+        do {
+            try await FileManager.default.removeItem(at: fileUrl)
+        } catch (let error) {
+            LocalLog.error("cleanup stashed file failed: \(error)")
+        }
+    }
+}
+
+
+extension QRClaimResult {
+    var fileUrl: URL? {
+        switch self {
+        case .file(let fileURL, let contentType, let filename):
+            return fileURL
+        case .image(let fileURL, let contentType, let filename):
+            return fileURL
+        default:
+            return nil
+        }
     }
 }

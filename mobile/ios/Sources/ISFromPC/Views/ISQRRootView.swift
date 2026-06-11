@@ -12,6 +12,9 @@ public struct ISQRRootView: View {
 
     public var body: some View {
         navigationContainer
+            .onDisappear {
+                viewModel.onDisappear()
+            }
     }
 
     @ViewBuilder
@@ -48,4 +51,10 @@ public struct ISQRRootView: View {
             ErrorStateView(viewModelFactory: errorVMFactory)
         }
     }
+}
+
+@MainActor
+protocol ViewLifeCycle {
+    func onAppear() -> Void
+    func onDisappear() -> Void
 }
