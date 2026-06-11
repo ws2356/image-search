@@ -11,7 +11,6 @@ protocol AppPageModeling: AnyObject {
     // New page-specific result handlers
     func onHomeCompleted(with result: HomePageResult) async
     func onScanningCompleted(with result: ScanningPageResult) async
-    func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async
     func onPairingCompleted(with result: PairingPageResult) async
     func onPermissionsCompleted(with result: PermissionsPageResult) async
     func onTransferCompleted(with result: TransferPageResult) async
@@ -19,7 +18,12 @@ protocol AppPageModeling: AnyObject {
     func onErrorCompleted(with result: ErrorPageResult) async
 }
 
-extension MobileAppModel: AppPageModeling {}
+@MainActor
+protocol GenericQRScanDelegate {
+    func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async
+}
+
+extension MobileAppModel: AppPageModeling, GenericQRScanDelegate {}
 
 @MainActor
 protocol PermissionsPageModeling: AppPageModeling {

@@ -13,7 +13,6 @@ struct QRTransferResultView: View {
     @State private var showFileError = false
     @State private var fileErrorMessage = ""
     @State private var showShareSheet = false
-    @State private var shareItems: [Any] = []
 
     init(result: QRClaimResult, delegate: ISQRDeliverDelegate) {
         self.result = result
@@ -30,7 +29,7 @@ struct QRTransferResultView: View {
                 }
             }
             .sheet(isPresented: $showShareSheet) {
-                ShareSheet(items: shareItems)
+                ShareSheet(items: result.asShareItems)
             }
             .overlay(alignment: .bottom) {
             if showCopiedToast {
@@ -117,32 +116,9 @@ struct QRTransferResultView: View {
     }
 
     private func shareCurrentContent() {
-        var items: [Any] = []
-        switch result {
-        case .text(let text):
-            items = [text]
-        case .html(let html):
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).html")
-            try? html.data(using: .utf8)?.write(to: tempURL)
-            items = [tempURL]
-        case .image(let fileURL, _, _):
-            items = [sanitizedFileURL(fileURL)]
-        case .file(let fileURL, _, _):
-            items = [sanitizedFileURL(fileURL)]
-        }
-        shareItems = items
         showShareSheet = true
     }
-
-    private func sanitizedFileURL(_ url: URL) -> URL {
-        let filename = url.lastPathComponent
-        let sanitized = filename.drop(while: { $0 == "." })
-        guard sanitized.isEmpty == false, sanitized.count != filename.count else { return url }
-        let newURL = url.deletingLastPathComponent().appendingPathComponent(String(sanitized))
-        try? FileManager.default.moveItem(at: url, to: newURL)
-        return newURL
-    }
-
+    
     private func imageContentView(fileURL: URL, contentType: String, filename: String?) -> some View {
         VStack(spacing: 16) {
             if let uiImage = UIImage(contentsOfFile: fileURL.path) {
@@ -288,8 +264,36 @@ struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
+        return UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+extension QRClaimResult {
+    var asShareItems: [Any] {
+        var items: [Any] = []
+        switch self {
+        case .text(let text):
+            items = [text]
+        case .html(let html):
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).html")
+            try? html.data(using: .utf8)?.write(to: tempURL)
+            items = [tempURL]
+        case .image(let fileURL, _, _):
+            items = [Self.sanitizedFileURL(fileURL)]
+        case .file(let fileURL, _, _):
+            items = [Self.sanitizedFileURL(fileURL)]
+        }
+        return items
+    }
+    
+    static private func sanitizedFileURL(_ url: URL) -> URL {
+        let filename = url.lastPathComponent
+        let sanitized = filename.drop(while: { $0 == "." })
+        guard sanitized.isEmpty == false, sanitized.count != filename.count else { return url }
+        let newURL = url.deletingLastPathComponent().appendingPathComponent(String(sanitized))
+        try? FileManager.default.moveItem(at: url, to: newURL)
+        return newURL
+    }
 }

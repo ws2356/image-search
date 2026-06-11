@@ -3,10 +3,10 @@ import Common
 
 @MainActor
 struct GenericQRScanPageViewModel: ScanningBaseViewModel {
-    private let model: any AppPageModeling
+    private let model: any GenericQRScanDelegate
     private let telemetryService: TelemetryService
 
-    init(model: any AppPageModeling, telemetryService: TelemetryService) {
+    init(model: any GenericQRScanDelegate, telemetryService: TelemetryService) {
         self.model = model
         self.telemetryService = telemetryService
     }
