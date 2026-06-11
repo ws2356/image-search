@@ -47,6 +47,7 @@ public struct QRScanTipBuilder {
             Text("1. Open https://aurora.boldman.net on your PC browser then install and launch AuSearch.")
             Text("2. Click 'Add Folder'.")
             Text("3. Select 'Mobile Device'.")
+            Text("4. Scan the QR code.")
         }
     }
     
@@ -57,6 +58,7 @@ public struct QRScanTipBuilder {
             Text("1. Download and install AuSearch from https://aurora.boldman.net")
             Text("2. (Optionally) Enable InstantShare extension: System Settings > General > Login Items & Extensions > Sharing > InstantShare.")
             Text("3. Right click text or file, then ‘Share > InstantShare’ to show the QR code.")
+            Text("4. Scan the QR code.")
         }
     }
 }
