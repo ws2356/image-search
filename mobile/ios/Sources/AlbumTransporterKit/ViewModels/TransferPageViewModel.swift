@@ -231,27 +231,8 @@ final class TransferPageViewModel: ObservableObject {
     ) {
         var diagnosticAttributes = attributes
         diagnosticAttributes["diagnostic.area"] = .string(area)
-        diagnosticAttributes["app.route"] = .string(routeName(model.route))
+        diagnosticAttributes["app.route"] = .string(model.route.routeName)
         diagnosticAttributes["backup.flow_state"] = .string(model.backupFlowState.rawValue)
         telemetryService.recordTelemetry(.diagnosticCheckpoint, attributes: diagnosticAttributes)
-    }
-
-    private func routeName(_ route: AppRoute) -> String {
-        switch route {
-        case .home:
-            return "home"
-        case .scan:
-            return "scan"
-        case .pair:
-            return "pair"
-        case .permissions:
-            return "permissions"
-        case .transfer:
-            return "transfer"
-        case .completed:
-            return "completed"
-        case .error:
-            return "error"
-        }
     }
 }

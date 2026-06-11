@@ -94,10 +94,40 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
     
     func onHomeCompleted(with result: HomePageResult) async {
         switch result.result {
-        case .success:
-            await openScanFlow()
+        case .success(let target):
+            switch target {
+            case .backupScan:
+                await openScanFlow()
+            case .genericScan:
+                route = .genericScan
+            }
         case .failure:
             break
+        }
+    }
+
+    func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async {
+        switch result.result {
+        case .success(let qrString):
+            if let url = URL(string: qrString), let payload = QRClaimPayload(universalLinkURL: url) {
+                self.instantShareQRPayload = payload
+                self.route = .home
+                return
+            }
+            beginBackupSessionTelemetry()
+            await showPairingPage(qrString: qrString)
+        case .failure(.cancel):
+            await returnHome()
+        case .failure(.scannerFailed):
+            presentErrorSummary(
+                title: "Scanner failed",
+                message: "The camera scanner couldn't continue. Try again or return home."
+            )
+        case .failure:
+            presentErrorSummary(
+                title: "Scanner error",
+                message: "An unexpected error occurred. Try again or return home."
+            )
         }
     }
 
@@ -106,6 +136,7 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         case .success(let qrString):
             if let url = URL(string: qrString), let payload = QRClaimPayload(universalLinkURL: url) {
                 self.instantShareQRPayload = payload
+                self.route = .home
                 return
             }
             await showPairingPage(qrString: qrString)
@@ -262,6 +293,8 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
             return "home"
         case .scan:
             return "scan"
+        case .genericScan:
+            return "generic_scan"
         case .pair:
             return "pair"
         case .permissions:

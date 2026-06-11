@@ -4,11 +4,35 @@ import ISFromPC
 enum AppRoute: Equatable, Sendable {
     case home
     case scan
+    case genericScan
     case pair(qrString: String)
     case permissions
     case transfer
     case completed
     case error(ErrorSummary)
+}
+
+extension AppRoute {
+    var routeName: String {
+        switch self {
+        case .home:
+            return "home"
+        case .scan:
+            return "scan"
+        case .genericScan:
+            return "genericScan"
+        case .pair:
+            return "pair"
+        case .permissions:
+            return "permissions"
+        case .transfer:
+            return "transfer"
+        case .completed:
+            return "completed"
+        case .error:
+            return "error"
+        }
+    }
 }
 
 struct ErrorSummary: Equatable, Sendable, Codable {

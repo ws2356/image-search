@@ -154,6 +154,12 @@ public struct AlbumTransporterRootView: View {
                 telemetryService: container.telemetryService()
             )
             ScanningPageView(viewModel: scanningViewModel)
+        case .genericScan:
+            let genericScanViewModel = GenericQRScanPageViewModel(
+                model: model,
+                telemetryService: container.telemetryService()
+            )
+            GenericQRScanView(viewModel: genericScanViewModel)
         case .pair:
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
