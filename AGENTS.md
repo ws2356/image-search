@@ -1,6 +1,11 @@
 # Agent Guidelines
 
-Welcome to the `image-search` repository. This document outlines the architectural patterns, coding styles, and commands necessary to operate within this codebase. Please adhere to these guidelines when suggesting or implementing changes.
+This is a monorepo containing source code for the following products:
+| Product Name | Features | Code Location |
+| :---- | :---- | :---- |
+| AuSearch | AI-powered image search, mobile folder backup, instant sharing (under active development) | dt_image_search/ |
+| AuBackup (iOS) | Mobile album backup to PC, instant sharing (under active development) | mobile/ios/ |
+| AuBackup (Android) | Mobile album backup to PC (paused for now), instant sharing (not started) | mobile/rn/ |
 
 ## 1. Tech Stack & Environment
 - **Language**: Python 3.10.
