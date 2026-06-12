@@ -20,7 +20,7 @@ extension Container {
     }
 
     var appIdentityProvider: Factory<AppIdentityProviding> {
-        self { KeychainAppIdentityProvider() }
+        self { KeychainAppIdentityProvider(localDeviceIdentifierProvider: self.localDeviceIdentityProvider()) }
             .singleton
     }
 

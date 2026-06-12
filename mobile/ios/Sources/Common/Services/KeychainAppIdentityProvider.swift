@@ -3,18 +3,25 @@ import Security
 import CryptoKit
 
 public protocol AppIdentityProviding: Sendable {
-    func ensureIdentity() throws
+    func ensureIdentity() async throws
+    func certificate() throws -> SecCertificate
+    func privateKey() throws -> SecKey
 }
 
 public final class KeychainAppIdentityProvider: AppIdentityProviding {
     private static let keyLabel = "AuBackup App Identity"
-    
-    public init() {}
+    private let localDeviceIdentifierProvider: LocalDeviceIdentifierProviding
+
+    public init(localDeviceIdentifierProvider: LocalDeviceIdentifierProviding) {
+        self.localDeviceIdentifierProvider = localDeviceIdentifierProvider
+    }
 
     enum IdentityError: Swift.Error, LocalizedError {
         case keyGenerationFailed
         case certificateCreationFailed
         case identityNotFound
+        case certificateNotFound
+        case privateKeyNotFound
         case publicKeyExportFailed
 
         var errorDescription: String? {
@@ -22,16 +29,42 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             case .keyGenerationFailed: return "Failed to generate EC keypair."
             case .certificateCreationFailed: return "Failed to create self-signed X.509 certificate."
             case .identityNotFound: return "Could not retrieve app identity."
+            case .certificateNotFound: return "Could not extract certificate from app identity."
+            case .privateKeyNotFound: return "Could not extract private key from app identity."
             case .publicKeyExportFailed: return "Failed to export public key as PEM."
             }
         }
     }
 
-    public func ensureIdentity() throws {
+    public func ensureIdentity() async throws {
+        LocalLog.info("Ensuring app identity...")
         if let _ = try? retrieveExistingIdentity() {
+            LocalLog.info("Existing app identity found")
             return
         }
-        try createIdentity()
+        LocalLog.info("No existing identity found, creating new self-signed certificate")
+        try await createIdentity()
+        LocalLog.info("App identity created successfully")
+    }
+
+    public func certificate() throws -> SecCertificate {
+        let identity = try retrieveExistingIdentity()
+        var cert: SecCertificate?
+        let status = SecIdentityCopyCertificate(identity, &cert)
+        guard status == errSecSuccess, let cert else {
+            throw IdentityError.certificateNotFound
+        }
+        return cert
+    }
+
+    public func privateKey() throws -> SecKey {
+        let identity = try retrieveExistingIdentity()
+        var key: SecKey?
+        let status = SecIdentityCopyPrivateKey(identity, &key)
+        guard status == errSecSuccess, let key else {
+            throw IdentityError.privateKeyNotFound
+        }
+        return key
     }
 
     private func retrieveExistingIdentity() throws -> SecIdentity {
@@ -48,7 +81,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return secIdent
     }
 
-    private func createIdentity() throws {
+    private func createIdentity() async throws {
         for secClass in [kSecClassIdentity, kSecClassCertificate, kSecClassKey] {
             SecItemDelete([kSecClass: secClass, kSecAttrLabel: Self.keyLabel] as CFDictionary)
         }
@@ -72,19 +105,24 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             throw IdentityError.keyGenerationFailed
         }
 
-        let certificate = try buildSelfSignedCert(privateKey: privateSecKey, rawPubKey: rawPubKey)
+        let identifier = await localDeviceIdentifierProvider.currentIdentifier()
+        let certificate = try buildSelfSignedCert(
+            privateKey: privateSecKey,
+            rawPubKey: rawPubKey,
+            commonName: identifier.deviceUUID
+        )
         SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: certificate, kSecAttrLabel: Self.keyLabel] as CFDictionary, nil)
     }
 
     // MARK: - Certificate
 
-    private func buildSelfSignedCert(privateKey: SecKey, rawPubKey: Data) throws -> SecCertificate {
-        let issuer = _DistinguishedName(commonName: "AuBackup")
+    private func buildSelfSignedCert(privateKey: SecKey, rawPubKey: Data, commonName: String) throws -> SecCertificate {
+        let subject = _DistinguishedName(commonName: commonName)
         let notBefore = Date()
         let notAfter = Calendar.current.date(byAdding: .year, value: 10, to: notBefore)!
         let serial = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
         let spki = _encodeSubjectPublicKeyInfo(rawPubKey)
-        let tbs = _encTBSCert(serial: serial, issuer: issuer, nb: notBefore, na: notAfter, subj: issuer, spki: spki)
+        let tbs = _encTBSCert(serial: serial, issuer: subject, nb: notBefore, na: notAfter, subj: subject, spki: spki)
         let sigAlgo = _encSigAlgo()
         let digest = SHA256.hash(data: tbs)
         guard let signature = SecKeyCreateSignature(privateKey, .ecdsaSignatureDigestX962SHA256, Data(digest) as CFData, nil) as Data? else {
@@ -189,4 +227,36 @@ private struct _DistinguishedName {
         result.append(value)
         return result
     }
+}
+
+public func DebugPrintCert(_ cert: SecCertificate) {
+    LocalLog.debug("================ [ 证书 ] ================")
+    
+    // A. 获取证书的主体摘要（通常是 Common Name）
+    if let summary = SecCertificateCopySubjectSummary(cert) as String? {
+        LocalLog.debug("🏷️ 证书名称: \(summary)")
+    }
+    
+    // B. 获取证书的原始数据并计算指纹 (SHA-256)
+    if let certData = SecCertificateCopyData(cert) as Data? {
+        let sha256Hash = SHA256.hash(data: certData)
+        // 转换为常见的 Hex 冒号分隔格式 (例如 AA:BB:CC...)
+        let fingerprint = sha256Hash.map { String(format: "%02X", $0) }.joined(separator: ":")
+        LocalLog.debug("🔒 证书指纹 (SHA-256):\n\(fingerprint)")
+    }
+    
+    // C. 从证书中提取公钥并打印为 Base64 文本
+    if let publicKey = SecCertificateCopyKey(cert) {
+        var error: Unmanaged<CFError>?
+        if let keyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? {
+            // 打印成标准的 Base64 格式，方便拷贝到调试工具中比对
+            let base64Key = keyData.base64EncodedString(options: .lineLength64Characters)
+            LocalLog.debug("🔑 公钥 (Base64):\n\(base64Key)")
+        } else if let err = error {
+            LocalLog.debug("❌ 提取公钥数据失败: \(err.takeRetainedValue().localizedDescription)")
+        }
+    } else {
+        LocalLog.debug("❌ 无法从该证书中解析出公钥")
+    }
+    LocalLog.debug("================================================\n")
 }

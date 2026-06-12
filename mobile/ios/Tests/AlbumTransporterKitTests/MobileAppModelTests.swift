@@ -1,6 +1,7 @@
 import XCTest
 import Combine
 @testable import AlbumTransporterKit
+import Common
 
 struct LaunchSnapshot: Sendable {
     var backupSession: BackupSession?
@@ -14,7 +15,7 @@ protocol AppStateStore: Sendable {
 }
 
 struct NoopAppIdentityProvider: AppIdentityProviding {
-    func ensureIdentity() throws {}
+    func ensureIdentity() async throws {}
 }
 
 actor InMemoryAppStateStore: AppStateStore {

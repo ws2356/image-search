@@ -15,7 +15,7 @@ final class PageViewModelTests: XCTestCase {
         await viewModel.refreshSummary()
         XCTAssertEqual(viewModel.summary, model.homeSummary)
 
-        await viewModel.handlePrimaryActionTapped()
+        await viewModel.handlePrimaryActionTapped(target: .backupScan)
 
         XCTAssertEqual(model.homeScanActionCallCount, 1)
     }
@@ -116,7 +116,7 @@ final class PageViewModelTests: XCTestCase {
         await viewModel.onQRScanned(scannedValue: "qr-value")
         await viewModel.onBackTapped()
         await viewModel.onOpenSettingsTapped()
-        await viewModel.onScannerFailed()
+        await viewModel.onScannerFailed(error: GenericQRScanPageError.unknown)
 
         XCTAssertEqual(model.route, .pair(qrString: "qr-value"))
         XCTAssertEqual(model.beginPairingCallCount, 1)
@@ -129,7 +129,7 @@ final class PageViewModelTests: XCTestCase {
         let model = StubPageModel(telemetryServiceActor: telemetryService)
         let expectedSummary = ErrorSummary(title: "Preview Error", message: "Preview error message.")
         model.route = .error(expectedSummary)
-        let viewModel = ErrorPageViewModel(model: model, telemetryService: telemetryService)
+        let viewModel = BackupErrorPageViewModel(model: model, telemetryService: telemetryService)
 
         XCTAssertEqual(viewModel.summary, expectedSummary)
 

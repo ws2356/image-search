@@ -318,7 +318,14 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         }
 
         hasLoaded = true
-        try? appIdentityProvider.ensureIdentity()
+        try? await appIdentityProvider.ensureIdentity()
+        do {
+            let cert = try appIdentityProvider.certificate()
+            DebugPrintCert(cert)
+        } catch (let error) {
+            LocalLog.error("[identity] failed to get cert: \(error)")
+        }
+        
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
         let backupSession = backupSessionProvider.currentBackupSession
