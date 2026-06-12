@@ -35,10 +35,13 @@ from dt_image_search.app_setting import initialize_app_settings
 
 initialize_app_settings()
 
-_LOG_DIR = Path.home() / "Library/Application Support/net.boldman.ausearch"
-_LOG_DIR.mkdir(parents=True, exist_ok=True)
-_LOG_FILE = _LOG_DIR / "instantshare.log"
-print(f"Logging to: {_LOG_FILE}")
+def _get_log_file_path() -> Path:
+    from dt_image_search.model.dts_fs import get_app_data_path
+    _LOG_DIR = get_app_data_path() / "logs"
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _LOG_FILE = _LOG_DIR / "instantshare.log"
+    print(f"Logging to: {_LOG_FILE}")
+    return _LOG_FILE
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -86,11 +89,13 @@ def hide_dock_icon():
 
 def main() -> int:
     args = _parse_args()
+    from dt_image_search.model.dts_fs import get_app_data_path
+    print(f"App data path: {get_app_data_path()}")
 
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        filename=str(_LOG_FILE),
+        filename=str(_get_log_file_path()),
         filemode="a",
     )
     _logger = logging.getLogger(__name__)
