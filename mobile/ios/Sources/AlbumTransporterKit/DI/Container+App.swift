@@ -18,6 +18,11 @@ extension Container {
             .singleton
     }
 
+    var appIdentityProvider: Factory<AppIdentityProviding> {
+        self { KeychainAppIdentityProvider() }
+            .singleton
+    }
+
     var trustedDesktopStore: Factory<TrustedDesktopStore> {
         self { UserDefaultsTrustedDesktopStore() }
             .singleton
@@ -146,7 +151,8 @@ extension Container {
                 appUpdateChecker: self.appUpdateChecker(),
                 appVersionProvider: self.appVersionProvider(),
                 telemetryService: self.telemetryService(),
-                telemetryContextProvider: self.telemetryContextProvider()
+                telemetryContextProvider: self.telemetryContextProvider(),
+                appIdentityProvider: self.appIdentityProvider()
             )
         }
         .singleton

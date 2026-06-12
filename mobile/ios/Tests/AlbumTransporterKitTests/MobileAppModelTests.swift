@@ -13,6 +13,10 @@ protocol AppStateStore: Sendable {
     func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async
 }
 
+struct NoopAppIdentityProvider: AppIdentityProviding {
+    func ensureIdentity() throws {}
+}
+
 actor InMemoryAppStateStore: AppStateStore {
     private var snapshot: LaunchSnapshot
 
@@ -310,7 +314,8 @@ final class MobileAppModelTests: XCTestCase {
             appUpdateChecker: appUpdateChecker,
             appVersionProvider: appVersionProvider,
             telemetryService: resolvedTelemetryService,
-            telemetryContextProvider: resolvedTelemetryContextProvider
+            telemetryContextProvider: resolvedTelemetryContextProvider,
+            appIdentityProvider: NoopAppIdentityProvider()
         )
     }
 
