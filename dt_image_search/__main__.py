@@ -819,6 +819,9 @@ def main():
 
     initialize_feature_flags()
 
+    from dt_image_search.identity import initialize_device_identity
+    initialize_device_identity()
+
     app = QApplication(sys.argv)
     app_icon = _load_application_icon()
     if not app_icon.isNull():

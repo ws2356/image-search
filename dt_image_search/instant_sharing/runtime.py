@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Callable, Mapping
 
+from dt_image_search.identity import initialize_device_identity
 from dt_image_search.instant_sharing.mdns import (
     ConnectionConfig,
     DeviceNameAdvertisement,
@@ -52,6 +53,8 @@ class InstantShareRuntime:
         pin_display_callback: Callable[[str], None] | None = None,
         qr_window_factory: QRTriggerMiniWindowFactory | None = None,
     ) -> None:
+        initialize_device_identity()
+
         self._auto_receive = auto_receive
         self._is_enabled = is_enabled
         self._device_id_provider = device_id_provider
