@@ -181,12 +181,21 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
                 let handshakeHost = pc.host
 
-                try await trustClient.confirm(
+                let myCert = try? InstantShareIdentityManager.certificatePEM()
+                let peerCert = try await trustClient.confirm(
                     host: handshakeHost,
                     port: pc.port,
                     sessionID: config.sessionID,
-                    correlationID: config.correlationID
+                    correlationID: config.correlationID,
+                    deviceCertificatePEM: myCert
                 )
+                if let peerCert {
+                    try? InstantShareTrustedPeerStore.store(
+                        peerDeviceID: pc.id,
+                        certificatePEM: peerCert
+                    )
+                    LocalLog.info("[Extension VM] stored peer certificate for device=\(pc.id)")
+                }
                 LocalLog.info("[Extension VM] trust confirmed")
 
                 switch service.sharedText.isEmpty {

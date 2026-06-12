@@ -225,13 +225,17 @@ final class InstantShareTrustClient: @unchecked Sendable {
         host: String,
         port: Int,
         sessionID: String,
-        correlationID: String
-    ) async throws {
+        correlationID: String,
+        deviceCertificatePEM: String? = nil
+    ) async throws -> String? {
         guard trustSessionManager.isEstablished else {
             throw InstantShareTrustClientError.sessionKeyNotEstablished
         }
 
-        let requestPayload: [String: Any] = ["action": "confirm", "pin_verified": true]
+        var requestPayload: [String: Any] = ["action": "confirm", "pin_verified": true]
+        if let cert = deviceCertificatePEM {
+            requestPayload["device_certificate_pem"] = cert
+        }
         let envelope = try trustSessionManager.encryptResponse(requestPayload)
 
         let requestBody: [String: Any] = [
@@ -301,6 +305,8 @@ final class InstantShareTrustClient: @unchecked Sendable {
               trustStatus == "trusted" else {
             throw InstantShareTrustClientError.confirmFailed("Expected trust_status=trusted, got \(decryptedPayload)")
         }
+        let pcCertificatePEM = decryptedPayload["device_certificate_pem"] as? String
+        return pcCertificatePEM
     }
 
     private func tryParseErrorBody(_ data: Data) -> (errorCode: String, message: String) {

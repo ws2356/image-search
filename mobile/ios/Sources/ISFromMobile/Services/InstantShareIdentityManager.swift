@@ -273,6 +273,22 @@ final class InstantShareIdentityManager {
 
     // MARK: - PEM
 
+    static func certificatePEM() throws -> String {
+        let identity = try getOrCreateIdentity()
+        var cert: SecCertificate?
+        SecIdentityCopyCertificate(identity.secIdentity, &cert)
+        guard let certificate = cert else {
+            throw Error.certificateCreationFailed
+        }
+        return try certificatePEM(from: certificate)
+    }
+
+    static func certificatePEM(from cert: SecCertificate) throws -> String {
+        let derData = SecCertificateCopyData(cert) as Data
+        let base64 = derData.base64EncodedString(options: .lineLength64Characters)
+        return "-----BEGIN CERTIFICATE-----\n\(base64)\n-----END CERTIFICATE-----\n"
+    }
+
     private static func publicKeyPEM(from cert: SecCertificate) throws -> String {
         guard let pk = SecCertificateCopyKey(cert),
               let raw = SecKeyCopyExternalRepresentation(pk, nil) as Data? else {
