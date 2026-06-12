@@ -1,5 +1,6 @@
 import Factory
 import ISFromMobile
+import Common
 
 extension Container {
     var backupSessionStore: Factory<BackupSessionStore> {
@@ -13,8 +14,8 @@ extension Container {
             .singleton
     }
 
-    var localDeviceIdentityProvider: Factory<LocalDeviceIdentityProviding> {
-        self { UserDefaultsLocalDeviceIdentityStore() }
+    var localDeviceIdentityProvider: Factory<LocalDeviceIdentifierProviding> {
+        self { LocalDeviceIdentifierStore() }
             .singleton
     }
 

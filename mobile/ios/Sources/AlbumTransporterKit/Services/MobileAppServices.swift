@@ -133,10 +133,6 @@ protocol PairingUSBBootstrapClient: Sendable {
     ) async throws -> PairingClaimResponse
 }
 
-protocol LocalDeviceIdentityProviding: Sendable {
-    func currentIdentity() async -> LocalDeviceIdentity
-}
-
 protocol AppIdentityProviding: Sendable {
     func ensureIdentity() throws
 }
@@ -649,13 +645,6 @@ struct PairingClaimResponse: Codable, Sendable, PairingSchemaResponse {
             return .pairingStopped
         }
     }
-}
-
-struct LocalDeviceIdentity: Codable, Equatable, Sendable {
-    var installID: String
-    var deviceUUID: String
-    var deviceName: String
-    var platform: String
 }
 
 struct TrustedDesktopRecord: Codable, Equatable, Sendable {
