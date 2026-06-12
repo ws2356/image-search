@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Combine
 import ISFromPC
+import Common
 
 @MainActor
 final class MobileAppModel: ObservableObject, NavigatorFactory {

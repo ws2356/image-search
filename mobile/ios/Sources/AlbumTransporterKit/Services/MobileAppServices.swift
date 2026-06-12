@@ -133,10 +133,6 @@ protocol PairingUSBBootstrapClient: Sendable {
     ) async throws -> PairingClaimResponse
 }
 
-protocol AppIdentityProviding: Sendable {
-    func ensureIdentity() throws
-}
-
 protocol TrustedDesktopStore: Sendable {
     func loadTrustedDesktop() async -> TrustedDesktopRecord?
     func saveTrustedDesktop(_ record: TrustedDesktopRecord) async

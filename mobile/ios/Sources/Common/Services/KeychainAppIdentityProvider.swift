@@ -2,8 +2,14 @@ import Foundation
 import Security
 import CryptoKit
 
-final class KeychainAppIdentityProvider: AppIdentityProviding {
+public protocol AppIdentityProviding: Sendable {
+    func ensureIdentity() throws
+}
+
+public final class KeychainAppIdentityProvider: AppIdentityProviding {
     private static let keyLabel = "AuBackup App Identity"
+    
+    public init() {}
 
     enum IdentityError: Swift.Error, LocalizedError {
         case keyGenerationFailed
@@ -21,7 +27,7 @@ final class KeychainAppIdentityProvider: AppIdentityProviding {
         }
     }
 
-    func ensureIdentity() throws {
+    public func ensureIdentity() throws {
         if let _ = try? retrieveExistingIdentity() {
             return
         }
