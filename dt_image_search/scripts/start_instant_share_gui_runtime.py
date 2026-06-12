@@ -27,20 +27,19 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
+from dt_image_search.app_setting import initialize_app_settings
+initialize_app_settings()
+
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE, INSTANT_SHARE_MDNS_PORT
 from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
-from dt_image_search.app_setting import initialize_app_settings
-
-initialize_app_settings()
 
 def _get_log_file_path() -> Path:
     from dt_image_search.model.dts_fs import get_app_data_path
     _LOG_DIR = get_app_data_path() / "logs"
     _LOG_DIR.mkdir(parents=True, exist_ok=True)
     _LOG_FILE = _LOG_DIR / "instantshare.log"
-    print(f"Logging to: {_LOG_FILE}")
     return _LOG_FILE
 
 def _parse_args() -> argparse.Namespace:
@@ -88,17 +87,8 @@ def hide_dock_icon():
             print("警告: 缺少 pyobjc 库，无法动态隐藏 Dock 图标")
 
 def main() -> int:
-    args = _parse_args()
-    from dt_image_search.model.dts_fs import get_app_data_path
-    print(f"App data path: {get_app_data_path()}")
 
-    logging.basicConfig(
-        level=getattr(logging, args.log_level),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        filename=str(_get_log_file_path()),
-        filemode="a",
-    )
-    _logger = logging.getLogger(__name__)
+    args = _parse_args()
 
     print(f"Starting instant share runtime with GUI...")
     print(f"  mDNS service:      {INSTANT_SHARE_MDNS_SERVICE_TYPE}")
@@ -117,6 +107,17 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("AuSearch Instant Share")
     app.setQuitOnLastWindowClosed(False)
+
+    from dt_image_search.model.dts_fs import get_app_data_path
+    print(f"App data path: {get_app_data_path()}")
+
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        filename=str(_get_log_file_path()),
+        filemode="a",
+    )
+    _logger = logging.getLogger(__name__)
 
     # 1. 在初始化 GUI 之后，戴上“隐形斗篷”
     hide_dock_icon()
