@@ -12,10 +12,10 @@ In the pc-hosted-trust-and-upload architecture, the trust flow is:
    - PC generates a 6-digit PIN, encrypts it, returns the envelope
    - Both sides display the same PIN
 
-3. /trust/confirm (encrypted finalization, mobile-side only)
-   - iOS sends encrypted {"action": "confirm", "pin_verified": true}
-   - PC marks the trust session as trusted, returns encrypted {"trust_status": "trusted"}
-   - No long-polling - iOS sends after user taps Confirm in iOS UI
+3. /trust/confirm (encrypted finalization + device certificate exchange)
+   - iOS sends encrypted {"action": "confirm", "pin_verified": true, "device_certificate_pem": "..."}
+   - PC stores mobile's certificate in keychain, returns encrypted {"trust_status": "trusted", "device_certificate_pem": "..."}
+   - iOS stores PC's certificate in keychain
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ class TrustSession:
         self._mobile_nonce: str | None = None
         self._kdf_context: str | None = None
         self._pin_code: str | None = None
+        self._mobile_certificate_pem: str | None = None
         self._is_trusted = threading.Event()
         self._lock = threading.RLock()
         self._created_monotonic = time.monotonic()
@@ -84,6 +85,15 @@ class TrustSession:
     @property
     def is_session_key_established(self) -> bool:
         return self._pc_protector.is_established
+
+    @property
+    def mobile_certificate_pem(self) -> str | None:
+        with self._lock:
+            return self._mobile_certificate_pem
+
+    def store_mobile_certificate(self, certificate_pem: str) -> None:
+        with self._lock:
+            self._mobile_certificate_pem = certificate_pem
 
     def store_mobile_handshake(
         self,
@@ -194,16 +204,19 @@ class TrustSession:
             "encryption_alg": ENCRYPTION_ALG,
         }
 
-    def encrypted_trust_status(self) -> dict[str, str]:
-        """Return the trust status encrypted in a trust envelope."""
+    def encrypted_trust_status(self, *, pc_certificate_pem: str | None = None) -> dict[str, str]:
+        """Return the trust status (+ optionally PC's device cert) encrypted in a trust envelope."""
         if not self._pc_protector.is_established:
             raise InstantShareError(
                 ErrorCode.HANDSHAKE_REQUIRED,
                 "Cannot encrypt trust status before trust session key is established.",
                 correlation_id=self._correlation_id,
             )
+        payload: dict[str, str] = {"trust_status": "trusted"}
+        if pc_certificate_pem is not None:
+            payload["device_certificate_pem"] = pc_certificate_pem
         encrypted = self._pc_protector.encrypt_json_payload(
-            payload={"trust_status": "trusted"},
+            payload=payload,
             correlation_id=self._correlation_id,
         )
         return {

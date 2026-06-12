@@ -142,6 +142,55 @@ def _decode_identity(p12_data: bytes, device_id: str) -> DeviceIdentity:
     )
 
 
+_PEER_CERT_LABEL = "AuSearch Trusted Device"
+
+
+def get_device_certificate_pem(timeout: float | None = 5.0) -> str:
+    """Return this device's own certificate PEM, blocking until identity is ready."""
+    future = get_identity_future()
+    identity = future.result(timeout=timeout)
+    return identity.certificate_pem
+
+
+def store_peer_certificate(peer_device_id: str, certificate_pem: str) -> None:
+    """Store a peer device's X.509 certificate in the login keychain.
+
+    Uses label "AuSearch Trusted Device" for future bulk queries.
+    """
+    service = f"net.boldman.ausearch.trusted-device"
+    subprocess.run(
+        [
+            "security", "add-generic-password",
+            "-s", service,
+            "-a", peer_device_id,
+            "-l", _PEER_CERT_LABEL,
+            "-U",
+            "-A",
+            "-w", certificate_pem.encode("utf-8").hex(),
+        ],
+        check=True,
+    )
+
+
+def load_peer_certificate(peer_device_id: str) -> str | None:
+    """Load a peer device's certificate from the login keychain, or None."""
+    service = f"net.boldman.ausearch.trusted-device"
+    try:
+        result = subprocess.run(
+            [
+                "security", "find-generic-password",
+                "-s", service,
+                "-a", peer_device_id,
+                "-w",
+            ],
+            capture_output=True,
+            check=True,
+        )
+        return bytes.fromhex(result.stdout.decode("utf-8").strip()).decode("utf-8")
+    except subprocess.CalledProcessError:
+        return None
+
+
 def _generate_identity(device_id: str) -> DeviceIdentity:
     key = ec.generate_private_key(ec.SECP256R1())
     subject = issuer = x509.Name([

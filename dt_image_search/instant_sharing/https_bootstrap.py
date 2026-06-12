@@ -33,6 +33,9 @@ from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
 from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
 from dt_image_search.instant_sharing.transfer_server import TransferHandler
+from cryptography import x509 as crypto_x509
+
+from dt_image_search.identity import get_device_certificate_pem, store_peer_certificate
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 
 _logger = logging.getLogger(__name__)
@@ -211,8 +214,26 @@ def _do_trust_confirm(
             error_code=ErrorCode.INVALID_REQUEST,
             message=f"Unsupported action: {action}",
         )
+
+    mobile_cert_pem = decrypted.get("device_certificate_pem")
+    if isinstance(mobile_cert_pem, str) and mobile_cert_pem.strip():
+        trust_session.store_mobile_certificate(mobile_cert_pem)
+        try:
+            parsed = crypto_x509.load_pem_x509_certificate(mobile_cert_pem.encode("utf-8"))
+            cn_attrs = parsed.subject.get_attributes_for_oid(crypto_x509.oid.NameOID.COMMON_NAME)
+            mobile_device_id = cn_attrs[0].value if cn_attrs else correlation_id_header
+        except Exception:
+            # mobile_device_id = correlation_id_header
+            # TODO: should fail the flow immediately instead of fallback on correlation_id_header
+        store_peer_certificate(mobile_device_id, mobile_cert_pem)
+        _logger.info(
+            "Stored peer certificate device=%s session_id=%s",
+            mobile_device_id, session_id_header,
+        )
+
     trust_session.mark_trusted()
-    trust_status = trust_session.encrypted_trust_status()
+    pc_cert_pem = get_device_certificate_pem()
+    trust_status = trust_session.encrypted_trust_status(pc_certificate_pem=pc_cert_pem)
     _logger.info("Trust confirmed: session_id=%s correlation_id=%s", session_id_header, correlation_id_header)
     return trust_status
 
