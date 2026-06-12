@@ -6,6 +6,10 @@ public protocol AppIdentityProviding: Sendable {
     func ensureSelfIdentity() async throws
     func selfCertificate() throws -> SecCertificate
     func selfPrivateKey() throws -> SecKey
+    
+    func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws
+    func importPeerCertificate(pem: String, for peerDeviceID: String) async throws
+    func peerCertificate(for peerDeviceID: String) throws -> SecCertificate
 }
 
 public enum KeychainError: Swift.Error, LocalizedError {
@@ -128,6 +132,53 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             commonName: identifier.deviceUUID
         )
         SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: certificate, kSecAttrLabel: Self.keyLabel] as CFDictionary, nil)
+    }
+
+    public func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws {
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassCertificate,
+            kSecValueRef as String: cert,
+            kSecAttrLabel as String: "AuBackup Peer Certificate",
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrApplicationTag as String: peerDeviceID.data(using: .utf8)
+        ]
+        SecItemDelete(addQuery as CFDictionary)
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw KeychainError.storeFailed(status)
+        }
+    }
+
+    public func importPeerCertificate(pem: String, for peerDeviceID: String) async throws {
+        let lines = pem.components(separatedBy: .newlines)
+            .filter { !$0.hasPrefix("-----BEGIN") && !$0.hasPrefix("-----END") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let der = Data(base64Encoded: lines.joined())
+        guard let der else {
+            throw KeychainError.unexpectedData
+        }
+        guard let cert = SecCertificateCreateWithData(nil, der as CFData) else {
+            throw KeychainError.unexpectedData
+        }
+        try await importPeerCertificate(cert, for: peerDeviceID)
+    }
+
+    public func peerCertificate(for peerDeviceID: String) throws -> SecCertificate {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassCertificate,
+            kSecAttrApplicationTag as String: peerDeviceID.data(using: .utf8),
+            kSecReturnRef as String: true,
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let cert = result as! SecCertificate? else {
+            throw KeychainError.loadFailed(status)
+        }
+        return cert
+    }
+
+    private static func peerLabel(for deviceID: String) -> String {
+        "AuBackup Peer Certificate - \(deviceID)"
     }
 
     // MARK: - Certificate
