@@ -13,6 +13,15 @@ public protocol AppIdentityProviding: Sendable {
     func deletePeerCertificate(for peerDeviceID: String) throws -> Void
 }
 
+public extension AppIdentityProviding {
+    func selfCertificatePEM() throws -> String {
+        let cert = try selfCertificate()
+        let derData = SecCertificateCopyData(cert) as Data
+        let base64 = derData.base64EncodedString(options: .lineLength64Characters)
+        return "-----BEGIN CERTIFICATE-----\n\(base64)\n-----END CERTIFICATE-----\n"
+    }
+}
+
 public enum KeychainError: Swift.Error, LocalizedError {
     case storeFailed(OSStatus)
     case loadFailed(OSStatus)

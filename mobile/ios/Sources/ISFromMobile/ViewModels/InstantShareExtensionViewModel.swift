@@ -31,11 +31,19 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
     let mdnsBrowser: InstantShareMDNSBrowser
     let service: InstantShareService
+    private let appIdentityProvider: AppIdentityProviding
     private var cancellables: Set<AnyCancellable> = []
 
-    public init(mdnsBrowser: InstantShareMDNSBrowser, service: InstantShareService) {
+    public init(
+        mdnsBrowser: InstantShareMDNSBrowser,
+        service: InstantShareService,
+        appIdentityProvider: AppIdentityProviding = KeychainAppIdentityProvider(
+            localDeviceIdentifierProvider: LocalDeviceIdentifierStore()
+        )
+    ) {
         self.mdnsBrowser = mdnsBrowser
         self.service = service
+        self.appIdentityProvider = appIdentityProvider
         LocalLog.info("[Extension VM] init, subscribing to mdnsBrowser")
         mdnsBrowser.objectWillChange
             .receive(on: DispatchQueue.main)
@@ -181,7 +189,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
                 let handshakeHost = pc.host
 
-                let myCert = try? InstantShareIdentityManager.certificatePEM()
+                let myCert = try? appIdentityProvider.selfCertificatePEM()
                 let peerCert = try await trustClient.confirm(
                     host: handshakeHost,
                     port: pc.port,
@@ -190,9 +198,9 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     deviceCertificatePEM: myCert
                 )
                 if let peerCert {
-                    try? InstantShareTrustedPeerStore.store(
-                        peerDeviceID: pc.id,
-                        certificatePEM: peerCert
+                    try? await appIdentityProvider.importPeerCertificate(
+                        pem: peerCert,
+                        for: pc.id
                     )
                     LocalLog.info("[Extension VM] stored peer certificate for device=\(pc.id)")
                 }
