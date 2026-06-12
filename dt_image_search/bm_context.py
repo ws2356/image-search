@@ -31,9 +31,9 @@ class BMContext:
     def get_model_cache_path(self) -> str:
         from dt_image_search.model.dts_fs import get_app_data_path
         if self.version == 2:
-            return str(get_app_data_path(ctx=self) / "model_cache")
+            return str(get_app_data_path() / "model_cache")
         elif self.version == 1:
-            return os.path.join(get_app_data_path(ctx=self), "open_clip_pytorch_model.bin")
+            return os.path.join(get_app_data_path(), "open_clip_pytorch_model.bin")
         else:
             raise ValueError("Unknown BMContext")
 
@@ -144,7 +144,7 @@ def get_context():
                 # For non-cn users, always use v1 context for better model performance, until later we support model switching.
                     _bm_context = _v1
                 else:
-                    with create_db_conn(_v1) as conn:
+                    with create_db_conn() as conn:
                         # For quickly shipping v2, we don't migrate from v1 to v2.
                         if has_any_folder(conn):
                             _bm_context = _v1
@@ -156,7 +156,7 @@ def get_context():
 
 def _get_existing_model_version() -> int | None:
     from dt_image_search.model.dts_db import create_db_conn, get_config
-    with create_db_conn(_v1) as conn:
+    with create_db_conn() as conn:
         version_str = get_config(conn, "model_version")
         if version_str is not None:
             try:
@@ -168,5 +168,5 @@ def _get_existing_model_version() -> int | None:
 
 def _set_existing_model_version(version: int):
     from dt_image_search.model.dts_db import create_db_conn, set_config
-    with create_db_conn(_v1) as conn:
+    with create_db_conn() as conn:
         set_config(conn, "model_version", str(version))

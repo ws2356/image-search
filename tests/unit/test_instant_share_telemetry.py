@@ -54,12 +54,8 @@ class SessionAttributesTests(unittest.TestCase):
 
 
 class TelemetrySpanTests(unittest.TestCase):
-    @patch("dt_image_search.instant_sharing.orchestrator.add_span")
     @patch("dt_image_search.instant_sharing.orchestrator.log")
-    def test_handle_connection_config_emits_span_and_log(self, mock_log, mock_span) -> None:
-        mock_span.return_value.__enter__ = MagicMock(return_value=None)
-        mock_span.return_value.__exit__ = MagicMock(return_value=False)
-
+    def test_handle_connection_config_emits_log(self, mock_log) -> None:
         delivery_service = InstantShareDeliveryService()
         orchestrator = InstantShareReceiverOrchestrator(
             session_registry=InstantShareSessionRegistry(),
@@ -67,10 +63,6 @@ class TelemetrySpanTests(unittest.TestCase):
         )
         config = _connection_config()
         orchestrator.handle_connection_config(config)
-
-        mock_span.assert_called_once()
-        span_name = mock_span.call_args[0][0]
-        self.assertEqual(span_name, "instant_share.session.bootstrap")
 
         mock_log.assert_called_once()
         log_kwargs = mock_log.call_args

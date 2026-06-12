@@ -4,13 +4,6 @@ import sys
 import threading
 import unittest
 import uuid
-from datetime import datetime, timedelta
-
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -26,7 +19,6 @@ from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.http_client import (
     InstantShareHttpClient,
     InstantShareHttpResponse,
-    PinnedHttpsRequester,
     RetryPolicy,
 )
 
@@ -68,27 +60,6 @@ class _StubRequester:
         if isinstance(response, Exception):
             raise response
         return response
-
-
-def _generate_public_key_and_certificate(common_name: str) -> tuple[str, bytes]:
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
-    certificate = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(private_key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.utcnow() - timedelta(minutes=1))
-        .not_valid_after(datetime.utcnow() + timedelta(days=1))
-        .sign(private_key, hashes.SHA256())
-    )
-    public_key_pem = private_key.public_key().public_bytes(
-        Encoding.PEM,
-        PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
-    certificate_der = certificate.public_bytes(Encoding.DER)
-    return public_key_pem, certificate_der
 
 
 class TestInstantShareHttpClient(unittest.TestCase):
@@ -143,19 +114,16 @@ class TestInstantShareHttpClient(unittest.TestCase):
             device_id="pc-001",
             requester=requester,
             session_signer=_StubSigner(),
-            pinned_mobile_public_key_pem="mobile-public-key-pem",
         )
 
         payload = client.download_text_payload(correlation_id=str(uuid.uuid4()))
 
         self.assertEqual(payload.text_utf8, "hello from ios")
         self.assertEqual(len(requester.requests), 2)
-        self.assertEqual(requester.requests[0].url.split("/api/")[0], "https://192.168.1.5:8443")
-        self.assertEqual(requester.requests[1].url.split("/api/")[0], "https://[fe80::42]:8443")
+        self.assertEqual(requester.requests[0].url.split("/api/")[0], "http://192.168.1.5:8443")
+        self.assertEqual(requester.requests[1].url.split("/api/")[0], "http://[fe80::42]:8443")
         self.assertIn("X-Session-Signature", requester.requests[1].headers)
         self.assertEqual(requester.requests[1].headers["X-Session-Signature-Alg"], "ed25519")
-        self.assertTrue(requester.requests[1].requires_tls_pin)
-        self.assertEqual(requester.requests[1].pinned_mobile_public_key_pem, "mobile-public-key-pem")
 
     def test_download_image_parses_response_headers(self):
         requester = _StubRequester(
@@ -174,7 +142,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
             device_id="pc-001",
             requester=requester,
             session_signer=_StubSigner(),
-            pinned_mobile_public_key_pem="mobile-public-key-pem",
         )
 
         payload = client.download_image_payload(correlation_id=str(uuid.uuid4()))
@@ -198,7 +165,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
             device_id="pc-001",
             requester=requester,
             session_signer=_StubSigner(),
-            pinned_mobile_public_key_pem="mobile-public-key-pem",
         )
 
         ack_payload = client.report_delivery_result(
@@ -213,58 +179,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
         body = json.loads(requester.requests[0].body.decode("utf-8"))
         self.assertEqual(body["state"], "done")
         self.assertEqual(body["target_result"]["clipboard_written"], True)
-
-    def test_transfer_requests_require_pinned_mobile_public_key(self):
-        requester = _StubRequester()
-        client = InstantShareHttpClient(
-            connection_config=_connection_config(trust_mode="trusted_direct"),
-            device_id="pc-001",
-            requester=requester,
-            session_signer=_StubSigner(),
-        )
-
-        with self.assertRaises(InstantShareError) as exc_info:
-            client.download_text_payload(correlation_id=str(uuid.uuid4()))
-
-        self.assertEqual(exc_info.exception.error_code.value, "TRUSTED_KEY_NOT_FOUND")
-        self.assertEqual(requester.requests, [])
-
-    def test_trust_confirm_stores_mobile_public_key_for_subsequent_transfer_requests(self):
-        requester = _StubRequester(
-            InstantShareHttpResponse(
-                status_code=200,
-                headers={"Content-Type": "application/json"},
-                body=json.dumps(
-                    {
-                        "mobile_public_key_pem": "mobile-public-key-pem-from-confirm",
-                        "trust_status": "trusted",
-                    }
-                ).encode("utf-8"),
-            ),
-            InstantShareHttpResponse(
-                status_code=200,
-                headers={"Content-Type": "application/json"},
-                body=json.dumps({"state": "delivering", "text_utf8": "hello from ios"}).encode("utf-8"),
-            ),
-        )
-        client = InstantShareHttpClient(
-            connection_config=_connection_config(trust_mode="first_share"),
-            device_id="pc-001",
-            requester=requester,
-            session_signer=_StubSigner(),
-        )
-
-        trust_payload = client.trust_confirm(
-            pc_public_key_pem="desktop-public-key",
-            correlation_id=str(uuid.uuid4()),
-        )
-        downloaded_payload = client.download_text_payload(correlation_id=str(uuid.uuid4()))
-
-        self.assertEqual(trust_payload["trust_status"], "trusted")
-        self.assertEqual(downloaded_payload.text_utf8, "hello from ios")
-        self.assertEqual(client.pinned_mobile_public_key_pem, "mobile-public-key-pem-from-confirm")
-        self.assertEqual(requester.requests[1].pinned_mobile_public_key_pem, "mobile-public-key-pem-from-confirm")
-        self.assertTrue(requester.requests[1].requires_tls_pin)
 
     def test_trust_follow_up_calls_use_encrypted_session_envelope_after_handshake(self):
         handshake_request_payload = {
@@ -332,7 +246,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
             key_id="key-001",
         )
         confirm_payload = client.trust_confirm(
-            pc_public_key_pem="desktop-public-key",
             correlation_id=str(uuid.uuid4()),
         )
 
@@ -345,8 +258,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
         confirm_request_body = json.loads(requester.requests[2].body.decode("utf-8"))
         self.assertEqual(apply_request_body["schema"], "dtis.instant-share.trust-envelope.v1")
         self.assertEqual(confirm_request_body["schema"], "dtis.instant-share.trust-envelope.v1")
-        self.assertNotIn("pc_public_key_pem", confirm_request_body)
-        self.assertEqual(client.pinned_mobile_public_key_pem, "mobile-public-key-pem-from-confirm")
 
     def test_trust_apply_requires_handshake_when_session_protector_is_configured(self):
         requester = _StubRequester()
@@ -369,28 +280,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
         self.assertEqual(exc_info.exception.error_code.value, "HANDSHAKE_REQUIRED")
         self.assertEqual(requester.requests, [])
 
-    def test_verify_peer_public_key_pin_accepts_matching_public_key(self):
-        pinned_public_key_pem, certificate_der = _generate_public_key_and_certificate("mobile.local")
-
-        PinnedHttpsRequester.verify_peer_public_key_pin(
-            peer_certificate_der=certificate_der,
-            pinned_mobile_public_key_pem=pinned_public_key_pem,
-            url="https://127.0.0.1:8443/api/instant-share/v1/payload/text",
-        )
-
-    def test_verify_peer_public_key_pin_rejects_mismatched_public_key(self):
-        _, certificate_der = _generate_public_key_and_certificate("mobile.local")
-        mismatched_public_key_pem, _ = _generate_public_key_and_certificate("other.local")
-
-        with self.assertRaises(InstantShareError) as exc_info:
-            PinnedHttpsRequester.verify_peer_public_key_pin(
-                peer_certificate_der=certificate_der,
-                pinned_mobile_public_key_pem=mismatched_public_key_pem,
-                url="https://127.0.0.1:8443/api/instant-share/v1/payload/text",
-            )
-
-        self.assertEqual(exc_info.exception.error_code.value, "TLS_PIN_VALIDATION_FAILED")
-
     def test_download_text_retries_transient_errors_with_backoff(self):
         requester = _StubRequester(
             OSError("temporary network issue"),
@@ -406,7 +295,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
             device_id="pc-001",
             requester=requester,
             session_signer=_StubSigner(),
-            pinned_mobile_public_key_pem="mobile-public-key-pem",
             retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=(0.25,)),
             sleep_func=sleep_calls.append,
         )
@@ -429,7 +317,6 @@ class TestInstantShareHttpClient(unittest.TestCase):
             device_id="pc-001",
             requester=requester,
             session_signer=_StubSigner(),
-            pinned_mobile_public_key_pem="mobile-public-key-pem",
             retry_policy=RetryPolicy(max_attempts=3, backoff_seconds=(0.1, 0.2)),
             sleep_func=sleep_calls.append,
         )

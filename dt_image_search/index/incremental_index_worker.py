@@ -65,7 +65,7 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
                 return
 
             # Check if the worker is stopped regularly to avoid unnecessary processing
-            with create_db_conn(ctx=self.ctx) as conn:
+            with create_db_conn() as conn:
                 folderId2FilePaths = {}
                 folderId2Folders = {}
                 for file_path in all_files:
@@ -88,7 +88,7 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
                         insert_file(conn, file, folder_id)
 
                     all_success = True
-                    for progress in append_to_index(self.ctx, index_path_for_folder(self.ctx, folder), folder_id, files):
+                    for progress in append_to_index(self.ctx, index_path_for_folder(folder), folder_id, files):
                         log("debug", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
                         if self._is_stopped:
                             log("info", message="Incremental indexing stopped by user.")
@@ -134,7 +134,7 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
 def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     try:
         status_bar_messenger.show_status_message.emit(f"File deletion started...")
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             file_id_set = set()
             folder_id_folder_map = {}
             for event in events:
@@ -174,7 +174,7 @@ def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
         deleted_events = []
         internal_rename_events = []
 
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             for event in events:
                 src_file = get_file_by_path(conn, event.src_path)
                 dest_folder = match_parent_folder(conn, event.dest_path)

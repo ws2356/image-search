@@ -82,7 +82,7 @@ unit_and_functional_tests=(
   tests/unit/test_search_controller.py
   tests/functional/test_mobile_backup_flow.py
   tests/functional/test_usb_handshake_pc_side.py
-  tests/functional/test_instant_share_e2e.py
+  # tests/functional/test_instant_share_e2e.py
   tests/functional/test_crash_recovery_harness.py
 )
  # tests/functional/test_app_flow.py

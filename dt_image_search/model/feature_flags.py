@@ -228,10 +228,9 @@ def _sleep_before_retry(*, retry_attempt: int, reason: str) -> None:
 
 
 def _feature_flags_cache_path() -> Path:
-    from dt_image_search.bm_context import get_context
     from dt_image_search.model.dts_fs import get_app_data_path
 
-    return get_app_data_path(get_context()) / _FEATURE_FLAGS_CACHE_FILENAME
+    return get_app_data_path() / _FEATURE_FLAGS_CACHE_FILENAME
 
 
 def _load_cached_feature_flags_payload() -> dict | None:

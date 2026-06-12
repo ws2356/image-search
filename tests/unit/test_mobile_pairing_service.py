@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_service import (
     MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
     MobileBackupAgainDecision,
@@ -116,7 +117,7 @@ class TestMobilePairingService(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -158,7 +159,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(pairing_result.state, PairingResultState.ACCEPTED)
         self.assertEqual(pairing_result.device_name, "Alice iPhone")
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             device_row = conn.execute(
                 """
                 SELECT device_uuid, platform, device_name, trust_key_b64
@@ -614,7 +615,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(first_status, 200)
         self.assertEqual(first_response["backup_state"], "pairing_completed")
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             conn.execute(
                 """
                 INSERT INTO mobile_assets (
@@ -820,7 +821,7 @@ class TestMobilePairingService(unittest.TestCase):
         )
         self.assertEqual(first_status, 200)
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             original_folder_row = conn.execute(
                 """
                 SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
@@ -891,7 +892,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(observed_mismatch_contexts[0].previous_device_uuid, "ios-device-old-001")
         self.assertEqual(observed_mismatch_contexts[0].replacement_device_uuid, "ios-device-new-001")
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             folders_count = conn.execute("SELECT COUNT(*) AS count FROM folders").fetchone()["count"]
             self.assertEqual(folders_count, 1)
 
@@ -954,7 +955,7 @@ class TestMobilePairingService(unittest.TestCase):
         )
         self.assertEqual(first_status, 200)
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             original_folder_row = conn.execute(
                 """
                 SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
@@ -1016,7 +1017,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(second_payload["backup_state"], "pairing_mismatched")
         self.assertNotEqual(completed_payload["folder_path"], original_folder_row["folder_path"])
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             old_binding = conn.execute(
                 "SELECT folder_id FROM mobile_folders WHERE device_uuid = ?",
                 ("ios-device-old-002",),
@@ -1062,7 +1063,7 @@ class TestMobilePairingService(unittest.TestCase):
         )
         self.assertEqual(first_status, 200)
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             original_folder_row = conn.execute(
                 """
                 SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
@@ -1130,7 +1131,7 @@ class TestMobilePairingService(unittest.TestCase):
         )
         self.assertEqual(first_status, 200)
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             original_folder_row = conn.execute(
                 """
                 SELECT mobile_folders.folder_id AS folder_id, folders.path AS folder_path
@@ -1176,7 +1177,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(stopped_payload["backup_state"], "pairing_stopped")
         self.assertIn("canceled", str(stopped_payload["message"]).lower())
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             self.assertIsNotNone(
                 conn.execute("SELECT 1 FROM mobile_devices WHERE device_uuid = ?", ("ios-device-old-004",)).fetchone()
             )

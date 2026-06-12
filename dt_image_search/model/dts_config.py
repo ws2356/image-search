@@ -3,11 +3,11 @@ import logging
 import os
 from importlib.resources import files
 from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.bm_context import get_context, BMContext
+from dt_image_search.bm_context import BMContext
 
 def get_config() -> dict:
     config = _read_build_vars_from_resource()
-    config_path = get_app_data_path(get_context()) / "config.json"
+    config_path = get_app_data_path() / "config.json"
     if config_path.exists():
         with open(config_path, "r", encoding="utf-8") as f:
             file_config = json.load(f)

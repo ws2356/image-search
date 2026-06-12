@@ -41,7 +41,7 @@ class IndexWorker:
     def _run_impl(self):
         try:
             # Check if the worker is stopped regularly to avoid unnecessary processing
-            with create_db_conn(ctx=self.ctx) as conn:
+            with create_db_conn() as conn:
                 status_bar_messenger.show_status_message.emit(f"Indexing folder: {self.folder.path}")
 
                 folder_id = self.folder.id
@@ -100,7 +100,7 @@ class IndexWorker:
                     return
 
                 update_folder_status(conn, folder_id, 1)
-                index_path = index_path_for_folder(self.ctx, self.folder)
+                index_path = index_path_for_folder(self.folder)
                 
                 all_success = True
                 # Iterate over the build_index generator and check for stop condition
@@ -138,7 +138,7 @@ class IndexWorker:
                 if self in _index_workers:
                     _index_workers.remove(self)
                     # Try to activate other workers if any are idle
-                    with create_db_conn(ctx=self.ctx) as conn:
+                    with create_db_conn() as conn:
                         folder = get_folder_by_path(conn, self.folder.path)
                         # Only recur if the previous folder was completed to avoid infinite loops
                         if folder is None or folder.status == 2:
@@ -183,7 +183,7 @@ def resume_index_workers(ctx: BMContext, is_init: bool = False):
     else:
         log("info", message="Checking for pending index workers to resume.")
     def resume_logic():
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             log("info", message="Resuming index workers for incomplete folders - db connected")
             all_folders = get_all_folders(conn)
             folders = [folder for folder in all_folders if folder.status in folder_statuses_to_resume and os.path.exists(folder.path)]

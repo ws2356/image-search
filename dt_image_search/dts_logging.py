@@ -3,11 +3,10 @@ from logging.handlers import RotatingFileHandler
 import sys
 import os
 from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.bm_context import get_context
 from dt_image_search.tools.dt_is_debug import is_debug
 
 def get_other_handlers():
-    log_dir = get_app_data_path(get_context()) / "logs"
+    log_dir = get_app_data_path() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "app-utf8.log"
 

@@ -115,7 +115,6 @@ class InstantShareHttpClient:
         requester: HttpRequester | None = None,
         session_signer: SessionRequestSigner | None = None,
         trust_session_protector: TrustSessionProtector | None = None,
-        correlation_id: str,
         retry_policy: RetryPolicy | None = None,
         sleep_func: Callable[[float], None] = time.sleep,
         timeout_seconds: float = 15.0,

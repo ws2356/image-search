@@ -34,10 +34,10 @@ from dt_image_search.instant_sharing.http_client import (
     RetryPolicy,
     SessionRequestSigner,
 )
+from dt_image_search.instant_sharing.https_bootstrap import TrustHandshakeRequest
 from dt_image_search.instant_sharing.orchestrator import (
     INSTANT_SHARE_LIFECYCLE_EVENT,
     InstantShareReceiverOrchestrator,
-    TrustHandshakeRequest,
 )
 from dt_image_search.instant_sharing.security import (
     PersistentEd25519SessionSigner,

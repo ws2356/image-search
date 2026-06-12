@@ -10,6 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_service import (
     MobileBackupAgainDecision,
     MobileBackupAgainMismatchContext,
@@ -84,7 +85,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -137,13 +138,13 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         self.assertEqual(fake_pairing_service.started_with, destination_parent_path)
         self.assertTrue(fake_pairing_service.closed)
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             stored_destination = get_config(conn, coordinator._LAST_DESTINATION_KEY)
         self.assertEqual(stored_destination, destination_parent_path)
 
     def test_choose_destination_parent_falls_back_when_stored_path_is_missing(self):
         missing_destination = (Path(self._temp_dir.name) / "does-not-exist").resolve()
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             set_config(conn, mobile_folder_controller_module.MobileFolderCoordinator._LAST_DESTINATION_KEY, missing_destination.as_posix())
 
         with (
@@ -197,7 +198,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         active_mobile_folder = (destination_parent / "Alice iPhone").resolve()
         active_mobile_folder.mkdir(parents=True, exist_ok=True)
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             folder = insert_folder(conn, active_mobile_folder.as_posix())
             self.assertIsNotNone(folder)
             conn.execute(
@@ -290,7 +291,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
             desktop_endpoint_url="http://127.0.0.1:54921/api/mobile/pairing/claim",
         )
         fake_pairing_service = _FakePairingService(pairing_session)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             folder = insert_folder(conn, mobile_folder.as_posix())
             self.assertIsNotNone(folder)
             conn.execute(
@@ -354,7 +355,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         active_mobile_folder = (destination_parent / "Active iPhone").resolve()
         active_mobile_folder.mkdir(parents=True, exist_ok=True)
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             selected_folder = insert_folder(conn, selected_mobile_folder.as_posix())
             active_folder = insert_folder(conn, active_mobile_folder.as_posix())
             self.assertIsNotNone(selected_folder)
@@ -455,7 +456,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         )
         fake_pairing_service = _FakePairingService(pairing_session)
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             folder = insert_folder(conn, active_mobile_folder.as_posix())
             self.assertIsNotNone(folder)
             conn.execute(
@@ -542,7 +543,7 @@ class TestMobileFolderCoordinator(unittest.TestCase):
         self.assertIsNotNone(result_session)
         self.assertEqual(fake_pairing_service.started_with, destination_parent.as_posix())
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             stopped_row = conn.execute(
                 """
                 SELECT status, ended_at

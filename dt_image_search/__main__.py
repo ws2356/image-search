@@ -89,7 +89,7 @@ def _crash_support_log(severity: str, error_type: str = "", message: str = "", w
     log(severity, error_type=error_type, message=message, where=where)
 
 
-_crash_recovery = CrashRecoveryManager(get_app_data_path(ctx), _crash_support_log)
+_crash_recovery = CrashRecoveryManager(get_app_data_path(), _crash_support_log)
 
 
 def _load_application_icon() -> QIcon:
@@ -163,7 +163,7 @@ def _activation_server_name(ctx: BMContext) -> str:
 def acquire_single_instance_lock(ctx: BMContext) -> bool:
     global _app_lock
 
-    lock_path = str(get_app_data_path(ctx) / "app_instance.lock")
+    lock_path = str(get_app_data_path() / "app_instance.lock")
     _app_lock = QLockFile(lock_path)
     # Keep stale detection tied to process lifetime for this long-running GUI app.
     _app_lock.setStaleLockTime(0)
