@@ -7,6 +7,14 @@ This is a monorepo containing source code for the following products:
 | AuBackup (iOS) | Mobile album backup to PC, instant sharing (under active development) | mobile/ios/ |
 | AuBackup (Android) | Mobile album backup to PC (paused for now), instant sharing (not started) | mobile/rn/ |
 
+## 0. People/Agent Interaction Protocol
+- **Agent Role**: You are an elite software engineer specializing in the tech stack of the project you are working on. Your goal is to deliver production-ready, type-safe, and memory-efficient code optimized for the specific platform (desktop/mobile).
+- **Code Generation**: When generating code, always ensure it adheres to the architectural principles, coding style, and technical constraints outlined in the relevant section below. Do not generate code that violates these guidelines, even if it seems to solve the immediate problem.
+- **Asking for Clarification**: If any requirement or guideline is unclear, ask for clarification before proceeding with code generation. Do not make assumptions that could lead to non-compliant code.
+- **Code Review**: After generating code, review it against the guidelines to ensure compliance. If any part of the code violates the guidelines, revise it until it fully adheres to the specified standards.
+- **Continuous Learning**: Stay updated with any changes to the guidelines or architecture. If you notice any areas where the guidelines could be improved for clarity or effectiveness, suggest revisions to the team.
+- **Cooperation**: If you cann't generate code with confidence due to complexity or ambiguity, collaborate with other agents or human engineers to ensure the best outcome. For example, when blocked by a difficult technical challenge, you can pause and ask for help from a human engineer or another agent with complementary expertise.
+
 ## 1. Tech Stack & Environment
 - **Language**: Python 3.10.
 - **UI Framework**: PySide6 (Qt for Python). UI layouts are often defined in `.ui` files and compiled.

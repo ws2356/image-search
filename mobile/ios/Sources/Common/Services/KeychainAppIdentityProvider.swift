@@ -10,6 +10,7 @@ public protocol AppIdentityProviding: Sendable {
     func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws
     func importPeerCertificate(pem: String, for peerDeviceID: String) async throws
     func peerCertificate(for peerDeviceID: String) throws -> SecCertificate
+    func deletePeerCertificate(for peerDeviceID: String) throws -> Void
 }
 
 public enum KeychainError: Swift.Error, LocalizedError {
@@ -29,6 +30,10 @@ public enum KeychainError: Swift.Error, LocalizedError {
 }
 
 public final class KeychainAppIdentityProvider: AppIdentityProviding {
+    private static func getPeerCertLabel(_ peerDeviceID: String) -> String {
+        return "AuBackup Peer Certificate \(peerDeviceID)"
+    }
+    
     private static let keyLabel = "AuBackup App Identity"
     private let localDeviceIdentifierProvider: LocalDeviceIdentifierProviding
 
@@ -63,7 +68,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             return
         }
         LocalLog.info("No existing identity found, creating new self-signed certificate")
-        try await createIdentity()
+        try await createAndSaveIdentity()
         LocalLog.info("App identity created successfully")
     }
 
@@ -101,7 +106,12 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return secIdent
     }
 
-    private func createIdentity() async throws {
+    private func createAndSaveIdentity() async throws -> SecCertificate {
+        let identifier = await localDeviceIdentifierProvider.currentIdentifier()
+        return try await createIdentity(commonName: identifier.deviceUUID, isPersist: true)
+    }
+    
+    func createIdentity(commonName: String, isPersist: Bool) async throws -> SecCertificate {
         for secClass in [kSecClassIdentity, kSecClassCertificate, kSecClassKey] {
             SecItemDelete([kSecClass: secClass, kSecAttrLabel: Self.keyLabel] as CFDictionary)
         }
@@ -110,9 +120,9 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
             kSecAttrKeySizeInBits as String: 256,
             kSecPrivateKeyAttrs as String: [
-                kSecAttrIsPermanent as String: true,
+                kSecAttrIsPermanent as String: isPersist,
                 kSecAttrLabel as String: Self.keyLabel,
-                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                kSecAttrAccessible as String: kSecAttrAccessibleAlwaysThisDeviceOnly,
             ],
         ]
         guard let privateSecKey = SecKeyCreateRandomKey(keyAttrs as CFDictionary, nil) else {
@@ -129,20 +139,23 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         let certificate = try buildSelfSignedCert(
             privateKey: privateSecKey,
             rawPubKey: rawPubKey,
-            commonName: identifier.deviceUUID
+            commonName: commonName
         )
-        SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: certificate, kSecAttrLabel: Self.keyLabel] as CFDictionary, nil)
+        if isPersist {
+            SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: certificate, kSecAttrLabel: Self.keyLabel] as CFDictionary, nil)
+        }
+        return certificate
     }
 
     public func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws {
+        let tag = peerDeviceID.data(using: .utf8)
+        try? deletePeerCertificate(for: peerDeviceID)
+        
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
             kSecValueRef as String: cert,
-            kSecAttrLabel as String: "AuBackup Peer Certificate",
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecAttrApplicationTag as String: peerDeviceID.data(using: .utf8)
+            kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
         ]
-        SecItemDelete(addQuery as CFDictionary)
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw KeychainError.storeFailed(status)
@@ -166,7 +179,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
     public func peerCertificate(for peerDeviceID: String) throws -> SecCertificate {
         let query: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
-            kSecAttrApplicationTag as String: peerDeviceID.data(using: .utf8),
+            kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
             kSecReturnRef as String: true,
         ]
         var result: CFTypeRef?
@@ -177,10 +190,14 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return cert
     }
 
-    private static func peerLabel(for deviceID: String) -> String {
-        "AuBackup Peer Certificate - \(deviceID)"
+    public func deletePeerCertificate(for peerDeviceID: String) throws -> Void {
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassCertificate,
+            kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
     }
-
+    
     // MARK: - Certificate
 
     private func buildSelfSignedCert(privateKey: SecKey, rawPubKey: Data, commonName: String) throws -> SecCertificate {

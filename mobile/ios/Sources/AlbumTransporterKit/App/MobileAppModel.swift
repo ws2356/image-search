@@ -322,6 +322,8 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         do {
             let cert = try appIdentityProvider.selfCertificate()
             DebugPrintCert(cert)
+            let key = try appIdentityProvider.selfPrivateKey()
+            LocalLog.info("private key hash: \(key.hashValue)")
         } catch (let error) {
             LocalLog.error("[identity] failed to get cert: \(error)")
         }

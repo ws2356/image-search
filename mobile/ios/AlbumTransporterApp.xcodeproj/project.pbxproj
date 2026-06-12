@@ -25,6 +25,7 @@
 		AB000008AB000008AB000008 /* PairingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000020AB000020AB000020 /* PairingServiceTests.swift */; };
 		AB000009AB000009AB000009 /* TransferServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000021AB000021AB000021 /* TransferServiceTests.swift */; };
 		725C8176EFBE4C0FB2D0ACA4 /* InstantShareServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */; };
+		AB000029AB000029AB000029 /* KeychainAppIdentityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000028AB000028AB000028 /* KeychainAppIdentityProviderTests.swift */; };
 		AB000010AB000010AB000010 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
 		AB000011AB000011AB000011 /* OpenTelemetryApi in Frameworks */ = {isa = PBXBuildFile; productRef = AB000024AB000024AB000024 /* OpenTelemetryApi */; };
 		AB000012AB000012AB000012 /* OpenTelemetrySdk in Frameworks */ = {isa = PBXBuildFile; productRef = AB000025AB000025AB000025 /* OpenTelemetrySdk */; };
@@ -84,6 +85,7 @@
 		AB000020AB000020AB000020 /* PairingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PairingServiceTests.swift; path = Tests/AlbumTransporterKitTests/PairingServiceTests.swift; sourceTree = "<group>"; };
 		AB000021AB000021AB000021 /* TransferServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TransferServiceTests.swift; path = Tests/AlbumTransporterKitTests/TransferServiceTests.swift; sourceTree = "<group>"; };
 		35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareServicesTests.swift; path = Tests/AlbumTransporterKitTests/InstantShareServicesTests.swift; sourceTree = "<group>"; };
+		AB000028AB000028AB000028 /* KeychainAppIdentityProviderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KeychainAppIdentityProviderTests.swift; path = Tests/AlbumTransporterKitTests/KeychainAppIdentityProviderTests.swift; sourceTree = "<group>"; };
 		C292EB02D1AB8B391C25D27A /* AlbumTransporterAppSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AlbumTransporterAppSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C7A0E9A23E414B28A8F4A101 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = App/Assets.xcassets; sourceTree = "<group>"; };
 		C7A0E9A43E414B28A8F4A101 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = App/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -187,6 +189,7 @@
 				AB000020AB000020AB000020 /* PairingServiceTests.swift */,
 				AB000021AB000021AB000021 /* TransferServiceTests.swift */,
 				35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */,
+				AB000028AB000028AB000028 /* KeychainAppIdentityProviderTests.swift */,
 			);
 			name = AlbumTransporterKitTests;
 			sourceTree = "<group>";
@@ -371,6 +374,7 @@
 				AB000008AB000008AB000008 /* PairingServiceTests.swift in Sources */,
 				AB000009AB000009AB000009 /* TransferServiceTests.swift in Sources */,
 				725C8176EFBE4C0FB2D0ACA4 /* InstantShareServicesTests.swift in Sources */,
+				AB000029AB000029AB000029 /* KeychainAppIdentityProviderTests.swift in Sources */,
 				159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */,
 				975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */,
 			);
