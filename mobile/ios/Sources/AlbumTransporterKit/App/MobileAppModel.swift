@@ -318,9 +318,9 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         }
 
         hasLoaded = true
-        try? await appIdentityProvider.ensureIdentity()
+        try? await appIdentityProvider.ensureSelfIdentity()
         do {
-            let cert = try appIdentityProvider.certificate()
+            let cert = try appIdentityProvider.selfCertificate()
             DebugPrintCert(cert)
         } catch (let error) {
             LocalLog.error("[identity] failed to get cert: \(error)")

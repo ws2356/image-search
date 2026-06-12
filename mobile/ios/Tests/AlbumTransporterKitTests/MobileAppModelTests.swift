@@ -14,10 +14,6 @@ protocol AppStateStore: Sendable {
     func saveLaunchSnapshot(_ snapshot: LaunchSnapshot) async
 }
 
-struct NoopAppIdentityProvider: AppIdentityProviding {
-    func ensureIdentity() async throws {}
-}
-
 actor InMemoryAppStateStore: AppStateStore {
     private var snapshot: LaunchSnapshot
 
@@ -316,7 +312,7 @@ final class MobileAppModelTests: XCTestCase {
             appVersionProvider: appVersionProvider,
             telemetryService: resolvedTelemetryService,
             telemetryContextProvider: resolvedTelemetryContextProvider,
-            appIdentityProvider: NoopAppIdentityProvider()
+            appIdentityProvider: KeychainAppIdentityProvider(localDeviceIdentifierProvider: LocalDeviceIdentifierStore(deviceUUIDKey: "test-device-uuid-key"))
         )
     }
 

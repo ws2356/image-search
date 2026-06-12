@@ -109,37 +109,6 @@ final class InstantShareIdentityManager {
         return cert
     }
 
-    // MARK: - Certificate
-
-    private static func buildCert(privateKey: P256.Signing.PrivateKey, rawPubKey: Data) throws -> SecCertificate {
-        let issuer = DistinguishedName(commonName: "AuBackup Instant Share")
-        let notBefore = Date()
-        let notAfter = Calendar.current.date(byAdding: .day, value: 3650, to: notBefore)!
-        let serial = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
-        let spki = X509SelfSignedCertificate.encodeSubjectPublicKeyInfo(rawPubKey)
-        let tbs = encTBSCert(serial: serial, issuer: issuer, nb: notBefore, na: notAfter, subj: issuer, spki: spki)
-        let sigAlgo = encSigAlgo()
-        let digest = SHA256.hash(data: tbs)
-        let sig = try privateKey.signature(for: Data(digest))
-        let derSig = raw2derSig(sig.rawRepresentation)
-        let sigVal = tlv(0x03, Data([0x00]) + derSig)
-        let derCert = tlv(0x30, tbs + sigAlgo + sigVal)
-        guard let cert = SecCertificateCreateWithData(nil, derCert as CFData) else {
-            throw Error.certificateCreationFailed
-        }
-        return cert
-    }
-
-    // MARK: - EC Private Key
-
-    private static func encodeECPrivateKey(scalarData: Data, rawPubKey: Data) -> Data {
-        tlv(0x30,
-            tlv(0x02, Data([0x01])) +
-            tlv(0x04, scalarData) +
-            tlv(0xA1, tlv(0x03, Data([0x00]) + rawPubKey))
-        )
-    }
-
     // MARK: - PKCS#12
 
     private static let pkcs7OID = Data([0x06,0x09,0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x07,0x01])
@@ -152,82 +121,6 @@ final class InstantShareIdentityManager {
     private static let p256OID = Data([0x06,0x08,0x2A,0x86,0x48,0xCE,0x3D,0x03,0x01,0x07])
     private static let sha256OID = Data([0x06,0x09,0x60,0x86,0x48,0x01,0x65,0x03,0x04,0x02,0x01])
     private static let sha1OID = Data([0x06, 0x05, 0x2B, 0x0E, 0x03, 0x02, 0x1A])
-
-    private static func buildPKCS12(ecPrivateKey: Data, certificate: SecCertificate) -> Data {
-        let certDER = SecCertificateCopyData(certificate) as Data
-        let rawPK = SecCertificateCopyKey(certificate)!
-        let rawKey = SecKeyCopyExternalRepresentation(rawPK, nil) as! Data
-        let keyID = Data(Insecure.SHA1.hash(data: rawKey))
-        let friendlyName = "id".data(using: .utf16BigEndian)!
-        let localKey = tlv(0x30, localKeyOID + tlv(0x31, tlv(0x04, keyID)))
-        let friendly = tlv(0x30, friendlyOID + tlv(0x31, tlv(0x1E, friendlyName)))
-        let bagAttrs = tlv(0x31, localKey + friendly)
-
-        let certVal = tlv(0x30, x509OID + tlv(0xA0, tlv(0x04, certDER)))
-        let certSB = tlv(0x30, certBagOID + tlv(0xA0, certVal) + bagAttrs)
-
-        let epkiAlgo = tlv(0x30, ecPubOID + p256OID)
-        let epki = tlv(0x30, tlv(0x02, Data([0x00])) + epkiAlgo + tlv(0x04, ecPrivateKey))
-        let keySB = tlv(0x30, shroudedKeyOID + tlv(0xA0, epki) + bagAttrs)
-
-        let safeContents = tlv(0x30, certSB + keySB)
-        let safeCI = tlv(0x30, pkcs7OID + tlv(0xA0, tlv(0x04, safeContents)))
-        let authSafe = tlv(0x30, safeCI)
-        let authCI = tlv(0x30, pkcs7OID + tlv(0xA0, tlv(0x04, authSafe)))
-
-        let pfxBody = tlv(0x02, Data([0x03])) + authCI
-
-        let macSalt = Data((0..<8).map { _ in UInt8.random(in: 0...255) })
-        let macIterations: UInt32 = 1024
-        let mac = computePKCS12Mac(password: Data([0x00, 0x00]), authSafeContent: authCI, salt: macSalt, iterations: macIterations)
-        let macData = buildMacData(mac: mac, salt: macSalt, iterations: macIterations)
-
-        return tlv(0x30, pfxBody + macData)
-    }
-
-    private static func computePKCS12Mac(password: Data, authSafeContent: Data, salt: Data, iterations: UInt32) -> Data {
-        let hashLen = 20
-        let id: UInt8 = 0x3D
-        let d = Data(repeating: id, count: hashLen)
-
-        var iData = salt
-        withUnsafeBytes(of: UInt32(1).bigEndian) { iData.append(contentsOf: $0) }
-
-        var key = Data(HMAC<Insecure.SHA1>.authenticationCode(for: d + iData, using: SymmetricKey(data: password)))
-        for _ in 1..<iterations {
-            key = Data(HMAC<Insecure.SHA1>.authenticationCode(for: key, using: SymmetricKey(data: password)))
-        }
-
-        return Data(HMAC<Insecure.SHA1>.authenticationCode(for: authSafeContent, using: SymmetricKey(data: key)))
-    }
-
-    private static func buildMacData(mac: Data, salt: Data, iterations: UInt32) -> Data {
-        let sha1Algorithm = tlv(0x30, sha1OID + tlv(0x05, Data()))
-        let digestInfo = tlv(0x30, sha1Algorithm + tlv(0x04, mac))
-        let macSaltEncoded = tlv(0x04, salt)
-        var iterBytes = withUnsafeBytes(of: iterations.bigEndian) { Data($0) }
-        while iterBytes.first == 0, iterBytes.count > 1 {
-            iterBytes = iterBytes.dropFirst()
-        }
-        let iterationsEncoded = tlv(0x02, iterBytes)
-        return digestInfo + macSaltEncoded + iterationsEncoded
-    }
-
-    private static func pbkdf2(pwd: Data, salt: Data, iter: Int, len: Int) -> Data {
-        var r = Data()
-        var b: UInt32 = 1
-        while r.count < len {
-            var u = salt; u += withUnsafeBytes(of: b.bigEndian) { Data($0) }
-            var t = Data(HMAC<SHA256>.authenticationCode(for: u, using: SymmetricKey(data: pwd)))
-            var up = t
-            for _ in 1..<iter {
-                up = Data(HMAC<SHA256>.authenticationCode(for: up, using: SymmetricKey(data: pwd)))
-                t = Data(zip(t, up).map(^))
-            }
-            r += t; b += 1
-        }
-        return r.prefix(len)
-    }
 
     // MARK: - ASN.1 helpers
 

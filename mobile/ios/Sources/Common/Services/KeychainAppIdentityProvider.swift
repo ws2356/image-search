@@ -3,9 +3,25 @@ import Security
 import CryptoKit
 
 public protocol AppIdentityProviding: Sendable {
-    func ensureIdentity() async throws
-    func certificate() throws -> SecCertificate
-    func privateKey() throws -> SecKey
+    func ensureSelfIdentity() async throws
+    func selfCertificate() throws -> SecCertificate
+    func selfPrivateKey() throws -> SecKey
+}
+
+public enum KeychainError: Swift.Error, LocalizedError {
+    case storeFailed(OSStatus)
+    case loadFailed(OSStatus)
+    case deleteFailed(OSStatus)
+    case unexpectedData
+
+    public var errorDescription: String? {
+        switch self {
+        case .storeFailed(let status): return "Keychain store failed: OSStatus \(status)"
+        case .loadFailed(let status): return "Keychain load failed: OSStatus \(status)"
+        case .deleteFailed(let status): return "Keychain delete failed: OSStatus \(status)"
+        case .unexpectedData: return "Keychain returned unexpected data"
+        }
+    }
 }
 
 public final class KeychainAppIdentityProvider: AppIdentityProviding {
@@ -36,7 +52,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         }
     }
 
-    public func ensureIdentity() async throws {
+    public func ensureSelfIdentity() async throws {
         LocalLog.info("Ensuring app identity...")
         if let _ = try? retrieveExistingIdentity() {
             LocalLog.info("Existing app identity found")
@@ -47,7 +63,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         LocalLog.info("App identity created successfully")
     }
 
-    public func certificate() throws -> SecCertificate {
+    public func selfCertificate() throws -> SecCertificate {
         let identity = try retrieveExistingIdentity()
         var cert: SecCertificate?
         let status = SecIdentityCopyCertificate(identity, &cert)
@@ -57,7 +73,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return cert
     }
 
-    public func privateKey() throws -> SecKey {
+    public func selfPrivateKey() throws -> SecKey {
         let identity = try retrieveExistingIdentity()
         var key: SecKey?
         let status = SecIdentityCopyPrivateKey(identity, &key)
