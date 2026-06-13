@@ -55,10 +55,17 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             payload_text_utf8 = payload.text_utf8
         except Exception:
             payload_text_utf8 = ""
+        session_id = request.headers.get("X-Session-Id", "")
+        _logger.info(
+            "[TLS] transfer_text session_id=%s active=%s",
+            session_id,
+            deps_local.session_registry.get_active_session().connection_config.session_id
+            if deps_local.session_registry.get_active_session() else None,
+        )
         result = await asyncio.to_thread(
             _do_transfer_text,
             deps_local,
-            session_id_header=request.headers.get("X-Session-Id", ""),
+            session_id_header=session_id,
             correlation_id_header=request.headers.get("X-Correlation-Id", ""),
             raw_body=raw_body,
             payload_text_utf8=payload_text_utf8,
@@ -71,10 +78,17 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         if deps_local is None:
             raise _ServiceUnavailable("Instant share service not initialized")
         raw_body = await request.body()
+        session_id = request.headers.get("X-Session-Id", "")
+        active_session = deps_local.session_registry.get_active_session()
+        _logger.info(
+            "[TLS] transfer_image session_id=%s active_session_id=%s",
+            session_id,
+            active_session.connection_config.session_id if active_session else None,
+        )
         result = await asyncio.to_thread(
             _do_transfer_image,
             deps_local,
-            session_id_header=request.headers.get("X-Session-Id", ""),
+            session_id_header=session_id,
             correlation_id_header=request.headers.get("X-Correlation-Id", ""),
             raw_body=raw_body,
             content_type=request.headers.get("Content-Type", "application/octet-stream"),

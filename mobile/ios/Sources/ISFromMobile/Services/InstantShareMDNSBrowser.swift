@@ -8,6 +8,7 @@ public struct InstantShareDiscoveredPC: Identifiable, Equatable, @unchecked Send
     public let name: String
     public let host: String
     public let port: Int
+    public let tlsPort: Int
     public let signature: String?
     public let signatureKeyID: String?
     public let timestampMS: Int64?
@@ -18,6 +19,7 @@ public struct InstantShareDiscoveredPC: Identifiable, Equatable, @unchecked Send
         name: String,
         host: String,
         port: Int,
+        tlsPort: Int = 9528,
         signature: String? = nil,
         signatureKeyID: String? = nil,
         timestampMS: Int64? = nil,
@@ -27,6 +29,7 @@ public struct InstantShareDiscoveredPC: Identifiable, Equatable, @unchecked Send
         self.name = name
         self.host = host
         self.port = port
+        self.tlsPort = tlsPort
         self.signature = signature
         self.signatureKeyID = signatureKeyID
         self.timestampMS = timestampMS
@@ -65,7 +68,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         let parameters = NWParameters()
         parameters.includePeerToPeer = true
 
-        let bonjourDescriptor = NWBrowser.Descriptor.bonjour(
+        let bonjourDescriptor = NWBrowser.Descriptor.bonjourWithTXTRecord(
             type: "_instantshare._tcp",
             domain: "local"
         )
@@ -143,21 +146,22 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         return result.endpoint.debugDescription
     }
 
-    private func deviceIDFromResult(_ result: NWBrowser.Result) -> String {
-        if case .service(let name, _, _, _) = result.endpoint {
-            return name
-        }
-        return result.endpoint.debugDescription
-    }
-
     private func removeResult(_ result: NWBrowser.Result) {
-        let deviceID = deviceIDFromResult(result)
-        resolvedPCs.removeValue(forKey: deviceID)
+        let serviceName = nameFromResult(result)
+        resolvedPCs.removeValue(forKey: serviceName)
+        // Also remove any entry keyed by TXT device_id for the same service
+        for key in resolvedPCs.keys where key != serviceName {
+            if let txt = extractTXTRecord(from: result),
+               let deviceID = txt["device_id"],
+               key == deviceID {
+                resolvedPCs.removeValue(forKey: key)
+                break
+            }
+        }
         refreshDiscovered()
     }
 
     private func resolveResult(_ result: NWBrowser.Result) {
-        let deviceID = deviceIDFromResult(result)
         let connection = NWConnection(to: result.endpoint, using: .tcp)
         
         LocalLog.debug("[debug] NWBrowser result: \(result)")
@@ -168,7 +172,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             switch state {
             case .ready:
                 Task { @MainActor in
-                    self.extractPCInfo(from: connection, result: result, deviceID: deviceID)
+                    self.extractPCInfo(from: connection, result: result)
                     connection.cancel()
                 }
             case .failed:
@@ -182,8 +186,8 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         connection.start(queue: queue)
     }
 
-    private func extractPCInfo(from connection: NWConnection, result: NWBrowser.Result, deviceID: String) {
-        let endpoint = connection.currentPath?.remoteEndpoint ?? connection.endpoint
+    private func extractPCInfo(from connection: NWConnection, result: NWBrowser.Result) {
+        let endpoint = connection.currentPath?.remoteEndpoint
         
         switch endpoint {
         case .hostPort(let host, let port):
@@ -206,10 +210,9 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             if let endpoint = connection.currentPath?.remoteEndpoint,
                case .hostPort(let host, let port) = endpoint,
                case .ipv6 = host {
-                resolveWithEndpoint(host: "\(host)", port: Int(port.rawValue), result: result, fallbackID: deviceID)
+                resolveWithEndpoint(host: "\(host)", port: Int(port.rawValue), result: result)
                 return
             }
-            LocalLog.debug("[MDNS Browser] extractPCInfo: could not determine host for \(deviceID)")
             LocalLog.debug("[MDNS Browser] currentPath: \(connection.currentPath)")
             LocalLog.debug("[MDNS Browser] point: \(endpoint)")
             LocalLog.debug("[MDNS Browser] remoteEndpoint: \(connection.currentPath?.remoteEndpoint)")
@@ -217,34 +220,37 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             return
         }
 
-        resolveWithEndpoint(host: "\(hostString)", port: Int(port.rawValue), result: result, fallbackID: deviceID)
+        resolveWithEndpoint(host: "\(hostString)", port: Int(port.rawValue), result: result)
     }
 
-    private func resolveWithEndpoint(host: String, port: Int, result: NWBrowser.Result, fallbackID: String) {
+    private func resolveWithEndpoint(host: String, port: Int, result: NWBrowser.Result) {
         let txtRecord = extractTXTRecord(from: result)
         LocalLog.debug("[MDNS Browser] TXT record: \(txtRecord?.description ?? "nil")")
         LocalLog.debug("[MDNS Browser] TXT keys: \(txtRecord?.keys.sorted().joined(separator: ", ") ?? "none")")
         
-        let deviceID: String
-        if let idFromTXT = txtRecord?["device_id"], !idFromTXT.isEmpty {
-            deviceID = idFromTXT
-            LocalLog.debug("[MDNS Browser] Using device_id from TXT: \(deviceID)")
-        } else {
-            // TXT record missing device_id — use fallback (service name) with warning
-            LocalLog.debug("[MDNS Browser] No device_id in TXT, using fallback: \(fallbackID)")
-            deviceID = fallbackID
+        guard let deviceID = txtRecord?["device_id"], let deviceName =  txtRecord?["device_name"] else {
+            LocalLog.error("[MDNS Browser] No device_id from TXT")
+            return
         }
-        let deviceName = txtRecord?["device_name"] ?? deviceID
         let signature = txtRecord?["signature"]
         let signatureKeyID = txtRecord?["signature_key_id"]
         let timestampMS = txtRecord?["timestamp_ms"].flatMap { Int64($0) }
         let protocolVersion = txtRecord?["ver"]
+        let tlsPort: Int
+        if let raw = txtRecord?["tls_port"], let value = Int(raw), value > 0, value <= 65535 {
+            tlsPort = value
+            LocalLog.debug("[MDNS Browser] TLS port from TXT: \(tlsPort)")
+        } else {
+            tlsPort = 9528
+            LocalLog.debug("[MDNS Browser] TLS port defaulting to \(tlsPort)")
+        }
 
         let pc = InstantShareDiscoveredPC(
             id: deviceID,
             name: String(deviceName),
             host: host,
             port: port,
+            tlsPort: tlsPort,
             signature: signature,
             signatureKeyID: signatureKeyID,
             timestampMS: timestampMS,
@@ -253,7 +259,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
         resolvedPCs[deviceID] = pc
         refreshDiscovered()
-        LocalLog.debug("[MDNS Browser] resolved \(pc.name) (\(pc.id)) at \(host):\(port)")
+        LocalLog.debug("[MDNS Browser] resolved \(pc.name) (\(pc.id)) at \(host):\(port) tlsPort=\(tlsPort)")
     }
 
     private func extractTXTRecord(from result: NWBrowser.Result) -> [String: String]? {

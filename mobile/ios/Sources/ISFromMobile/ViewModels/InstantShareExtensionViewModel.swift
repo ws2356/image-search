@@ -185,7 +185,9 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 let trustClient = InstantShareTrustClient(
                     trustSessionManager: service.trustSession
                 )
-                let uploadClient = InstantShareUploadClient()
+                let uploadClient = InstantShareUploadClient(
+                    appIdentityProvider: appIdentityProvider
+                )
 
                 let handshakeHost = pc.host
 
@@ -210,24 +212,26 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 case false:
                     try await uploadClient.uploadText(
                         host: handshakeHost,
-                        port: pc.port,
+                        port: pc.tlsPort,
                         sessionID: config.sessionID,
                         correlationID: config.correlationID,
-                        text: service.sharedText
+                        text: service.sharedText,
+                        peerDeviceID: pc.id
                     )
-                    LocalLog.info("[Extension VM] text uploaded")
+                    LocalLog.info("[Extension VM] text uploaded via TLS port \(pc.tlsPort)")
                 default:
                     if let imageData = service.sharedImageData {
                         try await uploadClient.uploadImage(
                             host: handshakeHost,
-                            port: pc.port,
+                            port: pc.tlsPort,
                             sessionID: config.sessionID,
                             correlationID: config.correlationID,
                             imageData: imageData,
                             contentType: service.sharedImageContentType,
-                            filename: service.sharedImageFilename
+                            filename: service.sharedImageFilename,
+                            peerDeviceID: pc.id
                         )
-                        LocalLog.info("[Extension VM] image uploaded")
+                        LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
                     }
                 }
 

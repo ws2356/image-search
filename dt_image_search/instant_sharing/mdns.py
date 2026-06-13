@@ -30,9 +30,7 @@ def _local_ip_addresses() -> list[str]:
             addrs.append(info[4][0])
     except Exception:
         pass
-    if not addrs:
-        addrs = ["127.0.0.1"]
-    return sorted(set(addrs))
+    return [ip for ip in addrs if ip and ip != "127.0.0.1" and not ip.startswith("169.254.")]
 
 
 class CharacteristicAccessMode(str, Enum):
@@ -367,7 +365,7 @@ class InstantShareMDNSAdvertiser:
                 "[InstantShareMDNSAdvertiser] built TXT properties: %s",
                 properties,
             )
-            addresses = [socket.inet_aton(addr) for addr in _local_ip_addresses() if addr != "127.0.0.1"]
+            addresses = [socket.inet_aton(addr) for addr in _local_ip_addresses()]
             _logger.info(
                 "[InstantShareMDNSAdvertiser] local addresses: %s",
                 [socket.inet_ntoa(addr) if isinstance(addr, bytes) else addr for addr in addresses],

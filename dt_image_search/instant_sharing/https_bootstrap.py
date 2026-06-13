@@ -127,20 +127,36 @@ def _do_trust_handshake(
                     correlation_id=correlation_id,
                     metadata=metadata,
                 )
-                # TODO: When would orchestrator be None? Could we prevent that?
                 if deps.orchestrator is not None:
-                    # TODO: Consider 1. removing handle_connection_config
-                    # 2. let handle_trust_handshake_received init the session if not exist. If there is already an active session having mismatching id, just replace it with the new one. This would make the app more resilient to edge cases like client abandoning a session and starting a new one without proper teardown.
-                    deps.orchestrator.handle_connection_config(connection_config)
-                    deps.orchestrator.handle_trust_handshake_received(
-                        session_id=session_id,
-                        correlation_id=correlation_id,
-                    )
+                    # If a session with mismatching id is still active (e.g. a
+                    # previous attempt that never completed), force-replace it so
+                    # the new session can proceed.  This avoids the silent
+                    # RECEIVER_BUSY_SINGLE_SESSION swallow that used to leave the
+                    # trust session bootstrapped but the instant-share session
+                    # absent, causing SESSION_ID_MISMATCH on the transfer endpoint.
+                    if active is not None:
+                        _logger.info(
+                            "Replacing stale active session old_id=%s new_id=%s",
+                            active.connection_config.session_id, session_id,
+                        )
+                        session_registry.replace_active_session(connection_config)
+                        deps.orchestrator.handle_trust_handshake_received(
+                            session_id=session_id,
+                            correlation_id=correlation_id,
+                        )
+                    else:
+                        deps.orchestrator.handle_connection_config(connection_config)
+                        deps.orchestrator.handle_trust_handshake_received(
+                            session_id=session_id,
+                            correlation_id=correlation_id,
+                        )
                 else:
-                    session_registry.bootstrap(connection_config)
+                    session_registry.replace_active_session(connection_config)
                 _logger.info("Instant-share session bootstrapped from handshake: session_id=%s", session_id)
             except Exception as exc:
-                _logger.warning("Failed to bootstrap instant-share session from handshake: %s", exc)
+                _logger.warning(
+                    "Failed to bootstrap instant-share session from handshake: %s", exc,
+                )
 
     trust_session.store_mobile_handshake(
         mobile_dh_public_key=body.mobile_dh_public_key,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -7,6 +8,9 @@ from dataclasses import dataclass, replace
 from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import ErrorCode, SessionState
 from dt_image_search.instant_sharing.errors import InstantShareError
+
+
+_logger = logging.getLogger(__name__)
 
 
 _ACTIVE_STATES = {
@@ -63,12 +67,24 @@ class InstantShareSessionRegistry:
             self._active_session = InstantShareSession(connection_config=connection_config)
             return self._active_session
 
+    def replace_active_session(self, connection_config: ConnectionConfig) -> InstantShareSession:
+        connection_config.validate()
+        with self._lock:
+            self._active_session = InstantShareSession(connection_config=connection_config)
+            return self._active_session
+
     def get_active_session(self) -> InstantShareSession | None:
         with self._lock:
             return self._active_session
 
     def require_session(self, session_id: str) -> InstantShareSession:
         if self._active_session is None or self._active_session.connection_config.session_id != session_id:
+            active_id = self._active_session.connection_config.session_id if self._active_session else None
+            _logger.warning(
+                "Session mismatch: requested=%s active=%s active_state=%s",
+                session_id, active_id,
+                self._active_session.state.value if self._active_session else "None",
+            )
             correlation_id = self._active_session.connection_config.correlation_id if self._active_session else None
             raise InstantShareError(
                 ErrorCode.SESSION_ID_MISMATCH,

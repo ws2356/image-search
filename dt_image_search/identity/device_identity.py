@@ -12,7 +12,9 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import pkcs12
-from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
+import ipaddress
 
 from dt_image_search.model.dt_device_id import get_device_id
 
@@ -279,21 +281,27 @@ def delete_peer_certificate(peer_device_id: str) -> None:
     except subprocess.CalledProcessError:
         pass
 
-
-def _generate_identity(device_id: str) -> DeviceIdentity:
+def _generate_identity(device_id: str, server_ips: list[str] = None, server_hostnames: list[str] = None) -> DeviceIdentity:
     key = ec.generate_private_key(ec.SECP256R1())
+    
     subject = issuer = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, device_id),
     ])
+    
     now = datetime.now(timezone.utc)
-    cert = (
+    
+    # 🔴 修复 1：Apple 严格限制 TLS 证书有效期绝对不能超过 398 天！这里改为 364 天 (提前消耗一天，避免设备时间差)
+    validity_days = 364 
+    
+    builder = (
         x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(issuer)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(now)
-        .not_valid_after(now + timedelta(days=365 * _CERT_VALIDITY_YEARS))
+        # 顺便往前挪一天，防止由于客户端/服务端时区微弱时间差导致证书“尚未生效”
+        .not_valid_before(now - timedelta(days=1)) 
+        .not_valid_after(now + timedelta(days=validity_days))
         .add_extension(
             x509.BasicConstraints(ca=False, path_length=None),
             critical=True,
@@ -312,8 +320,31 @@ def _generate_identity(device_id: str) -> DeviceIdentity:
             ),
             critical=True,
         )
-        .sign(key, hashes.SHA256())
+        # 🔴 修复 2：必须显式添加扩展密钥用法 (Extended Key Usage)
+        # 同时加入 SERVER_AUTH（解决报错）和 CLIENT_AUTH（为以后的 mTLS 铺路）
+        .add_extension(
+            x509.ExtendedKeyUsage([
+                ExtendedKeyUsageOID.SERVER_AUTH,
+                ExtendedKeyUsageOID.CLIENT_AUTH
+            ]),
+            critical=False,
+        )
     )
+    
+    # 🔴 修复 3：必须添加使用者可选名称 (Subject Alternative Name, 简称 SAN)
+    # 现代操作系统（包括 iOS）连接 TLS 时不再信任 CN，只认 SAN。
+    san_names = []
+    san_names.append(x509.DNSName("instant-share.home")) # 默认带上本地回环
+    
+    if san_names:
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName(san_names),
+            critical=False,
+        )
+
+    # 签名生成证书
+    cert = builder.sign(key, hashes.SHA256())
+    
     return DeviceIdentity(
         device_id=device_id,
         certificate_pem=cert.public_bytes(
