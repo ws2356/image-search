@@ -42,6 +42,14 @@ class ShareViewController: UIViewController {
             await viewModel.loadPayload(from: extensionItems)
             LocalLog.info("[Share VC] payload loaded, starting mDNS discovery")
             viewModel.startDiscovery()
+            
+            let identityProvider = KeychainAppIdentityProvider(
+                localDeviceIdentifierProvider: LocalDeviceIdentifierStore())
+            do {
+                try await identityProvider.ensureSelfIdentity()
+            } catch (let error) {
+                LocalLog.error("[Share VC] ensureSelfIdentity failed: \(error)")
+            }
         }
     }
 

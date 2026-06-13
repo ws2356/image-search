@@ -46,6 +46,8 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
     }
     
     private static let keyLabel = "AuBackup App Identity"
+    private static let SELF_CERT_VERSION = 2
+    private static let certVersionOID = ASN1ObjectIdentifier("2.25.37020860436019520")
     private let localDeviceIdentifierProvider: LocalDeviceIdentifierProviding
 
     public init(localDeviceIdentifierProvider: LocalDeviceIdentifierProviding) {
@@ -74,8 +76,9 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
 
     public func ensureSelfIdentity() async throws {
         LocalLog.info("Ensuring app identity...")
-        if let _ = try? retrieveExistingIdentity() {
+        if let identity = try? retrieveExistingIdentity() {
             LocalLog.info("Existing app identity found")
+            try migrateCertsIfNeeded(identity: identity)
             return
         }
         LocalLog.info("No existing identity found, creating new self-signed certificate")
@@ -115,7 +118,61 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         let identifier = await localDeviceIdentifierProvider.currentIdentifier()
         return try await createIdentity(commonName: identifier.deviceUUID, isPersist: true)
     }
-    
+
+    private func migrateCertsIfNeeded(identity: SecIdentity) throws {
+        var secCert: SecCertificate?
+        var copyStatus = SecIdentityCopyCertificate(identity, &secCert)
+        guard copyStatus == errSecSuccess, let secCert else {
+            throw IdentityError.certificateNotFound
+        }
+
+        let derData = SecCertificateCopyData(secCert) as Data
+        let cert = try Certificate(derEncoded: Array(derData))
+
+        let currentVersion: Int
+        if let ext = cert.extensions[oid: Self.certVersionOID] {
+            currentVersion = (try? Int(derEncoded: ext.value)) ?? 0
+        } else {
+            currentVersion = 0
+        }
+
+        guard currentVersion < Self.SELF_CERT_VERSION else {
+            LocalLog.info("Self cert is up to date (version \(currentVersion))")
+            return
+        }
+
+        LocalLog.info("Self cert version \(currentVersion) < \(Self.SELF_CERT_VERSION), migration needed")
+
+        var privateKey: SecKey?
+        copyStatus = SecIdentityCopyPrivateKey(identity, &privateKey)
+        guard copyStatus == errSecSuccess, let privateKey else {
+            throw IdentityError.privateKeyNotFound
+        }
+        guard let publicSecKey = SecCertificateCopyKey(secCert) else {
+            throw IdentityError.publicKeyExportFailed
+        }
+        guard let rawPubKey = SecKeyCopyExternalRepresentation(publicSecKey, nil) as Data? else {
+            throw IdentityError.publicKeyExportFailed
+        }
+        guard let commonName = SecCertificateCopySubjectSummary(secCert) as String? else {
+            throw IdentityError.certificateNotFound
+        }
+
+        let newCert = try buildSelfSignedCert(
+            privateKey: privateKey,
+            rawPubKey: rawPubKey,
+            commonName: commonName
+        )
+
+        let deleteStatus = SecItemDelete([kSecClass: kSecClassCertificate, kSecAttrLabel: Self.keyLabel] as CFDictionary)
+        LocalLog.info("Deleted old cert from keychain (status: \(deleteStatus))")
+
+        let addStatus = SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: newCert, kSecAttrLabel: Self.keyLabel] as CFDictionary, nil)
+        LocalLog.info("Added migrated cert to keychain (status: \(addStatus))")
+
+        LocalLog.info("Self cert migrated from version \(currentVersion) to \(Self.SELF_CERT_VERSION)")
+    }
+
     func createIdentity(commonName: String, isPersist: Bool) async throws -> SecCertificate {
         for secClass in [kSecClassIdentity, kSecClassCertificate, kSecClassKey] {
             SecItemDelete([kSecClass: secClass, kSecAttrLabel: Self.keyLabel] as CFDictionary)
@@ -213,9 +270,18 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         let now = Date().addingTimeInterval(-3600.0 * 24.0)
         let notAfter = Calendar.current.date(byAdding: .day, value: 364, to: now)!
 
+        var extSerializer = DER.Serializer()
+        try extSerializer.serialize(Int(Self.SELF_CERT_VERSION))
+        let certVersionExtension = Certificate.Extension(
+            oid: Self.certVersionOID,
+            critical: false,
+            value: extSerializer.serializedBytes[...]
+        )
+
         let extensions = try Certificate.Extensions {
             BasicConstraints.isCertificateAuthority(maxPathLength: nil)
             try ExtendedKeyUsage([.clientAuth])
+            certVersionExtension
         }
 
         let certificate = try Certificate(
