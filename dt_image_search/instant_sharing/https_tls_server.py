@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import ssl
 import tempfile
 import threading
 from typing import Any, Callable
@@ -11,7 +12,11 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from dt_image_search.identity import get_device_certificate_pem, get_device_private_key_pem
+from dt_image_search.identity import (
+    get_device_certificate_pem,
+    get_device_private_key_pem,
+    load_all_peer_certificates,
+)
 from dt_image_search.instant_sharing.contracts import TRANSFER_IMAGE_PATH, TRANSFER_TEXT_PATH
 from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.https_bootstrap import (
@@ -129,6 +134,8 @@ class InstantShareTLSServer:
         self._lock = threading.RLock()
         self._cert_file: tempfile.NamedTemporaryFile | None = None
         self._key_file: tempfile.NamedTemporaryFile | None = None
+        self._ca_bundle_file: tempfile.NamedTemporaryFile | None = None
+        self._ssl_ctx: ssl.SSLContext | None = None
 
     @property
     def is_running(self) -> bool:
@@ -159,6 +166,27 @@ class InstantShareTLSServer:
             )
             self._key_file.write(key_pem)
             self._key_file.flush()
+
+            # Load all previously trusted peer device certs from keychain
+            # and write them into a temp CA bundle for mTLS verification.
+            existing_certs = load_all_peer_certificates()
+            ca_bundle_path: str | None = None
+            if existing_certs:
+                self._ca_bundle_file = tempfile.NamedTemporaryFile(
+                    suffix=".pem", mode="w", delete=False
+                )
+                for _device_id, pem in existing_certs:
+                    self._ca_bundle_file.write(pem)
+                    self._ca_bundle_file.write("\n")
+                self._ca_bundle_file.flush()
+                ca_bundle_path = self._ca_bundle_file.name
+                _logger.info(
+                    "Loaded %d trusted peer cert(s) into mTLS CA bundle",
+                    len(existing_certs),
+                )
+            else:
+                _logger.info("No existing trusted peer certs found; mTLS will require client certs after first trust")
+
             app = _build_tls_app(self._deps)
             config = uvicorn.Config(
                 app,
@@ -170,6 +198,8 @@ class InstantShareTLSServer:
                 loop="asyncio",
                 ssl_certfile=self._cert_file.name,
                 ssl_keyfile=self._key_file.name,
+                ssl_ca_certs=ca_bundle_path,
+                ssl_cert_reqs=ssl.CERT_REQUIRED,
             )
             self._server = uvicorn.Server(config)
             self._thread = threading.Thread(
@@ -180,10 +210,43 @@ class InstantShareTLSServer:
             thread = self._thread
         thread.start()
         _logger.info(
-            "Instant-share TLS server started on %s:%d",
+            "Instant-share TLS server started on %s:%d (mTLS required)",
             self._host, self._port,
         )
         return True
+
+    def add_peer_certificate(self, cert_pem: str) -> bool:
+        """Dynamically inject a peer certificate into the running TLS server's SSL context.
+
+        The certificate will be trusted for mTLS client verification immediately,
+        without requiring a server restart.  Should be called after a successful
+        /trust/confirm to allow the newly-trusted device to start transferring
+        data right away.
+
+        Returns True if the certificate was injected, False if the SSL context
+        was not yet available (unlikely after server startup).
+        """
+        if self._ssl_ctx is None:
+            ssl_ctx = getattr(getattr(self._server, 'config', None), 'ssl', None)
+            self._ssl_ctx = ssl_ctx
+        if self._ssl_ctx is None:
+            _logger.warning(
+                "SSL context not ready yet, cannot inject peer cert. "
+                "The certificate is saved in the keychain and will be used "
+                "on the next server restart.",
+            )
+            return False
+        try:
+            self._ssl_ctx.load_verify_locations(cadata=cert_pem)
+            _logger.info(
+                "Injected peer certificate into running TLS SSL context",
+            )
+            return True
+        except ssl.SSLError as exc:
+            _logger.error(
+                "Failed to inject peer certificate into SSL context: %s", exc,
+            )
+            return False
 
     def stop(self) -> None:
         with self._lock:
@@ -191,12 +254,14 @@ class InstantShareTLSServer:
             thread = self._thread
             self._server = None
             self._thread = None
+            self._ssl_ctx = None
         if server is not None:
             server.should_exit = True
         if thread is not None:
             thread.join(timeout=5.0)
         cert_path = None
         key_path = None
+        ca_bundle_path = None
         with self._lock:
             if self._cert_file is not None:
                 cert_path = self._cert_file.name
@@ -206,8 +271,14 @@ class InstantShareTLSServer:
                 key_path = self._key_file.name
                 self._key_file.close()
                 self._key_file = None
+            if self._ca_bundle_file is not None:
+                ca_bundle_path = self._ca_bundle_file.name
+                self._ca_bundle_file.close()
+                self._ca_bundle_file = None
         if cert_path is not None and os.path.exists(cert_path):
             os.unlink(cert_path)
         if key_path is not None and os.path.exists(key_path):
             os.unlink(key_path)
+        if ca_bundle_path is not None and os.path.exists(ca_bundle_path):
+            os.unlink(ca_bundle_path)
         _logger.info("Instant-share TLS server stopped")

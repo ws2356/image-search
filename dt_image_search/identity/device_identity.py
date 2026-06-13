@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import threading
@@ -261,6 +262,51 @@ def get_peer_certificate(peer_device_id: str) -> x509.Certificate | None:
     if pem is None:
         return None
     return x509.load_pem_x509_certificate(pem.encode("utf-8"))
+
+
+def load_all_peer_certificates() -> list[tuple[str, str]]:
+    """Load all trusted peer device certificates from the dedicated keychain.
+
+    Queries all generic-password items with label "AuSearch Trusted Device"
+    and returns a list of (device_id, certificate_pem) tuples.
+    Returns an empty list if none are found or the keychain is unreachable.
+    """
+    _ensure_keychain()
+    try:
+        result = subprocess.run(
+            [
+                "security", "find-generic-password",
+                "-l", _PEER_CERT_LABEL,
+                *_keychain_arg(),
+            ],
+            capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError:
+        return []
+
+    # Parse device IDs from the attribute listing
+    device_ids: list[str] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        # Modern macOS format: "acct"<blob>="device-id"
+        m = re.search(r'"acct"<blob>\s*=\s*"([^"]+)"', line)
+        if m:
+            device_ids.append(m.group(1))
+        # Legacy macOS format: 0x00000009 <blob> = "device-id"
+        m = re.search(r'0x00000009\s+<blob>\s*=\s*"([^"]+)"', line)
+        if m:
+            device_ids.append(m.group(1))
+
+    seen: set[str] = set()
+    results: list[tuple[str, str]] = []
+    for device_id in device_ids:
+        if device_id in seen:
+            continue
+        seen.add(device_id)
+        pem = load_peer_certificate(device_id)
+        if pem:
+            results.append((device_id, pem))
+    return results
 
 
 def delete_peer_certificate(peer_device_id: str) -> None:

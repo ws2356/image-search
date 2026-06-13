@@ -7,6 +7,7 @@ from dt_image_search.identity.device_identity import (
     get_peer_certificate,
     import_peer_certificate,
     initialize_device_identity,
+    load_all_peer_certificates,
     load_peer_certificate,
     store_peer_certificate,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "get_peer_certificate",
     "import_peer_certificate",
     "initialize_device_identity",
+    "load_all_peer_certificates",
     "load_peer_certificate",
     "store_peer_certificate",
 ]
