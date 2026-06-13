@@ -196,9 +196,22 @@ final class InstantShareServerTrustDelegate: NSObject, URLSessionTaskDelegate {
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let serverTrust = challenge.protectionSpace.serverTrust else {
+        switch challenge.protectionSpace.authenticationMethod {
+        case NSURLAuthenticationMethodServerTrust:
+            handleServerTrustChallenge(challenge, completionHandler: completionHandler)
+        case NSURLAuthenticationMethodClientCertificate:
+            handleClientCertificateChallenge(completionHandler: completionHandler)
+        default:
             completionHandler(.performDefaultHandling, nil)
+        }
+    }
+
+    private func handleServerTrustChallenge(
+        _ challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard let serverTrust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
 
@@ -292,6 +305,26 @@ final class InstantShareServerTrustDelegate: NSObject, URLSessionTaskDelegate {
         } else {
             let errDesc = error?.localizedDescription ?? "unknown error"
             LocalLog.error("[TLS] trust evaluation failed: \(errDesc)")
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        }
+    }
+
+    private func handleClientCertificateChallenge(
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        LocalLog.debug("[TLS] received client certificate challenge")
+        do {
+            let identity = try appIdentityProvider.selfIdentity()
+            let cert = try appIdentityProvider.selfCertificate()
+            LocalLog.debug("[TLS] providing client identity for mTLS")
+            let credential = URLCredential(
+                identity: identity,
+                certificates: [cert],
+                persistence: .forSession
+            )
+            completionHandler(.useCredential, credential)
+        } catch {
+            LocalLog.error("[TLS] failed to get client identity: \(error.localizedDescription)")
             completionHandler(.cancelAuthenticationChallenge, nil)
         }
     }

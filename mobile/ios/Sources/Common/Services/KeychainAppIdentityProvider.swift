@@ -5,7 +5,7 @@ import CryptoKit
 public protocol AppIdentityProviding: Sendable {
     func ensureSelfIdentity() async throws
     func selfCertificate() throws -> SecCertificate
-    func selfPrivateKey() throws -> SecKey
+    func selfIdentity() throws -> SecIdentity
     
     func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws
     func importPeerCertificate(pem: String, for peerDeviceID: String) async throws
@@ -91,14 +91,8 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return cert
     }
 
-    public func selfPrivateKey() throws -> SecKey {
-        let identity = try retrieveExistingIdentity()
-        var key: SecKey?
-        let status = SecIdentityCopyPrivateKey(identity, &key)
-        guard status == errSecSuccess, let key else {
-            throw IdentityError.privateKeyNotFound
-        }
-        return key
+    public func selfIdentity() throws -> SecIdentity {
+        try retrieveExistingIdentity()
     }
 
     private func retrieveExistingIdentity() throws -> SecIdentity {
