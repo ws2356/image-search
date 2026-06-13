@@ -192,6 +192,17 @@ def get_device_certificate_pem(timeout: float | None = 5.0) -> str:
     return identity.certificate_pem
 
 
+def get_device_private_key_pem(timeout: float | None = 5.0) -> str:
+    """Return this device's own private key PEM, blocking until identity is ready."""
+    future = get_identity_future()
+    identity = future.result(timeout=timeout)
+    return identity.private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+
+
 def store_peer_certificate(peer_device_id: str, certificate_pem: str) -> None:
     """Store a peer device's X.509 certificate in the dedicated keychain.
 

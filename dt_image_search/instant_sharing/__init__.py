@@ -13,6 +13,10 @@ from dt_image_search.instant_sharing.mdns import (
 from dt_image_search.instant_sharing.https_bootstrap import (
     InstantShareHTTPServer,
 )
+from dt_image_search.instant_sharing.https_tls_server import (
+    INSTANT_SHARE_TLS_SERVER_PORT,
+    InstantShareTLSServer,
+)
 from dt_image_search.instant_sharing.mini_window import (
     InstantShareMiniWindow,
     MiniWindowPhase,
@@ -100,8 +104,10 @@ __all__ = [
     "InstantShareDeliveryService",
     "InstantShareError",
     "InstantShareHeaders",
+    "INSTANT_SHARE_TLS_SERVER_PORT",
     "InstantShareHTTPServer",
     "InstantShareHttpClient",
+    "InstantShareTLSServer",
     "InstantShareHttpRequest",
     "InstantShareHttpResponse",
     "InstantShareMDNSAdvertiser",

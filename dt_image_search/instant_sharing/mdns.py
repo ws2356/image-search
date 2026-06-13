@@ -19,6 +19,7 @@ _logger = logging.getLogger(__name__)
 
 INSTANT_SHARE_MDNS_SERVICE_TYPE = "_instantshare._tcp.local."
 INSTANT_SHARE_MDNS_PORT = 9527
+INSTANT_SHARE_TLS_PORT = 9528
 
 
 def _local_ip_addresses() -> list[str]:
@@ -216,12 +217,14 @@ class InstantShareMDNSAdvertiser:
         device_id: str,
         desktop_name: str = "",
         port: int = INSTANT_SHARE_MDNS_PORT,
+        tls_port: int = INSTANT_SHARE_TLS_PORT,
         protocol_version: str = "1",
     ) -> None:
         self._ble_service = ble_service
         self._device_id = device_id
         self._desktop_name = desktop_name or "AuSearch Desktop"
         self._port = port
+        self._tls_port = tls_port
         self._protocol_version = protocol_version
         self._zeroconf: Zeroconf | None = None
         self._service_info: ServiceInfo | None = None
@@ -329,6 +332,7 @@ class InstantShareMDNSAdvertiser:
         props: dict[str, str] = {
             "ver": self._protocol_version,
             "device_id": self._device_id,
+            "tls_port": str(self._tls_port),
         }
         try:
             name_adv = self._ble_service.read_characteristic("DeviceName")

@@ -17,6 +17,7 @@ from dt_image_search.instant_sharing.mdns import (
     InstantShareMDNSAdvertiser,
 )
 from dt_image_search.instant_sharing.https_bootstrap import InstantShareHTTPServer
+from dt_image_search.instant_sharing.https_tls_server import INSTANT_SHARE_TLS_SERVER_PORT, InstantShareTLSServer
 from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
 from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
@@ -52,6 +53,7 @@ class InstantShareRuntime:
         trust_session_registry: TrustSessionRegistry | None = None,
         pin_display_callback: Callable[[str], None] | None = None,
         qr_window_factory: QRTriggerMiniWindowFactory | None = None,
+        tls_port: int = INSTANT_SHARE_TLS_SERVER_PORT,
     ) -> None:
         initialize_device_identity()
 
@@ -85,6 +87,7 @@ class InstantShareRuntime:
             )
         )
         self._pin_display_callback = pin_display_callback
+        self._tls_port = tls_port
         device_id = self._device_id_provider()
         desktop_name = self._desktop_name_provider()
         self._ble_service = InstantShareBleService(
@@ -103,6 +106,15 @@ class InstantShareRuntime:
             request_handler=self._qr_trigger_handler.handle_trigger,
         )
         self._http_server = InstantShareHTTPServer(
+            trust_session_registry=self._trust_session_registry,
+            session_registry=self._session_registry,
+            orchestrator=self._orchestrator,
+            transfer_handler=self._transfer_handler,
+            pin_display_callback=self._pin_display_callback,
+            qr_trigger_handler=self._qr_trigger_handler,
+        )
+        self._tls_server = InstantShareTLSServer(
+            port=self._tls_port,
             trust_session_registry=self._trust_session_registry,
             session_registry=self._session_registry,
             orchestrator=self._orchestrator,
@@ -169,6 +181,10 @@ class InstantShareRuntime:
         return self._http_server
 
     @property
+    def tls_server(self) -> InstantShareTLSServer:
+        return self._tls_server
+
+    @property
     def is_running(self) -> bool:
         return self._ble_daemon.is_running
 
@@ -195,6 +211,12 @@ class InstantShareRuntime:
             "[InstantShareRuntime] instant-share HTTP server started=%s",
             http_ok,
         )
+        tls_ok = self._tls_server.start()
+        _logger.info(
+            "[InstantShareRuntime] instant-share TLS server started=%s (port=%d)",
+            tls_ok,
+            self._tls_server.port,
+        )
         unix_ok = self._unix_socket_server.start()
         _logger.info(
             "[InstantShareRuntime] QR Unix socket server started=%s (path=%s)",
@@ -210,6 +232,7 @@ class InstantShareRuntime:
         _logger = logging.getLogger(__name__)
         _logger.info("[InstantShareRuntime] stop() called")
         self._unix_socket_server.stop()
+        self._tls_server.stop()
         self._http_server.stop()
         self._ble_daemon.stop()
         if self._qr_window_factory is not None:
