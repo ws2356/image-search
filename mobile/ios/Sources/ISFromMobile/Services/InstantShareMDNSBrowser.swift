@@ -160,10 +160,11 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         let deviceID = deviceIDFromResult(result)
         let connection = NWConnection(to: result.endpoint, using: .tcp)
         
-        print("[debug] NWBrowser result: \(result)")
+        LocalLog.debug("[debug] NWBrowser result: \(result)")
 
         connection.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
+            LocalLog.debug("[MDNS Browser] state connection state: \(state)")
             switch state {
             case .ready:
                 Task { @MainActor in
@@ -172,7 +173,6 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                 }
             case .failed:
                 connection.cancel()
-                LocalLog.debug("[MDNS Browser] connection failed for \(deviceID)")
             case .cancelled:
                 break
             default:
