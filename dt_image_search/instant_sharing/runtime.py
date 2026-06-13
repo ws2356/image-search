@@ -105,15 +105,6 @@ class InstantShareRuntime:
         self._unix_socket_server = UnixSocketHttpServer(
             request_handler=self._qr_trigger_handler.handle_trigger,
         )
-        self._http_server = InstantShareHTTPServer(
-            trust_session_registry=self._trust_session_registry,
-            session_registry=self._session_registry,
-            orchestrator=self._orchestrator,
-            transfer_handler=self._transfer_handler,
-            pin_display_callback=self._pin_display_callback,
-            qr_trigger_handler=self._qr_trigger_handler,
-            tls_server=self._tls_server,
-        )
         self._tls_server = InstantShareTLSServer(
             port=self._tls_port,
             trust_session_registry=self._trust_session_registry,
@@ -122,6 +113,15 @@ class InstantShareRuntime:
             transfer_handler=self._transfer_handler,
             pin_display_callback=self._pin_display_callback,
             qr_trigger_handler=self._qr_trigger_handler,
+        )
+        self._http_server = InstantShareHTTPServer(
+            trust_session_registry=self._trust_session_registry,
+            session_registry=self._session_registry,
+            orchestrator=self._orchestrator,
+            transfer_handler=self._transfer_handler,
+            pin_display_callback=self._pin_display_callback,
+            qr_trigger_handler=self._qr_trigger_handler,
+            tls_server=self._tls_server,
         )
         self._ble_daemon = InstantShareBleDaemon(
             ble_service=self._ble_service,
