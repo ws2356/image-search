@@ -6,6 +6,7 @@ import threading
 from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -24,9 +25,46 @@ if sys.platform != "darwin":
 _KEYCHAIN_SERVICE = "net.boldman.ausearch.device-identity"
 _KEYCHAIN_ACCOUNT = "device-identity-v1"
 _CERT_VALIDITY_YEARS = 20
+_KEYCHAIN_PATH = Path.home() / "Library" / "Keychains" / "ausearch.keychain"
+_KEY_CHAIN_PASSWORD = "123456"
+
+
+def _resolve_keychain_path() -> Path:
+    p = _KEYCHAIN_PATH
+    if p.exists():
+        return p
+    db_p = p.with_suffix(".keychain-db")
+    if db_p.exists():
+        return db_p
+    return p
+
 
 _identity_future: Future[DeviceIdentity] | None = None
 _lock = threading.Lock()
+
+
+def _keychain_arg() -> list[str]:
+    return [str(_resolve_keychain_path())]
+
+
+def _ensure_keychain() -> None:
+    p = _resolve_keychain_path()
+    _KEYCHAIN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not p.exists():
+        subprocess.run(
+            ["security", "create-keychain", "-p", _KEY_CHAIN_PASSWORD, str(_KEYCHAIN_PATH)],
+            check=True, capture_output=True,
+        )
+        p = _resolve_keychain_path()
+    subprocess.run(
+        ["security", "unlock-keychain", "-p", _KEY_CHAIN_PASSWORD, str(p)],
+        check=True, capture_output=True,
+    )
+    p.chmod(0o600)
+    subprocess.run(
+        ["security", "set-keychain-settings", "-u", str(p)],
+        check=True, capture_output=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -69,6 +107,7 @@ def get_identity_future() -> Future[DeviceIdentity]:
 
 
 def _load_or_create_identity() -> DeviceIdentity:
+    _ensure_keychain()
     device_id = get_device_id()
 
     p12_data = _load_p12_from_keychain()
@@ -97,6 +136,7 @@ def _load_p12_from_keychain() -> bytes | None:
                 "-s", _KEYCHAIN_SERVICE,
                 "-a", _KEYCHAIN_ACCOUNT,
                 "-w",
+                *_keychain_arg(),
             ],
             capture_output=True,
             check=True,
@@ -116,6 +156,7 @@ def _store_p12_to_keychain(p12_data: bytes) -> None:
             "-U",
             "-A",
             "-w", p12_data.hex(),
+            *_keychain_arg(),
         ],
         check=True,
     )
@@ -153,10 +194,11 @@ def get_device_certificate_pem(timeout: float | None = 5.0) -> str:
 
 
 def store_peer_certificate(peer_device_id: str, certificate_pem: str) -> None:
-    """Store a peer device's X.509 certificate in the login keychain.
+    """Store a peer device's X.509 certificate in the dedicated keychain.
 
     Uses label "AuSearch Trusted Device" for future bulk queries.
     """
+    _ensure_keychain()
     service = f"net.boldman.ausearch.trusted-device"
     subprocess.run(
         [
@@ -167,13 +209,15 @@ def store_peer_certificate(peer_device_id: str, certificate_pem: str) -> None:
             "-U",
             "-A",
             "-w", certificate_pem.encode("utf-8").hex(),
+            *_keychain_arg(),
         ],
         check=True,
     )
 
 
 def load_peer_certificate(peer_device_id: str) -> str | None:
-    """Load a peer device's certificate from the login keychain, or None."""
+    """Load a peer device's certificate from the dedicated keychain, or None."""
+    _ensure_keychain()
     service = f"net.boldman.ausearch.trusted-device"
     try:
         result = subprocess.run(
@@ -182,6 +226,7 @@ def load_peer_certificate(peer_device_id: str) -> str | None:
                 "-s", service,
                 "-a", peer_device_id,
                 "-w",
+                *_keychain_arg(),
             ],
             capture_output=True,
             check=True,
@@ -208,7 +253,8 @@ def get_peer_certificate(peer_device_id: str) -> x509.Certificate | None:
 
 
 def delete_peer_certificate(peer_device_id: str) -> None:
-    """Delete a peer device's certificate from the keychain (cf. deletePeerCertificate(for:))."""
+    """Delete a peer device's certificate from the dedicated keychain (cf. deletePeerCertificate(for:))."""
+    _ensure_keychain()
     service = f"net.boldman.ausearch.trusted-device"
     try:
         subprocess.run(
@@ -216,6 +262,7 @@ def delete_peer_certificate(peer_device_id: str) -> None:
                 "security", "delete-generic-password",
                 "-s", service,
                 "-a", peer_device_id,
+                *_keychain_arg(),
             ],
             check=True,
             capture_output=True,
