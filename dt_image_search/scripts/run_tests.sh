@@ -78,6 +78,7 @@ unit_and_functional_tests=(
   tests/unit/test_fs_image_list_model.py
   tests/unit/test_thumbnail_job.py
   tests/unit/test_crash_support.py
+  tests/unit/test_device_identity.py
   tests/unit/test_runtime_metadata.py
   tests/unit/test_search_controller.py
   tests/functional/test_mobile_backup_flow.py
