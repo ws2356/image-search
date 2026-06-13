@@ -222,7 +222,8 @@ def _do_trust_confirm(
             parsed = crypto_x509.load_pem_x509_certificate(mobile_cert_pem.encode("utf-8"))
             cn_attrs = parsed.subject.get_attributes_for_oid(crypto_x509.oid.NameOID.COMMON_NAME)
             mobile_device_id = cn_attrs[0].value if cn_attrs else correlation_id_header
-        except Exception:
+        except Exception as exc:
+            _logger.error("Failed to parse mobile certificate PEM: %s", exc)
             # mobile_device_id = correlation_id_header
             # TODO: should fail the flow immediately instead of fallback on correlation_id_header
         store_peer_certificate(mobile_device_id, mobile_cert_pem)
