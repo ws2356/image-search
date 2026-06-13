@@ -191,6 +191,39 @@ def load_peer_certificate(peer_device_id: str) -> str | None:
         return None
 
 
+def import_peer_certificate(cert: x509.Certificate, peer_device_id: str) -> None:
+    """Import a parsed X.509 certificate for a peer device (cf. importPeerCertificate(_:for:))."""
+    certificate_pem = cert.public_bytes(
+        serialization.Encoding.PEM
+    ).decode("utf-8")
+    store_peer_certificate(peer_device_id, certificate_pem)
+
+
+def get_peer_certificate(peer_device_id: str) -> x509.Certificate | None:
+    """Load a peer certificate as a parsed x509.Certificate (cf. peerCertificate(for:))."""
+    pem = load_peer_certificate(peer_device_id)
+    if pem is None:
+        return None
+    return x509.load_pem_x509_certificate(pem.encode("utf-8"))
+
+
+def delete_peer_certificate(peer_device_id: str) -> None:
+    """Delete a peer device's certificate from the keychain (cf. deletePeerCertificate(for:))."""
+    service = f"net.boldman.ausearch.trusted-device"
+    try:
+        subprocess.run(
+            [
+                "security", "delete-generic-password",
+                "-s", service,
+                "-a", peer_device_id,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError:
+        pass
+
+
 def _generate_identity(device_id: str) -> DeviceIdentity:
     key = ec.generate_private_key(ec.SECP256R1())
     subject = issuer = x509.Name([
