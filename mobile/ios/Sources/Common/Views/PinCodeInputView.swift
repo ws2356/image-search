@@ -1,38 +1,104 @@
 import SwiftUI
+import UIKit
+
+private final class HiddenPinTextField: UITextField {
+    var onDigit: ((Character) -> Void)?
+    var onDeleteBackward: (() -> Void)?
+
+    override func deleteBackward() {
+        onDeleteBackward?()
+        super.deleteBackward()
+    }
+}
+
+private struct PinCodeInputRepresentable: UIViewRepresentable {
+    @Binding var isFocused: Bool
+    var onDigit: (Character) -> Void
+    var onDeleteBackward: () -> Void
+
+    func makeUIView(context: Context) -> HiddenPinTextField {
+        let textField = HiddenPinTextField()
+        textField.keyboardType = .numberPad
+        textField.textContentType = .oneTimeCode
+        textField.delegate = context.coordinator
+        textField.isHidden = true
+        return textField
+    }
+
+    func updateUIView(_ uiView: HiddenPinTextField, context: Context) {
+        uiView.onDigit = onDigit
+        uiView.onDeleteBackward = onDeleteBackward
+        if isFocused && !uiView.isFirstResponder {
+            uiView.becomeFirstResponder()
+        } else if !isFocused && uiView.isFirstResponder {
+            uiView.resignFirstResponder()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        func textField(
+            _ textField: UITextField,
+            shouldChangeCharactersIn range: NSRange,
+            replacementString string: String
+        ) -> Bool {
+            guard !string.isEmpty else {
+                return true
+            }
+            guard let pinField = textField as? HiddenPinTextField else {
+                return false
+            }
+            for char in string where char.isNumber {
+                pinField.onDigit?(char)
+            }
+            return false
+        }
+    }
+}
 
 public struct PinCodeInputView: View {
     public let onSubmit: (String) -> Void
 
     @State private var pinCharacters: [String] = Array(repeating: "", count: 4)
-    @FocusState private var focusedField: Int?
+    @State private var isInputFocused = true
 
     public init(onSubmit: @escaping (String) -> Void) {
         self.onSubmit = onSubmit
     }
 
     public var body: some View {
-        HStack(spacing: 12) {
-            ForEach(0..<4, id: \.self) { index in
-                TextField("", text: Binding(
-                    get: { pinCharacters[index] },
-                    set: { handlePinInput($0, at: index) }
-                ))
-                    .font(.system(size: 32, weight: .heavy, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .keyboardType(.numberPad)
-                    .frame(width: 60, height: 72)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                focusedField == index ? Color.accentColor : Color.secondary.opacity(0.3),
-                                lineWidth: focusedField == index ? 2 : 1
-                            )
-                    )
-                    .focused($focusedField, equals: index)
+        ZStack {
+            PinCodeInputRepresentable(
+                isFocused: $isInputFocused,
+                onDigit: { digit in
+                    guard let firstEmpty = pinCharacters.firstIndex(where: { $0.isEmpty }) else {
+                        return
+                    }
+                    pinCharacters[firstEmpty] = String(digit)
+                },
+                onDeleteBackward: {
+                    guard let lastFilled = pinCharacters.lastIndex(where: { !$0.isEmpty }) else {
+                        return
+                    }
+                    pinCharacters[lastFilled] = ""
+                }
+            )
+            .frame(width: 0, height: 0)
+
+            HStack(spacing: 12) {
+                ForEach(0..<4, id: \.self) { index in
+                    boxView(at: index)
+                }
+            }
+            .onTapGesture {
+                isInputFocused = true
             }
         }
         .onAppear {
-            focusedField = 0
+            isInputFocused = true
         }
         .compatibleOnChange(of: pinCharacters) { _ in
             if pinCharacters.joined().count == 4 {
@@ -41,25 +107,19 @@ public struct PinCodeInputView: View {
         }
     }
 
-    private func handlePinInput(_ newValue: String, at index: Int) {
-        let digits = newValue.filter(\.isNumber)
+    private func boxView(at index: Int) -> some View {
+        let isActive = pinCharacters.joined().count == index
 
-        if digits.isEmpty {
-            pinCharacters[index] = ""
-            return
-        }
-
-        if digits.count == 1 {
-            pinCharacters[index] = String(digits)
-            if index < 3 {
-                focusedField = index + 1
-            }
-        } else {
-            let remaining = Array(digits.prefix(4 - index))
-            for (i, char) in remaining.enumerated() {
-                pinCharacters[index + i] = String(char)
-            }
-            focusedField = min(index + remaining.count, 3)
-        }
+        return Text(pinCharacters[index])
+            .font(.system(size: 32, weight: .heavy, design: .monospaced))
+            .multilineTextAlignment(.center)
+            .frame(width: 60, height: 72)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        isActive ? Color.accentColor : Color.secondary.opacity(0.3),
+                        lineWidth: isActive ? 2 : 1
+                    )
+            )
     }
 }
