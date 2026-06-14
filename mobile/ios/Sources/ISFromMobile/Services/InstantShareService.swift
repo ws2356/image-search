@@ -15,7 +15,6 @@ public final class InstantShareService: ObservableObject {
     @Published private(set) var trustSession: InstantShareTrustSessionManager
     @Published public var connectionConfig: InstantShareConnectionConfig?
     @Published private(set) var selectedPC: InstantShareDiscoveredPC?
-    @Published public var currentPIN: String?
     @Published private(set) var sharedText: String = ""
     @Published private(set) var sharedImage: (data: Data, filename: String, contentType: String)?
     @Published private(set) var lastError: String?
@@ -79,7 +78,6 @@ public final class InstantShareService: ObservableObject {
     func stopSession() {
         log("Stopping session...")
         trustSession.reset()
-        currentPIN = nil
         connectionConfig = nil
         selectedPC = nil
         sharedText = ""

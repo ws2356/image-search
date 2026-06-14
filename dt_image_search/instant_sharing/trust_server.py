@@ -8,14 +8,15 @@ In the pc-hosted-trust-and-upload architecture, the trust flow is:
    - Both sides derive the session key using HKDF-SHA256
 
 2. /trust/apply (encrypted PIN retrieval)
-   - iOS sends encrypted {"action": "request_pin"}
-   - PC generates a 6-digit PIN, encrypts it, returns the envelope
-   - Both sides display the same PIN
+    - iOS sends encrypted {"action": "request_pin"}
+    - PC generates a 4-digit PIN, stores it in session, returns an ack envelope
+    - PC displays the PIN on screen; user reads it and enters it on the mobile
 
 3. /trust/confirm (encrypted finalization + device certificate exchange)
-   - iOS sends encrypted {"action": "confirm", "pin_verified": true, "device_certificate_pem": "..."}
-   - PC stores mobile's certificate in keychain, returns encrypted {"trust_status": "trusted", "device_certificate_pem": "..."}
-   - iOS stores PC's certificate in keychain
+    - iOS sends encrypted {"action": "confirm", "pin_code": "<user-entered>", "device_certificate_pem": "..."}
+    - PC verifies pin_code matches the stored PIN, stores mobile's certificate in keychain,
+      returns encrypted {"trust_status": "trusted", "device_certificate_pem": "..."}
+    - iOS stores PC's certificate in keychain
 """
 
 from __future__ import annotations
@@ -178,23 +179,21 @@ class TrustSession:
                 self._pin_code = _generate_pin_code()
             return self._pin_code
 
-    def encrypted_pin_envelope(self) -> dict[str, str]:
-        """Return the PIN encrypted in a trust envelope."""
+    def verify_pin(self, pin_code: str) -> bool:
+        """Check whether the given pin_code matches the stored PIN."""
+        with self._lock:
+            return self._pin_code is not None and self._pin_code == pin_code
+
+    def encrypted_apply_ack_envelope(self) -> dict[str, str]:
+        """Return an acknowledgment envelope (no PIN in the response)."""
         if not self._pc_protector.is_established:
             raise InstantShareError(
                 ErrorCode.HANDSHAKE_REQUIRED,
-                "Cannot encrypt PIN before trust session key is established.",
-                correlation_id=self._correlation_id,
-            )
-        pin = self.pin_code
-        if pin is None:
-            raise InstantShareError(
-                ErrorCode.HANDSHAKE_REQUIRED,
-                "Cannot encrypt PIN before PIN is generated.",
+                "Cannot encrypt apply ack before trust session key is established.",
                 correlation_id=self._correlation_id,
             )
         encrypted = self._pc_protector.encrypt_json_payload(
-            payload={"pin_code": pin},
+            payload={"status": "accepted"},
             correlation_id=self._correlation_id,
         )
         return {
@@ -291,7 +290,7 @@ class TrustSessionRegistry:
 
 
 def _generate_pin_code() -> str:
-    return f"{int.from_bytes(os.urandom(3), 'big') % 1000000:06d}"
+    return f"{int.from_bytes(os.urandom(2), 'big') % 10000:04d}"
 
 
 def _base64url_encode(data: bytes) -> str:

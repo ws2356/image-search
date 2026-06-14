@@ -10,7 +10,7 @@ public enum ExtensionSessionPhase {
     case scanning
     case ready
     case starting
-    case verifying(pin: String)
+    case awaitingPinInput
     case transferring
     case success
     case failed(String)
@@ -152,17 +152,16 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             )
             LocalLog.info("[Extension VM] handshake completed")
 
-            let pin = try await trustClient.apply(
+            try await trustClient.apply(
                 host: handshakeHost,
                 port: handshakePort,
                 sessionID: config.sessionID,
                 correlationID: config.correlationID
             )
-            LocalLog.info("[Extension VM] PIN received: \(pin)")
-            service.currentPIN = pin
+            LocalLog.info("[Extension VM] apply completed, awaiting PIN input")
 
             isProcessing = false
-            sessionPhase = .verifying(pin: pin)
+            sessionPhase = .awaitingPinInput
         } catch {
             isProcessing = false
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
@@ -171,8 +170,8 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         }
     }
 
-    public func confirmPIN() {
-        LocalLog.info("[Extension VM] PIN confirmed")
+    public func confirmPIN(pinCode: String) {
+        LocalLog.info("[Extension VM] PIN confirmed with code: \(pinCode)")
         sessionPhase = .transferring
 
         guard let pc = selectedDevice, let config = service.connectionConfig else {
@@ -197,6 +196,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     port: pc.port,
                     sessionID: config.sessionID,
                     correlationID: config.correlationID,
+                    pinCode: pinCode,
                     deviceCertificatePEM: myCert
                 )
                 if let peerCert {
@@ -236,6 +236,16 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 }
 
                 sessionPhase = .success
+            } catch let error as InstantShareTrustClientError {
+                LocalLog.error("[Extension VM] confirm/transfer failed: \(error)")
+                if case .httpError(let statusCode, let errorCode, _) = error,
+                   statusCode == 403 && errorCode == "PIN_MISMATCH_OR_REJECTED" {
+                    errorMessage = "PIN code incorrect. Please check the code on your Mac and try again."
+                    sessionPhase = .awaitingPinInput
+                } else {
+                    let msg = error.localizedDescription
+                    sessionPhase = .failed(msg)
+                }
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
                 LocalLog.error("[Extension VM] confirm/transfer failed: \(msg)")

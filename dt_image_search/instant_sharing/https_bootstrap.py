@@ -201,11 +201,11 @@ def _do_trust_apply(
             message=f"Unsupported action: {action}",
         )
     pin = trust_session.generate_pin()
-    pin_envelope = trust_session.encrypted_pin_envelope()
+    ack_envelope = trust_session.encrypted_apply_ack_envelope()
     if deps.pin_display_callback is not None:
         deps.pin_display_callback(pin)
     _logger.info("Trust apply completed: session_id=%s pin=%s", session_id_header, pin)
-    return 202, {"apply_status": "accepted", **pin_envelope}
+    return 202, {"apply_status": "accepted", **ack_envelope}
 
 
 def _do_trust_confirm(
@@ -235,6 +235,14 @@ def _do_trust_confirm(
         raise InstantShareError(
             error_code=ErrorCode.INVALID_REQUEST,
             message=f"Unsupported action: {action}",
+        )
+
+    request_pin = decrypted.get("pin_code", "")
+    if not isinstance(request_pin, str) or not trust_session.verify_pin(request_pin):
+        raise InstantShareError(
+            error_code=ErrorCode.PIN_MISMATCH_OR_REJECTED,
+            message="PIN code does not match.",
+            status_code=403,
         )
 
     mobile_cert_pem = decrypted.get("device_certificate_pem")

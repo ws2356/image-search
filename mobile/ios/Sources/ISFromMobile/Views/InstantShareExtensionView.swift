@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 public struct InstantShareExtensionView: View {
     @ObservedObject var viewModel: InstantShareExtensionViewModel
@@ -18,8 +19,8 @@ public struct InstantShareExtensionView: View {
                 scanningContent
             case .starting:
                 startingContent
-            case .verifying(let pin):
-                verifyingContent(pin: pin)
+            case .awaitingPinInput:
+                awaitingPinInputContent
             case .transferring:
                 transferringContent
             case .success:
@@ -79,41 +80,35 @@ public struct InstantShareExtensionView: View {
         }
     }
 
-    // MARK: - Verifying PIN
+    // MARK: - Awaiting PIN Input
 
-    private func verifyingContent(pin: String) -> some View {
+    private var awaitingPinInputContent: some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("Verify PIN")
+            Text("Enter PIN")
                 .font(.title2.bold())
-            Text("Make sure this code matches on your Mac:")
+            Text("Enter the 4-digit code shown on your Mac:")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text(pin)
-                .font(.system(size: 56, weight: .heavy, design: .monospaced))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 40)
-                .padding(.vertical, 20)
-                .background(Color.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 20))
-            Spacer()
-            HStack(spacing: 16) {
-                Button(role: .cancel) {
-                    viewModel.rejectPIN()
-                } label: {
-                    Text("Reject")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                Button {
-                    viewModel.confirmPIN()
-                } label: {
-                    Text("Code Matches")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
+            PinCodeInputView(onSubmit: { pinCode in
+                viewModel.confirmPIN(pinCode: pinCode)
+            })
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
             }
+            Button(role: .cancel) {
+                viewModel.rejectPIN()
+                onCancel()
+            } label: {
+                Text("Cancel")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            Spacer()
         }
     }
 

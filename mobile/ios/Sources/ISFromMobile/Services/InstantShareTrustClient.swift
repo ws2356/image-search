@@ -143,7 +143,7 @@ final class InstantShareTrustClient: @unchecked Sendable {
         port: Int,
         sessionID: String,
         correlationID: String
-    ) async throws -> String {
+    ) async throws {
         guard trustSessionManager.isEstablished else {
             throw InstantShareTrustClientError.sessionKeyNotEstablished
         }
@@ -195,30 +195,6 @@ final class InstantShareTrustClient: @unchecked Sendable {
                 message: errorInfo.message
             )
         }
-
-        let responseBody: [String: Any]
-        do {
-            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw InstantShareTrustClientError.invalidResponse("Response is not a JSON object")
-            }
-            responseBody = decoded
-        } catch let error as InstantShareTrustClientError {
-            throw error
-        } catch {
-            throw InstantShareTrustClientError.invalidResponse("Failed to decode response: \(error)")
-        }
-
-        let responseEnvelope = InstantShareTrustEnvelope(
-            nonce: responseBody["nonce"] as? String ?? "",
-            ciphertext: responseBody["ciphertext"] as? String ?? ""
-        )
-
-        let decryptedPayload = try trustSessionManager.decryptEnvelope(responseEnvelope)
-        guard let pinCode = decryptedPayload["pin_code"] as? String else {
-            throw InstantShareTrustClientError.invalidResponse("Missing pin_code in apply response")
-        }
-
-        return pinCode
     }
 
     func confirm(
@@ -226,13 +202,14 @@ final class InstantShareTrustClient: @unchecked Sendable {
         port: Int,
         sessionID: String,
         correlationID: String,
+        pinCode: String,
         deviceCertificatePEM: String? = nil
     ) async throws -> String? {
         guard trustSessionManager.isEstablished else {
             throw InstantShareTrustClientError.sessionKeyNotEstablished
         }
 
-        var requestPayload: [String: Any] = ["action": "confirm", "pin_verified": true]
+        var requestPayload: [String: Any] = ["action": "confirm", "pin_code": pinCode]
         if let cert = deviceCertificatePEM {
             requestPayload["device_certificate_pem"] = cert
         }
