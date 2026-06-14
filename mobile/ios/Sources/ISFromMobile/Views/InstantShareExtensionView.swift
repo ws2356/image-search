@@ -258,10 +258,8 @@ public struct InstantShareExtensionView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if viewModel.selectedDevice?.id == device.id {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
+                Image(systemName: viewModel.selectedDevice?.id == device.id ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(viewModel.selectedDevice?.id == device.id ? .green : .gray.opacity(0.4))
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
