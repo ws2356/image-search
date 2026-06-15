@@ -77,6 +77,7 @@ if [[ -n "$IDENTITY" ]]; then
 else
     echo "  WARNING: No signing identity — skipping codesign."
     echo "  Set \$DEVELOPER_ID_IDENTITY or pass --identity."
+    exit 1
 fi
 
 # ── Step 4: Copy into .app bundle if requested ─────────────────────────────────

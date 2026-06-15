@@ -55,16 +55,24 @@ echo "Using tag: $tag"
 
 cd "$repo_root"
 
-"$this_dir/build_pyinstaller.sh"
-
+# -- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env
 set -a; . "$repo_root/.env"; set +a
+
 APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
+if [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] ; then
+    echo "Failed to find APPLE_APP_SPECIFIC_PASSWORD"
+    exit 1
+fi
 export APPLE_APP_SPECIFIC_PASSWORD
 
-# Build and notarize the PKG distribution
+# -- Step 2: Build AuSearch.app, InstantShareAgent.app (sub bundle), InstantShare Extension
+"$this_dir/build_pyinstaller.sh"
+
+# -- Step 3: Build and notarize the PKG distribution
 "$this_dir/create_distributable_pkg.sh" \
     --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
 
+# -- Step 4: Forget and remove old bundle (helpful for local testing)
 sudo pkgutil --forget 'vip.wansong.dtimagesearch' || true
 (cd "$repo_root/pyinstaller-dist-${build_type}" && rm -rf ./AuSearch.app)
 
@@ -73,11 +81,13 @@ if [[ "$skip_release" == true ]]; then
     exit 0
 fi
 
+# -- Step 5: Push to Github Release
 (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
     --repo "$parent_repo" --tag "$tag" \
     --title "Release $tag" --notes "Bug free code" \
     --pkg-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.pkg" --target main)
 
+# -- Step 6: Release to Official Side
 (cd "$repo_root/web" && \
     export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/AuSearch.pkg" && \
     npm run build && \

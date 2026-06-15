@@ -99,7 +99,8 @@ echo "  ${bin_count} binary/binaries signed."
 # ── Step 3a: Sign plug-in bundles ─────────────────────────────────────────────
 echo ""
 echo "Step 3a: Signing ShareExtension.appex plug-in"
-SHARE_EXT_ENTITLEMENTS="${SCRIPT_DIR}/../../macos/ShareExtension/ShareExtension.entitlements"
+_configuration="$(printf "%s" "${CONFIGURATION:-release}" | tr '[:upper:]' '[:lower:]')"
+SHARE_EXT_ENTITLEMENTS="${SCRIPT_DIR}/../../macos/ShareExtension/ShareExtension.${_configuration}.entitlements"
 SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
 if [[ -f "$SHARE_EXT_ENTITLEMENTS" ]]; then
     codesign --sign "$IDENTITY" \

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# -- Build AuSearch.app and InstantShareAgent
+# -- Set up a sub bundle for InstantShareAgent
+# -- Build InstantShare extension
 set -euo pipefail
 
 distpath=""
