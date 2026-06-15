@@ -92,7 +92,20 @@ fi
 
 # ── Step 3 ────────────────────────────────────────────────────────────────────
 echo "──── Step 3: Notarize ────"
-"$SCRIPT_DIR/notarize.sh" --pkg-path "$OUTPUT_PKG"
+remaining_attempts=3
+while [ "$remaining_attempts" -gt 0 ] ; do
+    if "$SCRIPT_DIR/notarize.sh" --pkg-path "$OUTPUT_PKG" ; then
+        break
+    fi
+    ((remaining_attempts -= 1))
+    if [ "$remaining_attempts" -gt 0 ] ; then
+        echo "Notarization failed. Wait before retrying ..."
+        sleep 3
+    else
+        echo "Notarization failed. Exit"
+        exit 1
+    fi
+done
 echo ""
 
 # ── Step 4 ────────────────────────────────────────────────────────────────────
