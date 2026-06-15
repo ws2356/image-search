@@ -10,19 +10,20 @@ from typing import Any, Callable
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from dt_image_search.identity import (
     get_device_certificate_pem,
     get_device_private_key_pem,
     load_all_peer_certificates,
 )
-from dt_image_search.instant_sharing.contracts import TRANSFER_IMAGE_PATH, TRANSFER_TEXT_PATH
+from dt_image_search.instant_sharing.contracts import TRANSFER_DOWNLOAD_PATH, TRANSFER_IMAGE_PATH, TRANSFER_TEXT_PATH
 from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.https_bootstrap import (
     _Deps,
     _ServiceUnavailable,
     TransferTextPayload,
+    _do_transfer_download,
     _do_transfer_image,
     _do_transfer_text,
 )
@@ -100,6 +101,26 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             filename=request.headers.get("X-Instant-Share-Filename"),
         )
         return JSONResponse(result, status_code=200)
+
+    @app.post(TRANSFER_DOWNLOAD_PATH)
+    async def transfer_download(request: Request) -> Response:
+        deps_local: _Deps = getattr(request.app.state, "deps", None)
+        if deps_local is None:
+            raise _ServiceUnavailable("Instant share service not initialized")
+        session_id = request.headers.get("X-Session-Id", "")
+        _logger.info(
+            "[TLS] transfer_download session_id=%s",
+            session_id,
+        )
+        status, payload, headers = await asyncio.to_thread(
+            _do_transfer_download,
+            deps_local,
+            session_id_header=session_id,
+            correlation_id_header=request.headers.get("X-Correlation-Id", ""),
+        )
+        if headers is not None and isinstance(payload, bytes) and payload:
+            return Response(content=payload, status_code=status, headers=headers)
+        return JSONResponse(payload, status_code=status)
 
     return app
 

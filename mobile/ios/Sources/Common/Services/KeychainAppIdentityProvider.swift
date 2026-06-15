@@ -12,7 +12,7 @@ public protocol AppIdentityProviding: Sendable {
     func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws
     func importPeerCertificate(pem: String, for peerDeviceID: String) async throws
     func peerCertificate(for peerDeviceID: String) throws -> SecCertificate
-    func deletePeerCertificate(for peerDeviceID: String) throws -> Void
+    func deletePeerCertificate(for peerDeviceID: String, cert: SecCertificate?) throws -> Void
 }
 
 public extension AppIdentityProviding {
@@ -210,8 +210,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
     }
 
     public func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws {
-        let tag = peerDeviceID.data(using: .utf8)
-        try? deletePeerCertificate(for: peerDeviceID)
+        try? deletePeerCertificate(for: peerDeviceID, cert: cert)
         
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
@@ -252,12 +251,29 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return cert
     }
 
-    public func deletePeerCertificate(for peerDeviceID: String) throws -> Void {
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassCertificate,
-            kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
+    public func deletePeerCertificate(for peerDeviceID: String, cert: SecCertificate?) throws -> Void {
+        if let cert {
+            guard let publicKey = SecCertificateCopyKey(cert) else {
+                throw KeychainError.unexpectedData
+            }
+            guard let keyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? else {
+                throw KeychainError.unexpectedData
+            }
+            let publicKeyHash = Data(Insecure.SHA1.hash(data: keyData))
+            let deleteQuery: [String: Any] = [
+                kSecClass as String: kSecClassCertificate,
+                kSecAttrPublicKeyHash as String: publicKeyHash,
+            ]
+            let status = SecItemDelete(deleteQuery as CFDictionary)
+            LocalLog.debug("[Keychain] deletePeerCertificate by publicKeyHash status=\(status)")
+        } else {
+            let deleteQuery: [String: Any] = [
+                kSecClass as String: kSecClassCertificate,
+                kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
+            ]
+            let status = SecItemDelete(deleteQuery as CFDictionary)
+            LocalLog.debug("[Keychain] deletePeerCertificate by label status=\(status)")
+        }
     }
     
     // MARK: - Certificate

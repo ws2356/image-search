@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, RootModel
 from dt_image_search.instant_sharing.ble import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
     API_PREFIX,
-    QR_CLAIM_PATH,
+    TRANSFER_DOWNLOAD_PATH,
     TRANSFER_IMAGE_PATH,
     TRANSFER_TEXT_PATH,
     TRUST_APPLY_PATH,
@@ -82,12 +82,6 @@ class TransferTextPayload(BaseModel):
     text_utf8: str = ""
 
 
-class QrClaimRequest(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    stash_id: str
-    opt: str
-
-
 def _deps_from(request: Request) -> _Deps:
     deps: _Deps | None = getattr(request.app.state, "deps", None)
     if deps is None:
@@ -116,53 +110,55 @@ def _do_trust_handshake(
         )
         _logger.info("Auto-created trust session for handshake: session_id=%s", session_id)
 
-    session_registry = deps.session_registry
-    if session_registry is not None:
-        active = session_registry.get_active_session()
-        if active is None or active.connection_config.session_id != session_id:
-            try:
-                metadata = InstantShareMetadata(
-                    payload_class=PayloadClass(body.payload_class),
-                    target_intent=TargetIntent(body.target_intent),
-                    trust_mode=TrustMode(body.trust_mode),
-                )
-                connection_config = ConnectionConfig(
-                    session_id=session_id,
-                    mobile_port=body.mobile_port,
-                    mobile_ip_list=tuple(body.mobile_ip_list),
-                    correlation_id=correlation_id,
-                    metadata=metadata,
-                )
-                if deps.orchestrator is not None:
-                    # If a session with mismatching id is still active (e.g. a
-                    # previous attempt that never completed), force-replace it so
-                    # the new session can proceed.  This avoids the silent
-                    # RECEIVER_BUSY_SINGLE_SESSION swallow that used to leave the
-                    # trust session bootstrapped but the instant-share session
-                    # absent, causing SESSION_ID_MISMATCH on the transfer endpoint.
-                    if active is not None:
-                        _logger.info(
-                            "Replacing stale active session old_id=%s new_id=%s",
-                            active.connection_config.session_id, session_id,
-                        )
-                        session_registry.replace_active_session(connection_config)
-                        deps.orchestrator.handle_trust_handshake_received(
-                            session_id=session_id,
-                            correlation_id=correlation_id,
-                        )
+    from dt_image_search.instant_sharing.trust_server import TrustFlowType
+
+    if trust_session.flow_type == TrustFlowType.MOBILE_TO_PC:
+        session_registry = deps.session_registry
+        if session_registry is not None:
+            active = session_registry.get_active_session()
+            if active is None or active.connection_config.session_id != session_id:
+                try:
+                    metadata = InstantShareMetadata(
+                        payload_class=PayloadClass(body.payload_class),
+                        target_intent=TargetIntent(body.target_intent),
+                        trust_mode=TrustMode(body.trust_mode),
+                    )
+                    connection_config = ConnectionConfig(
+                        session_id=session_id,
+                        mobile_port=body.mobile_port,
+                        mobile_ip_list=tuple(body.mobile_ip_list),
+                        correlation_id=correlation_id,
+                        metadata=metadata,
+                    )
+                    if deps.orchestrator is not None:
+                        if active is not None:
+                            _logger.info(
+                                "Replacing stale active session old_id=%s new_id=%s",
+                                active.connection_config.session_id, session_id,
+                            )
+                            session_registry.replace_active_session(connection_config)
+                            deps.orchestrator.handle_trust_handshake_received(
+                                session_id=session_id,
+                                correlation_id=correlation_id,
+                            )
+                        else:
+                            deps.orchestrator.handle_connection_config(connection_config)
+                            deps.orchestrator.handle_trust_handshake_received(
+                                session_id=session_id,
+                                correlation_id=correlation_id,
+                            )
                     else:
-                        deps.orchestrator.handle_connection_config(connection_config)
-                        deps.orchestrator.handle_trust_handshake_received(
-                            session_id=session_id,
-                            correlation_id=correlation_id,
-                        )
-                else:
-                    session_registry.replace_active_session(connection_config)
-                _logger.info("Instant-share session bootstrapped from handshake: session_id=%s", session_id)
-            except Exception as exc:
-                _logger.warning(
-                    "Failed to bootstrap instant-share session from handshake: %s", exc,
-                )
+                        session_registry.replace_active_session(connection_config)
+                    _logger.info("Instant-share session bootstrapped from handshake: session_id=%s", session_id)
+                except Exception as exc:
+                    _logger.warning(
+                        "Failed to bootstrap instant-share session from handshake: %s", exc,
+                    )
+    else:
+        _logger.info(
+            "Skipping instant-share session bootstrap for pc-to-mobile flow session_id=%s",
+            session_id,
+        )
 
     trust_session.store_mobile_handshake(
         mobile_dh_public_key=body.mobile_dh_public_key,
@@ -238,12 +234,34 @@ def _do_trust_confirm(
         )
 
     request_pin = decrypted.get("pin_code", "")
-    if not isinstance(request_pin, str) or not trust_session.verify_pin(request_pin):
-        raise InstantShareError(
-            error_code=ErrorCode.PIN_MISMATCH_OR_REJECTED,
-            message="PIN code does not match.",
-            status_code=403,
-        )
+    request_opt = decrypted.get("opt_code", "")
+
+    from dt_image_search.instant_sharing.trust_server import TrustFlowType
+
+    if trust_session.flow_type == TrustFlowType.PC_TO_MOBILE:
+        if not isinstance(request_opt, str) or not request_opt.strip():
+            raise InstantShareError(
+                error_code=ErrorCode.INVALID_REQUEST,
+                message="opt_code is required for pc-to-mobile flow.",
+                status_code=400,
+            )
+        if not trust_session.verify_opt(request_opt.strip()):
+            _logger.warning(
+                "[trust/confirm] invalid opt_code for pc-to-mobile flow session_id=%s",
+                session_id_header,
+            )
+            raise InstantShareError(
+                error_code=ErrorCode.PIN_MISMATCH_OR_REJECTED,
+                message="OPT code does not match.",
+                status_code=403,
+            )
+    else:
+        if not isinstance(request_pin, str) or not trust_session.verify_pin(request_pin):
+            raise InstantShareError(
+                error_code=ErrorCode.PIN_MISMATCH_OR_REJECTED,
+                message="PIN code does not match.",
+                status_code=403,
+            )
 
     mobile_cert_pem = decrypted.get("device_certificate_pem")
     if isinstance(mobile_cert_pem, str) and mobile_cert_pem.strip():
@@ -257,11 +275,9 @@ def _do_trust_confirm(
             mobile_device_id = correlation_id_header
         store_peer_certificate(mobile_device_id, mobile_cert_pem)
         _logger.info(
-            "Stored peer certificate device=%s session_id=%s",
-            mobile_device_id, session_id_header,
+            "Stored peer certificate device=%s session_id=%s flow_type=%s",
+            mobile_device_id, session_id_header, trust_session.flow_type.value,
         )
-        # Inject the cert into the running TLS server so the device can
-        # start transferring data immediately without a server restart.
         if deps.tls_server is not None:
             injected = deps.tls_server.add_peer_certificate(mobile_cert_pem)
             _logger.info(
@@ -272,7 +288,10 @@ def _do_trust_confirm(
     trust_session.mark_trusted()
     pc_cert_pem = get_device_certificate_pem()
     trust_status = trust_session.encrypted_trust_status(pc_certificate_pem=pc_cert_pem)
-    _logger.info("Trust confirmed: session_id=%s correlation_id=%s", session_id_header, correlation_id_header)
+    _logger.info(
+        "Trust confirmed: session_id=%s correlation_id=%s flow_type=%s",
+        session_id_header, correlation_id_header, trust_session.flow_type.value,
+    )
     return trust_status
 
 
@@ -371,28 +390,56 @@ def _do_transfer_image(
     return {"state": "delivered", **result.as_dict()}
 
 
-def _do_qr_claim(deps: _Deps, *, body: dict[str, Any]) -> tuple[int, dict[str, Any] | bytes, dict[str, str] | None]:
+def _do_transfer_download(
+    deps: _Deps,
+    *,
+    session_id_header: str,
+    correlation_id_header: str,
+) -> tuple[int, bytes, dict[str, str] | None]:
+    if deps.trust_session_registry is None or deps.session_registry is None:
+        raise _ServiceUnavailable("Transfer service not initialized")
+    trust_session = deps.trust_session_registry.get_session(session_id_header)
+    if trust_session is None:
+        raise InstantShareError(
+            error_code=ErrorCode.SESSION_NOT_FOUND,
+            message="No active session found",
+            status_code=404,
+        )
+    if not trust_session.is_trusted:
+        raise InstantShareError(
+            error_code=ErrorCode.TRUST_REQUIRED,
+            message="Trust handshake must be completed before transfer download",
+            status_code=403,
+        )
+    stash_id = trust_session.stash_id
+    if stash_id is None:
+        raise InstantShareError(
+            error_code=ErrorCode.INVALID_REQUEST,
+            message="No stash associated with this session",
+            status_code=400,
+        )
     if deps.qr_trigger_handler is None:
         raise _ServiceUnavailable("QR trigger service not initialized")
-    result = deps.qr_trigger_handler.handle_claim(body)
+    result = deps.qr_trigger_handler.retrieve_stash_content(stash_id)
     result_status = result.get("_status", 200)
     if not isinstance(result_status, int):
         result_status = 200
     if result.get("status") == "claimed" and "content" in result:
-        resp_bytes = str(result.get("content", "")).encode("utf-8")
-        headers = {"Content-Type": str(result.get("content_type", "text/plain"))}
-        if result.get("filename"):
-            headers["X-Original-Filename"] = str(result["filename"])
-        return result_status, resp_bytes, headers
-    if result.get("status") == "claimed" and "file_bytes_base64" in result:
-        raw = result["file_bytes_base64"]
-        resp_bytes = raw if isinstance(raw, bytes) else base64.b64decode(str(raw))
+        content = str(result.get("content", ""))
+        if result.get("file_bytes") is not None:
+            resp_bytes = result["file_bytes"] if isinstance(result["file_bytes"], bytes) else str(result["file_bytes"]).encode("utf-8")
+        else:
+            resp_bytes = content.encode("utf-8")
         headers = {"Content-Type": str(result.get("content_type", "application/octet-stream"))}
         if result.get("filename"):
             headers["X-Original-Filename"] = str(result["filename"])
+        _logger.info(
+            "[transfer/download] delivering stash_id=%s content_type=%s bytes=%d session_id=%s",
+            stash_id, result.get("content_type"), len(resp_bytes), session_id_header,
+        )
         return result_status, resp_bytes, headers
     safe = {k: v for k, v in result.items() if not k.startswith("_")}
-    return result_status, safe, None
+    return result_status, b"", safe
 
 
 def _build_app(deps: _Deps) -> FastAPI:
@@ -447,47 +494,6 @@ def _build_app(deps: _Deps) -> FastAPI:
             envelope=envelope,
         )
         return JSONResponse(result, status_code=200)
-
-    @app.post(TRANSFER_TEXT_PATH)
-    async def transfer_text(request: Request, payload: TransferTextPayload) -> JSONResponse:
-        deps_local = _deps_from(request)
-        raw_body = await request.body()
-        try:
-            payload_text_utf8 = payload.text_utf8
-        except Exception:
-            payload_text_utf8 = ""
-        result = await asyncio.to_thread(
-            _do_transfer_text,
-            deps_local,
-            session_id_header=request.headers.get("X-Session-Id", ""),
-            correlation_id_header=request.headers.get("X-Correlation-Id", ""),
-            raw_body=raw_body,
-            payload_text_utf8=payload_text_utf8,
-        )
-        return JSONResponse(result, status_code=200)
-
-    @app.post(TRANSFER_IMAGE_PATH)
-    async def transfer_image(request: Request) -> JSONResponse:
-        deps_local = _deps_from(request)
-        raw_body = await request.body()
-        result = await asyncio.to_thread(
-            _do_transfer_image,
-            deps_local,
-            session_id_header=request.headers.get("X-Session-Id", ""),
-            correlation_id_header=request.headers.get("X-Correlation-Id", ""),
-            raw_body=raw_body,
-            content_type=request.headers.get("Content-Type", "application/octet-stream"),
-            filename=request.headers.get("X-Instant-Share-Filename"),
-        )
-        return JSONResponse(result, status_code=200)
-
-    @app.post(QR_CLAIM_PATH)
-    async def qr_claim(request: Request, body: dict[str, Any] = Body(...)) -> Response:
-        deps_local = _deps_from(request)
-        status, payload, headers = await asyncio.to_thread(_do_qr_claim, deps_local, body=body)
-        if headers is not None and isinstance(payload, bytes):
-            return Response(content=payload, status_code=status, headers=headers)
-        return JSONResponse(payload, status_code=status)
 
     @app.post(f"{API_PREFIX}/{{rest_of_path:path}}")
     async def _not_found(_: Request) -> JSONResponse:

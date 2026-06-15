@@ -7,12 +7,14 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 
 _logger = logging.getLogger(__name__)
 
 TRIGGER_PATH = "/api/instant-share/v1/qr-trigger"
-CLAIM_PATH = "/api/instant-share/v1/qr-claim"
 OPT_CODE_TTL_SECONDS = 300
 MAX_CLAIM_ATTEMPTS = 3
 
@@ -37,11 +39,14 @@ class QRTriggerHandler:
     def __init__(
         self,
         *,
+        trust_session_registry: TrustSessionRegistry | None = None,
         on_stash_created: Callable[[StashEntry], None] | None = None,
         on_stash_expired: Callable[[str], None] | None = None,
         on_stash_claimed: Callable[[str], None] | None = None,
     ) -> None:
+        self._trust_session_registry = trust_session_registry
         self._stashes: dict[str, StashEntry] = {}
+        self._session_ids: dict[str, str] = {}
         self._lock = threading.Lock()
         self._timers: dict[str, threading.Timer] = {}
         self._on_stash_created = on_stash_created
@@ -89,11 +94,36 @@ class QRTriggerHandler:
             content_type = self._detect_mime(file_path)
             stash = self._create_stash(content_type=content_type, content=None, file_path=file_path, filename=filename or None)
 
+        session_id = str(uuid.uuid4())
+        if self._trust_session_registry is not None:
+            from dt_image_search.instant_sharing.trust_server import TrustFlowType
+            self._trust_session_registry.create_session(
+                session_id=session_id,
+                correlation_id=session_id,
+                flow_type=TrustFlowType.PC_TO_MOBILE,
+                opt_code=stash.opt_code,
+                stash_id=stash.stash_id,
+            )
+            with self._lock:
+                self._session_ids[stash.stash_id] = session_id
+            _logger.info(
+                "[QRTriggerHandler] trust session created for pc-to-mobile flow session_id=%s stash_id=%s",
+                session_id, stash.stash_id,
+            )
+
+        if self._on_stash_created is not None:
+            self._on_stash_created(stash)
+
         return {
             "status": "stashed",
+            "session_id": session_id,
             "stash_id": stash.stash_id,
             "content_type": stash.content_type,
         }
+
+    def get_session_id_for_stash(self, stash_id: str) -> str | None:
+        with self._lock:
+            return self._session_ids.get(stash_id)
 
     @staticmethod
     def _detect_mime(file_path: str) -> str:
@@ -135,16 +165,14 @@ class QRTriggerHandler:
             self._stashes[stash_id] = entry
         self._start_expiry_timer(stash_id)
         _logger.info("Stash created: id=%s type=%s opt=%s ttl=%ds", stash_id, content_type, opt_code, OPT_CODE_TTL_SECONDS)
-        if self._on_stash_created is not None:
-            self._on_stash_created(entry)
         return entry
 
-    def handle_claim(self, body: dict[str, object]) -> dict[str, object]:
-        stash_id = body.get("stash_id")
-        opt_code = body.get("opt")
-        if not isinstance(stash_id, str) or not isinstance(opt_code, str):
-            return {"_status": 400, "status": "error", "error": "Missing stash_id or opt"}
-
+    def retrieve_stash_content(self, stash_id: str) -> dict[str, object]:
+        """Retrieve stash content for the /transfer/download endpoint.
+        Validates the stash is still valid (exists, not expired, not claimed).
+        Returns dict with _status, content/file_bytes, content_type, filename.
+        """
+        stash_id = stash_id.strip()
         with self._lock:
             entry = self._stashes.get(stash_id)
 
@@ -161,25 +189,23 @@ class QRTriggerHandler:
             self._invalidate_stash(entry, expired=True)
             return {"_status": 410, "status": "expired", "error": "Stash has expired"}
 
-        if entry.opt_code != opt_code:
-            entry.attempt_count += 1
-            remaining = entry.max_attempts - entry.attempt_count
-            _logger.warning("Invalid opt-code for stash %s (attempt %d/%d)", stash_id, entry.attempt_count, entry.max_attempts)
-            if entry.attempt_count >= entry.max_attempts:
-                self._invalidate_stash(entry, expired=True)
-                return {"_status": 410, "status": "expired", "error": "Too many failed attempts"}
-            return {"_status": 401, "status": "unauthorized", "error": "Invalid opt-code"}
-
         self._cancel_timer(stash_id)
         entry.claimed = True
         if self._on_stash_claimed is not None:
             self._on_stash_claimed(stash_id)
 
-        _logger.info("Stash claimed: id=%s type=%s", stash_id, entry.content_type)
+        _logger.info(
+            "[QRTriggerHandler] stash content retrieved for transfer/download: id=%s type=%s",
+            stash_id, entry.content_type,
+        )
 
         if entry.content is not None:
-            _logger.info("Stash content delivered: id=%s content_type=%s", stash_id, entry.content_type)
+            _logger.info(
+                "[QRTriggerHandler] text stash delivered: id=%s content_type=%s",
+                stash_id, entry.content_type,
+            )
             return {
+                "_status": 200,
                 "status": "claimed",
                 "content_type": entry.content_type,
                 "content": entry.content,
@@ -192,12 +218,17 @@ class QRTriggerHandler:
             except FileNotFoundError:
                 self._invalidate_stash(entry, expired=True)
                 return {"_status": 410, "status": "expired", "error": "Source file no longer available"}
-            _logger.info("Stash file delivered: id=%s content_type=%s filename=%s path=%s filesize=%d", stash_id, entry.content_type, entry.filename, entry.file_path, len(file_bytes))
+            _logger.info(
+                "[QRTriggerHandler] file stash delivered: id=%s content_type=%s filename=%s path=%s filesize=%d",
+                stash_id, entry.content_type, entry.filename, entry.file_path, len(file_bytes),
+            )
             return {
+                "_status": 200,
                 "status": "claimed",
                 "content_type": entry.content_type,
                 "filename": entry.filename or "",
-                "file_bytes_base64": file_bytes,
+                "content": entry.content,
+                "file_bytes": file_bytes,
             }
 
         return {"_status": 500, "status": "error", "error": "Invalid stash state"}

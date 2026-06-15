@@ -9,18 +9,21 @@ import SwiftUI
 public struct QRClaimPayload: Equatable, Sendable, Identifiable {
     var ips: [String]
     var port: Int
-    var stashId: String
+    var sessionId: String
     var optCode: String
+    var deviceId: String
     public let id: String
 
-    /// Parse from a universal link URL: https://dl.boldman.net/share?ips=...&port=...&stash=...&opt=...
+    /// Parse from a universal link URL.
+    /// Format: https://dl.boldman.net/share?ips=...&p=...&sid=...&opt=...&did=...
+    /// Also supports legacy format with port, stash params.
     public init?(universalLinkURL: URL) {
         guard let host = universalLinkURL.host?.lowercased(),
               host == "dl.boldman.net" else {
             return nil
         }
         let path = universalLinkURL.path.lowercased()
-        guard path == "/share" || path.hasPrefix("/share?") || path == "/share" else {
+        guard path == "/share" || path.hasPrefix("/share?") else {
             return nil
         }
         guard let components = URLComponents(url: universalLinkURL, resolvingAgainstBaseURL: false),
@@ -33,23 +36,31 @@ public struct QRClaimPayload: Equatable, Sendable, Identifiable {
         }
 
         guard let ipsStr = valueFor("ips"),
-              let portStr = valueFor("port"),
-              let stashId = valueFor("stash"),
-              let optCode = valueFor("opt"),
-              let port = Int(portStr) else {
+              let optCode = valueFor("opt") else {
+            return nil
+        }
+
+        let portStr = valueFor("p") ?? valueFor("port")
+        guard let portVal = portStr, let port = Int(portVal) else {
+            return nil
+        }
+
+        let sessionId = valueFor("sid") ?? valueFor("stash")
+        guard let unwrappedSessionId = sessionId, !unwrappedSessionId.isEmpty else {
             return nil
         }
 
         self.ips = ipsStr.split(separator: ",").map(String.init)
         self.port = port
-        self.stashId = stashId
+        self.sessionId = unwrappedSessionId
         self.optCode = optCode
+        self.deviceId = valueFor("did") ?? ""
 
         guard !ips.isEmpty, (1...65535).contains(port) else {
             return nil
         }
-        
-        self.id = stashId
+
+        self.id = unwrappedSessionId
     }
 }
 

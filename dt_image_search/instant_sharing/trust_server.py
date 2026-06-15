@@ -1,26 +1,41 @@
 """PC-side trust session manager for the instant-share protocol.
 
-In the pc-hosted-trust-and-upload architecture, the trust flow is:
+Supports two flows distinguished by TrustFlowType:
 
-1. /trust/handshake (plain text DH exchange)
-   - iOS sends mobile_dh_public_key, mobile_nonce
-   - PC stores these, generates pc_nonce, kdf_context, returns pc_dh_public_key
-   - Both sides derive the session key using HKDF-SHA256
+MOBILE_TO_PC:
+  1. /trust/handshake (plain text DH exchange)
+     - iOS sends mobile_dh_public_key, mobile_nonce
+     - PC stores these, generates pc_nonce, kdf_context, returns pc_dh_public_key
+     - Both sides derive the session key using HKDF-SHA256
 
-2. /trust/apply (encrypted PIN retrieval)
-    - iOS sends encrypted {"action": "request_pin"}
-    - PC generates a 4-digit PIN, stores it in session, returns an ack envelope
-    - PC displays the PIN on screen; user reads it and enters it on the mobile
+  2. /trust/apply (encrypted PIN retrieval)
+     - iOS sends encrypted {"action": "request_pin"}
+     - PC generates a 4-digit PIN, stores it in session, returns an ack envelope
+     - PC displays the PIN on screen; user reads it and enters it on the mobile
 
-3. /trust/confirm (encrypted finalization + device certificate exchange)
-    - iOS sends encrypted {"action": "confirm", "pin_code": "<user-entered>", "device_certificate_pem": "..."}
-    - PC verifies pin_code matches the stored PIN, stores mobile's certificate in keychain,
-      returns encrypted {"trust_status": "trusted", "device_certificate_pem": "..."}
-    - iOS stores PC's certificate in keychain
+  3. /trust/confirm (encrypted finalization + device certificate exchange)
+     - iOS sends encrypted {"action": "confirm", "pin_code": "<user-entered>", "device_certificate_pem": "..."}
+     - PC verifies pin_code matches the stored PIN, stores mobile's certificate in keychain,
+       returns encrypted {"trust_status": "trusted", "device_certificate_pem": "..."}
+     - iOS stores PC's certificate in keychain
+
+PC_TO_MOBILE (QR transfer):
+  1. /trust/handshake (plain text DH exchange)
+     - iOS sends mobile_dh_public_key, mobile_nonce (trust session already created by qr-trigger)
+     - PC stores these, returns pc_dh_public_key, pc_nonce, kdf_context
+     - Both sides derive the session key using HKDF-SHA256
+
+  2. /trust/confirm (encrypted verification + device certificate exchange)
+     - iOS sends encrypted {"action": "confirm", "opt_code": "<from-qr>", "device_certificate_pem": "..."}
+     - PC verifies opt_code matches the stored code, stores mobile's certificate in keychain,
+       returns encrypted {"trust_status": "trusted", "device_certificate_pem": "..."}
+     - iOS stores PC's certificate in keychain
+     - /trust/apply is skipped (opt_code already known to both sides from QR)
 """
 
 from __future__ import annotations
 
+import enum
 import logging
 import os
 import threading
@@ -41,30 +56,53 @@ _logger = logging.getLogger(__name__)
 ENCRYPTION_ALG = "aes-256-gcm"
 
 
+class TrustFlowType(enum.Enum):
+    MOBILE_TO_PC = "mobile_to_pc"
+    PC_TO_MOBILE = "pc_to_mobile"
+
+
 class TrustSession:
     """Per-session trust state held by the PC while the iOS client
-    completes the handshake → apply → confirm sequence."""
+    completes the handshake → (apply) → confirm sequence.
+
+    In MOBILE_TO_PC flow the full 3-step handshake→apply→confirm
+    sequence is followed.  In PC_TO_MOBILE flow /trust/apply is
+    skipped (opt_code verification replaces PIN verification).
+    """
 
     def __init__(
         self,
         *,
         session_id: str,
         correlation_id: str,
+        flow_type: TrustFlowType,
         pc_key_resolver: X25519TrustSessionKeyResolver,
         pc_protector: AesGcmTrustSessionProtector,
+        opt_code: str | None = None,
+        stash_id: str | None = None,
     ) -> None:
         self._session_id = session_id
         self._correlation_id = correlation_id
+        self._flow_type = flow_type
         self._pc_key_resolver = pc_key_resolver
         self._pc_protector = pc_protector
         self._mobile_dh_public_key: str | None = None
         self._mobile_nonce: str | None = None
         self._kdf_context: str | None = None
         self._pin_code: str | None = None
+        self._opt_code: str | None = opt_code
+        self._stash_id: str | None = stash_id
         self._mobile_certificate_pem: str | None = None
         self._is_trusted = threading.Event()
         self._lock = threading.RLock()
         self._created_monotonic = time.monotonic()
+        _logger.info(
+            "[TrustSession] created session_id=%s flow_type=%s has_opt_code=%s has_stash_id=%s",
+            session_id,
+            flow_type.value,
+            opt_code is not None,
+            stash_id is not None,
+        )
 
     @property
     def session_id(self) -> str:
@@ -75,9 +113,23 @@ class TrustSession:
         return self._correlation_id
 
     @property
+    def flow_type(self) -> TrustFlowType:
+        return self._flow_type
+
+    @property
     def pin_code(self) -> str | None:
         with self._lock:
             return self._pin_code
+
+    @property
+    def opt_code(self) -> str | None:
+        with self._lock:
+            return self._opt_code
+
+    @property
+    def stash_id(self) -> str | None:
+        with self._lock:
+            return self._stash_id
 
     @property
     def is_trusted(self) -> bool:
@@ -184,6 +236,11 @@ class TrustSession:
         with self._lock:
             return self._pin_code is not None and self._pin_code == pin_code
 
+    def verify_opt(self, opt_code: str) -> bool:
+        """Check whether the given opt_code matches the stored opt code."""
+        with self._lock:
+            return self._opt_code is not None and self._opt_code == opt_code
+
     def encrypted_apply_ack_envelope(self) -> dict[str, str]:
         """Return an acknowledgment envelope (no PIN in the response)."""
         if not self._pc_protector.is_established:
@@ -242,6 +299,9 @@ class TrustSessionRegistry:
         *,
         session_id: str,
         correlation_id: str,
+        flow_type: TrustFlowType = TrustFlowType.MOBILE_TO_PC,
+        opt_code: str | None = None,
+        stash_id: str | None = None,
     ) -> TrustSession:
         with self._lock:
             pc_key_resolver = X25519TrustSessionKeyResolver()
@@ -251,14 +311,18 @@ class TrustSessionRegistry:
             session = TrustSession(
                 session_id=session_id,
                 correlation_id=correlation_id,
+                flow_type=flow_type,
                 pc_key_resolver=pc_key_resolver,
                 pc_protector=pc_protector,
+                opt_code=opt_code,
+                stash_id=stash_id,
             )
             self._session = session
             _logger.info(
-                "[TrustSessionRegistry] created trust session session_id=%s correlation_id=%s",
+                "[TrustSessionRegistry] created trust session session_id=%s correlation_id=%s flow_type=%s",
                 session_id,
                 correlation_id,
+                flow_type.value,
             )
             return session
 

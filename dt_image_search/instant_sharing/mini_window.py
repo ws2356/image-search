@@ -57,7 +57,7 @@ class MiniWindowState:
 
 
 def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str, pin_code: str = "") -> str:
-    name = device_name or "your Mac"
+    name = device_name or "your phone"
     if phase == MiniWindowPhase.CONNECTING:
         return f"Connecting to {name}..."
     if phase == MiniWindowPhase.NEGOTIATING:

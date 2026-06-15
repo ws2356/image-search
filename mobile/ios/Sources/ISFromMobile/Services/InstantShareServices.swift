@@ -12,6 +12,7 @@ enum InstantShareProtocol {
     static let trustConfirmPath = "/trust/confirm"
     static let transferTextPath = "/transfer/text"
     static let transferImagePath = "/transfer/image"
+    static let transferDownloadPath = "/transfer/download"
     static let payloadTextPath = "/payload/text"
     static let payloadImagePath = "/payload/image"
     static let deliveryResultPath = "/delivery-result"

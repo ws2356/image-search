@@ -100,7 +100,9 @@ class InstantShareRuntime:
             device_id=device_id,
             desktop_name=desktop_name,
         )
-        self._qr_trigger_handler = QRTriggerHandler()
+        self._qr_trigger_handler = QRTriggerHandler(
+            trust_session_registry=self._trust_session_registry,
+        )
         self._qr_window_factory = qr_window_factory
         self._unix_socket_server = UnixSocketHttpServer(
             request_handler=self._qr_trigger_handler.handle_trigger,
@@ -130,6 +132,10 @@ class InstantShareRuntime:
             poll_interval_seconds=poll_interval_seconds,
             mdns_advertiser=self._mdns_advertiser,
         )
+
+    @property
+    def device_id(self) -> str:
+        return self._device_id_provider()
 
     @property
     def ble_service(self) -> InstantShareBleService:

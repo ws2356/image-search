@@ -66,8 +66,8 @@ TRUST_APPLY_PATH = f"{API_PREFIX}/trust/apply"
 TRUST_CONFIRM_PATH = f"{API_PREFIX}/trust/confirm"
 TRANSFER_TEXT_PATH = f"{API_PREFIX}/transfer/text"
 TRANSFER_IMAGE_PATH = f"{API_PREFIX}/transfer/image"
+TRANSFER_DOWNLOAD_PATH = f"{API_PREFIX}/transfer/download"
 QR_TRIGGER_PATH = f"{API_PREFIX}/qr-trigger"
-QR_CLAIM_PATH = f"{API_PREFIX}/qr-claim"
 
 
 _ALLOWED_TARGETS = {

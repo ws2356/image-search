@@ -134,7 +134,10 @@ def main() -> int:
         pin_display_callback=mini_window_factory.show_pin,
     )
 
-    qr_window_factory = QRTriggerMiniWindowFactory(runtime.qr_trigger_handler)
+    qr_window_factory = QRTriggerMiniWindowFactory(
+        runtime.qr_trigger_handler,
+        device_id=runtime.device_id,
+    )
     qr_window_factory.start()
     _logger.info("QRTriggerMiniWindowFactory started")
 

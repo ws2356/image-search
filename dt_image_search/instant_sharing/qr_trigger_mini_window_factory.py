@@ -31,10 +31,12 @@ class QRTriggerMiniWindowFactory:
         *,
         pc_name: str = "",
         pc_port: int = 9527,
+        device_id: str = "",
     ) -> None:
         self._handler = handler
         self._pc_name = pc_name or socket.gethostname()
         self._pc_port = pc_port
+        self._device_id = device_id
         self._windows: dict[str, QRTriggerMiniWindow] = {}
         self._stash_created_sub: Any = None
         self._stash_claimed_sub: Any = None
@@ -83,10 +85,13 @@ class QRTriggerMiniWindowFactory:
         self._bridge.stash_expired.emit(stash_id)
 
     def _show_window(self, stash: StashEntry) -> None:
+        session_id = self._handler.get_session_id_for_stash(stash.stash_id) or ""
         window = QRTriggerMiniWindow(
             stash,
+            session_id=session_id,
             pc_name=self._pc_name,
             pc_port=self._pc_port,
+            device_id=self._device_id,
             on_cancel=self._on_cancel,
         )
         window.show_qr()
@@ -95,9 +100,10 @@ class QRTriggerMiniWindowFactory:
         self._windows[stash.stash_id] = window
         acquire_activation_policy()
         _logger.info(
-            "[QRTriggerMiniWindowFactory] window shown: stash=%s type=%s",
+            "[QRTriggerMiniWindowFactory] window shown: stash=%s type=%s session_id=%s",
             stash.stash_id,
             stash.content_type,
+            session_id,
         )
 
     def _on_cancel(self, stash_id: str) -> None:
