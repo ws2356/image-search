@@ -56,14 +56,7 @@ echo "Using tag: $tag"
 cd "$repo_root"
 
 # -- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env
-set -a; . "$repo_root/.env"; set +a
-
-APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
-if [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] ; then
-    echo "Failed to find APPLE_APP_SPECIFIC_PASSWORD"
-    exit 1
-fi
-export APPLE_APP_SPECIFIC_PASSWORD
+. "$this_dir/init_envs.sh"
 
 # -- Step 2: Build AuSearch.app, InstantShareAgent.app (sub bundle), InstantShare Extension
 "$this_dir/build_pyinstaller.sh"
