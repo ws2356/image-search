@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import Combine
 import Network
+import Security
 import Common
 
 
@@ -199,14 +200,14 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     pinCode: pinCode,
                     deviceCertificatePEM: myCert
                 )
-                if let peerCert {
-                    try? await appIdentityProvider.importPeerCertificate(
-                        pem: peerCert,
-                        for: pc.id
-                    )
-                    LocalLog.info("[Extension VM] stored peer certificate for device=\(pc.id)")
+                guard let peerCert, let peerDeviceID = Self.extractDeviceIDFromCertificatePEM(peerCert) else {
+                    return
                 }
-                LocalLog.info("[Extension VM] trust confirmed")
+                try? await appIdentityProvider.importPeerCertificate(
+                    pem: peerCert,
+                    for: peerDeviceID
+                )
+                LocalLog.info("[Extension VM] stored peer certificate for device=\(peerDeviceID)")
 
                 switch service.sharedText.isEmpty {
                 case false:
@@ -216,7 +217,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                         sessionID: config.sessionID,
                         correlationID: config.correlationID,
                         text: service.sharedText,
-                        peerDeviceID: pc.id
+                        peerDeviceID: peerDeviceID
                     )
                     LocalLog.info("[Extension VM] text uploaded via TLS port \(pc.tlsPort)")
                 default:
@@ -229,8 +230,9 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                             imageData: imageData,
                             contentType: service.sharedImageContentType,
                             filename: service.sharedImageFilename,
-                            peerDeviceID: pc.id
+                            peerDeviceID: peerDeviceID
                         )
+                        LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
                         LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
                     }
                 }
@@ -283,5 +285,16 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             correlationID: UUID().uuidString.lowercased(),
             metadata: metadata
         )
+    }
+
+    private static func extractDeviceIDFromCertificatePEM(_ pem: String) -> String? {
+        let lines = pem.components(separatedBy: .newlines)
+            .filter { !$0.hasPrefix("-----BEGIN") && !$0.hasPrefix("-----END") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard let der = Data(base64Encoded: lines.joined()),
+              let cert = SecCertificateCreateWithData(nil, der as CFData) else {
+            return nil
+        }
+        return SecCertificateCopySubjectSummary(cert) as String?
     }
 }

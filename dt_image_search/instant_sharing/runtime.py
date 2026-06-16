@@ -85,7 +85,6 @@ class InstantShareRuntime:
             )
         )
         self._pin_display_callback = pin_display_callback
-        device_id = self._device_id_provider()
         desktop_name = self._desktop_name_provider()
         self._ble_service = InstantShareBleService(
             device_name_provider=self._device_name_advertisement,
@@ -93,7 +92,6 @@ class InstantShareRuntime:
         )
         self._mdns_advertiser = InstantShareMDNSAdvertiser(
             ble_service=self._ble_service,
-            device_id=device_id,
             desktop_name=desktop_name,
             port=0,
             tls_port=0,

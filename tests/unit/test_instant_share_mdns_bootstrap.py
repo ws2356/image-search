@@ -221,7 +221,6 @@ class TestInstantShareMDNSAdvertiser:
         )
         advertiser = InstantShareMDNSAdvertiser(
             ble_service=svc,
-            device_id="dev-1",
             desktop_name="My Mac",
             port=9527,
             tls_port=9528,
@@ -242,7 +241,6 @@ class TestInstantShareMDNSAdvertiser:
         )
         advertiser = InstantShareMDNSAdvertiser(
             ble_service=svc,
-            device_id="dev-1",
             desktop_name="Test",
             port=9527,
             tls_port=9528,
@@ -267,7 +265,6 @@ class TestConstants:
         )
         advertiser = InstantShareMDNSAdvertiser(
             ble_service=svc,
-            device_id="dev-1",
             desktop_name="My Mac",
             port=9876,
             tls_port=9877,

@@ -183,14 +183,12 @@ class InstantShareMDNSAdvertiser:
         self,
         *,
         ble_service: InstantShareBleService,
-        device_id: str,
         desktop_name: str = "",
         port: int,
         tls_port: int,
         protocol_version: str = "1",
     ) -> None:
         self._ble_service = ble_service
-        self._device_id = device_id
         self._desktop_name = desktop_name or "AuSearch Desktop"
         self._port = port
         self._tls_port = tls_port
@@ -222,9 +220,8 @@ class InstantShareMDNSAdvertiser:
 
     def start(self, *, timeout_seconds: float = 10.0) -> bool:
         _logger.info(
-            "[InstantShareMDNSAdvertiser] start() called, desktop_name=%s device_id=%s port=%d",
+            "[InstantShareMDNSAdvertiser] start() called, desktop_name=%s port=%d",
             self._desktop_name,
-            self._device_id,
             self._port,
         )
         with self._lock:
@@ -300,7 +297,6 @@ class InstantShareMDNSAdvertiser:
     def _build_txt_properties(self) -> dict[str, str]:
         props: dict[str, str] = {
             "ver": self._protocol_version,
-            "device_id": self._device_id,
             "tls_port": str(self._tls_port),
         }
         try:
