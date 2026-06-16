@@ -1,92 +1,98 @@
 ## Context
 
-The instant-share system already supports trust establishment between mobile (iOS) and PC via a three-step handshake (DH exchange → encrypted PIN → certificate exchange). After first trust, both sides persist each other's X.509 certificates, and the PC advertises an Ed25519 `signature` in its mDNS TXT records. However, currently every share repeats the full handshake—the persisted certificates and mDNS signatures are unused for skipping re-authentication.
+The instant-share system already supports trust establishment between mobile (iOS) and PC via a three-step handshake (DH exchange → encrypted PIN → certificate exchange). After first trust, both sides persist each other's X.509 certificates. However, currently every share repeats the full handshake — the persisted certificates are unused for skipping re-authentication.
 
-This design implements the deferred "Signed mDNS advertisement verification and pinned direct HTTPS for future sharing" requirement from the original `instant-share-secure-discovery-trust` spec.
+The key insight: **mTLS already proves identity.** The TLS handshake verifies both the server's certificate (mobile authenticates the PC) and the client's certificate (PC authenticates the mobile). If both sides have each other's certs from a previous trust exchange, the mTLS handshake alone is sufficient proof — no additional Ed25519 signature verification over mDNS TXT records is needed.
+
+The PC side already loads trusted peer certs into the mTLS CA bundle (`load_all_peer_certificates()` at server start + dynamic injection via `add_peer_certificate()` after trust confirm). When an untrusted client connects, the TLS handshake fails at the SSL layer (before any HTTP exchange) — there is no 403 response, the connection is simply refused.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Mobile detects a previously-trusted PC from mDNS TXT records (device_id + Ed25519 signature)
-- Mobile verifies the PC's identity using the Ed25519 public key acquired during first trust
-- On successful verification, mobile skips the trust handshake and sends payloads directly via mTLS to `/transfer/xxx`
-- PC-side transfer endpoints accept requests from previously-trusted mTLS peers without a prior session
-- If revisit fails at any point, mobile falls back gracefully to the existing full trust handshake flow
+- Mobile identifies a previously-trusted PC from its TLS certificate CN (already extracted via `CertTools.swift`)
+- If mobile has a stored peer cert for that `device_id`, it attempts direct mTLS transfer to `/transfer/xxx`
+- PC-side TLS transfer endpoints accept requests from trusted mTLS peers without a prior trust session (on-the-fly session creation)
+- If the TLS handshake fails (PC doesn't trust the mobile's cert), mobile falls back to the full trust handshake
+- Mobile sends `peerDeviceName` so the PC can display which device is sharing
 
 **Non-Goals:**
-- Changing the mDNS TXT record format (already includes `signature`, `signature_key_id`, `timestamp_ms`)
-- Replacing the existing trust handshake flow (it remains as the fallback)
+- Changing the mDNS TXT record format
+- Replacing the existing first-share trust handshake flow (it remains as the fallback)
 - PC-to-mobile revisit (QR flow) — this change is mobile-to-PC only
-- BLE-based revisit (the BLE `TrustMode.TRUSTED_DIRECT` path is separate)
+- BLE-based revisit (BLE provides connectivity discovery only, same as mDNS)
 - Certificate revocation or expiry notification mechanisms
+- Supporting multiple concurrent sessions (later sessions override existing ones for now)
 
 ## Decisions
 
-### Decision 1: Ed25519 public key exchange during first trust
+### Decision 1: Identity from TLS certificate CN, not mDNS TXT
 
-During `/trust/confirm`, the PC's encrypted response already includes `device_certificate_pem` (the PC's X.509 cert). We add a new field `ed25519_public_key_pem` containing the PC's Ed25519 public key in SubjectPublicKeyInfo PEM format (exported via `PersistentEd25519SessionSigner.public_key_pem()`).
+mDNS provides connectivity only (hostname/IP + `tls_port`). Device identity is derived from the PC's TLS certificate CN during the mTLS handshake. The mobile already extracts the CN via `CertTools.swift`. This eliminates the need for `device_id` in mDNS TXT records and for Ed25519 signature verification.
 
-The mobile stores both the X.509 cert and the Ed25519 public key, keyed by `device_id`. This gives the mobile everything needed for future mDNS signature verification: the device identity (from device_id), the Ed25519 public key (to verify signatures), and the X.509 cert (for mTLS).
+The PC's certificate CN *is* the `device_id` — set during cert generation in `device_identity.py` line 334:
+```python
+subject = issuer = x509.Name([
+    x509.NameAttribute(NameOID.COMMON_NAME, device_id),
+])
+```
 
-**Alternative considered**: Embed the Ed25519 key in an X.509 extension. Rejected because it complicates cert parsing on iOS and adds non-standard cert fields. Storing it as a separate field is simpler and more portable.
+Both sides' certs use the same convention, so the TLS handshake carries all identity information needed.
 
-### Decision 2: mDNS signature verification on mobile
+### Decision 2: Revisit = direct mTLS transfer attempt
 
-The mobile extracts `device_id`, `signature`, `signature_key_id`, and `timestamp_ms` from the mDNS TXT record. It looks up the stored Ed25519 public key by `device_id` (which is also the `signature_key_id` value).
-
-The signed message format is already defined by `PersistentEd25519SessionSigner.device_signature_advertisement()`: `f"{device_id}:{timestamp_ms}"`. The mobile reconstructs this message and verifies the base64url-decoded Ed25519 signature.
-
-Timestamp freshness check: the mobile compares `timestamp_ms` against its own clock, rejecting signatures older than 300 seconds (5 minutes). This window is generous enough to account for clock skew while preventing replay of stale advertisements (mDNS TXT is refreshed every 5 seconds with a 120s TTL).
-
-### Decision 3: Revisit transfer flow on mobile (no session pre-establishment)
-
-When signature verification succeeds, the mobile:
-1. Connects to `tls_port` (from mDNS TXT) via HTTPS with its own X.509 certificate for mTLS
+When the mobile discovers a PC and has a stored peer cert for the CN extracted from the TLS handshake, it:
+1. Connects to `tls_port` (from mDNS) via HTTPS with its own X.509 client certificate
 2. Generates a new `X-Session-Id` (UUID v4)
-3. POSTs payload to `/transfer/text` or `/transfer/image` with standard headers including `X-Device-Id` set to the mobile's device_id
+3. Sets `X-Peer-Device-Name` header to a human-readable device name
+4. POSTs payload to `/transfer/text` or `/transfer/image` directly
 
-No `/trust/handshake`, `/trust/apply`, or `/trust/confirm` calls are made. The mTLS handshake itself proves the mobile's identity (its cert was already stored on the PC during first trust).
+No `/trust/handshake`, `/trust/apply`, or `/trust/confirm` calls are made. The mTLS handshake itself authenticates both sides.
 
-The mobile also handles `/transfer/download` for potential future PC-to-mobile revisit, though this change focuses on mobile-to-PC.
+### Decision 3: Fallback triggered by TLS handshake failure
+
+When the mobile's client cert is not in the PC's CA bundle, the TLS handshake fails at the SSL layer — the connection is refused, and the PC never receives an HTTP request. The mobile detects this as a connection/TLS error and falls back to the full trust handshake.
+
+There are two failure modes:
+1. **TLS handshake failure** (cert not trusted) → connection refused → mobile falls back to trust handshake
+2. **Application-layer conflict** (e.g., another session active) → PC returns 409/RECEIVER_BUSY → mobile retries or falls back
 
 ### Decision 4: PC on-the-fly session creation for revisit
 
-Currently, the `/transfer/xxx` TLS endpoints require a session to exist and be in a trusted state. For revisit, there is no session yet.
-
-The PC transfer handlers are updated to detect the "no session" case:
-1. Request arrives via mTLS (TLS client cert already verified by the SSL layer)
-2. Extract client certificate CN (which is the mobile's `device_id`)
-3. Look up the peer cert in the keychain to confirm it's a known trusted device
-4. If trusted, create an on-the-fly `InstantShareSession` with `TrustMode.TRUSTED_DIRECT`, state `TRANSFERRING`, and the payload metadata from request headers
+When a transfer request arrives at `/transfer/xxx` via mTLS and no trust session exists:
+1. Extract client certificate CN (mobile's `device_id`) from the TLS connection
+2. Look up the peer cert in the keychain to confirm it's a known trusted device
+3. If trusted, create an on-the-fly `InstantShareSession` with `TrustMode.TRUSTED_DIRECT`, state `TRANSFERRING`
+4. Derive `payload_class` and `target_intent` from the endpoint:
+   - `/transfer/text` → TEXT / CLIPBOARD_ONLY
+   - `/transfer/image` → IMAGE / CLIPBOARD_OR_FILE
 5. Process the transfer normally
 
-**Alternative considered**: Require a lightweight "revisit bootstrap" endpoint before transfer. Rejected because it adds an extra round-trip and the mTLS handshake already establishes identity. The existing trust material (keychain cert) is sufficient authorization.
+The TLS layer already validated the client cert against the CA bundle (containing all trusted peer certs) and verified the public key. The app layer only needs to extract the CN for session identification.
 
-### Decision 5: Fallback strategy
+### Decision 5: Minimal TLS handshake changes
 
-The mobile implements a sequential fallback:
-1. Try mDNS signature verification → if fail, go to step 4
-2. Try mTLS direct transfer to `/transfer/xxx` → if fail (connection error, TLS error, HTTP 4xx/5xx), go to step 4
-3. Transfer succeeds → done
-4. Fall back to full trust handshake: `/trust/handshake` → `/trust/apply` → `/trust/confirm` → `/transfer/xxx`
+The existing TLS configuration (`ssl_cert_reqs=ssl.CERT_REQUIRED`, CA bundle from keychain) remains intact. The only addition is extracting the client certificate CN from the request scope in the transfer handlers. The cert validation (signature, public key, expiry) is handled entirely by the SSL layer.
 
-The fallback path re-runs the full trust establishment, which also re-exchanges certificates and Ed25519 keys (handles key rotation). The mobile should clear and re-store the peer's certs/keys on successful fallback trust to handle key changes.
+### Decision 6: peerDeviceName for UI display
 
-If the mTLS connection fails specifically with a certificate verification error (e.g., the PC's cert expired and was regenerated), the fallback trust handshake will exchange the new cert. If the fallback trust handshake itself fails, the user sees an error.
+The mobile sends a human-readable device name in two places:
+- **First visit**: `peer_device_name` field in the encrypted `/trust/confirm` request body
+- **Revisit**: `X-Peer-Device-Name` HTTP header in `/transfer/xxx` requests
 
-### Decision 6: No changes to mDNS TXT format
+The PC stores this name in the session and includes it in the lifecycle event published to the event bus. The mini-window already supports `MiniWindowState.device_name` — this just needs to be populated from the lifecycle event.
 
-The existing mDNS TXT records already include all required fields: `device_id`, `signature`, `signature_key_id`, `timestamp_ms`. No format changes are needed. The `tls_port` field is already advertised for the mobile to know where to connect for mTLS transfer.
+### Decision 7: No mDNS TXT format changes
+
+The mDNS TXT records continue to include all existing fields (`signature`, `signature_key_id`, `timestamp_ms`, `device_id`, `device_name`, `tls_port`). The revisit flow simply does not use the identity-related fields (`signature`, `signature_key_id`, `timestamp_ms`, `device_id`) — it relies on the TLS cert CN instead. However, `device_name` and `tls_port` remain essential for connectivity and initial display.
 
 ## Risks / Trade-offs
 
-- **[Clock skew]** Mobile and PC clocks may differ, causing legitimate signatures to appear expired or future-dated. → Mitigation: 300-second timestamp tolerance window. The mobile uses its own clock as reference, not trusting the PC's timestamp.
-- **[Ed25519 key rotation]** If the PC regenerates its Ed25519 signing key (e.g., config directory lost), the mobile's stored key becomes invalid. → Mitigation: Signature verification fails → falls back to full trust handshake → re-exchanges both X.509 cert and Ed25519 key. No user-visible breakage, just one extra round-trip.
-- **[mTLS cert expiry]** X.509 certs have a 364-day validity. If a cert expires between shares, mTLS will fail. → Mitigation: mTLS failure triggers fallback to full trust handshake, which re-exchanges fresh certs.
-- **[Session state visibility]** On-the-fly session creation means the mini-window may not show the full lifecycle (BOOTSTRAPPED→QUEUED→NEGOTIATING states are skipped). → Mitigation: The orchestrator should handle `TRANSFERRING` as a valid initial state for revisit sessions. The mini-window shows transfer progress as usual.
-- **[Concurrent revisit + first-share]** If a first-share trust handshake is in progress for device A when device B attempts a revisit transfer, the single-session model may reject B. → Mitigation: This is consistent with existing behavior (single active session). The revisit transfer will receive 409/RECEIVER_BUSY and the mobile will retry or fall back.
+- **[mTLS cert expiry]** X.509 certs have a 364-day validity. If a cert expires between shares, the TLS handshake will fail. → Mitigation: TLS failure triggers fallback to full trust handshake, which re-exchanges fresh certs.
+- **[Session state visibility]** On-the-fly session creation means the mini-window may not show the full lifecycle (BOOTSTRAPPED→QUEUED→NEGOTIATING states are skipped). → Mitigation: The orchestrator publishes lifecycle events starting from TRANSFERRING state. The mini-window handles this as a valid entry point.
+- **[Concurrent sessions]** If a transfer is in progress when another revisit transfer arrives, the single-session model rejects it. → Mitigation: Later sessions override existing ones for now. Future iterations will support multiple sessions.
+- **[PC key rotation]** If the PC regenerates its identity (config directory lost), the mobile's stored cert becomes invalid. → Mitigation: TLS handshake fails → falls back to full trust handshake → re-exchanges certificates.
 
 ## Open Questions
 
-- Should the mobile cache "revisit capable" status per device to avoid re-verifying the signature on every share within a session? (Leaning: No — signature verification is cheap and mDNS TXT refreshes every 5s, so per-share verification is fine.)
-- Should the PC's Ed25519 key be included in the SAN or an extension of the X.509 cert to reduce the number of stored items? (Leaning: No — Decision 1 already resolves this with a simple extra field.)
+- Should the mobile cache "stored cert exists" per PC to avoid the TLS handshake when no cert is stored? (Leaning: Yes — the mobile already checks its local cert store for the device_id, so no TLS attempt is made when no cert exists.)
+- Should the PC persist `peer_device_name` alongside the stored cert for future sessions? (Leaning: Yes — store as keychain metadata or in a lightweight mapping, so the PC can display the device name even without the mobile explicitly sending it on revisit.)

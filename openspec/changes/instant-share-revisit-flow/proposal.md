@@ -1,26 +1,29 @@
 ## Why
 
-Currently every mobile-to-PC instant share requires the full trust handshake (DH exchange → PIN verification → cert exchange), even when the mobile device has already established trust with the PC. The PC already advertises an Ed25519 `signature` in its mDNS TXT records and stores peer X.509 certificates after first trust, but these are unused for skipping re-authentication. This adds unnecessary friction for repeat shares.
+Currently every mobile-to-PC instant share requires the full trust handshake (DH exchange → PIN verification → cert exchange), even when the mobile device has already established trust with the PC. Both sides already persist each other's X.509 certificates after first trust, but these are unused for skipping re-authentication. This adds unnecessary friction for repeat shares.
 
 ## What Changes
 
-- **Mobile**: After mDNS discovery, extract `device_id` and `signature` from TXT records. Look up the previously-trusted peer certificate by `device_id`. Verify the Ed25519 `signature` using the peer's known public key (derived from the stored X.509 cert). If verification succeeds, skip the trust handshake/PIN/cert-exchange flow and proceed directly to mTLS transfer.
-- **Mobile**: If mTLS connection to `/transfer/xxx` fails (e.g., cert expired, not recognized), fall back to the existing full trust handshake flow.
-- **PC**: Update `/transfer/text`, `/transfer/image`, and `/transfer/download` endpoints to accept requests from previously-trusted peers that connect via mTLS without a prior session (on-the-fly session creation for revisit).
-- **PC**: mDNS TXT `signature` field must be verifiable against the same Ed25519 key material that was shared during the initial trust handshake. The public key must be derivable from or associated with the stored peer X.509 certificate.
+- **Mobile**: After mDNS discovery (provides connectivity only — hostname/IP + `tls_port`), extract the PC's `device_id` from its TLS certificate CN during the mTLS handshake (already implemented in `CertTools.swift`). If a stored peer certificate exists for this `device_id`, attempt direct mTLS transfer to `/transfer/xxx`. The mTLS handshake itself proves identity — no separate signature verification needed.
+- **Mobile**: Include `peerDeviceName` in the transfer request header `X-Peer-Device-Name` so the PC can display which device is sharing (for revisit). Include `peer_device_name` in the `/trust/confirm` encrypted body (for first visit).
+- **Mobile**: If the mTLS connection fails (TLS handshake failure — the SSL layer rejects untrusted client certs before any HTTP response), fall back to the existing full trust handshake flow. Revisit failure is NOT a fatal error.
+- **PC**: Update `/transfer/text`, `/transfer/image`, and `/transfer/download` TLS endpoints to accept requests from previously-trusted peers that connect via mTLS without a prior trust session (on-the-fly session creation for revisit). The session check is made optional — when no trust session exists, extract the client certificate CN and look up the stored peer cert to authorize the transfer.
+- **PC**: Extract the client certificate CN from the mTLS connection in the transfer handlers (minimal TLS change — existing cert validation and public key comparison remain intact).
 
 ## Capabilities
 
 ### New Capabilities
-- `mdns-signature-verification`: Mobile client verifies Ed25519 signature from mDNS TXT records against a previously-trusted peer's public key, confirming identity before skipping trust handshake.
-- `revisit-transfer-skip-trust`: When mDNS signature verification succeeds, mobile skips the full DH/PIN/cert-exchange flow and sends payloads directly via mTLS to `/transfer/xxx` endpoints.
-- `pc-revisit-session`: PC creates an on-the-fly session for previously-trusted peers connecting via mTLS without a prior trust handshake, enabling revisit transfers without a pre-established session.
+- `revisit-transfer-skip-trust`: Mobile attempts direct mTLS transfer when a stored peer certificate exists. The mTLS handshake proves identity — no signature verification, no trust endpoints. If the TLS handshake fails (PC doesn't recognize the mobile's cert), fall back to the full trust handshake.
+- `pc-revisit-session`: PC creates an on-the-fly `InstantShareSession` for previously-trusted peers connecting via mTLS without a prior trust session. The session starts at `TRANSFERRING` state with `TrustMode.TRUSTED_DIRECT`.
 
 ### Modified Capabilities
-- `instant-share-secure-discovery-trust`: The deferred "Signed mDNS advertisement verification and pinned direct HTTPS for future sharing" requirement is now being implemented. The `signature` field in mDNS TXT records becomes the primary mechanism for revisit detection.
+- `instant-share-secure-discovery-trust`: The discovery layer (mDNS) provides connectivity only. Device identity is derived from the TLS certificate CN during the mTLS handshake — no Ed25519 signature verification is required. The `signature` field in mDNS TXT records is not used for revisit recognition.
+
+### Removed Capabilities
+- `mdns-signature-verification`: No longer needed. The mTLS handshake inherently verifies both sides' identities via their X.509 certificates. An additional Ed25519 signature check over mDNS TXT records is redundant.
 
 ## Impact
 
-- **PC**: `dt_image_search/instant_sharing/https_tls_server.py` — transfer endpoints gain revisit session creation. `dt_image_search/identity/device_identity.py` — may need Ed25519 public key association with stored peer certs. `dt_image_search/instant_sharing/sender_validation.py` — Ed25519 key material needs to be extractable/persistable for mobile verification.
-- **Mobile (iOS)**: New mDNS TXT signature verification logic in the Share Extension (or AuBackup app). Peer certificate/Ed25519 key storage updates. Fallback path to existing trust handshake on mTLS failure.
-- **No breaking changes**: The existing first-share trust flow remains intact as the fallback.
+- **PC**: `dt_image_search/instant_sharing/https_tls_server.py` — transfer handlers extract client cert CN and create on-the-fly revisit sessions. `dt_image_search/instant_sharing/https_bootstrap.py` — transfer handler functions (`_do_transfer_text`, `_do_transfer_image`, `_do_transfer_download`) gain optional session checking (no trust session → attempt revisit session creation). `dt_image_search/instant_sharing/session.py` — new `bootstrap_revisit()` method for on-the-fly session creation at TRANSFERRING state. `dt_image_search/instant_sharing/orchestrator.py` — new lifecycle path for revisit sessions.
+- **Mobile (iOS)**: Simplified revisit logic — stored cert check → mTLS transfer → success or fallback to trust handshake. `CertTools.swift` already extracts CN from TLS certs. Add `peerDeviceName` handling.
+- **No breaking changes**: The existing first-share trust flow remains intact as the fallback. mDNS TXT record format is unchanged (though `signature`/`signature_key_id`/`timestamp_ms` fields may become unused by revisit flow).
