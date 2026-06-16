@@ -9,6 +9,7 @@ import SwiftUI
 public struct QRClaimPayload: Equatable, Sendable, Identifiable {
     var ips: [String]
     var port: Int
+    var tlsPort: Int
     var sessionId: String
     var optCode: String
     var deviceId: String
@@ -52,6 +53,13 @@ public struct QRClaimPayload: Equatable, Sendable, Identifiable {
 
         self.ips = ipsStr.split(separator: ",").map(String.init)
         self.port = port
+
+        let tlsPortStr = valueFor("tls_p")
+        guard let tlsPortVal = tlsPortStr, let tlsPort = Int(tlsPortVal), (1...65535).contains(tlsPort) else {
+            return nil
+        }
+        self.tlsPort = tlsPort
+
         self.sessionId = unwrappedSessionId
         self.optCode = optCode
         self.deviceId = valueFor("did") ?? ""

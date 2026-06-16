@@ -31,6 +31,7 @@ class QRClaimViewModel: ObservableObject {
             let result = try await client.claim(
                 hosts: qrClaimPayload.ips,
                 port: qrClaimPayload.port,
+                tlsPort: qrClaimPayload.tlsPort,
                 sessionId: qrClaimPayload.sessionId,
                 optCode: qrClaimPayload.optCode,
                 pcDeviceId: qrClaimPayload.deviceId

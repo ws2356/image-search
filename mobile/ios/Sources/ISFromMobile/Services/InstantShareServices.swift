@@ -221,7 +221,7 @@ public struct InstantShareConnectionConfig: Codable, Sendable, Equatable {
         }
     }
 
-    func pcEndpointURLs(path: String, pcHost: String, pcPort: Int = 9527) throws -> [URL] {
+    func pcEndpointURLs(path: String, pcHost: String, pcPort: Int) throws -> [URL] {
         let normalizedPath = path.hasPrefix("/") ? path : "/\(path)"
         var components = URLComponents()
         components.scheme = "http"

@@ -31,7 +31,7 @@ from dt_image_search.app_setting import initialize_app_settings
 initialize_app_settings()
 
 from dt_image_search.instant_sharing import InstantShareRuntime
-from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE, INSTANT_SHARE_MDNS_PORT
+from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE
 from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
 
@@ -134,19 +134,20 @@ def main() -> int:
         pin_display_callback=mini_window_factory.show_pin,
     )
 
-    qr_window_factory = QRTriggerMiniWindowFactory(
-        runtime.qr_trigger_handler,
-        device_id=runtime.device_id,
-    )
-    qr_window_factory.start()
-    _logger.info("QRTriggerMiniWindowFactory started")
-
     started = runtime.start()
     if not started:
         print("Failed to start runtime.", file=sys.stderr)
-        qr_window_factory.stop()
         mini_window_factory.stop()
         return 1
+
+    qr_window_factory = QRTriggerMiniWindowFactory(
+        runtime.qr_trigger_handler,
+        device_id=runtime.device_id,
+        pc_port=runtime.http_server.port,
+        pc_tls_port=runtime.tls_server.port,
+    )
+    qr_window_factory.start()
+    _logger.info("QRTriggerMiniWindowFactory started")
 
     is_advertising = runtime.mdns_advertiser.is_advertising
     print(f"\nRuntime started.")

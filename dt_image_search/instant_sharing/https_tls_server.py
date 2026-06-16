@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
 import ssl
 import tempfile
 import threading
@@ -29,8 +30,6 @@ from dt_image_search.instant_sharing.https_bootstrap import (
 )
 
 _logger = logging.getLogger(__name__)
-
-INSTANT_SHARE_TLS_SERVER_PORT = 9528
 
 
 def _build_tls_app(deps: _Deps) -> FastAPI:
@@ -130,7 +129,7 @@ class InstantShareTLSServer:
         self,
         *,
         host: str = "0.0.0.0",
-        port: int = INSTANT_SHARE_TLS_SERVER_PORT,
+        port: int = 0,
         on_error: Callable[[str], None] | None = None,
         trust_session_registry: Any = None,
         session_registry: Any = None,
@@ -152,6 +151,7 @@ class InstantShareTLSServer:
         )
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
+        self._sock: socket.socket | None = None
         self._lock = threading.RLock()
         self._cert_file: tempfile.NamedTemporaryFile | None = None
         self._key_file: tempfile.NamedTemporaryFile | None = None
@@ -175,6 +175,11 @@ class InstantShareTLSServer:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return True
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((self._host, self._port or 0))
+            self._port = sock.getsockname()[1]
+            self._sock = sock
             cert_pem = get_device_certificate_pem()
             key_pem = get_device_private_key_pem()
             self._cert_file = tempfile.NamedTemporaryFile(
@@ -225,6 +230,7 @@ class InstantShareTLSServer:
             self._server = uvicorn.Server(config)
             self._thread = threading.Thread(
                 target=self._server.run,
+                kwargs={"sockets": [sock]},
                 name="instant_share_tls",
                 daemon=True,
             )
@@ -273,13 +279,20 @@ class InstantShareTLSServer:
         with self._lock:
             server = self._server
             thread = self._thread
+            sock = self._sock
             self._server = None
             self._thread = None
+            self._sock = None
             self._ssl_ctx = None
         if server is not None:
             server.should_exit = True
         if thread is not None:
             thread.join(timeout=5.0)
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
         cert_path = None
         key_path = None
         ca_bundle_path = None

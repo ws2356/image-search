@@ -237,6 +237,7 @@ public final class QRTriggerDownloadClient: Sendable {
     public func claim(
         hosts: [String],
         port: Int,
+        tlsPort: Int,
         sessionId: String,
         optCode: String,
         pcDeviceId: String = ""
@@ -248,6 +249,7 @@ public final class QRTriggerDownloadClient: Sendable {
                 return try await attemptClaim(
                     host: host,
                     port: port,
+                    tlsPort: tlsPort,
                     sessionId: sessionId,
                     optCode: optCode,
                     pcDeviceId: pcDeviceId
@@ -271,6 +273,7 @@ public final class QRTriggerDownloadClient: Sendable {
     private func attemptClaim(
         host: String,
         port: Int,
+        tlsPort: Int,
         sessionId: String,
         optCode: String,
         pcDeviceId: String
@@ -292,7 +295,7 @@ public final class QRTriggerDownloadClient: Sendable {
 
         let peerId = pcDeviceId.isEmpty ? sessionId : pcDeviceId
         let result = try await download(
-            host: host, port: 9528,
+            host: host, port: tlsPort,
             sessionId: sessionId, correlationID: correlationID,
             peerDeviceId: peerId
         )

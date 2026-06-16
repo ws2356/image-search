@@ -30,12 +30,14 @@ class QRTriggerMiniWindowFactory:
         handler: QRTriggerHandler,
         *,
         pc_name: str = "",
-        pc_port: int = 9527,
+        pc_port: int,
+        pc_tls_port: int,
         device_id: str = "",
     ) -> None:
         self._handler = handler
         self._pc_name = pc_name or socket.gethostname()
         self._pc_port = pc_port
+        self._pc_tls_port = pc_tls_port
         self._device_id = device_id
         self._windows: dict[str, QRTriggerMiniWindow] = {}
         self._stash_created_sub: Any = None
@@ -91,6 +93,7 @@ class QRTriggerMiniWindowFactory:
             session_id=session_id,
             pc_name=self._pc_name,
             pc_port=self._pc_port,
+            pc_tls_port=self._pc_tls_port,
             device_id=self._device_id,
             on_cancel=self._on_cancel,
         )

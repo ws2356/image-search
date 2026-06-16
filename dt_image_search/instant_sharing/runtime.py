@@ -17,7 +17,7 @@ from dt_image_search.instant_sharing.mdns import (
     InstantShareMDNSAdvertiser,
 )
 from dt_image_search.instant_sharing.https_bootstrap import InstantShareHTTPServer
-from dt_image_search.instant_sharing.https_tls_server import INSTANT_SHARE_TLS_SERVER_PORT, InstantShareTLSServer
+from dt_image_search.instant_sharing.https_tls_server import InstantShareTLSServer
 from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
 from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
@@ -53,7 +53,6 @@ class InstantShareRuntime:
         trust_session_registry: TrustSessionRegistry | None = None,
         pin_display_callback: Callable[[str], None] | None = None,
         qr_window_factory: QRTriggerMiniWindowFactory | None = None,
-        tls_port: int = INSTANT_SHARE_TLS_SERVER_PORT,
     ) -> None:
         initialize_device_identity()
 
@@ -87,7 +86,6 @@ class InstantShareRuntime:
             )
         )
         self._pin_display_callback = pin_display_callback
-        self._tls_port = tls_port
         device_id = self._device_id_provider()
         desktop_name = self._desktop_name_provider()
         self._ble_service = InstantShareBleService(
@@ -99,6 +97,8 @@ class InstantShareRuntime:
             ble_service=self._ble_service,
             device_id=device_id,
             desktop_name=desktop_name,
+            port=0,
+            tls_port=0,
         )
         self._qr_trigger_handler = QRTriggerHandler(
             trust_session_registry=self._trust_session_registry,
@@ -108,7 +108,7 @@ class InstantShareRuntime:
             request_handler=self._qr_trigger_handler.handle_trigger,
         )
         self._tls_server = InstantShareTLSServer(
-            port=self._tls_port,
+            port=0,
             trust_session_registry=self._trust_session_registry,
             session_registry=self._session_registry,
             orchestrator=self._orchestrator,
@@ -117,6 +117,7 @@ class InstantShareRuntime:
             qr_trigger_handler=self._qr_trigger_handler,
         )
         self._http_server = InstantShareHTTPServer(
+            port=0,
             trust_session_registry=self._trust_session_registry,
             session_registry=self._session_registry,
             orchestrator=self._orchestrator,
@@ -204,6 +205,20 @@ class InstantShareRuntime:
         )
         if not is_enabled_val:
             _logger.warning("[InstantShareRuntime] feature flag disabled, refusing to start")
+        http_ok = self._http_server.start()
+        _logger.info(
+            "[InstantShareRuntime] instant-share HTTP server started=%s (port=%d)",
+            http_ok,
+            self._http_server.port,
+        )
+        tls_ok = self._tls_server.start()
+        _logger.info(
+            "[InstantShareRuntime] instant-share TLS server started=%s (port=%d)",
+            tls_ok,
+            self._tls_server.port,
+        )
+        self._mdns_advertiser._port = self._http_server.port
+        self._mdns_advertiser._tls_port = self._tls_server.port
         result = self._ble_daemon.start()
         if not result:
             _logger.error("[InstantShareRuntime] mDNS daemon failed to start")
@@ -212,17 +227,6 @@ class InstantShareRuntime:
             "[InstantShareRuntime] mDNS daemon started, is_advertising=%s, last_error=%s",
             self._mdns_advertiser.is_advertising,
             self._mdns_advertiser.last_error,
-        )
-        http_ok = self._http_server.start()
-        _logger.info(
-            "[InstantShareRuntime] instant-share HTTP server started=%s",
-            http_ok,
-        )
-        tls_ok = self._tls_server.start()
-        _logger.info(
-            "[InstantShareRuntime] instant-share TLS server started=%s (port=%d)",
-            tls_ok,
-            self._tls_server.port,
         )
         unix_ok = self._unix_socket_server.start()
         _logger.info(

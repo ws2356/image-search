@@ -32,7 +32,7 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         let result = try await client.claim(
             hosts: ["192.168.1.10"],
             port: 9527,
-            stashId: "test-stash-id",
+            sessionId: "test-stash-id",
             optCode: "123456"
         )
 
@@ -71,7 +71,7 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         let result = try await client.claim(
             hosts: ["192.168.1.10"],
             port: 9527,
-            stashId: "test-stash-id",
+            sessionId: "test-stash-id",
             optCode: "123456"
         )
 
@@ -112,7 +112,7 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         let result = try await client.claim(
             hosts: ["192.168.1.10"],
             port: 9527,
-            stashId: "test-stash-id",
+            sessionId: "test-stash-id",
             optCode: "123456"
         )
 
@@ -150,7 +150,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
             _ = try await client.claim(
                 hosts: ["192.168.1.10"],
                 port: 9527,
-                stashId: "test-stash-id",
+                tlsPort: 9528,
+                sessionId: "test-stash-id",
                 optCode: "wrong"
             )
             XCTFail("Expected invalidOptCode error")
@@ -185,7 +186,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
             _ = try await client.claim(
                 hosts: ["192.168.1.10"],
                 port: 9527,
-                stashId: "test-stash-id",
+                tlsPort: 9528,
+                sessionId: "test-stash-id",
                 optCode: "123456"
             )
             XCTFail("Expected stashExpired error")
@@ -220,7 +222,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
             _ = try await client.claim(
                 hosts: ["192.168.1.10"],
                 port: 9527,
-                stashId: "nonexistent",
+                tlsPort: 9528,
+                sessionId: "nonexistent",
                 optCode: "123456"
             )
             XCTFail("Expected stashNotFound error")
@@ -255,7 +258,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
             _ = try await client.claim(
                 hosts: ["192.168.1.10"],
                 port: 9527,
-                stashId: "test-stash-id",
+                tlsPort: 9528,
+                sessionId: "test-stash-id",
                 optCode: "123456"
             )
             XCTFail("Expected serverError")
@@ -284,7 +288,8 @@ final class QRTriggerDownloadClientTests: XCTestCase {
             _ = try await client.claim(
                 hosts: ["192.168.1.10", "192.168.1.11"],
                 port: 9527,
-                stashId: "test-stash-id",
+                tlsPort: 9528,
+                sessionId: "test-stash-id",
                 optCode: "123456"
             )
             XCTFail("Expected allHostsFailed error")
@@ -323,7 +328,7 @@ final class QRTriggerDownloadClientTests: XCTestCase {
         let result = try await client.claim(
             hosts: ["192.168.1.10", "192.168.1.11"],
             port: 9527,
-            stashId: "test-stash-id",
+            sessionId: "test-stash-id",
             optCode: "123456"
         )
 

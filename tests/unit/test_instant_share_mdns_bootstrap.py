@@ -7,7 +7,6 @@ import pytest
 
 from dt_image_search.instant_sharing.mdns import (
     INSTANT_SHARE_MDNS_SERVICE_TYPE,
-    INSTANT_SHARE_MDNS_PORT,
     BootstrapRequest,
     ConnectionConfig,
     DeviceNameAdvertisement,
@@ -262,6 +261,8 @@ class TestInstantShareMDNSAdvertiser:
             ble_service=svc,
             device_id="dev-1",
             desktop_name="My Mac",
+            port=9527,
+            tls_port=9528,
         )
         assert advertiser.is_advertising is False
         assert advertiser.is_running is False
@@ -282,6 +283,8 @@ class TestInstantShareMDNSAdvertiser:
             ble_service=svc,
             device_id="dev-1",
             desktop_name="Test",
+            port=9527,
+            tls_port=9528,
         )
         started = advertiser.start()
         assert started
@@ -295,8 +298,26 @@ class TestConstants:
     def test_service_type(self) -> None:
         assert INSTANT_SHARE_MDNS_SERVICE_TYPE == "_instantshare._tcp.local."
 
-    def test_mdns_port(self) -> None:
-        assert INSTANT_SHARE_MDNS_PORT == 9527
+    def test_mdns_port_required(self) -> None:
+        from dt_image_search.instant_sharing.mdns import InstantShareMDNSAdvertiser
+        svc = InstantShareBleService(
+            device_name_provider=lambda: DeviceNameAdvertisement("My Mac", "dev-1"),
+            signature_provider=lambda: DeviceSignatureAdvertisement("sig", "k1", 1000),
+            bootstrap_handler=lambda _: None,
+        )
+        advertiser = InstantShareMDNSAdvertiser(
+            ble_service=svc,
+            device_id="dev-1",
+            desktop_name="My Mac",
+            port=9876,
+            tls_port=9877,
+        )
+        import inspect
+        sig = inspect.signature(InstantShareMDNSAdvertiser.__init__)
+        assert "port" in sig.parameters
+        assert sig.parameters["port"].default is inspect.Parameter.empty
+        assert "tls_port" in sig.parameters
+        assert sig.parameters["tls_port"].default is inspect.Parameter.empty
 
 
 

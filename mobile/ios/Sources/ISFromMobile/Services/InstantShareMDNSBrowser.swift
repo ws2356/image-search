@@ -19,7 +19,7 @@ public struct InstantShareDiscoveredPC: Identifiable, Equatable, @unchecked Send
         name: String,
         host: String,
         port: Int,
-        tlsPort: Int = 9528,
+        tlsPort: Int,
         signature: String? = nil,
         signatureKeyID: String? = nil,
         timestampMS: Int64? = nil,
@@ -241,8 +241,8 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             tlsPort = value
             LocalLog.debug("[MDNS Browser] TLS port from TXT: \(tlsPort)")
         } else {
-            tlsPort = 9528
-            LocalLog.debug("[MDNS Browser] TLS port defaulting to \(tlsPort)")
+            LocalLog.error("[MDNS Browser] missing or invalid tls_port in TXT record, skipping PC")
+            return
         }
 
         let pc = InstantShareDiscoveredPC(

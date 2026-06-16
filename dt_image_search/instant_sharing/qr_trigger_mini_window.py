@@ -37,12 +37,13 @@ def build_qr_url(
     *,
     ips: list[str],
     port: int,
+    tls_port: int,
     session_id: str,
     opt_code: str,
     device_id: str = "",
 ) -> str:
     ips_str = ",".join(ips)
-    url = f"https://dl.boldman.net/share?ips={ips_str}&p={port}&sid={session_id}&opt={opt_code}"
+    url = f"https://dl.boldman.net/share?ips={ips_str}&p={port}&tls_p={tls_port}&sid={session_id}&opt={opt_code}"
     if device_id:
         url += f"&did={device_id}"
     return url
@@ -81,7 +82,8 @@ class QRTriggerMiniWindow(QDialog):
         *,
         session_id: str = "",
         pc_name: str = "",
-        pc_port: int = 9527,
+        pc_port: int,
+        pc_tls_port: int,
         device_id: str = "",
         lan_ips: list[str] | None = None,
         on_cancel: Callable[[str], None] | None = None,
@@ -92,6 +94,7 @@ class QRTriggerMiniWindow(QDialog):
         self._session_id = session_id
         self._pc_name = pc_name or socket.gethostname()
         self._pc_port = pc_port
+        self._pc_tls_port = pc_tls_port
         self._device_id = device_id
         self._lan_ips = lan_ips or get_lan_ip_addresses()
         self._on_cancel = on_cancel
@@ -208,6 +211,7 @@ class QRTriggerMiniWindow(QDialog):
         payload = build_qr_url(
             ips=self._lan_ips,
             port=self._pc_port,
+            tls_port=self._pc_tls_port,
             session_id=self._session_id,
             opt_code=self._stash.opt_code,
             device_id=self._device_id,

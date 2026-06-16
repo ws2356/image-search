@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+import socket
 import threading
 import uuid
 from dataclasses import dataclass
@@ -505,14 +506,12 @@ def _build_app(deps: _Deps) -> FastAPI:
     return app
 
 
-# TODO: Avoid hardcoding the port number, instead auto-select an available port
-# and provide a way for the caller to discover it.
 class InstantShareHTTPServer:
     def __init__(
         self,
         *,
         host: str = "0.0.0.0",
-        port: int = 9527,
+        port: int = 0,
         on_error: Callable[[str], None] | None = None,
         trust_session_registry: TrustSessionRegistry | None = None,
         session_registry: InstantShareSessionRegistry | None = None,
@@ -536,6 +535,7 @@ class InstantShareHTTPServer:
         )
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
+        self._sock: socket.socket | None = None
         self._lock = threading.RLock()
 
     @property
@@ -555,6 +555,11 @@ class InstantShareHTTPServer:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return True
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((self._host, self._port or 0))
+            self._port = sock.getsockname()[1]
+            self._sock = sock
             app = _build_app(self._deps)
             config = uvicorn.Config(
                 app,
@@ -568,6 +573,7 @@ class InstantShareHTTPServer:
             self._server = uvicorn.Server(config)
             self._thread = threading.Thread(
                 target=self._server.run,
+                kwargs={"sockets": [sock]},
                 name="instant_share_http",
                 daemon=True,
             )
@@ -580,10 +586,17 @@ class InstantShareHTTPServer:
         with self._lock:
             server = self._server
             thread = self._thread
+            sock = self._sock
             self._server = None
             self._thread = None
+            self._sock = None
         if server is not None:
             server.should_exit = True
         if thread is not None:
             thread.join(timeout=5.0)
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
         _logger.info("Instant-share HTTP server stopped")

@@ -18,8 +18,6 @@ from dt_image_search.instant_sharing.contracts import InstantShareMetadata
 _logger = logging.getLogger(__name__)
 
 INSTANT_SHARE_MDNS_SERVICE_TYPE = "_instantshare._tcp.local."
-INSTANT_SHARE_MDNS_PORT = 9527
-INSTANT_SHARE_TLS_PORT = 9528
 
 
 def _local_ip_addresses() -> list[str]:
@@ -214,8 +212,8 @@ class InstantShareMDNSAdvertiser:
         ble_service: InstantShareBleService,
         device_id: str,
         desktop_name: str = "",
-        port: int = INSTANT_SHARE_MDNS_PORT,
-        tls_port: int = INSTANT_SHARE_TLS_PORT,
+        port: int,
+        tls_port: int,
         protocol_version: str = "1",
     ) -> None:
         self._ble_service = ble_service

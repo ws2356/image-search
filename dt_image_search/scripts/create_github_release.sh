@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Create or update a GitHub release and upload a DMG asset.
+# Create or update a GitHub release and upload release asset.
 #
 # Usage:
 #   create_github_release.sh \
 #       --tag v1.2.3 \
 #       --title "AuSearch v1.2.3" \
 #       --notes-file ./release-notes.md \
-#       --dmg-path ./pyinstaller-dist-prod/AuSearch.dmg \
+#       --pkg-path ./pyinstaller-dist-prod/AuSearch.pkg \
 #       [--repo ws2356/image-search] \
 #       [--target main] \
 #       [--draft] \
@@ -22,8 +22,6 @@ Required:
   --tag <tag>               Release tag (for example: v1.2.3)
   --title <title>           Release title
   --pkg-path <path>         PKG file to upload
-    or
-  --dmg-path <path>         DMG file to upload (legacy)
   --notes <text>            Release notes text
     or
   --notes-file <path>       Release notes file path
@@ -54,7 +52,6 @@ while [[ $# -gt 0 ]]; do
         --title) TITLE="$2"; shift 2 ;;
         --notes) NOTES="$2"; shift 2 ;;
         --notes-file) NOTES_FILE="$2"; shift 2 ;;
-        --dmg-path) ASSET_PATH="$2"; shift 2 ;;
         --pkg-path) ASSET_PATH="$2"; shift 2 ;;
         --repo) REPO="$2"; shift 2 ;;
         --target) TARGET="$2"; shift 2 ;;
