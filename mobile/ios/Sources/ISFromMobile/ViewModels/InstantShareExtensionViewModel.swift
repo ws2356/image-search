@@ -200,7 +200,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     pinCode: pinCode,
                     deviceCertificatePEM: myCert
                 )
-                guard let peerCert, let peerDeviceID = Self.extractDeviceIDFromCertificatePEM(peerCert) else {
+                guard let peerCert, let peerDeviceID = SecCertificate.fromPEM(peerCert)?.commonName else {
                     return
                 }
                 try? await appIdentityProvider.importPeerCertificate(
@@ -285,16 +285,5 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             correlationID: UUID().uuidString.lowercased(),
             metadata: metadata
         )
-    }
-
-    private static func extractDeviceIDFromCertificatePEM(_ pem: String) -> String? {
-        let lines = pem.components(separatedBy: .newlines)
-            .filter { !$0.hasPrefix("-----BEGIN") && !$0.hasPrefix("-----END") }
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard let der = Data(base64Encoded: lines.joined()),
-              let cert = SecCertificateCreateWithData(nil, der as CFData) else {
-            return nil
-        }
-        return SecCertificateCopySubjectSummary(cert) as String?
     }
 }

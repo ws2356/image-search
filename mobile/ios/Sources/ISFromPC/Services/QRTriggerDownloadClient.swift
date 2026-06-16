@@ -239,8 +239,7 @@ public final class QRTriggerDownloadClient: Sendable {
         port: Int,
         tlsPort: Int,
         sessionId: String,
-        optCode: String,
-        pcDeviceId: String = ""
+        optCode: String
     ) async throws -> QRClaimResult {
         var lastErrors: [Error] = []
 
@@ -251,8 +250,7 @@ public final class QRTriggerDownloadClient: Sendable {
                     port: port,
                     tlsPort: tlsPort,
                     sessionId: sessionId,
-                    optCode: optCode,
-                    pcDeviceId: pcDeviceId
+                    optCode: optCode
                 )
             } catch {
                 LocalLog.error("[QRDownload] host \(host):\(port) failed: \(error.localizedDescription)")
@@ -275,8 +273,7 @@ public final class QRTriggerDownloadClient: Sendable {
         port: Int,
         tlsPort: Int,
         sessionId: String,
-        optCode: String,
-        pcDeviceId: String
+        optCode: String
     ) async throws -> QRClaimResult {
         LocalLog.info("[QRDownload] starting pc-to-mobile flow host=\(host):\(port) session_id=\(sessionId)")
 
@@ -286,18 +283,17 @@ public final class QRTriggerDownloadClient: Sendable {
         try await trustHandshake(host: host, port: port, sessionId: sessionId, correlationID: correlationID)
         LocalLog.info("[QRDownload] trust handshake completed session_id=\(sessionId)")
 
-        try await trustConfirm(
+        let peerDeviceID = try await trustConfirm(
             host: host, port: port,
             sessionId: sessionId, correlationID: correlationID,
-            optCode: optCode, deviceCertPEM: deviceCertPEM, pcDeviceId: pcDeviceId
+            optCode: optCode, deviceCertPEM: deviceCertPEM
         )
         LocalLog.info("[QRDownload] trust confirm completed session_id=\(sessionId)")
 
-        let peerId = pcDeviceId.isEmpty ? sessionId : pcDeviceId
         let result = try await download(
             host: host, port: tlsPort,
             sessionId: sessionId, correlationID: correlationID,
-            peerDeviceId: peerId
+            peerDeviceId: peerDeviceID
         )
         LocalLog.info("[QRDownload] download completed session_id=\(sessionId)")
         return result
@@ -374,9 +370,8 @@ public final class QRTriggerDownloadClient: Sendable {
         sessionId: String,
         correlationID: String,
         optCode: String,
-        deviceCertPEM: String?,
-        pcDeviceId: String
-    ) async throws {
+        deviceCertPEM: String?
+    ) async throws -> String {
         guard trustSessionManager.isEstablished else {
             throw QRTriggerDownloadClientError.confirmFailed("Session key not established")
         }
@@ -447,14 +442,18 @@ public final class QRTriggerDownloadClient: Sendable {
             throw QRTriggerDownloadClientError.confirmFailed("Expected trust_status=trusted")
         }
 
-        if let pcCertPEM = decryptedPayload["device_certificate_pem"] as? String {
-            let peerId = pcDeviceId.isEmpty ? sessionId : pcDeviceId
+        if let pcCertPEM = decryptedPayload["device_certificate_pem"] as? String,
+           let peerDeviceID = SecCertificate.fromPEM(pcCertPEM)?.commonName {
             do {
-                try await appIdentityProvider.importPeerCertificate(pem: pcCertPEM, for: peerId)
-                LocalLog.info("[QRDownload] imported PC certificate for peerId=\(peerId)")
+                try await appIdentityProvider.importPeerCertificate(pem: pcCertPEM, for: peerDeviceID)
+                LocalLog.info("[QRDownload] imported PC certificate for peerId=\(peerDeviceID)")
+                return peerDeviceID
             } catch {
                 LocalLog.error("[QRDownload] failed to import PC cert: \(error.localizedDescription)")
+                throw QRTriggerDownloadClientError.confirmFailed(error.localizedDescription)
             }
+        } else {
+            throw QRTriggerDownloadClientError.confirmFailed("No peer cert or no peer device_id")
         }
     }
 

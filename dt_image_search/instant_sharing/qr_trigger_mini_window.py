@@ -39,14 +39,10 @@ def build_qr_url(
     port: int,
     tls_port: int,
     session_id: str,
-    opt_code: str,
-    device_id: str = "",
+    opt_code: str
 ) -> str:
     ips_str = ",".join(ips)
-    url = f"https://dl.boldman.net/share?ips={ips_str}&p={port}&tls_p={tls_port}&sid={session_id}&opt={opt_code}"
-    if device_id:
-        url += f"&did={device_id}"
-    return url
+    return f"https://dl.boldman.net/share?ips={ips_str}&p={port}&sp={tls_port}&sid={session_id}&opt={opt_code}"
 
 
 def render_qr_pixmap(payload: str, size: int) -> QPixmap:
@@ -213,8 +209,7 @@ class QRTriggerMiniWindow(QDialog):
             port=self._pc_port,
             tls_port=self._pc_tls_port,
             session_id=self._session_id,
-            opt_code=self._stash.opt_code,
-            device_id=self._device_id,
+            opt_code=self._stash.opt_code
         )
         pixmap = render_qr_pixmap(payload, QR_SIZE)
         self.set_qr_pixmap(pixmap)

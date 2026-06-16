@@ -54,7 +54,7 @@ public struct QRClaimPayload: Equatable, Sendable, Identifiable {
         self.ips = ipsStr.split(separator: ",").map(String.init)
         self.port = port
 
-        let tlsPortStr = valueFor("tls_p")
+        let tlsPortStr = valueFor("sp")
         guard let tlsPortVal = tlsPortStr, let tlsPort = Int(tlsPortVal), (1...65535).contains(tlsPort) else {
             return nil
         }

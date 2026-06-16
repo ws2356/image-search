@@ -33,8 +33,7 @@ class QRClaimViewModel: ObservableObject {
                 port: qrClaimPayload.port,
                 tlsPort: qrClaimPayload.tlsPort,
                 sessionId: qrClaimPayload.sessionId,
-                optCode: qrClaimPayload.optCode,
-                pcDeviceId: qrClaimPayload.deviceId
+                optCode: qrClaimPayload.optCode
             )
             self.delegate.onClaimCompletion(.success(result))
         } catch {
