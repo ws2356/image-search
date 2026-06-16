@@ -9,16 +9,14 @@ The PC side already loads trusted peer certs into the mTLS CA bundle (`load_all_
 ## Goals / Non-Goals
 
 **Goals:**
-- Mobile identifies a previously-trusted PC from its TLS certificate CN (already extracted via `CertTools.swift`)
-- If mobile has a stored peer cert for that `device_id`, it attempts direct mTLS transfer to `/transfer/xxx`
+- Mobile attempts direct mTLS transfer to `/transfer/xxx` for any discovered PC — the TLS handshake itself determines whether this is a revisit or requires the full trust flow
 - PC-side TLS transfer endpoints accept requests from trusted mTLS peers without a prior trust session (on-the-fly session creation)
-- If the TLS handshake fails (PC doesn't trust the mobile's cert), mobile falls back to the full trust handshake
+- If the TLS handshake fails (PC doesn't trust the mobile's cert, or mobile doesn't trust the PC's cert), mobile falls back to the full trust handshake
 - Mobile sends `peerDeviceName` so the PC can display which device is sharing
 
 **Non-Goals:**
 - Changing the mDNS TXT record format
 - Replacing the existing first-share trust handshake flow (it remains as the fallback)
-- PC-to-mobile revisit (QR flow) — this change is mobile-to-PC only
 - BLE-based revisit (BLE provides connectivity discovery only, same as mDNS)
 - Certificate revocation or expiry notification mechanisms
 - Supporting multiple concurrent sessions (later sessions override existing ones for now)
@@ -27,26 +25,25 @@ The PC side already loads trusted peer certs into the mTLS CA bundle (`load_all_
 
 ### Decision 1: Identity from TLS certificate CN, not mDNS TXT
 
-mDNS provides connectivity only (hostname/IP + `tls_port`). Device identity is derived from the PC's TLS certificate CN during the mTLS handshake. The mobile already extracts the CN via `CertTools.swift`. This eliminates the need for `device_id` in mDNS TXT records and for Ed25519 signature verification.
+mDNS provides connectivity only (hostname/IP + `tls_port`). Device identity is derived from the TLS certificate CN during the mTLS handshake:
 
-The PC's certificate CN *is* the `device_id` — set during cert generation in `device_identity.py` line 334:
-```python
-subject = issuer = x509.Name([
-    x509.NameAttribute(NameOID.COMMON_NAME, device_id),
-])
-```
+- **Mobile side**: The PC's certificate CN *is* its `device_id` (set during cert generation in `device_identity.py:334`). The mobile already extracts the CN via `CertTools.swift` during the mTLS handshake (`SecCertificateCopyCommonName`). This replaces deriving `device_id` from mDNS TXT records.
+- **PC side**: No changes needed. The TLS server already validates client certs against the CA bundle (all trusted peer certs loaded at startup + dynamically injected after trust confirm). The TLS handshake succeeding is itself the trust proof — the framework (OpenSSL) handles all cert validation.
 
-Both sides' certs use the same convention, so the TLS handshake carries all identity information needed.
+This eliminates the need for Ed25519 signature verification over mDNS TXT records entirely.
 
-### Decision 2: Revisit = direct mTLS transfer attempt
+### Decision 2: Revisit = blind mTLS transfer attempt
 
-When the mobile discovers a PC and has a stored peer cert for the CN extracted from the TLS handshake, it:
+When the mobile discovers a PC via mDNS, it attempts a direct mTLS transfer without pre-checking whether stored certs exist:
 1. Connects to `tls_port` (from mDNS) via HTTPS with its own X.509 client certificate
-2. Generates a new `X-Session-Id` (UUID v4)
-3. Sets `X-Peer-Device-Name` header to a human-readable device name
-4. POSTs payload to `/transfer/text` or `/transfer/image` directly
+2. Sets `X-Session-Id` (UUID v4) and `X-Peer-Device-Name` headers
+3. POSTs payload to `/transfer/text` or `/transfer/image` directly
 
-No `/trust/handshake`, `/trust/apply`, or `/trust/confirm` calls are made. The mTLS handshake itself authenticates both sides.
+The TLS handshake itself determines the outcome:
+- **Success**: Both sides' certs are mutually trusted → transfer proceeds. The mobile's `InstantShareServerTrustDelegate` already validates the PC's cert during the TLS handshake.
+- **Failure**: TLS handshake fails at the SSL layer (either side rejects the other's cert) → connection refused → mobile falls back to the full trust handshake.
+
+No `/trust/handshake`, `/trust/apply`, or `/trust/confirm` calls are made. The mTLS handshake itself authenticates both sides. No separate cert-existence check is needed — just connect and let TLS decide.
 
 ### Decision 3: Fallback triggered by TLS handshake failure
 
@@ -59,29 +56,47 @@ There are two failure modes:
 ### Decision 4: PC on-the-fly session creation for revisit
 
 When a transfer request arrives at `/transfer/xxx` via mTLS and no trust session exists:
-1. Extract client certificate CN (mobile's `device_id`) from the TLS connection
-2. Look up the peer cert in the keychain to confirm it's a known trusted device
-3. If trusted, create an on-the-fly `InstantShareSession` with `TrustMode.TRUSTED_DIRECT`, state `TRANSFERRING`
-4. Derive `payload_class` and `target_intent` from the endpoint:
+1. The TLS handshake already proved the client is trusted (cert validated against CA bundle by the framework)
+2. Create an on-the-fly `InstantShareSession` with `TrustMode.TRUSTED_DIRECT`, state `TRANSFERRING`, using the `X-Session-Id` header
+3. Derive `payload_class` and `target_intent` from the endpoint:
    - `/transfer/text` → TEXT / CLIPBOARD_ONLY
    - `/transfer/image` → IMAGE / CLIPBOARD_OR_FILE
-5. Process the transfer normally
+4. Process the transfer normally
 
-The TLS layer already validated the client cert against the CA bundle (containing all trusted peer certs) and verified the public key. The app layer only needs to extract the CN for session identification.
+No CN extraction or peer cert lookup is needed — the TLS layer already did the work.
 
-### Decision 5: Minimal TLS handshake changes
+### Decision 5: peerDeviceName for UI display
 
-The existing TLS configuration (`ssl_cert_reqs=ssl.CERT_REQUIRED`, CA bundle from keychain) remains intact. The only addition is extracting the client certificate CN from the request scope in the transfer handlers. The cert validation (signature, public key, expiry) is handled entirely by the SSL layer.
+The mobile sends a human-readable device name at the **first encrypted opportunity** in each flow:
 
-### Decision 6: peerDeviceName for UI display
+| Flow | First encrypted request | Mechanism |
+|---|---|---|
+| First visit (mobile→PC) | `/trust/apply` | `peer_device_name` body field (AES-GCM encrypted) |
+| Revisit (mobile→PC) | `/transfer/xxx` | `X-Peer-Device-Name` HTTP header (mTLS-protected) |
+| QR (PC→mobile) | `/trust/confirm` | `peer_device_name` body field (AES-GCM encrypted) |
 
-The mobile sends a human-readable device name in two places:
-- **First visit**: `peer_device_name` field in the encrypted `/trust/confirm` request body
-- **Revisit**: `X-Peer-Device-Name` HTTP header in `/transfer/xxx` requests
+Rationale:
+- `/trust/handshake` is plaintext HTTP — sending the device name unencrypted is unnecessary
+- `/trust/confirm` is late in the mobile→PC flow (step 3 of 3) — the PIN display phase is the most user-facing moment and benefits from showing the real device name, hence `/trust/apply` (step 2 of 3, first encrypted)
+- The QR flow skips `/trust/apply` entirely (opt_code is already known from the QR), so `/trust/confirm` is the first encrypted request
 
-The PC stores this name in the session and includes it in the lifecycle event published to the event bus. The mini-window already supports `MiniWindowState.device_name` — this just needs to be populated from the lifecycle event.
+**Mobile→PC data path:**
+1. Mobile encrypts `{"action": "request_pin", "peer_device_name": "Alice's iPhone"}` with the session key
+2. PC-side `_do_trust_apply()` decrypts the body and extracts `peer_device_name`
+3. Stored on `TrustSession` as new `peer_device_name` attribute
+4. Orchestrator's `_publish()` reads it from the trust session registry and includes `device_name` in every lifecycle event
+5. `_on_lifecycle_event` handler extracts and passes `device_name` to `apply_session_event()`
+6. `show_pin()` copies forward the previously-set `device_name`, so the PIN display phase automatically shows the real name
 
-### Decision 7: No mDNS TXT format changes
+**QR flow data path:**
+1. Mobile encrypts `{"action": "confirm", "opt_code": "...", "device_certificate_pem": "...", "peer_device_name": "Alice's iPhone"}` with the session key
+2. PC-side `_do_trust_confirm()` (PC_TO_MOBILE branch) decrypts the body and extracts `peer_device_name`
+3. Stored on `TrustSession` as new `peer_device_name` attribute (same attribute used by both flows)
+4. `_do_transfer_download()` → `retrieve_stash_content()` marks the stash claimed and fires `on_stash_claimed(stash_id, peer_device_name)`
+5. `QRTriggerMiniWindowFactory._mark_claimed()` passes the name to `QRTriggerMiniWindow.on_claimed()`
+6. QR mini-window displays "Delivered to Alice's iPhone" instead of just "Delivered"
+
+### Decision 6: No mDNS TXT format changes
 
 The mDNS TXT records continue to include all existing fields (`signature`, `signature_key_id`, `timestamp_ms`, `device_id`, `device_name`, `tls_port`). The revisit flow simply does not use the identity-related fields (`signature`, `signature_key_id`, `timestamp_ms`, `device_id`) — it relies on the TLS cert CN instead. However, `device_name` and `tls_port` remain essential for connectivity and initial display.
 
