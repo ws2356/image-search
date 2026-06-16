@@ -4,7 +4,6 @@ from dt_image_search.instant_sharing.mdns import (
     CharacteristicAccessMode,
     ConnectionConfig,
     DeviceNameAdvertisement,
-    DeviceSignatureAdvertisement,
     InstantShareBleDaemon,
     InstantShareBleService,
     InstantShareMDNSAdvertiser,

@@ -18,7 +18,7 @@ from fastapi import Body, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, RootModel
 
-from dt_image_search.instant_sharing.ble import ConnectionConfig
+from dt_image_search.instant_sharing.mdns import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
     API_PREFIX,
     TRANSFER_DOWNLOAD_PATH,

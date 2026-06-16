@@ -53,29 +53,6 @@ class DeviceNameAdvertisement:
 
 
 @dataclass(frozen=True)
-class DeviceSignatureAdvertisement:
-    signature: str
-    signature_key_id: str
-    timestamp_ms: int
-
-    def validate(self) -> None:
-        if not self.signature.strip():
-            raise ValueError("signature must not be empty.")
-        if not self.signature_key_id.strip():
-            raise ValueError("signature_key_id must not be empty.")
-        if self.timestamp_ms <= 0:
-            raise ValueError("timestamp_ms must be positive.")
-
-    def as_dict(self) -> dict[str, object]:
-        self.validate()
-        return {
-            "signature": self.signature,
-            "signature_key_id": self.signature_key_id,
-            "timestamp_ms": self.timestamp_ms,
-        }
-
-
-@dataclass(frozen=True)
 class ConnectionConfig:
     session_id: str
     mobile_port: int
@@ -132,11 +109,9 @@ class InstantShareBleService:
         self,
         *,
         device_name_provider: Callable[[], DeviceNameAdvertisement],
-        signature_provider: Callable[[], DeviceSignatureAdvertisement],
         bootstrap_handler: Callable[[ConnectionConfig], None],
     ) -> None:
         self._device_name_provider = device_name_provider
-        self._signature_provider = signature_provider
         self._bootstrap_handler = bootstrap_handler
         self._active_connection_config: ConnectionConfig | None = None
         self._lock = threading.RLock()
@@ -144,8 +119,6 @@ class InstantShareBleService:
     def read_characteristic(self, name: str) -> dict[str, object]:
         if name == "DeviceName":
             return self._device_name_provider().as_dict()
-        if name == "DeviceSignature":
-            return self._signature_provider().as_dict()
         raise KeyError(name)
 
     def handle_bootstrap(self, connection_config: ConnectionConfig) -> None:
@@ -335,15 +308,6 @@ class InstantShareMDNSAdvertiser:
             props["device_name"] = str(name_adv.get("device_name", self._desktop_name))
         except Exception:
             props["device_name"] = self._desktop_name
-        try:
-            sig_adv = self._ble_service.read_characteristic("DeviceSignature")
-            props["signature"] = str(sig_adv.get("signature", ""))
-            props["signature_key_id"] = str(sig_adv.get("signature_key_id", ""))
-            props["timestamp_ms"] = str(sig_adv.get("timestamp_ms", "0"))
-        except Exception:
-            props["signature"] = ""
-            props["signature_key_id"] = ""
-            props["timestamp_ms"] = "0"
         return props
 
     def _sanitize_service_name(self) -> str:

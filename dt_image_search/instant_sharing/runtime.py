@@ -11,7 +11,6 @@ from dt_image_search.identity import initialize_device_identity
 from dt_image_search.instant_sharing.mdns import (
     ConnectionConfig,
     DeviceNameAdvertisement,
-    DeviceSignatureAdvertisement,
     InstantShareBleDaemon,
     InstantShareBleService,
     InstantShareMDNSAdvertiser,
@@ -90,7 +89,6 @@ class InstantShareRuntime:
         desktop_name = self._desktop_name_provider()
         self._ble_service = InstantShareBleService(
             device_name_provider=self._device_name_advertisement,
-            signature_provider=self._real_signature_provider,
             bootstrap_handler=self._handle_connection_config,
         )
         self._mdns_advertiser = InstantShareMDNSAdvertiser(
@@ -272,9 +270,6 @@ class InstantShareRuntime:
             device_name=self._desktop_name_provider(),
             receiver_id=self._device_id_provider(),
         )
-
-    def _real_signature_provider(self) -> DeviceSignatureAdvertisement:
-        return self._sender_identity.device_signature_advertisement()
 
     def _create_default_sender_identity(self, config_dir: Path | None) -> SenderIdentity:
         identity_dir = config_dir or Path.home() / ".config" / "ausearch"

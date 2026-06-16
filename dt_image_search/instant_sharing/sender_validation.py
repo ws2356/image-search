@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
-from dt_image_search.instant_sharing.ble import DeviceSignatureAdvertisement
 from dt_image_search.instant_sharing.contracts import ErrorCode
 from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.security import PersistentEd25519SessionSigner
@@ -48,9 +46,3 @@ class SenderIdentity:
 
     def public_key_pem(self) -> str:
         return self._signer.public_key_pem()
-
-    def device_signature_advertisement(self) -> DeviceSignatureAdvertisement:
-        return self._signer.device_signature_advertisement(
-            device_id=self._device_id,
-            timestamp_ms=int(time.time() * 1000),
-        )

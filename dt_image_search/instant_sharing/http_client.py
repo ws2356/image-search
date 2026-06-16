@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, Protocol
 from urllib.parse import urlsplit
 
-from dt_image_search.instant_sharing.ble import ConnectionConfig
+from dt_image_search.instant_sharing.mdns import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
     API_PREFIX,
     ErrorCode,

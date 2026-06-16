@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.ble import ConnectionConfig
+from dt_image_search.instant_sharing.mdns import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
     DeliveryResult,
     DeliveryTargetResult,

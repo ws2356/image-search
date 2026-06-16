@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from fastapi.testclient import TestClient
 
-from dt_image_search.instant_sharing.ble import ConnectionConfig
+from dt_image_search.instant_sharing.mdns import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import (
     TRANSFER_IMAGE_PATH,
     TRANSFER_TEXT_PATH,

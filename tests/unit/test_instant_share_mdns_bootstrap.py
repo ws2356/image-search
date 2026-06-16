@@ -10,7 +10,6 @@ from dt_image_search.instant_sharing.mdns import (
     BootstrapRequest,
     ConnectionConfig,
     DeviceNameAdvertisement,
-    DeviceSignatureAdvertisement,
     InstantShareBleDaemon,
     InstantShareBleService,
     InstantShareMDNSAdvertiser,
@@ -35,32 +34,6 @@ def _default_metadata(**kwargs) -> InstantShareMetadata:
     return InstantShareMetadata(**defaults)
 
 
-
-
-class TestDeviceSignatureAdvertisement:
-    def test_validate_ok(self) -> None:
-        adv = DeviceSignatureAdvertisement(signature="sig", signature_key_id="k1", timestamp_ms=1000)
-        adv.validate()
-
-    def test_validate_empty_signature(self) -> None:
-        adv = DeviceSignatureAdvertisement(signature="  ", signature_key_id="k1", timestamp_ms=1000)
-        with pytest.raises(ValueError, match="signature must not be empty"):
-            adv.validate()
-
-    def test_validate_empty_key_id(self) -> None:
-        adv = DeviceSignatureAdvertisement(signature="sig", signature_key_id="  ", timestamp_ms=1000)
-        with pytest.raises(ValueError, match="signature_key_id must not be empty"):
-            adv.validate()
-
-    def test_validate_nonpositive_timestamp(self) -> None:
-        adv = DeviceSignatureAdvertisement(signature="sig", signature_key_id="k1", timestamp_ms=-1)
-        with pytest.raises(ValueError, match="timestamp_ms must be positive"):
-            adv.validate()
-
-    def test_as_dict(self) -> None:
-        adv = DeviceSignatureAdvertisement(signature="sig", signature_key_id="k1", timestamp_ms=1000)
-        d = adv.as_dict()
-        assert d == {"signature": "sig", "signature_key_id": "k1", "timestamp_ms": 1000}
 
 
 class TestConnectionConfig:
@@ -171,9 +144,6 @@ class TestInstantShareBleService:
             device_name_provider=lambda: DeviceNameAdvertisement(
                 device_name="Test PC", receiver_id="dev-001"
             ),
-            signature_provider=lambda: DeviceSignatureAdvertisement(
-                signature="sha256=abc", signature_key_id="k1", timestamp_ms=1
-            ),
             bootstrap_handler=bootstrap_handler or (lambda _: None),
         )
 
@@ -182,11 +152,6 @@ class TestInstantShareBleService:
         result = svc.read_characteristic("DeviceName")
         assert result["device_name"] == "Test PC"
         assert result["receiver_id"] == "dev-001"
-
-    def test_read_device_signature(self) -> None:
-        svc = self._make_service()
-        result = svc.read_characteristic("DeviceSignature")
-        assert result["signature"] == "sha256=abc"
 
     def test_read_unknown_characteristic_raises(self) -> None:
         svc = self._make_service()
@@ -222,7 +187,6 @@ class TestInstantShareBleDaemon:
     def test_start_stop_lifecycle(self) -> None:
         svc = InstantShareBleService(
             device_name_provider=lambda: DeviceNameAdvertisement("d", "r"),
-            signature_provider=lambda: DeviceSignatureAdvertisement("s", "k", 1),
             bootstrap_handler=lambda _: None,
         )
         daemon = InstantShareBleDaemon(
@@ -239,7 +203,6 @@ class TestInstantShareBleDaemon:
     def test_refuses_start_when_disabled(self) -> None:
         svc = InstantShareBleService(
             device_name_provider=lambda: DeviceNameAdvertisement("d", "r"),
-            signature_provider=lambda: DeviceSignatureAdvertisement("s", "k", 1),
             bootstrap_handler=lambda _: None,
         )
         daemon = InstantShareBleDaemon(
@@ -254,7 +217,6 @@ class TestInstantShareMDNSAdvertiser:
     def test_constructor(self) -> None:
         svc = InstantShareBleService(
             device_name_provider=lambda: DeviceNameAdvertisement("My Mac", "dev-1"),
-            signature_provider=lambda: DeviceSignatureAdvertisement("sig", "k1", 1000),
             bootstrap_handler=lambda _: None,
         )
         advertiser = InstantShareMDNSAdvertiser(
@@ -276,7 +238,6 @@ class TestInstantShareMDNSAdvertiser:
 
         svc = InstantShareBleService(
             device_name_provider=lambda: DeviceNameAdvertisement("Test", "dev-1"),
-            signature_provider=lambda: DeviceSignatureAdvertisement("sig", "k1", 1000),
             bootstrap_handler=lambda _: None,
         )
         advertiser = InstantShareMDNSAdvertiser(
@@ -302,7 +263,6 @@ class TestConstants:
         from dt_image_search.instant_sharing.mdns import InstantShareMDNSAdvertiser
         svc = InstantShareBleService(
             device_name_provider=lambda: DeviceNameAdvertisement("My Mac", "dev-1"),
-            signature_provider=lambda: DeviceSignatureAdvertisement("sig", "k1", 1000),
             bootstrap_handler=lambda _: None,
         )
         advertiser = InstantShareMDNSAdvertiser(

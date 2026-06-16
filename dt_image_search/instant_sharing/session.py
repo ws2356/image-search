@@ -5,7 +5,7 @@ import threading
 import time
 from dataclasses import dataclass, replace
 
-from dt_image_search.instant_sharing.ble import ConnectionConfig
+from dt_image_search.instant_sharing.mdns import ConnectionConfig
 from dt_image_search.instant_sharing.contracts import ErrorCode, SessionState
 from dt_image_search.instant_sharing.errors import InstantShareError
 

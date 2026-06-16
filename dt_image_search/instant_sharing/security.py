@@ -9,8 +9,6 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519, x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from dt_image_search.instant_sharing.ble import DeviceSignatureAdvertisement
-
 
 _TRUST_SESSION_INFO_PREFIX = b"dtis.instant-share.trust-session.v1"
 _TRUST_NONCE_BYTES = 32
@@ -93,19 +91,6 @@ class PersistentEd25519SessionSigner:
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ).decode("utf-8")
-
-    def device_signature_advertisement(self, *, device_id: str, timestamp_ms: int) -> DeviceSignatureAdvertisement:
-        if not isinstance(device_id, str) or not device_id.strip():
-            raise ValueError("device_id must not be empty.")
-        if timestamp_ms <= 0:
-            raise ValueError("timestamp_ms must be positive.")
-        signed_message = f"{device_id}:{timestamp_ms}".encode("utf-8")
-        signature = self._private_key.sign(signed_message)
-        return DeviceSignatureAdvertisement(
-            signature=_base64url_encode(signature),
-            signature_key_id=device_id,
-            timestamp_ms=timestamp_ms,
-        )
 
     @staticmethod
     def _load_or_create_private_key(key_path: Path) -> ed25519.Ed25519PrivateKey:

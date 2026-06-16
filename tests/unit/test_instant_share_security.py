@@ -80,24 +80,6 @@ class TestPersistentEd25519SessionSigner(unittest.TestCase):
             public_key = load_pem_public_key(public_key_pem.encode("utf-8"))
             public_key.verify(_base64url_decode(signature), b"session-123")
 
-    def test_builds_device_signature_advertisement(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            signer = PersistentEd25519SessionSigner(Path(temp_dir) / "instant-share-ed25519.pem")
-
-            advertisement = signer.device_signature_advertisement(
-                device_id="pc-001",
-                timestamp_ms=1735948800000,
-            )
-
-            self.assertEqual(advertisement.signature_key_id, "pc-001")
-            self.assertEqual(advertisement.timestamp_ms, 1735948800000)
-
-            public_key = load_pem_public_key(signer.public_key_pem().encode("utf-8"))
-            public_key.verify(
-                _base64url_decode(advertisement.signature),
-                b"pc-001:1735948800000",
-            )
-
 
 if __name__ == "__main__":
     unittest.main()

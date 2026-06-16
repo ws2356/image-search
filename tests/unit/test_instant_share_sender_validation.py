@@ -40,14 +40,6 @@ class SenderIdentityTests(unittest.TestCase):
             self.assertTrue(pem.startswith("-----BEGIN PUBLIC KEY-----"))
             self.assertTrue(pem.strip().endswith("-----END PUBLIC KEY-----"))
 
-    def test_device_signature_advertisement_has_fields(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            identity = SenderIdentity.from_config_dir(Path(tmp), device_id="my-mac")
-            ad = identity.device_signature_advertisement()
-            self.assertEqual(ad.signature_key_id, "my-mac")
-            self.assertTrue(len(ad.signature) > 0)
-            self.assertGreater(ad.timestamp_ms, 0)
-
     def test_reuses_existing_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             identity1 = SenderIdentity.from_config_dir(Path(tmp), device_id="dev")
