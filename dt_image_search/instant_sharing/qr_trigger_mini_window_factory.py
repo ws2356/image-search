@@ -20,7 +20,7 @@ _logger = logging.getLogger(__name__)
 
 class _Bridge(QObject):
     stash_created = Signal(object)  # StashEntry
-    stash_claimed = Signal(str)
+    stash_claimed = Signal(str, str)  # stash_id, peer_device_name
     stash_expired = Signal(str)
 
 
@@ -80,8 +80,8 @@ class QRTriggerMiniWindowFactory:
     def _on_stash_created(self, stash: StashEntry) -> None:
         self._bridge.stash_created.emit(stash)
 
-    def _on_stash_claimed(self, stash_id: str) -> None:
-        self._bridge.stash_claimed.emit(stash_id)
+    def _on_stash_claimed(self, stash_id: str, peer_device_name: str = "") -> None:
+        self._bridge.stash_claimed.emit(stash_id, peer_device_name)
 
     def _on_stash_expired(self, stash_id: str) -> None:
         self._bridge.stash_expired.emit(stash_id)
@@ -114,10 +114,10 @@ class QRTriggerMiniWindowFactory:
         if self._windows.pop(stash_id, None) is not None:
             release_activation_policy()
 
-    def _mark_claimed(self, stash_id: str) -> None:
+    def _mark_claimed(self, stash_id: str, peer_device_name: str = "") -> None:
         window = self._windows.pop(stash_id, None)
         if window is not None:
-            window.on_claimed()
+            window.on_claimed(peer_device_name=peer_device_name)
             release_activation_policy()
 
     def _mark_expired(self, stash_id: str) -> None:

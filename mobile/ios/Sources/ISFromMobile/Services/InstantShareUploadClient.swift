@@ -53,12 +53,13 @@ final class InstantShareUploadClient: Sendable {
         sessionID: String,
         correlationID: String,
         text: String,
-        peerDeviceID: String
+        peerDeviceID: String? = nil,
+        peerDeviceName: String? = nil
     ) async throws {
         let requestBody: [String: Any] = ["text_utf8": text]
 
         let urlString = "https://\(host):\(port)\(InstantShareProtocol.apiPrefix)/transfer/text"
-        LocalLog.debug("[UploadClient] uploadText URL: \(urlString) peerDeviceID=\(peerDeviceID)")
+        LocalLog.debug("[UploadClient] uploadText URL: \(urlString) peerDeviceID=\(peerDeviceID ?? "nil")")
         guard let url = URL(string: urlString) else {
             throw InstantShareUploadClientError.uploadFailed("Invalid URL: \(urlString)")
         }
@@ -69,6 +70,9 @@ final class InstantShareUploadClient: Sendable {
         request.setValue(sessionID, forHTTPHeaderField: "X-Session-Id")
         request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
         request.timeoutInterval = timeoutInterval
+        if let peerDeviceName {
+            request.setValue(peerDeviceName, forHTTPHeaderField: "X-Peer-Device-Name")
+        }
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -117,10 +121,11 @@ final class InstantShareUploadClient: Sendable {
         imageData: Data,
         contentType: String,
         filename: String?,
-        peerDeviceID: String
+        peerDeviceID: String? = nil,
+        peerDeviceName: String? = nil
     ) async throws {
         let urlString = "https://\(host):\(port)\(InstantShareProtocol.apiPrefix)/transfer/image"
-        LocalLog.debug("[UploadClient] uploadImage URL: \(urlString) peerDeviceID=\(peerDeviceID) size=\(imageData.count)")
+        LocalLog.debug("[UploadClient] uploadImage URL: \(urlString) peerDeviceID=\(peerDeviceID ?? "nil") size=\(imageData.count)")
         guard let url = URL(string: urlString) else {
             throw InstantShareUploadClientError.uploadFailed("Invalid URL: \(urlString)")
         }
@@ -132,6 +137,9 @@ final class InstantShareUploadClient: Sendable {
         request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
         if let filename {
             request.setValue(filename, forHTTPHeaderField: "X-Instant-Share-Filename")
+        }
+        if let peerDeviceName {
+            request.setValue(peerDeviceName, forHTTPHeaderField: "X-Peer-Device-Name")
         }
         request.httpBody = imageData
         request.timeoutInterval = timeoutInterval
@@ -181,13 +189,13 @@ final class InstantShareUploadClient: Sendable {
 }
 
 final class InstantShareServerTrustDelegate: NSObject, URLSessionTaskDelegate {
-    private let peerDeviceID: String
+    private let peerDeviceID: String?
     private let appIdentityProvider: AppIdentityProviding
 
-    init(peerDeviceID: String, appIdentityProvider: AppIdentityProviding) {
+    init(peerDeviceID: String?, appIdentityProvider: AppIdentityProviding) {
         self.peerDeviceID = peerDeviceID
         self.appIdentityProvider = appIdentityProvider
-        LocalLog.debug("[TLS] InstantShareServerTrustDelegate created for peer=\(peerDeviceID)")
+        LocalLog.debug("[TLS] InstantShareServerTrustDelegate created for peer=\(peerDeviceID ?? "nil")")
     }
 
     func urlSession(
@@ -236,12 +244,18 @@ final class InstantShareServerTrustDelegate: NSObject, URLSessionTaskDelegate {
             storedCert = try appIdentityProvider.peerCertificate(for: serverCN)
             LocalLog.debug("[TLS] loaded stored peer certificate by CN=\(serverCN)")
         } catch {
-            LocalLog.debug("[TLS] lookup by CN failed, trying peerDeviceID=\(peerDeviceID)")
-            do {
-                storedCert = try appIdentityProvider.peerCertificate(for: peerDeviceID)
-                LocalLog.debug("[TLS] loaded stored peer certificate by key=\(peerDeviceID)")
-            } catch {
-                LocalLog.error("[TLS] no stored peer certificate for CN=\(serverCN) or key=\(peerDeviceID)")
+            if let peerDeviceID, !peerDeviceID.isEmpty {
+                LocalLog.debug("[TLS] lookup by CN failed, trying peerDeviceID=\(peerDeviceID)")
+                do {
+                    storedCert = try appIdentityProvider.peerCertificate(for: peerDeviceID)
+                    LocalLog.debug("[TLS] loaded stored peer certificate by key=\(peerDeviceID)")
+                } catch {
+                    LocalLog.error("[TLS] no stored peer certificate for CN=\(serverCN) or key=\(peerDeviceID)")
+                    completionHandler(.cancelAuthenticationChallenge, nil)
+                    return
+                }
+            } else {
+                LocalLog.error("[TLS] no stored peer certificate for CN=\(serverCN) and no peerDeviceID")
                 completionHandler(.cancelAuthenticationChallenge, nil)
                 return
             }

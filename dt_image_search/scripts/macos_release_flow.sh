@@ -24,10 +24,12 @@ parent_repo="ws2356/ausearch-release"
 
 build_type=prod
 skip_release=false
+skip_build=false
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --build-type) build_type="$2"; shift 2;;
         --skip-release) skip_release=true; shift;;
+        --skip-build) skip_build=true; shift;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
 done
@@ -55,33 +57,32 @@ echo "Using tag: $tag"
 
 cd "$repo_root"
 
-# -- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env
-. "$this_dir/init_envs.sh"
+if [ "$skip_build" = false ] ;  then
+    # -- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env
+    . "$this_dir/init_envs.sh"
 
-# -- Step 2: Build AuSearch.app, InstantShareAgent.app (sub bundle), InstantShare Extension
-"$this_dir/build_pyinstaller.sh"
+    # -- Step 2: Build AuSearch.app, InstantShareAgent.app (sub bundle), InstantShare Extension
+    "$this_dir/build_pyinstaller.sh"
 
-# -- Step 3: Build and notarize the PKG distribution
-"$this_dir/create_distributable_pkg.sh" \
-    --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
+    # -- Step 3: Build and notarize the PKG distribution
+    "$this_dir/create_distributable_pkg.sh" \
+        --app-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.app"
 
-# -- Step 4: Forget and remove old bundle (helpful for local testing)
-sudo pkgutil --forget 'vip.wansong.dtimagesearch' || true
-(cd "$repo_root/pyinstaller-dist-${build_type}" && rm -rf ./AuSearch.app)
-
-if [[ "$skip_release" == true ]]; then
-    echo "Skipping GitHub release creation and asset upload as --skip-release flag is set."
-    exit 0
+    # -- Step 4: Forget and remove old bundle (helpful for local testing)
+    sudo pkgutil --forget 'vip.wansong.dtimagesearch' || true
+    (cd "$repo_root/pyinstaller-dist-${build_type}" && rm -rf ./AuSearch.app)
 fi
 
-# -- Step 5: Push to Github Release
-(cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
-    --repo "$parent_repo" --tag "$tag" \
-    --title "Release $tag" --notes "Bug free code" \
-    --pkg-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.pkg" --target main)
+if [ "$skip_release" = false ]; then
+    # -- Step 5: Push to Github Release
+    (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
+        --repo "$parent_repo" --tag "$tag" \
+        --title "Release $tag" --notes "Bug free code" \
+        --pkg-path "$repo_root/pyinstaller-dist-${build_type}/AuSearch.pkg" --target main)
 
-# -- Step 6: Release to Official Side
-(cd "$repo_root/web" && \
-    export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/AuSearch.pkg" && \
-    npm run build && \
-    npm run sync)
+    # -- Step 6: Release to Official Side
+    (cd "$repo_root/web" && \
+        export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/AuSearch.pkg" && \
+        npm run build && \
+        npm run sync)
+fi

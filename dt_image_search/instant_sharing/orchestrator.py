@@ -78,6 +78,26 @@ class InstantShareReceiverOrchestrator:
             updated = self._session_registry.transition(session_id, SessionState.TRANSFERRING)
             self._publish(updated)
 
+    def handle_revisit_transfer(
+        self,
+        *,
+        connection_config,
+        peer_device_name: str = "",
+    ) -> InstantShareSession:
+        with add_span(
+            "instant_share.revisit.transfer",
+            attributes=_session_attributes(connection_config),
+        ):
+            session = self._session_registry.bootstrap_revisit(connection_config)
+            self._publish(session, device_name=peer_device_name)
+            log(
+                "info",
+                message="Instant-share revisit transfer session created",
+                where="instant_share.orchestrator.handle_revisit_transfer",
+                attributes=_session_attributes(connection_config),
+            )
+            return session
+
     def handle_delivery_complete(
         self,
         *,
@@ -138,14 +158,17 @@ class InstantShareReceiverOrchestrator:
             return SessionState.TIMED_OUT
         return SessionState.FAILED
 
-    @staticmethod
     def _publish(
+        self,
         session: InstantShareSession,
         *,
         error: InstantShareError | None = None,
         text_content: str = "",
         file_path: str = "",
+        device_name: str | None = None,
     ) -> None:
+        if device_name is None:
+            device_name = self._get_device_name(session.connection_config.session_id)
         event: dict[str, object] = {
             "session_id": session.connection_config.session_id,
             "correlation_id": session.connection_config.correlation_id,
@@ -154,6 +177,8 @@ class InstantShareReceiverOrchestrator:
             "target_intent": session.connection_config.metadata.target_intent.value,
             "trust_mode": session.connection_config.metadata.trust_mode.value,
         }
+        if device_name:
+            event["device_name"] = device_name
         if text_content:
             event["text_content"] = text_content
         if file_path:
@@ -162,6 +187,14 @@ class InstantShareReceiverOrchestrator:
             event["error_code"] = error.error_code.value
             event["error_message"] = error.message
         default_bus.publish(INSTANT_SHARE_LIFECYCLE_EVENT, **event)
+
+    def _get_device_name(self, session_id: str) -> str:
+        if self._trust_session_registry is None:
+            return ""
+        trust_session = self._trust_session_registry.get_session(session_id)
+        if trust_session is None:
+            return ""
+        return trust_session.peer_device_name
 
     @property
     def trust_session_registry(self) -> TrustSessionRegistry | None:

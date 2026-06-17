@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import UIKit
 
 enum InstantShareTrustClientError: Error, Sendable {
     case handshakeFailed(String)
@@ -148,7 +149,10 @@ final class InstantShareTrustClient: @unchecked Sendable {
             throw InstantShareTrustClientError.sessionKeyNotEstablished
         }
 
-        let requestPayload: [String: Any] = ["action": "request_pin"]
+        let requestPayload: [String: Any] = [
+            "action": "request_pin",
+            "peer_device_name": await UIDevice.current.name,
+        ]
         let envelope = try trustSessionManager.encryptResponse(requestPayload)
 
         let requestBody: [String: Any] = [

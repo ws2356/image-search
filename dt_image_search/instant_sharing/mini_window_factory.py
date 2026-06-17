@@ -56,6 +56,7 @@ class InstantShareMiniWindowFactory:
         error_message: object = None,
         text_content: object = "",
         file_path: object = "",
+        device_name: object = "",
         **_: object,
     ) -> None:
         state_value = str(state) if state is not None else "unknown"
@@ -64,6 +65,7 @@ class InstantShareMiniWindowFactory:
         error_message_value = str(error_message) if error_message is not None else ""
         text_content_value = str(text_content) if text_content is not None else ""
         file_path_value = str(file_path) if file_path is not None else ""
+        device_name_value = str(device_name) if device_name else ""
 
         phase = InstantShareMiniWindow.build_phase(state_value)
         is_new_session = session_id_value and session_id_value != self._current_session_id
@@ -76,6 +78,7 @@ class InstantShareMiniWindowFactory:
                 error_message=error_message_value,
                 text_content=text_content_value,
                 file_path=file_path_value,
+                device_name=device_name_value,
             ))
         elif self._active_window is not None:
             dispatcher.post(lambda: self._active_window.apply_session_event(
@@ -84,6 +87,7 @@ class InstantShareMiniWindowFactory:
                 error_message=error_message_value,
                 text_content=text_content_value,
                 file_path=file_path_value,
+                device_name=device_name_value,
             ))
 
     def _create_or_show_window(
@@ -94,6 +98,7 @@ class InstantShareMiniWindowFactory:
         error_message: str,
         text_content: str = "",
         file_path: str = "",
+        device_name: str = "",
     ) -> None:
         if self._active_window is not None:
             try:
@@ -109,6 +114,7 @@ class InstantShareMiniWindowFactory:
             error_message=error_message,
             text_content=text_content,
             file_path=file_path,
+            device_name=device_name,
         )
         window.destroyed.connect(self._on_window_destroyed)
         window.show()

@@ -103,9 +103,12 @@ class QRTriggerMiniWindow(QDialog):
     def stash_id(self) -> str:
         return self._stash.stash_id
 
-    def on_claimed(self) -> None:
+    def on_claimed(self, peer_device_name: str = "") -> None:
         self._claimed = True
-        self._message_label.setText("Delivered")
+        if peer_device_name:
+            self._message_label.setText(f"Delivered to {peer_device_name}")
+        else:
+            self._message_label.setText("Delivered")
         self._qr_label.hide()
         self._cancel_button.hide()
         self._dismiss_button.show()
@@ -156,19 +159,7 @@ class QRTriggerMiniWindow(QDialog):
         self._qr_label.setText("Generating QR...")
         layout.addWidget(self._qr_label, alignment=Qt.AlignCenter)
 
-        layout.addSpacing(4)
-
-        self._opt_code_label = QLabel()
-        self._opt_code_label.setAlignment(Qt.AlignCenter)
-        opt_font = self._opt_code_label.font()
-        opt_font.setPointSize(28)
-        opt_font.setBold(True)
-        self._opt_code_label.setFont(opt_font)
-        self._opt_code_label.setStyleSheet("letter-spacing: 6px; color: #374151;")
-        self._opt_code_label.setText(self._stash.opt_code)
-        layout.addWidget(self._opt_code_label)
-
-        layout.addSpacing(4)
+        layout.addSpacing(8)
 
         self._message_label = QLabel('Scan this QR code with your iPhone or the <b>AuBackup</b> app to receive the shared content.')
         self._message_label.setAlignment(Qt.AlignCenter)
@@ -176,7 +167,7 @@ class QRTriggerMiniWindow(QDialog):
         self._message_label.setTextFormat(Qt.RichText)
         layout.addWidget(self._message_label)
 
-        layout.addStretch()
+        # layout.addStretch()
 
         ips_str = ", ".join(self._lan_ips)
         port_label = QLabel(f"PC Address: {ips_str}:{self._pc_port}")

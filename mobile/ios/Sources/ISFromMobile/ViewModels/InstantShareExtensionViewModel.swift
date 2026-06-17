@@ -128,6 +128,16 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         let config = buildConnectionConfig(pc: pc, envelope: envelope)
         service.connectionConfig = config
 
+        let deviceName = await UIDevice.current.name
+
+        LocalLog.info("[Extension VM] attempting blind mTLS transfer to \(pc.host):\(pc.tlsPort)")
+        do {
+            try await attemptRevisitTransfer(pc: pc, config: config, deviceName: deviceName)
+            return
+        } catch {
+            LocalLog.info("[Extension VM] blind mTLS transfer failed, falling back to trust handshake: \(error.localizedDescription)")
+        }
+
         do {
             LocalLog.info("[Extension VM] storing connection config for PC \(pc.host):\(pc.port)")
             await service.startSession(connectionConfig: config)
@@ -169,6 +179,50 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             LocalLog.error("[Extension VM] send failed: \(msg)")
             sessionPhase = .failed(msg)
         }
+    }
+
+    private func attemptRevisitTransfer(
+        pc: InstantShareDiscoveredPC,
+        config: InstantShareConnectionConfig,
+        deviceName: String
+    ) async throws {
+        let uploadClient = InstantShareUploadClient(
+            appIdentityProvider: appIdentityProvider
+        )
+        let revisitSessionID = UUID().uuidString.lowercased()
+        let revisitCorrelationID = UUID().uuidString.lowercased()
+
+        switch service.sharedText.isEmpty {
+        case false:
+            try await uploadClient.uploadText(
+                host: pc.host,
+                port: pc.tlsPort,
+                sessionID: revisitSessionID,
+                correlationID: revisitCorrelationID,
+                text: service.sharedText,
+                peerDeviceID: nil,
+                peerDeviceName: deviceName
+            )
+            LocalLog.info("[Extension VM] revisit text transfer succeeded via TLS port \(pc.tlsPort)")
+        default:
+            if let imageData = service.sharedImageData {
+                try await uploadClient.uploadImage(
+                    host: pc.host,
+                    port: pc.tlsPort,
+                    sessionID: revisitSessionID,
+                    correlationID: revisitCorrelationID,
+                    imageData: imageData,
+                    contentType: service.sharedImageContentType,
+                    filename: service.sharedImageFilename,
+                    peerDeviceID: nil,
+                    peerDeviceName: deviceName
+                )
+                LocalLog.info("[Extension VM] revisit image transfer succeeded via TLS port \(pc.tlsPort)")
+            }
+        }
+
+        sessionPhase = .success
+        isProcessing = false
     }
 
     public func confirmPIN(pinCode: String) {

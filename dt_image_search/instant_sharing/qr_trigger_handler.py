@@ -42,7 +42,7 @@ class QRTriggerHandler:
         trust_session_registry: TrustSessionRegistry | None = None,
         on_stash_created: Callable[[StashEntry], None] | None = None,
         on_stash_expired: Callable[[str], None] | None = None,
-        on_stash_claimed: Callable[[str], None] | None = None,
+        on_stash_claimed: Callable[[str, str], None] | None = None,
     ) -> None:
         self._trust_session_registry = trust_session_registry
         self._stashes: dict[str, StashEntry] = {}
@@ -125,6 +125,15 @@ class QRTriggerHandler:
         with self._lock:
             return self._session_ids.get(stash_id)
 
+    def _get_peer_device_name_for_stash(self, stash_id: str) -> str:
+        session_id = self.get_session_id_for_stash(stash_id)
+        if session_id is None or self._trust_session_registry is None:
+            return ""
+        trust_session = self._trust_session_registry.get_session(session_id)
+        if trust_session is None:
+            return ""
+        return trust_session.peer_device_name
+
     @staticmethod
     def _detect_mime(file_path: str) -> str:
         lower = file_path.lower()
@@ -192,7 +201,8 @@ class QRTriggerHandler:
         self._cancel_timer(stash_id)
         entry.claimed = True
         if self._on_stash_claimed is not None:
-            self._on_stash_claimed(stash_id)
+            peer_name = self._get_peer_device_name_for_stash(stash_id)
+            self._on_stash_claimed(stash_id, peer_name)
 
         _logger.info(
             "[QRTriggerHandler] stash content retrieved for transfer/download: id=%s type=%s",

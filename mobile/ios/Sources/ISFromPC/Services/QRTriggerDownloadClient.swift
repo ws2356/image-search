@@ -379,6 +379,7 @@ public final class QRTriggerDownloadClient: Sendable {
         var requestPayload: [String: Any] = [
             "action": "confirm",
             "opt_code": optCode,
+            "peer_device_name": await UIDevice.current.name,
         ]
         if let cert = deviceCertPEM {
             requestPayload["device_certificate_pem"] = cert

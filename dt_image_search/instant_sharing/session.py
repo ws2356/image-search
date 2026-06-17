@@ -73,6 +73,23 @@ class InstantShareSessionRegistry:
             self._active_session = InstantShareSession(connection_config=connection_config)
             return self._active_session
 
+    def bootstrap_revisit(self, connection_config: ConnectionConfig) -> InstantShareSession:
+        connection_config.validate()
+        with self._lock:
+            if self._active_session is not None and self._active_session.state in _ACTIVE_STATES:
+                _logger.info(
+                    "Revisit overriding active session old_id=%s old_state=%s new_id=%s",
+                    self._active_session.connection_config.session_id,
+                    self._active_session.state.value,
+                    connection_config.session_id,
+                )
+            session = InstantShareSession(
+                connection_config=connection_config,
+                state=SessionState.TRANSFERRING,
+            )
+            self._active_session = session
+            return session
+
     def get_active_session(self) -> InstantShareSession | None:
         with self._lock:
             return self._active_session

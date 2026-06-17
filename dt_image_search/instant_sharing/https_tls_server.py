@@ -61,6 +61,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         except Exception:
             payload_text_utf8 = ""
         session_id = request.headers.get("X-Session-Id", "")
+        peer_device_name = request.headers.get("X-Peer-Device-Name", "")
         _logger.info(
             "[TLS] transfer_text session_id=%s active=%s",
             session_id,
@@ -74,6 +75,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             correlation_id_header=request.headers.get("X-Correlation-Id", ""),
             raw_body=raw_body,
             payload_text_utf8=payload_text_utf8,
+            peer_device_name=peer_device_name,
         )
         return JSONResponse(result, status_code=200)
 
@@ -84,6 +86,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             raise _ServiceUnavailable("Instant share service not initialized")
         raw_body = await request.body()
         session_id = request.headers.get("X-Session-Id", "")
+        peer_device_name = request.headers.get("X-Peer-Device-Name", "")
         active_session = deps_local.session_registry.get_active_session()
         _logger.info(
             "[TLS] transfer_image session_id=%s active_session_id=%s",
@@ -98,6 +101,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             raw_body=raw_body,
             content_type=request.headers.get("Content-Type", "application/octet-stream"),
             filename=request.headers.get("X-Instant-Share-Filename"),
+            peer_device_name=peer_device_name,
         )
         return JSONResponse(result, status_code=200)
 

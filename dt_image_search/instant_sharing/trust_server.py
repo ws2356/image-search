@@ -93,6 +93,7 @@ class TrustSession:
         self._opt_code: str | None = opt_code
         self._stash_id: str | None = stash_id
         self._mobile_certificate_pem: str | None = None
+        self._peer_device_name: str = ""
         self._is_trusted = threading.Event()
         self._lock = threading.RLock()
         self._created_monotonic = time.monotonic()
@@ -143,6 +144,17 @@ class TrustSession:
     def mobile_certificate_pem(self) -> str | None:
         with self._lock:
             return self._mobile_certificate_pem
+
+    @property
+    def peer_device_name(self) -> str:
+        with self._lock:
+            return self._peer_device_name
+
+    def set_peer_device_name(self, name: str) -> None:
+        with self._lock:
+            if self._peer_device_name:
+                return
+            self._peer_device_name = name
 
     def store_mobile_certificate(self, certificate_pem: str) -> None:
         with self._lock:

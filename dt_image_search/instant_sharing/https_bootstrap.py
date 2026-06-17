@@ -83,6 +83,44 @@ class TransferTextPayload(BaseModel):
     text_utf8: str = ""
 
 
+def _try_create_revisit_session(
+    deps: _Deps,
+    *,
+    session_id_header: str,
+    correlation_id_header: str,
+    payload_class: PayloadClass,
+    target_intent: TargetIntent,
+    peer_device_name: str = "",
+) -> bool:
+    if deps.session_registry is None or deps.orchestrator is None:
+        return False
+    try:
+        metadata = InstantShareMetadata(
+            payload_class=payload_class,
+            target_intent=target_intent,
+            trust_mode=TrustMode.TRUSTED_DIRECT,
+        )
+        connection_config = ConnectionConfig(
+            session_id=session_id_header,
+            mobile_port=1,
+            mobile_ip_list=("127.0.0.1",),
+            correlation_id=correlation_id_header or session_id_header,
+            metadata=metadata,
+        )
+        connection_config.validate()
+    except Exception:
+        _logger.warning(
+            "Failed to build revisit connection config session_id=%s",
+            session_id_header,
+        )
+        return False
+    deps.orchestrator.handle_revisit_transfer(
+        connection_config=connection_config,
+        peer_device_name=peer_device_name,
+    )
+    return True
+
+
 def _deps_from(request: Request) -> _Deps:
     deps: _Deps | None = getattr(request.app.state, "deps", None)
     if deps is None:
@@ -197,6 +235,9 @@ def _do_trust_apply(
             error_code=ErrorCode.INVALID_REQUEST,
             message=f"Unsupported action: {action}",
         )
+    peer_device_name = decrypted.get("peer_device_name", "")
+    if isinstance(peer_device_name, str) and peer_device_name.strip():
+        trust_session.set_peer_device_name(peer_device_name.strip())
     pin = trust_session.generate_pin()
     ack_envelope = trust_session.encrypted_apply_ack_envelope()
     if deps.pin_display_callback is not None:
@@ -233,6 +274,10 @@ def _do_trust_confirm(
             error_code=ErrorCode.INVALID_REQUEST,
             message=f"Unsupported action: {action}",
         )
+
+    peer_device_name = decrypted.get("peer_device_name", "")
+    if isinstance(peer_device_name, str) and peer_device_name.strip():
+        trust_session.set_peer_device_name(peer_device_name.strip())
 
     request_pin = decrypted.get("pin_code", "")
     request_opt = decrypted.get("opt_code", "")
@@ -303,17 +348,28 @@ def _do_transfer_text(
     correlation_id_header: str,
     raw_body: bytes,
     payload_text_utf8: str,
+    peer_device_name: str = "",
 ) -> dict[str, object]:
     if deps.trust_session_registry is None or deps.transfer_handler is None or deps.session_registry is None:
         raise _ServiceUnavailable("Transfer service not initialized")
     trust_session = deps.trust_session_registry.get_session(session_id_header)
+    is_revisit = False
     if trust_session is None:
-        raise InstantShareError(
-            error_code=ErrorCode.SESSION_NOT_FOUND,
-            message="No active session found",
-            status_code=404,
-        )
-    if not trust_session.is_trusted:
+        if not _try_create_revisit_session(
+            deps,
+            session_id_header=session_id_header,
+            correlation_id_header=correlation_id_header,
+            payload_class=PayloadClass.TEXT,
+            target_intent=TargetIntent.CLIPBOARD_ONLY,
+            peer_device_name=peer_device_name,
+        ):
+            raise InstantShareError(
+                error_code=ErrorCode.SESSION_NOT_FOUND,
+                message="No active session found",
+                status_code=404,
+            )
+        is_revisit = True
+    elif not trust_session.is_trusted:
         raise InstantShareError(
             error_code=ErrorCode.TRUST_REQUIRED,
             message="Trust handshake must be completed before transfer",
@@ -327,10 +383,11 @@ def _do_transfer_text(
     _logger.info("Transfer text received: session_id=%s correlation_id=%s", session_id_header, correlation_id_header)
     if deps.orchestrator is not None:
         try:
-            deps.orchestrator.handle_transfer_received(
-                session_id=session_id_header,
-                correlation_id=correlation_id_header,
-            )
+            if not is_revisit:
+                deps.orchestrator.handle_transfer_received(
+                    session_id=session_id_header,
+                    correlation_id=correlation_id_header,
+                )
             deps.orchestrator.handle_delivery_complete(
                 session_id=session_id_header,
                 correlation_id=correlation_id_header,
@@ -350,17 +407,28 @@ def _do_transfer_image(
     raw_body: bytes,
     content_type: str,
     filename: str | None,
+    peer_device_name: str = "",
 ) -> dict[str, object]:
     if deps.trust_session_registry is None or deps.transfer_handler is None or deps.session_registry is None:
         raise _ServiceUnavailable("Transfer service not initialized")
     trust_session = deps.trust_session_registry.get_session(session_id_header)
+    is_revisit = False
     if trust_session is None:
-        raise InstantShareError(
-            error_code=ErrorCode.SESSION_NOT_FOUND,
-            message="No active session found",
-            status_code=404,
-        )
-    if not trust_session.is_trusted:
+        if not _try_create_revisit_session(
+            deps,
+            session_id_header=session_id_header,
+            correlation_id_header=correlation_id_header,
+            payload_class=PayloadClass.IMAGE,
+            target_intent=TargetIntent.CLIPBOARD_OR_FILE,
+            peer_device_name=peer_device_name,
+        ):
+            raise InstantShareError(
+                error_code=ErrorCode.SESSION_NOT_FOUND,
+                message="No active session found",
+                status_code=404,
+            )
+        is_revisit = True
+    elif not trust_session.is_trusted:
         raise InstantShareError(
             error_code=ErrorCode.TRUST_REQUIRED,
             message="Trust handshake must be completed before transfer",
@@ -377,10 +445,11 @@ def _do_transfer_image(
     file_path = result.output_file_path
     if deps.orchestrator is not None:
         try:
-            deps.orchestrator.handle_transfer_received(
-                session_id=session_id_header,
-                correlation_id=correlation_id_header,
-            )
+            if not is_revisit:
+                deps.orchestrator.handle_transfer_received(
+                    session_id=session_id_header,
+                    correlation_id=correlation_id_header,
+                )
             deps.orchestrator.handle_delivery_complete(
                 session_id=session_id_header,
                 correlation_id=correlation_id_header,
