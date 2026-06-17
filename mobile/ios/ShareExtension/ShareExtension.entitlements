@@ -6,5 +6,9 @@
 	<array>
 		<string>group.com.aubackup.instant-share</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)net.boldman.albumtransporter</string>
+	</array>
 </dict>
 </plist>

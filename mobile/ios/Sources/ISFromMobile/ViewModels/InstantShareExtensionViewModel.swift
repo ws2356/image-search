@@ -257,11 +257,15 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 guard let peerCert, let peerDeviceID = SecCertificate.fromPEM(peerCert)?.commonName else {
                     return
                 }
-                try? await appIdentityProvider.importPeerCertificate(
-                    pem: peerCert,
-                    for: peerDeviceID
-                )
-                LocalLog.info("[Extension VM] stored peer certificate for device=\(peerDeviceID)")
+                do {
+                    try await appIdentityProvider.importPeerCertificate(
+                        pem: peerCert,
+                        for: peerDeviceID
+                    )
+                    LocalLog.info("[Extension VM] stored peer certificate for device=\(peerDeviceID)")
+                } catch {
+                    LocalLog.error("[Extension VM] storing peer certificate for device=\(peerDeviceID) failed: \(error)")
+                }
 
                 switch service.sharedText.isEmpty {
                 case false:

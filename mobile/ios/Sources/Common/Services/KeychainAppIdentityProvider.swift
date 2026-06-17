@@ -44,10 +44,17 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
     private static func getPeerCertLabel(_ peerDeviceID: String) -> String {
         return "AuBackup Peer Certificate \(peerDeviceID)"
     }
-    
+
     private static let keyLabel = "AuBackup App Identity"
     private static let SELF_CERT_VERSION = 2
     private static let certVersionOID = ASN1ObjectIdentifier("2.25.37020860436019520")
+    
+    static var sharedAccessGroup: String {
+        return Bundle.main.object(
+            forInfoDictionaryKey: "SharedKeychainAccessGroup"
+        ) as! String
+    }
+
     private let localDeviceIdentifierProvider: LocalDeviceIdentifierProviding
 
     public init(localDeviceIdentifierProvider: LocalDeviceIdentifierProviding) {
@@ -104,6 +111,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         let query: [String: Any] = [
             kSecClass as String: kSecClassIdentity,
             kSecAttrLabel as String: Self.keyLabel,
+            kSecAttrAccessGroup as String: Self.sharedAccessGroup,
             kSecReturnRef as String: true,
         ]
         var identityRef: CFTypeRef?
@@ -164,18 +172,26 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             commonName: commonName
         )
 
-        let deleteStatus = SecItemDelete([kSecClass: kSecClassCertificate, kSecAttrLabel: Self.keyLabel] as CFDictionary)
+        let deleteStatus = SecItemDelete([
+            kSecClass: kSecClassCertificate,
+            kSecAttrLabel: Self.keyLabel,
+            kSecAttrAccessGroup: Self.sharedAccessGroup] as CFDictionary)
         LocalLog.info("Deleted old cert from keychain (status: \(deleteStatus))")
 
-        let addStatus = SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: newCert, kSecAttrLabel: Self.keyLabel] as CFDictionary, nil)
+        let addStatus = SecItemAdd([
+            kSecClass: kSecClassCertificate,
+            kSecValueRef: newCert,
+            kSecAttrLabel: Self.keyLabel,
+            kSecAttrAccessGroup: Self.sharedAccessGroup] as CFDictionary, nil)
         LocalLog.info("Added migrated cert to keychain (status: \(addStatus))")
-
-        LocalLog.info("Self cert migrated from version \(currentVersion) to \(Self.SELF_CERT_VERSION)")
     }
 
     func createIdentity(commonName: String, isPersist: Bool) async throws -> SecCertificate {
         for secClass in [kSecClassIdentity, kSecClassCertificate, kSecClassKey] {
-            SecItemDelete([kSecClass: secClass, kSecAttrLabel: Self.keyLabel] as CFDictionary)
+            SecItemDelete([
+                kSecClass: secClass,
+                kSecAttrLabel: Self.keyLabel,
+                kSecAttrAccessGroup: Self.sharedAccessGroup] as CFDictionary)
         }
 
         let keyAttrs: [String: Any] = [
@@ -184,6 +200,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             kSecPrivateKeyAttrs as String: [
                 kSecAttrIsPermanent as String: isPersist,
                 kSecAttrLabel as String: Self.keyLabel,
+                kSecAttrAccessGroup as String: Self.sharedAccessGroup,
                 kSecAttrAccessible as String: kSecAttrAccessibleAlwaysThisDeviceOnly,
             ],
         ]
@@ -204,7 +221,11 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             commonName: commonName
         )
         if isPersist {
-            SecItemAdd([kSecClass: kSecClassCertificate, kSecValueRef: certificate, kSecAttrLabel: Self.keyLabel] as CFDictionary, nil)
+            SecItemAdd([
+                kSecClass: kSecClassCertificate,
+                kSecValueRef: certificate,
+                kSecAttrLabel: Self.keyLabel,
+                kSecAttrAccessGroup: Self.sharedAccessGroup] as CFDictionary, nil)
         }
         return certificate
     }
@@ -216,9 +237,11 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             kSecClass as String: kSecClassCertificate,
             kSecValueRef as String: cert,
             kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
+            kSecAttrAccessGroup as String: Self.sharedAccessGroup,
         ]
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
+            LocalLog.error("[IdentityProvider] importPeerCertificate failed: \(status)")
             throw KeychainError.storeFailed(status)
         }
     }
@@ -241,6 +264,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         let query: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
             kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
+            kSecAttrAccessGroup as String: Self.sharedAccessGroup,
             kSecReturnRef as String: true,
         ]
         var result: CFTypeRef?
@@ -263,6 +287,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             let deleteQuery: [String: Any] = [
                 kSecClass as String: kSecClassCertificate,
                 kSecAttrPublicKeyHash as String: publicKeyHash,
+                kSecAttrAccessGroup as String: Self.sharedAccessGroup,
             ]
             let status = SecItemDelete(deleteQuery as CFDictionary)
             LocalLog.debug("[Keychain] deletePeerCertificate by publicKeyHash status=\(status)")
@@ -270,6 +295,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             let deleteQuery: [String: Any] = [
                 kSecClass as String: kSecClassCertificate,
                 kSecAttrLabel as String: Self.getPeerCertLabel(peerDeviceID),
+                kSecAttrAccessGroup as String: Self.sharedAccessGroup,
             ]
             let status = SecItemDelete(deleteQuery as CFDictionary)
             LocalLog.debug("[Keychain] deletePeerCertificate by label status=\(status)")
