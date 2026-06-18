@@ -398,16 +398,16 @@ def _do_transfer_text(
     return {"state": "delivered", **result.as_dict()}
 
 
-# TODO: DO NOT read the bytes into memory, instead stream it into a temp file
 def _do_transfer_image(
     deps: _Deps,
     *,
     session_id_header: str,
     correlation_id_header: str,
-    raw_body: bytes,
+    raw_body: bytes | None = None,
     content_type: str,
     filename: str | None,
     peer_device_name: str = "",
+    temp_file_path: str | None = None,
 ) -> dict[str, object]:
     if deps.trust_session_registry is None or deps.transfer_handler is None or deps.session_registry is None:
         raise _ServiceUnavailable("Transfer service not initialized")
@@ -440,6 +440,7 @@ def _do_transfer_image(
         body=raw_body,
         content_type=content_type,
         filename=filename,
+        temp_file_path=temp_file_path,
     )
     _logger.info("Transfer image received: session_id=%s correlation_id=%s", session_id_header, correlation_id_header)
     file_path = result.output_file_path

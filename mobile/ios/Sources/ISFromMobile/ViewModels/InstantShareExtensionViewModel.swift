@@ -26,7 +26,6 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     @Published public var sessionPhase: ExtensionSessionPhase = .scanning
     @Published public var isProcessing: Bool = false
     @Published public var sharedText: String = ""
-    @Published public var sharedImageData: Data?
     @Published public var sharedImageFilename: String = ""
     @Published public var sharedImageContentType: String = ""
 
@@ -113,10 +112,9 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 service.setSharedText(text)
             }
         case .image:
-            if let fileURL = envelope.fileURL,
-               let data = try? Data(contentsOf: fileURL) {
+            if let fileURL = envelope.fileURL {
                 service.setSharedImage(
-                    data: data,
+                    fileURL: fileURL,
                     filename: envelope.filename ?? "image",
                     contentType: envelope.contentType ?? "image/jpeg"
                 )
@@ -205,13 +203,13 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             )
             LocalLog.info("[Extension VM] revisit text transfer succeeded via TLS port \(pc.tlsPort)")
         default:
-            if let imageData = service.sharedImageData {
+            if let imageFileURL = service.sharedImageFileURL {
                 try await uploadClient.uploadImage(
                     host: pc.host,
                     port: pc.tlsPort,
                     sessionID: revisitSessionID,
                     correlationID: revisitCorrelationID,
-                    imageData: imageData,
+                    fileURL: imageFileURL,
                     contentType: service.sharedImageContentType,
                     filename: service.sharedImageFilename,
                     peerDeviceID: nil,
@@ -279,18 +277,17 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     )
                     LocalLog.info("[Extension VM] text uploaded via TLS port \(pc.tlsPort)")
                 default:
-                    if let imageData = service.sharedImageData {
+                    if let imageFileURL = service.sharedImageFileURL {
                         try await uploadClient.uploadImage(
                             host: handshakeHost,
                             port: pc.tlsPort,
                             sessionID: config.sessionID,
                             correlationID: config.correlationID,
-                            imageData: imageData,
+                            fileURL: imageFileURL,
                             contentType: service.sharedImageContentType,
                             filename: service.sharedImageFilename,
                             peerDeviceID: peerDeviceID
                         )
-                        LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
                         LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
                     }
                 }

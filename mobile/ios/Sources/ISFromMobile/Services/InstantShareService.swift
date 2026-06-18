@@ -16,12 +16,12 @@ public final class InstantShareService: ObservableObject {
     @Published public var connectionConfig: InstantShareConnectionConfig?
     @Published private(set) var selectedPC: InstantShareDiscoveredPC?
     @Published private(set) var sharedText: String = ""
-    @Published private(set) var sharedImage: (data: Data, filename: String, contentType: String)?
+    @Published private(set) var sharedImage: (fileURL: URL, filename: String, contentType: String)?
     @Published private(set) var lastError: String?
     @Published private(set) var statusLog: [String] = []
 
-    var sharedImageData: Data? {
-        sharedImage?.data
+    var sharedImageFileURL: URL? {
+        sharedImage?.fileURL
     }
 
     var sharedImageFilename: String {
@@ -61,10 +61,10 @@ public final class InstantShareService: ObservableObject {
         log("Shared text set (\(text.count) chars)")
     }
 
-    /// Configure the shared image payload.
-    func setSharedImage(data: Data, filename: String, contentType: String) {
-        self.sharedImage = (data, filename, contentType)
-        log("Shared image set (\(data.count) bytes, \(filename))")
+    /// Configure the shared image payload from a file URL.
+    func setSharedImage(fileURL: URL, filename: String, contentType: String) {
+        self.sharedImage = (fileURL, filename, contentType)
+        log("Shared image set (file: \(fileURL.lastPathComponent), \(filename))")
     }
 
     /// Start the instant-share session by storing the connection config.

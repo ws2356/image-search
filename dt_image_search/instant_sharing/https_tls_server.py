@@ -84,7 +84,6 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
             raise _ServiceUnavailable("Instant share service not initialized")
-        raw_body = await request.body()
         session_id = request.headers.get("X-Session-Id", "")
         peer_device_name = request.headers.get("X-Peer-Device-Name", "")
         active_session = deps_local.session_registry.get_active_session()
@@ -93,16 +92,37 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             session_id,
             active_session.connection_config.session_id if active_session else None,
         )
-        result = await asyncio.to_thread(
-            _do_transfer_image,
-            deps_local,
-            session_id_header=session_id,
-            correlation_id_header=request.headers.get("X-Correlation-Id", ""),
-            raw_body=raw_body,
-            content_type=request.headers.get("Content-Type", "application/octet-stream"),
-            filename=request.headers.get("X-Instant-Share-Filename"),
-            peer_device_name=peer_device_name,
-        )
+        content_type = request.headers.get("Content-Type", "application/octet-stream")
+        filename = request.headers.get("X-Instant-Share-Filename")
+        correlation_id_header = request.headers.get("X-Correlation-Id", "")
+
+        from tempfile import NamedTemporaryFile
+        tmp = NamedTemporaryFile(delete=False, suffix=".upload")
+        try:
+            async for chunk in request.stream():
+                tmp.write(chunk)
+            tmp.flush()
+            temp_path = tmp.name
+        finally:
+            tmp.close()
+
+        try:
+            result = await asyncio.to_thread(
+                _do_transfer_image,
+                deps_local,
+                session_id_header=session_id,
+                correlation_id_header=correlation_id_header,
+                raw_body=None,
+                content_type=content_type,
+                filename=filename,
+                peer_device_name=peer_device_name,
+                temp_file_path=temp_path,
+            )
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
         return JSONResponse(result, status_code=200)
 
     @app.post(TRANSFER_DOWNLOAD_PATH)

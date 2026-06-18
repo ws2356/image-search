@@ -118,14 +118,14 @@ final class InstantShareUploadClient: Sendable {
         port: Int,
         sessionID: String,
         correlationID: String,
-        imageData: Data,
+        fileURL: URL,
         contentType: String,
         filename: String?,
         peerDeviceID: String? = nil,
         peerDeviceName: String? = nil
     ) async throws {
         let urlString = "https://\(host):\(port)\(InstantShareProtocol.apiPrefix)/transfer/image"
-        LocalLog.debug("[UploadClient] uploadImage URL: \(urlString) peerDeviceID=\(peerDeviceID ?? "nil") size=\(imageData.count)")
+        LocalLog.debug("[UploadClient] uploadImage URL: \(urlString) peerDeviceID=\(peerDeviceID ?? "nil") file=\(fileURL.lastPathComponent)")
         guard let url = URL(string: urlString) else {
             throw InstantShareUploadClientError.uploadFailed("Invalid URL: \(urlString)")
         }
@@ -141,7 +141,6 @@ final class InstantShareUploadClient: Sendable {
         if let peerDeviceName {
             request.setValue(peerDeviceName, forHTTPHeaderField: "X-Peer-Device-Name")
         }
-        request.httpBody = imageData
         request.timeoutInterval = timeoutInterval
 
         let delegate = InstantShareServerTrustDelegate(
@@ -150,7 +149,7 @@ final class InstantShareUploadClient: Sendable {
         )
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await urlSession.data(for: request, delegate: delegate)
+            (data, response) = try await urlSession.upload(for: request, fromFile: fileURL, delegate: delegate)
         } catch {
             LocalLog.debug("[UploadClient] uploadImage network error: \(error.localizedDescription)")
             throw InstantShareUploadClientError.networkError(error)

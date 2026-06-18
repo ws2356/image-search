@@ -109,6 +109,32 @@ struct InstantSharePayloadExtractor {
         }
     }
 
+    private static func loadInPlaceFile(provider: NSItemProvider, typeIdentifier: String) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            provider.loadInPlaceFileRepresentation(forTypeIdentifier: typeIdentifier) { url, _, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else if let url = url {
+                    let tempURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(UUID().uuidString)
+                        .appendingPathExtension(url.pathExtension)
+                    do {
+                        try FileManager.default.copyItem(at: url, to: tempURL)
+                        continuation.resume(returning: tempURL)
+                    } catch {
+                        continuation.resume(throwing: InstantSharePayloadExtractorError.unreadableContent(
+                            "Failed to copy in-place file: \(error.localizedDescription)"
+                        ))
+                    }
+                } else {
+                    continuation.resume(throwing: InstantSharePayloadExtractorError.unreadableContent(
+                        "loadInPlaceFileRepresentation returned nil"
+                    ))
+                }
+            }
+        }
+    }
+
     private static func extractText(from provider: NSItemProvider) async throws -> InstantSharePayloadEnvelope? {
         let matchingType = supportedTextTypes.first { provider.hasItemConformingToTypeIdentifier($0) }
         guard let typeIdentifier = matchingType else { return nil }
@@ -142,24 +168,28 @@ struct InstantSharePayloadExtractor {
         let matchingType = typeSet.first { provider.hasItemConformingToTypeIdentifier($0) }
         guard let typeIdentifier = matchingType else { return nil }
 
-        let result = try await loadItem(provider: provider, typeIdentifier: typeIdentifier)
         let fileURL: URL
-        if let url = result as? URL {
-            fileURL = url
-        } else if let data = result as? Data {
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension(preferredType == .image ? "jpg" : "mp4")
-            try data.write(to: tempURL)
-            fileURL = tempURL
-        } else if let image = result as? UIImage, let data = image.pngData() {
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension("png")
-            try data.write(to: tempURL)
-            fileURL = tempURL
-        } else {
-            throw InstantSharePayloadExtractorError.unreadableContent("media provider returned unexpected type")
+        do {
+            fileURL = try await loadInPlaceFile(provider: provider, typeIdentifier: typeIdentifier)
+        } catch {
+            let result = try await loadItem(provider: provider, typeIdentifier: typeIdentifier)
+            if let url = result as? URL {
+                fileURL = url
+            } else if let data = result as? Data {
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension(preferredType == .image ? "jpg" : "mp4")
+                try data.write(to: tempURL)
+                fileURL = tempURL
+            } else if let image = result as? UIImage, let data = image.pngData() {
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension("png")
+                try data.write(to: tempURL)
+                fileURL = tempURL
+            } else {
+                throw InstantSharePayloadExtractorError.unreadableContent("media provider returned unexpected type")
+            }
         }
 
         let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
@@ -178,9 +208,13 @@ struct InstantSharePayloadExtractor {
     private static func extractFile(from provider: NSItemProvider) async throws -> InstantSharePayloadEnvelope? {
         guard provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) else { return nil }
 
-        let result = try await loadItem(provider: provider, typeIdentifier: UTType.data.identifier)
-        guard let url = result as? URL else {
-            return nil
+        let url: URL
+        do {
+            url = try await loadInPlaceFile(provider: provider, typeIdentifier: UTType.data.identifier)
+        } catch {
+            let result = try await loadItem(provider: provider, typeIdentifier: UTType.data.identifier)
+            guard let fallbackURL = result as? URL else { return nil }
+            url = fallbackURL
         }
 
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)

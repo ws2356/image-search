@@ -121,9 +121,10 @@ class TransferHandler:
         *,
         session_id: str,
         correlation_id: str,
-        body: bytes,
+        body: bytes | None = None,
         content_type: str | None,
         filename: str | None,
+        temp_file_path: str | None = None,
     ) -> TransferResult:
         session = self._session_registry.require_session(session_id)
         metadata = session.connection_config.metadata
@@ -133,7 +134,7 @@ class TransferHandler:
                 f"Session {session_id} expects payload_class=text, got image.",
                 correlation_id=correlation_id,
             )
-        if not body:
+        if not body and not temp_file_path:
             raise InstantShareError(
                 ErrorCode.PAYLOAD_UNREADABLE,
                 "Image payload body is empty.",
@@ -141,17 +142,22 @@ class TransferHandler:
             )
         image_payload = DownloadedImagePayload(
             metadata=metadata,
-            image_bytes=body,
+            image_bytes=body or b"",
             filename=filename,
             content_type=content_type or "application/octet-stream",
             manifest={},
+            temp_file_path=temp_file_path,
         )
         result = self._delivery_service.deliver(image_payload)
         file_path = result.target_result.output_paths[0] if result.target_result.output_paths else ""
+        bytes_received = body and len(body) or 0
+        if temp_file_path:
+            from pathlib import Path
+            bytes_received = Path(temp_file_path).stat().st_size
         return TransferResult(
             session_id=session_id,
             correlation_id=correlation_id,
             state=result.state.value,
-            bytes_received=len(body),
+            bytes_received=bytes_received,
             output_file_path=file_path,
         )

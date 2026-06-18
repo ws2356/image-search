@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Mapping
 from uuid import UUID
 
@@ -179,18 +180,28 @@ class DownloadedTextPayload:
 @dataclass(frozen=True)
 class DownloadedImagePayload:
     metadata: InstantShareMetadata
-    image_bytes: bytes
+    image_bytes: bytes = b""
     filename: str | None = None
     content_type: str = "application/octet-stream"
     manifest: Mapping[str, object] = field(default_factory=dict)
+    temp_file_path: str | None = None
+
+    @property
+    def _effective_bytes(self) -> bytes:
+        if self.temp_file_path:
+            return Path(self.temp_file_path).read_bytes()
+        return self.image_bytes
 
     def as_dict(self) -> dict[str, object]:
+        size = (Path(self.temp_file_path).stat().st_size
+                if self.temp_file_path
+                else len(self.image_bytes))
         return {
             "metadata": self.metadata.as_dict(),
             "filename": self.filename,
             "content_type": self.content_type,
             "manifest": dict(self.manifest),
-            "size_bytes": len(self.image_bytes),
+            "size_bytes": size,
         }
 
 

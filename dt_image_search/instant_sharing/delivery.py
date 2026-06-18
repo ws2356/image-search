@@ -82,7 +82,7 @@ class InstantShareDeliveryService:
                     ErrorCode.PAYLOAD_UNREADABLE,
                     "Image clipboard delivery requires a clipboard writer.",
                 )
-            self._clipboard_writer.write_image_bytes(payload.image_bytes)
+            self._clipboard_writer.write_image_bytes(payload._effective_bytes)
             return DeliveryResult(
                 state=SessionState.DONE,
                 target_result=DeliveryTargetResult(clipboard_written=True),
@@ -103,7 +103,11 @@ class InstantShareDeliveryService:
         downloads_dir.mkdir(parents=True, exist_ok=True)
         filename = self._resolve_filename(payload)
         output_path = self._resolve_output_path(downloads_dir=downloads_dir, filename=filename)
-        output_path.write_bytes(payload.image_bytes)
+        if payload.temp_file_path:
+            import shutil
+            shutil.copy2(payload.temp_file_path, output_path)
+        else:
+            output_path.write_bytes(payload.image_bytes)
         return output_path
 
     def _default_downloads_dir(self) -> Path:
