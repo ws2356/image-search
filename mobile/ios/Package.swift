@@ -10,18 +10,22 @@ let package = Package(
     products: [
         .library(
             name: "AlbumTransporterKit",
+            type: .dynamic,
             targets: ["AlbumTransporterKit"]
         ),
         .library(
             name: "Common",
+            type: .dynamic,
             targets: ["Common"]
         ),
         .library(
             name: "ISFromPC",
+            type: .dynamic,
             targets: ["ISFromPC"]
         ),
         .library(
             name: "ISFromMobile",
+            type: .dynamic,
             targets: ["ISFromMobile"]
         )
     ],
@@ -62,16 +66,5 @@ let package = Package(
                 "Common"
                ],
                resources: []),
-        .testTarget(
-            name: "AlbumTransporterKitTests",
-            dependencies: [
-                "AlbumTransporterKit",
-                "Common",
-                "ISFromPC",
-                "ISFromMobile",
-                .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-                .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-            ]
-        ),
     ]
 )
