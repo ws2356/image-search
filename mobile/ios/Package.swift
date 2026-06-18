@@ -32,9 +32,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/hmlongco/Factory.git", from: "2.4.12"),
         .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
-        .package(path: "./third-party/swift-asn1"),
-        .package(path: "./third-party/swift-certificates"),
-        .package(path: "./third-party/swift-crypto"),
+        .package(url: "https://github.com/apple/swift-asn1.git", from: "1.3.0"),
+        .package(url: "https://github.com/apple/swift-certificates.git", from: "1.0.0"),
     ],
     targets: [
         .target(
