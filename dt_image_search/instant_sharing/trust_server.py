@@ -300,11 +300,12 @@ class TrustSession:
 
 
 class TrustSessionRegistry:
-    """Holds the single active trust session for the PC receiver."""
+    """Holds active trust sessions for the PC receiver, keyed by session_id."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._session: TrustSession | None = None
+        self._sessions: dict[str, TrustSession] = {}
+        self._cleanup_timers: dict[str, threading.Timer] = {}
 
     def create_session(
         self,
@@ -329,7 +330,7 @@ class TrustSessionRegistry:
                 opt_code=opt_code,
                 stash_id=stash_id,
             )
-            self._session = session
+            self._sessions[session_id] = session
             _logger.info(
                 "[TrustSessionRegistry] created trust session session_id=%s correlation_id=%s flow_type=%s",
                 session_id,
@@ -340,11 +341,7 @@ class TrustSessionRegistry:
 
     def get_session(self, session_id: str) -> TrustSession | None:
         with self._lock:
-            if self._session is None:
-                return None
-            if self._session.session_id != session_id:
-                return None
-            return self._session
+            return self._sessions.get(session_id)
 
     def require_session(self, session_id: str) -> TrustSession:
         session = self.get_session(session_id)
@@ -357,12 +354,30 @@ class TrustSessionRegistry:
 
     def clear(self, session_id: str) -> None:
         with self._lock:
-            if self._session is not None and self._session.session_id == session_id:
+            self._cancel_cleanup_timer(session_id)
+            session = self._sessions.pop(session_id, None)
+            if session is not None:
                 _logger.info(
                     "[TrustSessionRegistry] cleared trust session session_id=%s",
                     session_id,
                 )
-                self._session = None
+
+    def _schedule_cleanup(self, session_id: str) -> None:
+        timer = threading.Timer(60.0, self._cleanup_session, args=[session_id])
+        timer.daemon = True
+        with self._lock:
+            self._cleanup_timers[session_id] = timer
+        timer.start()
+
+    def _cleanup_session(self, session_id: str) -> None:
+        with self._lock:
+            self._sessions.pop(session_id, None)
+            self._cleanup_timers.pop(session_id, None)
+
+    def _cancel_cleanup_timer(self, session_id: str) -> None:
+        timer = self._cleanup_timers.pop(session_id, None)
+        if timer is not None:
+            timer.cancel()
 
 
 def _generate_pin_code() -> str:

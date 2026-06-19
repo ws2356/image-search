@@ -1,6 +1,7 @@
-"""Unit tests for InstantShareSessionRegistry."""
+"""Unit tests for InstantShareSessionRegistry bootstrap_revisit."""
 
 import unittest
+import uuid
 
 from dt_image_search.instant_sharing.contracts import (
     InstantShareMetadata,
@@ -17,12 +18,12 @@ class TestBootstrapRevisit(unittest.TestCase):
     def setUp(self):
         self.registry = InstantShareSessionRegistry()
 
-    def _make_config(self, session_id="test-session-id", payload_class=PayloadClass.TEXT):
+    def _make_config(self, session_id=None, payload_class=PayloadClass.TEXT):
         return ConnectionConfig(
-            session_id=session_id,
+            session_id=session_id or str(uuid.uuid4()),
             mobile_port=1,
             mobile_ip_list=("127.0.0.1",),
-            correlation_id="test-correlation-id",
+            correlation_id=str(uuid.uuid4()),
             metadata=InstantShareMetadata(
                 payload_class=payload_class,
                 target_intent=TargetIntent.CLIPBOARD_ONLY,
@@ -31,7 +32,8 @@ class TestBootstrapRevisit(unittest.TestCase):
         )
 
     def test_bootstrap_revisit_creates_session_at_transferring_state(self):
-        config = self._make_config()
+        sid = str(uuid.uuid4())
+        config = self._make_config(session_id=sid)
         session = self.registry.bootstrap_revisit(config)
 
         self.assertEqual(session.state, SessionState.TRANSFERRING)
@@ -39,19 +41,24 @@ class TestBootstrapRevisit(unittest.TestCase):
             session.connection_config.metadata.trust_mode,
             TrustMode.TRUSTED_DIRECT,
         )
-        self.assertEqual(session.connection_config.session_id, "test-session-id")
+        self.assertEqual(session.connection_config.session_id, sid)
 
-    def test_bootstrap_revisit_overrides_active_session(self):
-        config1 = self._make_config(session_id="session-1")
-        config2 = self._make_config(session_id="session-2")
+    def test_bootstrap_revisit_coexists_with_other_sessions(self):
+        """Multi-session: revisit creates independent session alongside existing ones."""
+        sid1 = str(uuid.uuid4())
+        sid2 = str(uuid.uuid4())
+        config1 = self._make_config(session_id=sid1)
+        config2 = self._make_config(session_id=sid2)
 
-        self.registry.bootstrap_revisit(config1)
+        session1 = self.registry.bootstrap_revisit(config1)
         session2 = self.registry.bootstrap_revisit(config2)
 
-        self.assertEqual(session2.connection_config.session_id, "session-2")
-        active = self.registry.get_active_session()
-        self.assertIsNotNone(active)
-        self.assertEqual(active.connection_config.session_id, "session-2")
+        self.assertEqual(session2.connection_config.session_id, sid2)
+        # Both sessions should exist independently
+        self.assertIsNotNone(self.registry.get_session(sid1))
+        self.assertIsNotNone(self.registry.get_session(sid2))
+        self.assertEqual(self.registry.get_session(sid1).state,
+                         SessionState.TRANSFERRING)
 
     def test_bootstrap_revisit_sets_trusted_direct_mode(self):
         config = self._make_config()

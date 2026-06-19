@@ -47,7 +47,7 @@ class _Deps:
     session_registry: InstantShareSessionRegistry | None = None
     orchestrator: InstantShareReceiverOrchestrator | None = None
     transfer_handler: TransferHandler | None = None
-    pin_display_callback: Callable[[str], None] | None = None
+    pin_display_callback: Callable[[str, str], None] | None = None
     # TODO: Define a proper protocol for this instead of Any
     qr_trigger_handler: Any = None
     # Reference to the TLS server, so the trust-confirm handler can
@@ -106,45 +106,32 @@ def _do_trust_handshake(
     if trust_session.flow_type == TrustFlowType.MOBILE_TO_PC:
         session_registry = deps.session_registry
         if session_registry is not None:
-            active = session_registry.get_active_session()
-            if active is None or active.connection_config.session_id != session_id:
-                try:
-                    metadata = InstantShareMetadata(
-                        payload_class=PayloadClass(body.payload_class),
-                        target_intent=TargetIntent(body.target_intent),
-                        trust_mode=TrustMode(body.trust_mode),
-                    )
-                    connection_config = ConnectionConfig(
+            try:
+                metadata = InstantShareMetadata(
+                    payload_class=PayloadClass(body.payload_class),
+                    target_intent=TargetIntent(body.target_intent),
+                    trust_mode=TrustMode(body.trust_mode),
+                )
+                connection_config = ConnectionConfig(
+                    session_id=session_id,
+                    mobile_port=body.mobile_port,
+                    mobile_ip_list=tuple(body.mobile_ip_list),
+                    correlation_id=correlation_id,
+                    metadata=metadata,
+                )
+                if deps.orchestrator is not None:
+                    deps.orchestrator.handle_connection_config(connection_config)
+                    deps.orchestrator.handle_trust_handshake_received(
                         session_id=session_id,
-                        mobile_port=body.mobile_port,
-                        mobile_ip_list=tuple(body.mobile_ip_list),
                         correlation_id=correlation_id,
-                        metadata=metadata,
                     )
-                    if deps.orchestrator is not None:
-                        if active is not None:
-                            _logger.info(
-                                "Replacing stale active session old_id=%s new_id=%s",
-                                active.connection_config.session_id, session_id,
-                            )
-                            session_registry.replace_active_session(connection_config)
-                            deps.orchestrator.handle_trust_handshake_received(
-                                session_id=session_id,
-                                correlation_id=correlation_id,
-                            )
-                        else:
-                            deps.orchestrator.handle_connection_config(connection_config)
-                            deps.orchestrator.handle_trust_handshake_received(
-                                session_id=session_id,
-                                correlation_id=correlation_id,
-                            )
-                    else:
-                        session_registry.replace_active_session(connection_config)
-                    _logger.info("Instant-share session bootstrapped from handshake: session_id=%s", session_id)
-                except Exception as exc:
-                    _logger.warning(
-                        "Failed to bootstrap instant-share session from handshake: %s", exc,
-                    )
+                else:
+                    session_registry.bootstrap(connection_config)
+                _logger.info("Instant-share session bootstrapped from handshake: session_id=%s", session_id)
+            except InstantShareError as exc:
+                _logger.warning(
+                    "Failed to bootstrap instant-share session from handshake: %s", exc,
+                )
     else:
         _logger.info(
             "Skipping instant-share session bootstrap for pc-to-mobile flow session_id=%s",
@@ -193,7 +180,7 @@ def _do_trust_apply(
     pin = trust_session.generate_pin()
     ack_envelope = trust_session.encrypted_apply_ack_envelope()
     if deps.pin_display_callback is not None:
-        deps.pin_display_callback(pin)
+        deps.pin_display_callback(pin, session_id_header)
     _logger.info("Trust apply completed: session_id=%s pin=%s", session_id_header, pin)
     return 202, {"apply_status": "accepted", **ack_envelope}
 
@@ -368,7 +355,7 @@ class InstantShareHTTPServer:
         session_registry: InstantShareSessionRegistry | None = None,
         orchestrator: InstantShareReceiverOrchestrator | None = None,
         transfer_handler: TransferHandler | None = None,
-        pin_display_callback: Callable[[str], None] | None = None,
+        pin_display_callback: Callable[[str, str], None] | None = None,
         qr_trigger_handler: Any = None,
         tls_server: Any | None = None,
     ) -> None:

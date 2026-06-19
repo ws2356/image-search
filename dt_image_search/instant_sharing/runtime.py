@@ -50,7 +50,7 @@ class InstantShareRuntime:
         orchestrator: InstantShareReceiverOrchestrator | None = None,
         auto_receive: bool = False,
         trust_session_registry: TrustSessionRegistry | None = None,
-        pin_display_callback: Callable[[str], None] | None = None,
+        pin_display_callback: Callable[[str, str], None] | None = None,
         qr_window_factory: QRTriggerMiniWindowFactory | None = None,
     ) -> None:
         initialize_device_identity()
@@ -254,7 +254,7 @@ class InstantShareRuntime:
         else:
             connection_config = ConnectionConfig.from_dict(payload)
             self._ble_service.handle_bootstrap(connection_config)
-        return self._session_registry.get_active_session()
+        return self._session_registry.get_session(connection_config.session_id)
 
     def _handle_connection_config(self, connection_config: ConnectionConfig) -> None:
         self._orchestrator.handle_connection_config(connection_config)

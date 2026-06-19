@@ -88,7 +88,8 @@ class InstantShareReceiverOrchestrator:
             "instant_share.revisit.transfer",
             attributes=_session_attributes(connection_config),
         ):
-            session = self._session_registry.bootstrap_revisit(connection_config)
+            session = self._session_registry.bootstrap(connection_config)
+            session = self._session_registry.transition(connection_config.session_id, SessionState.TRANSFERRING)
             self._publish(session, device_name=peer_device_name)
             log(
                 "info",

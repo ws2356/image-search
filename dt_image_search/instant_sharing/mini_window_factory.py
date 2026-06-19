@@ -26,8 +26,7 @@ WINDOW_WIDTH = 360
 
 class InstantShareMiniWindowFactory:
     def __init__(self) -> None:
-        self._active_window: InstantShareMiniWindow | None = None
-        self._current_session_id: str | None = None
+        self._windows: dict[str, InstantShareMiniWindow | None] = {}
         self._subscription: Any = None
 
     def start(self) -> None:
@@ -43,8 +42,17 @@ class InstantShareMiniWindowFactory:
         if self._subscription is not None:
             self._subscription.dispose()
             self._subscription = None
-        if self._active_window is not None:
-            self._close_window()
+        # Close all windows; each close() will trigger destroyed signal
+        # which calls _on_window_destroyed and release_activation_policy.
+        # Iterate over a snapshot of keys to avoid changing dict during iteration.
+        for session_id in list(self._windows):
+            window = self._windows.pop(session_id, None)
+            if window is not None:
+                try:
+                    window.close()
+                except RuntimeError:
+                    pass
+            release_activation_policy()
         _logger.info("[InstantShareMiniWindowFactory] stopped")
 
     def _on_lifecycle_event(
@@ -67,13 +75,11 @@ class InstantShareMiniWindowFactory:
         file_path_value = str(file_path) if file_path is not None else ""
         device_name_value = str(device_name) if device_name else ""
 
-        phase = InstantShareMiniWindow.build_phase(state_value)
-        is_new_session = session_id_value and session_id_value != self._current_session_id
-
-        if is_new_session:
-            self._current_session_id = session_id_value
-            dispatcher.post(lambda: self._create_or_show_window(
-                session_id=session_id_value,
+        if session_id_value and session_id_value not in self._windows:
+            # New session: create a placeholder and schedule window creation
+            self._windows[session_id_value] = None
+            dispatcher.post(lambda sid=session_id_value: self._create_or_show_window(
+                session_id=sid,
                 state=state_value,
                 payload_class=payload_class_value,
                 error_message=error_message_value,
@@ -81,8 +87,10 @@ class InstantShareMiniWindowFactory:
                 file_path=file_path_value,
                 device_name=device_name_value,
             ))
-        elif session_id_value == self._current_session_id:
-            dispatcher.post(lambda: self._apply_event_to_window(
+        elif session_id_value in self._windows:
+            # Existing session: apply event to its window
+            dispatcher.post(lambda sid=session_id_value: self._apply_event_to_window(
+                session_id=sid,
                 state=state_value,
                 payload_class=payload_class_value,
                 error_message=error_message_value,
@@ -101,13 +109,20 @@ class InstantShareMiniWindowFactory:
         file_path: str = "",
         device_name: str = "",
     ) -> None:
-        if self._active_window is not None:
+        existing = self._windows.get(session_id)
+        if existing is not None:
+            # Window already exists for this session; bring it to front
             try:
-                self._active_window.close()
+                bring_to_front(existing)
             except RuntimeError:
                 pass
-            self._active_window = None
-        self._current_session_id = session_id
+            _logger.info(
+                "[InstantShareMiniWindowFactory] window brought to front: session=%s state=%s",
+                session_id,
+                state,
+            )
+            return
+
         window = InstantShareMiniWindow()
         window.apply_session_event(
             state=state,
@@ -117,30 +132,43 @@ class InstantShareMiniWindowFactory:
             file_path=file_path,
             device_name=device_name,
         )
-        window.destroyed.connect(self._on_window_destroyed)
+        window.destroyed.connect(lambda sid=session_id: self._on_window_destroyed(sid))
         window.show()
         bring_to_front(window)
         acquire_activation_policy()
-        self._active_window = window
+        self._windows[session_id] = window
         _logger.info(
             "[InstantShareMiniWindowFactory] window shown: session=%s state=%s",
             session_id,
             state,
         )
 
-    def show_pin(self, pin_code: str) -> None:
-        dispatcher.post(lambda: self._show_pin(pin_code))
+    def show_pin(self, pin_code: str, session_id: str = "") -> None:
+        dispatcher.post(lambda: self._show_pin(pin_code, session_id))
 
-    def _show_pin(self, pin_code: str) -> None:
-        if self._active_window is not None:
-            self._active_window.show_pin(pin_code)
+    def _show_pin(self, pin_code: str, session_id: str = "") -> None:
+        if session_id:
+            window = self._windows.get(session_id)
+            if window is not None:
+                try:
+                    window.show_pin(pin_code)
+                except RuntimeError:
+                    pass
+            return
+        for window in list(self._windows.values()):
+            if window is not None:
+                try:
+                    window.show_pin(pin_code)
+                except RuntimeError:
+                    pass
 
-    def _on_window_destroyed(self) -> None:
-        self._active_window = None
+    def _on_window_destroyed(self, session_id: str) -> None:
+        self._windows.pop(session_id, None)
         release_activation_policy()
 
     def _apply_event_to_window(
         self,
+        session_id: str,
         state: str,
         payload_class: str,
         error_message: str,
@@ -148,22 +176,18 @@ class InstantShareMiniWindowFactory:
         file_path: str = "",
         device_name: str = "",
     ) -> None:
-        if self._active_window is not None:
-            self._active_window.apply_session_event(
-                state=state,
-                payload_class=payload_class,
-                error_message=error_message,
-                text_content=text_content,
-                file_path=file_path,
-                device_name=device_name,
-            )
-
-    def _close_window(self) -> None:
-        if self._active_window is not None:
+        window = self._windows.get(session_id)
+        if window is not None:
             try:
-                self._active_window.close()
+                window.apply_session_event(
+                    state=state,
+                    payload_class=payload_class,
+                    error_message=error_message,
+                    text_content=text_content,
+                    file_path=file_path,
+                    device_name=device_name,
+                )
             except RuntimeError:
-                pass
-        self._active_window = None
-        release_activation_policy()
-        self._current_session_id = None
+                # Window was already deleted (e.g. auto-close race); clean up
+                self._windows.pop(session_id, None)
+                release_activation_policy()

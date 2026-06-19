@@ -13,6 +13,9 @@ from dt_image_search.instant_sharing.errors import InstantShareError
 _logger = logging.getLogger(__name__)
 
 
+DEFAULT_MAX_SESSIONS = 8
+_TERMINAL_SESSION_CLEANUP_SECONDS = 60
+
 _ACTIVE_STATES = {
     SessionState.BOOTSTRAPPED,
     SessionState.QUEUED,
@@ -43,72 +46,70 @@ class InstantShareSession:
     connection_config: ConnectionConfig
     state: SessionState = SessionState.BOOTSTRAPPED
     started_monotonic: float = 0.0
+    last_updated: float = 0.0
 
     def __post_init__(self) -> None:
         if self.started_monotonic <= 0:
-            object.__setattr__(self, "started_monotonic", time.monotonic())
+            now = time.monotonic()
+            object.__setattr__(self, "started_monotonic", now)
+            object.__setattr__(self, "last_updated", now)
 
 
 class InstantShareSessionRegistry:
-    def __init__(self) -> None:
+    def __init__(self, max_sessions: int | None = None) -> None:
         self._lock = threading.RLock()
-        self._active_session: InstantShareSession | None = None
+        self._active_sessions: dict[str, InstantShareSession] = {}
+        self._max_sessions: int = DEFAULT_MAX_SESSIONS if max_sessions is None else max_sessions
+        self._cleanup_timers: dict[str, threading.Timer] = {}
 
     def bootstrap(self, connection_config: ConnectionConfig) -> InstantShareSession:
         connection_config.validate()
         with self._lock:
-            if self._active_session is not None and self._active_session.state in _ACTIVE_STATES:
+            # Idempotent: return existing session if session_id already known
+            existing = self._active_sessions.get(connection_config.session_id)
+            if existing is not None:
+                return existing
+
+            # Enforce max concurrent non-terminal sessions
+            active_count = sum(1 for s in self._active_sessions.values() if s.state in _ACTIVE_STATES)
+            if active_count >= self._max_sessions:
                 raise InstantShareError(
-                    ErrorCode.RECEIVER_BUSY_SINGLE_SESSION,
-                    "An instant-share session is already active.",
+                    ErrorCode.RECEIVER_BUSY_MAX_SESSIONS,
+                    "Maximum concurrent sessions reached.",
                     correlation_id=connection_config.correlation_id,
                     retryable=True,
+                    status_code=503,
                 )
-            self._active_session = InstantShareSession(connection_config=connection_config)
-            return self._active_session
 
-    def replace_active_session(self, connection_config: ConnectionConfig) -> InstantShareSession:
-        connection_config.validate()
-        with self._lock:
-            self._active_session = InstantShareSession(connection_config=connection_config)
-            return self._active_session
-
-    def bootstrap_revisit(self, connection_config: ConnectionConfig) -> InstantShareSession:
-        connection_config.validate()
-        with self._lock:
-            if self._active_session is not None and self._active_session.state in _ACTIVE_STATES:
-                _logger.info(
-                    "Revisit overriding active session old_id=%s old_state=%s new_id=%s",
-                    self._active_session.connection_config.session_id,
-                    self._active_session.state.value,
-                    connection_config.session_id,
-                )
-            session = InstantShareSession(
-                connection_config=connection_config,
-                state=SessionState.TRANSFERRING,
-            )
-            self._active_session = session
+            session = InstantShareSession(connection_config=connection_config)
+            self._active_sessions[connection_config.session_id] = session
             return session
 
-    def get_active_session(self) -> InstantShareSession | None:
+    def bootstrap_revisit(self, connection_config: ConnectionConfig) -> InstantShareSession:
+        session = self.bootstrap(connection_config)
+        return self.transition(session.connection_config.session_id, SessionState.TRANSFERRING)
+
+    def get_active_sessions(self) -> list[InstantShareSession]:
         with self._lock:
-            return self._active_session
+            return [s for s in self._active_sessions.values() if s.state in _ACTIVE_STATES]
+
+    def get_session(self, session_id: str) -> InstantShareSession | None:
+        with self._lock:
+            return self._active_sessions.get(session_id)
 
     def require_session(self, session_id: str) -> InstantShareSession:
-        if self._active_session is None or self._active_session.connection_config.session_id != session_id:
-            active_id = self._active_session.connection_config.session_id if self._active_session else None
-            _logger.warning(
-                "Session mismatch: requested=%s active=%s active_state=%s",
-                session_id, active_id,
-                self._active_session.state.value if self._active_session else "None",
-            )
-            correlation_id = self._active_session.connection_config.correlation_id if self._active_session else None
-            raise InstantShareError(
-                ErrorCode.SESSION_ID_MISMATCH,
-                "No active instant-share session matches the provided session id.",
-                correlation_id=correlation_id,
-            )
-        return self._active_session
+        with self._lock:
+            session = self._active_sessions.get(session_id)
+            if session is None:
+                _logger.warning(
+                    "Session mismatch: requested=%s", session_id,
+                )
+                raise InstantShareError(
+                    ErrorCode.SESSION_ID_MISMATCH,
+                    "No active instant-share session matches the provided session id.",
+                    correlation_id=None,
+                )
+            return session
 
     def transition(self, session_id: str, next_state: SessionState) -> InstantShareSession:
         with self._lock:
@@ -123,6 +124,19 @@ class InstantShareSessionRegistry:
                     ),
                     correlation_id=current_session.connection_config.correlation_id,
                 )
-            updated_session = replace(current_session, state=next_state)
-            self._active_session = updated_session
+            updated_session = replace(current_session, state=next_state, last_updated=time.monotonic())
+            self._active_sessions[session_id] = updated_session
+            if next_state not in _ACTIVE_STATES:
+                self._schedule_cleanup(session_id)
             return updated_session
+
+    def _schedule_cleanup(self, session_id: str) -> None:
+        timer = threading.Timer(_TERMINAL_SESSION_CLEANUP_SECONDS, self._cleanup_session, args=[session_id])
+        timer.daemon = True
+        self._cleanup_timers[session_id] = timer
+        timer.start()
+
+    def _cleanup_session(self, session_id: str) -> None:
+        with self._lock:
+            self._active_sessions.pop(session_id, None)
+            self._cleanup_timers.pop(session_id, None)

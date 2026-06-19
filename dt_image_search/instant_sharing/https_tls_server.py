@@ -282,10 +282,8 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         session_id = request.headers.get("X-Session-Id", "")
         peer_device_name = request.headers.get("X-Peer-Device-Name", "")
         _logger.info(
-            "[TLS] transfer_text session_id=%s active=%s",
+            "[TLS] transfer_text session_id=%s",
             session_id,
-            deps_local.session_registry.get_active_session().connection_config.session_id
-            if deps_local.session_registry.get_active_session() else None,
         )
         result = await asyncio.to_thread(
             _do_transfer_text,
@@ -305,11 +303,9 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             raise _ServiceUnavailable("Instant share service not initialized")
         session_id = request.headers.get("X-Session-Id", "")
         peer_device_name = request.headers.get("X-Peer-Device-Name", "")
-        active_session = deps_local.session_registry.get_active_session()
         _logger.info(
-            "[TLS] transfer_image session_id=%s active_session_id=%s",
+            "[TLS] transfer_image session_id=%s",
             session_id,
-            active_session.connection_config.session_id if active_session else None,
         )
         content_type = request.headers.get("Content-Type", "application/octet-stream")
         filename = request.headers.get("X-Instant-Share-Filename")
@@ -378,7 +374,7 @@ class InstantShareTLSServer:
         session_registry: Any = None,
         orchestrator: Any = None,
         transfer_handler: Any = None,
-        pin_display_callback: Callable[[str], None] | None = None,
+        pin_display_callback: Callable[[str, str], None] | None = None,
         qr_trigger_handler: Any = None,
     ) -> None:
         self._host = host
