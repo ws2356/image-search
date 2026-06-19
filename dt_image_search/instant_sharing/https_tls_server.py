@@ -12,25 +12,244 @@ from typing import Any, Callable
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, RootModel
 
 from dt_image_search.identity import (
     get_device_certificate_pem,
     get_device_private_key_pem,
     load_all_peer_certificates,
 )
-from dt_image_search.instant_sharing.contracts import TRANSFER_DOWNLOAD_PATH, TRANSFER_IMAGE_PATH, TRANSFER_TEXT_PATH
 from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.https_bootstrap import (
     _Deps,
     _ServiceUnavailable,
     TransferTextPayload,
-    _do_transfer_download,
-    _do_transfer_image,
-    _do_transfer_text,
 )
+from dt_image_search.instant_sharing.contracts import (
+    TRANSFER_DOWNLOAD_PATH,
+    TRANSFER_IMAGE_PATH,
+    TRANSFER_TEXT_PATH,
+    ErrorCode,
+    InstantShareMetadata,
+    PayloadClass,
+    TargetIntent,
+    TrustMode,
+)
+from dt_image_search.instant_sharing.mdns import ConnectionConfig
+
+_TrustEnvelope = RootModel[dict[str, Any]]
+
 
 _logger = logging.getLogger(__name__)
 
+def _do_transfer_text(
+    deps: _Deps,
+    *,
+    session_id_header: str,
+    correlation_id_header: str,
+    raw_body: bytes,
+    payload_text_utf8: str,
+    peer_device_name: str = "",
+) -> dict[str, object]:
+    if deps.trust_session_registry is None or deps.transfer_handler is None or deps.session_registry is None:
+        raise _ServiceUnavailable("Transfer service not initialized")
+    trust_session = deps.trust_session_registry.get_session(session_id_header)
+    is_revisit = False
+    if trust_session is None:
+        if not _try_create_revisit_session(
+            deps,
+            session_id_header=session_id_header,
+            correlation_id_header=correlation_id_header,
+            payload_class=PayloadClass.TEXT,
+            target_intent=TargetIntent.CLIPBOARD_ONLY,
+            peer_device_name=peer_device_name,
+        ):
+            raise InstantShareError(
+                error_code=ErrorCode.SESSION_NOT_FOUND,
+                message="No active session found",
+                status_code=404,
+            )
+        is_revisit = True
+    elif not trust_session.is_trusted:
+        raise InstantShareError(
+            error_code=ErrorCode.TRUST_REQUIRED,
+            message="Trust handshake must be completed before transfer",
+            status_code=403,
+        )
+    result = deps.transfer_handler.receive_text(
+        session_id=session_id_header,
+        correlation_id=correlation_id_header,
+        body=raw_body,
+    )
+    _logger.info("Transfer text received: session_id=%s correlation_id=%s", session_id_header, correlation_id_header)
+    if deps.orchestrator is not None:
+        try:
+            if not is_revisit:
+                deps.orchestrator.handle_transfer_received(
+                    session_id=session_id_header,
+                    correlation_id=correlation_id_header,
+                )
+            deps.orchestrator.handle_delivery_complete(
+                session_id=session_id_header,
+                correlation_id=correlation_id_header,
+                text_content=payload_text_utf8,
+            )
+        except Exception as exc:
+            _logger.warning("Failed to publish transfer lifecycle event: %s", exc)
+    return {"state": "delivered", **result.as_dict()}
+
+
+def _do_transfer_image(
+    deps: _Deps,
+    *,
+    session_id_header: str,
+    correlation_id_header: str,
+    raw_body: bytes | None = None,
+    content_type: str,
+    filename: str | None,
+    peer_device_name: str = "",
+    temp_file_path: str | None = None,
+) -> dict[str, object]:
+    if deps.trust_session_registry is None or deps.transfer_handler is None or deps.session_registry is None:
+        raise _ServiceUnavailable("Transfer service not initialized")
+    trust_session = deps.trust_session_registry.get_session(session_id_header)
+    is_revisit = False
+    if trust_session is None:
+        if not _try_create_revisit_session(
+            deps,
+            session_id_header=session_id_header,
+            correlation_id_header=correlation_id_header,
+            payload_class=PayloadClass.IMAGE,
+            target_intent=TargetIntent.CLIPBOARD_OR_FILE,
+            peer_device_name=peer_device_name,
+        ):
+            raise InstantShareError(
+                error_code=ErrorCode.SESSION_NOT_FOUND,
+                message="No active session found",
+                status_code=404,
+            )
+        is_revisit = True
+    elif not trust_session.is_trusted:
+        raise InstantShareError(
+            error_code=ErrorCode.TRUST_REQUIRED,
+            message="Trust handshake must be completed before transfer",
+            status_code=403,
+        )
+    result = deps.transfer_handler.receive_image(
+        session_id=session_id_header,
+        correlation_id=correlation_id_header,
+        body=raw_body,
+        content_type=content_type,
+        filename=filename,
+        temp_file_path=temp_file_path,
+    )
+    _logger.info("Transfer image received: session_id=%s correlation_id=%s", session_id_header, correlation_id_header)
+    file_path = result.output_file_path
+    if deps.orchestrator is not None:
+        try:
+            if not is_revisit:
+                deps.orchestrator.handle_transfer_received(
+                    session_id=session_id_header,
+                    correlation_id=correlation_id_header,
+                )
+            deps.orchestrator.handle_delivery_complete(
+                session_id=session_id_header,
+                correlation_id=correlation_id_header,
+                file_path=file_path,
+            )
+        except Exception as exc:
+            _logger.warning("Failed to publish transfer lifecycle event: %s", exc)
+    return {"state": "delivered", **result.as_dict()}
+
+
+def _do_transfer_download(
+    deps: _Deps,
+    *,
+    session_id_header: str,
+    correlation_id_header: str,
+) -> tuple[int, bytes, dict[str, str] | None]:
+    if deps.trust_session_registry is None or deps.session_registry is None:
+        raise _ServiceUnavailable("Transfer service not initialized")
+    trust_session = deps.trust_session_registry.get_session(session_id_header)
+    if trust_session is None:
+        raise InstantShareError(
+            error_code=ErrorCode.SESSION_NOT_FOUND,
+            message="No active session found",
+            status_code=404,
+        )
+    if not trust_session.is_trusted:
+        raise InstantShareError(
+            error_code=ErrorCode.TRUST_REQUIRED,
+            message="Trust handshake must be completed before transfer download",
+            status_code=403,
+        )
+    stash_id = trust_session.stash_id
+    if stash_id is None:
+        raise InstantShareError(
+            error_code=ErrorCode.INVALID_REQUEST,
+            message="No stash associated with this session",
+            status_code=400,
+        )
+    if deps.qr_trigger_handler is None:
+        raise _ServiceUnavailable("QR trigger service not initialized")
+    result = deps.qr_trigger_handler.retrieve_stash_content(stash_id)
+    result_status = result.get("_status", 200)
+    if not isinstance(result_status, int):
+        result_status = 200
+    if result.get("status") == "claimed" and "content" in result:
+        content = str(result.get("content", ""))
+        if result.get("file_bytes") is not None:
+            resp_bytes = result["file_bytes"] if isinstance(result["file_bytes"], bytes) else str(result["file_bytes"]).encode("utf-8")
+        else:
+            resp_bytes = content.encode("utf-8")
+        headers = {"Content-Type": str(result.get("content_type", "application/octet-stream"))}
+        if result.get("filename"):
+            headers["X-Original-Filename"] = str(result["filename"])
+        _logger.info(
+            "[transfer/download] delivering stash_id=%s content_type=%s bytes=%d session_id=%s",
+            stash_id, result.get("content_type"), len(resp_bytes), session_id_header,
+        )
+        return result_status, resp_bytes, headers
+    safe = {k: v for k, v in result.items() if not k.startswith("_")}
+    return result_status, b"", safe
+
+
+def _try_create_revisit_session(
+    deps: _Deps,
+    *,
+    session_id_header: str,
+    correlation_id_header: str,
+    payload_class: PayloadClass,
+    target_intent: TargetIntent,
+    peer_device_name: str = "",
+) -> bool:
+    if deps.session_registry is None or deps.orchestrator is None:
+        return False
+    try:
+        metadata = InstantShareMetadata(
+            payload_class=payload_class,
+            target_intent=target_intent,
+            trust_mode=TrustMode.TRUSTED_DIRECT,
+        )
+        connection_config = ConnectionConfig(
+            session_id=session_id_header,
+            mobile_port=1,
+            mobile_ip_list=("127.0.0.1",),
+            correlation_id=correlation_id_header or session_id_header,
+            metadata=metadata,
+        )
+        connection_config.validate()
+    except Exception:
+        _logger.warning(
+            "Failed to build revisit connection config session_id=%s",
+            session_id_header,
+        )
+        return False
+    deps.orchestrator.handle_revisit_transfer(
+        connection_config=connection_config,
+        peer_device_name=peer_device_name,
+    )
+    return True
 
 def _build_tls_app(deps: _Deps) -> FastAPI:
     app = FastAPI()
