@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: On-the-fly session creation for revisit transfers
-When a transfer request arrives at `/transfer/text`, `/transfer/image`, or `/transfer/download` via mTLS and no active trust session matches the `X-Session-Id` header, the PC SHALL create a session on-the-fly if the client certificate's CN matches a previously-trusted peer certificate in the keychain. The session SHALL be initialized with `TrustMode.TRUSTED_DIRECT` and state `TRANSFERRING`.
+When a transfer request arrives at `/transfer/text`, `/transfer/image`, or `/transfer/download` via mTLS and no active trust session matches the `X-Session-Id` header, the PC SHALL create a session on-the-fly if the client certificate's CN matches a previously-trusted peer certificate in the keychain. The session SHALL be initialized with `TrustMode.TRUSTED_DIRECT` and state `TRANSFERRING`. This session SHALL coexist with any other active sessions.
 
 #### Scenario: Revisit transfer with trusted mTLS client cert
 - **WHEN** a POST request arrives at `/transfer/text` or `/transfer/image` via mTLS with no matching active trust session
@@ -14,9 +14,9 @@ When a transfer request arrives at `/transfer/text`, `/transfer/image`, or `/tra
 - **THEN** the TLS handshake SHALL fail at the SSL layer — the PC SHALL NOT receive an HTTP request and SHALL NOT return an HTTP error
 
 #### Scenario: Revisit transfer when another session is active
-- **WHEN** a revisit transfer request arrives and an active session already exists for a different device
-- **THEN** the PC SHALL return HTTP 409 with error code `RECEIVER_BUSY_SINGLE_SESSION`
-- **AND** the mobile SHALL fall back to the trust handshake or retry
+- **WHEN** a revisit transfer request arrives and another active session already exists for a different device
+- **THEN** the PC SHALL create a new session for the revisit transfer and process it normally
+- **AND** the existing session SHALL continue unaffected
 
 ### Requirement: Client certificate CN extraction for revisit identity
 The PC SHALL extract the client certificate's Common Name (CN) from the TLS connection scope and SHALL use it as the mobile `device_id` for peer certificate lookup and session identification. The TLS layer's existing certificate validation (signature, public key, expiry) SHALL remain intact.
@@ -51,14 +51,14 @@ During the first-share trust handshake, the mobile SHALL include a human-readabl
 - **AND** the PC SHALL store this name for UI display during the current session
 
 ### Requirement: Revisit session lifecycle events
-The orchestrator SHALL publish lifecycle events for revisit sessions starting from state `TRANSFERRING` (skipping `BOOTSTRAPPED`, `QUEUED`, and `NEGOTIATING`). The lifecycle event SHALL include `device_name` for the mini-window to display. The mini-window SHALL display transfer progress for revisit sessions identically to first-share sessions.
+The orchestrator SHALL publish lifecycle events for revisit sessions starting from state `TRANSFERRING` (skipping `BOOTSTRAPPED`, `QUEUED`, and `NEGOTIATING`). The lifecycle event SHALL include `device_name` and `session_id` for the mini-window to display. The mini-window SHALL display transfer progress for revisit sessions identically to first-share sessions.
 
 #### Scenario: Revisit session lifecycle event published with device name
 - **WHEN** an on-the-fly revisit session is created with state `TRANSFERRING`
-- **THEN** the orchestrator SHALL publish a lifecycle event with state `TRANSFERRING`, the session details, and `device_name` populated from the peer device name
-- **AND** the mini-window SHALL render the transfer progress UI showing the correct device name
+- **THEN** the orchestrator SHALL publish a lifecycle event with `session_id`, state `TRANSFERRING`, the session details, and `device_name` populated from the peer device name
+- **AND** the mini-window SHALL render the transfer progress UI showing the correct device name for the correct session
 
-#### Scenario: Mini-window displays peer device name for revisit
-- **WHEN** the mini-window receives a lifecycle event for a revisit session
-- **THEN** the mini-window SHALL display the `device_name` from the event (e.g., "Receiving shared item from John's iPhone...")
-- **AND** if no device name is provided, the mini-window SHALL fall back to "your phone"
+#### Scenario: Multi-session lifecycle events
+- **WHEN** a revisit session and a first-share trust session are both active
+- **THEN** the orchestrator SHALL publish independent lifecycle events for each session
+- **AND** each event SHALL carry the correct `session_id`
