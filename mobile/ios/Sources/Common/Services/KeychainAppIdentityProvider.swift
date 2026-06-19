@@ -232,6 +232,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
 
     public func importPeerCertificate(_ cert: SecCertificate, for peerDeviceID: String) async throws {
         try? deletePeerCertificate(for: peerDeviceID, cert: cert)
+        try? deletePeerCertificate(for: peerDeviceID, cert: nil)
         
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassCertificate,

@@ -260,9 +260,9 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                         pem: peerCert,
                         for: peerDeviceID
                     )
-                    LocalLog.info("[Extension VM] stored peer certificate for device=\(peerDeviceID)")
+                    LocalLog.info("[Extension VM] imported peer certificate for device=\(peerDeviceID)")
                 } catch {
-                    LocalLog.error("[Extension VM] storing peer certificate for device=\(peerDeviceID) failed: \(error)")
+                    LocalLog.error("[Extension VM] imported peer certificate for device=\(peerDeviceID) failed: \(error)")
                 }
 
                 switch service.sharedText.isEmpty {

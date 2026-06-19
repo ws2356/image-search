@@ -667,12 +667,12 @@ private final class ISPCServerTrustDelegate: NSObject, URLSessionTaskDelegate {
         let storedCert: SecCertificate
         do {
             storedCert = try appIdentityProvider.peerCertificate(for: serverCN)
-            LocalLog.debug("[TLS-QR] loaded stored peer certificate by CN=\(serverCN)")
+            LocalLog.debug("[TLS-QR] loaded peer certificate by CN=\(serverCN)")
         } catch {
             LocalLog.debug("[TLS-QR] lookup by CN failed, trying peerDeviceID=\(peerDeviceID)")
             do {
                 storedCert = try appIdentityProvider.peerCertificate(for: peerDeviceID)
-                LocalLog.debug("[TLS-QR] loaded stored peer certificate by key=\(peerDeviceID)")
+                LocalLog.debug("[TLS-QR] loaded peer certificate by key=\(peerDeviceID)")
             } catch {
                 LocalLog.error("[TLS-QR] no stored peer certificate for CN=\(serverCN) or key=\(peerDeviceID)")
                 completionHandler(.cancelAuthenticationChallenge, nil)

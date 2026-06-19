@@ -16,8 +16,8 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        try? deletePeerCertificate(for: testPeerID)
-        try? deletePeerCertificate(for: testPeerID2)
+        try? provider.deletePeerCertificate(for: testPeerID, cert: nil)
+        try? provider.deletePeerCertificate(for: testPeerID2, cert: nil)
         provider = nil
         try await super.tearDown()
     }
@@ -29,35 +29,36 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
         try await provider.importPeerCertificate(selfCert, for: testPeerID)
         let retrieved = try provider.peerCertificate(for: testPeerID)
 
-        let originalData = try XCTUnwrap(SecCertificateCopyData(selfCert) as Data?)
-        let retrievedData = try XCTUnwrap(SecCertificateCopyData(retrieved) as Data?)
-        XCTAssertEqual(originalData, retrievedData)
+        let originalKeyData = try publicKeyData(from: selfCert)
+        let retrievedKeyData = try publicKeyData(from: retrieved)
+        XCTAssertEqual(originalKeyData, retrievedKeyData)
     }
 
     func test_importPeerCertificate_pem_roundTrip() async throws {
         try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: testPeerID, isPersist: false)
-        let derData = try XCTUnwrap(SecCertificateCopyData(selfCert) as Data?)
 
-        let pem = derDataToPem(derData)
+        let pem = derDataToPem(try XCTUnwrap(SecCertificateCopyData(selfCert) as Data?))
         try await provider.importPeerCertificate(pem: pem, for: testPeerID)
         let retrieved = try provider.peerCertificate(for: testPeerID)
 
-        let retrievedData = try XCTUnwrap(SecCertificateCopyData(retrieved) as Data?)
-        XCTAssertEqual(derData, retrievedData)
+        let originalKeyData = try publicKeyData(from: selfCert)
+        let retrievedKeyData = try publicKeyData(from: retrieved)
+        XCTAssertEqual(originalKeyData, retrievedKeyData)
     }
 
     func test_importPeerCertificate_pem_overwritesExisting() async throws {
         try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: testPeerID, isPersist: false)
-        let derData = try XCTUnwrap(SecCertificateCopyData(selfCert) as Data?)
-        let pem = derDataToPem(derData)
+        let pem = derDataToPem(try XCTUnwrap(SecCertificateCopyData(selfCert) as Data?))
 
         try await provider.importPeerCertificate(pem: pem, for: testPeerID)
         try await provider.importPeerCertificate(pem: pem, for: testPeerID)
         let retrieved = try provider.peerCertificate(for: testPeerID)
-        let retrievedData = try XCTUnwrap(SecCertificateCopyData(retrieved) as Data?)
-        XCTAssertEqual(derData, retrievedData)
+
+        let originalKeyData = try publicKeyData(from: selfCert)
+        let retrievedKeyData = try publicKeyData(from: retrieved)
+        XCTAssertEqual(originalKeyData, retrievedKeyData)
     }
 
     func test_peerCertificate_notFound_throws() {
@@ -75,16 +76,18 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func deletePeerCertificate(for peerDeviceID: String) throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassCertificate,
-            kSecAttrApplicationTag as String: peerDeviceID.data(using: .utf8) as Any,
-        ]
-        SecItemDelete(query as CFDictionary)
-    }
-
     private func derDataToPem(_ derData: Data) -> String {
         let base64 = derData.base64EncodedString(options: .lineLength64Characters)
         return "-----BEGIN CERTIFICATE-----\n\(base64)\n-----END CERTIFICATE-----"
+    }
+
+    private func publicKeyData(from cert: SecCertificate) throws -> Data {
+        guard let publicKey = SecCertificateCopyKey(cert) else {
+            throw KeychainError.unexpectedData
+        }
+        guard let keyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? else {
+            throw KeychainError.unexpectedData
+        }
+        return keyData
     }
 }
