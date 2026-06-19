@@ -21,7 +21,7 @@ The advertised TCP port SHALL be the PC's instant-share HTTP API port. `tls_port
 
 #### Scenario: Mobile calls trust handshake with bootstrap data
 - **WHEN** the user has selected a PC and taps "Send" in the Share Extension
-- **THEN** the Share Extension calls PC's `/api/instant-share/v1/trust/handshake` endpoint (using the IP:port from mDNS resolution) with DH key material plus bootstrap data (`mobile_port`, `mobile_ip_list`, `payload_class`, `target_intent`, `trust_mode`) embedded in the body. No separate bootstrap endpoint. No local HTTP server.
+- **THEN** the Share Extension calls PC's `/api/instant-share/v1/trust/handshake` endpoint (using the IP:port from mDNS resolution) with DH key material plus bootstrap data (`mobile_port`, `mobile_ip_list`, `payload_class`, `target_intent`, `trust_mode`) embedded in the body. No separate bootstrap endpoint. **Correction**: non of above fields are useful now. The /trust/handshake endpoint is only used for DH key exchanges.
 
 ### Requirement: Discovered PC identity
 The mobile system SHALL synthesize a unique identity for each discovered PC using the resolved `host:port` tuple. This identity SHALL be used for SwiftUI `Identifiable` conformance, list deduplication, and equality checks.
@@ -127,9 +127,3 @@ Instant-sharing SHALL NOT require a dedicated `/sessions/bootstrap` endpoint. Se
 #### Scenario: Session created from trust handshake
 - **WHEN** iOS sends `/trust/handshake` with bootstrap metadata
 - **THEN** PC creates a session from the embedded bootstrap data and subsequent requests are matched by `X-Session-Id`
-
-## REMOVED Requirements
-
-### Requirement: Signed mDNS advertisement verification and pinned direct HTTPS for future sharing
-**Reason**: The TXT fields supporting this feature (`device_id`, `signature`, `signature_key_id`, `timestamp_ms`) were removed from the mDNS advertisement to reduce broadcast data and simplify the QR code. The code has no provision for signed mDNS advertisement verification or pinned HTTPS.
-**Migration**: If signature-verified direct shares are implemented in the future, a new TXT record version should be defined under `ver` and the relevant fields reintroduced as a new capability spec.

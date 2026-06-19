@@ -13,7 +13,8 @@ This is a monorepo containing source code for the following products:
 - **Asking for Clarification**: If any requirement or guideline is unclear, ask for clarification before proceeding with code generation. Do not make assumptions that could lead to non-compliant code.
 - **Code Review**: After generating code, review it against the guidelines to ensure compliance. If any part of the code violates the guidelines, revise it until it fully adheres to the specified standards.
 - **Continuous Learning**: Stay updated with any changes to the guidelines or architecture. If you notice any areas where the guidelines could be improved for clarity or effectiveness, suggest revisions to the team.
-- **Cooperation**: If you cann't generate code with confidence due to complexity or ambiguity, collaborate with other agents or human engineers to ensure the best outcome. For example, when blocked by a difficult technical challenge, you can pause and ask for help from a human engineer or another agent with complementary expertise.
+- **Cooperation**: If you cann't generate code with confidence due to complexity or ambiguity, turn to human engineers for help. For example, when blocked by a difficult technical challenge, you can pause and ask for help from a human engineer or another agent with complementary expertise.
+- **Ask for Clarification**: If any requirement or guideline is unclear, ask for clarification before proceeding with planning or coding. Do not make assumptions that could lead to non-compliant code.
 
 ## 1. Tech Stack & Environment
 - **Language**: Python 3.10.

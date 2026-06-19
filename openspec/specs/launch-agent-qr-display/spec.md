@@ -42,7 +42,7 @@ Upon successful stash, the Launch Agent SHALL generate a 6-digit opt-code and as
 - **THEN** the opt-code SHALL be single-use (invalidated after a successful or 3 failed claim attempts)
 
 ### Requirement: QR code display
-After generating the opt-code, the Launch Agent SHALL display a mini-window with a QR code encoding the PC's LAN IP addresses, port, stash_id, and opt-code.
+After generating the opt-code, the Launch Agent SHALL display a mini-window with a QR code encoding the PC's LAN IP addresses, port, ~~stash_id~~ (replaced with session id), and opt-code.
 
 #### Scenario: Show QR mini-window
 - **WHEN** a payload is stashed and opt-code generated
