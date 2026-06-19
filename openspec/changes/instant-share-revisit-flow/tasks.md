@@ -46,8 +46,8 @@
 ## 8. Testing and verification
 
 - [x] 8.1 Add unit test for `bootstrap_revisit()` covering: session creation with TRUSTED_DIRECT mode and TRANSFERRING state
-- [ ] 8.2 Manual test: full revisit flow end-to-end (pre-trusted devices → mTLS transfer → delivery, no trust endpoints called)
-- [ ] 8.3 Manual test: revisit fallback flow (pre-trusted device but cert expired/rotated → TLS handshake fails → fallback trust handshake → transfer succeeds)
-- [ ] 8.4 Manual test: first-share flow unchanged (new device → full trust handshake → transfer)
-- [ ] 8.5 Manual test: mini-window displays correct peer device name for first-share, revisit, and QR flows
-- [ ] 8.6 Manual test: QR mini-window transitions from "Delivered" to "Delivered to {device_name}" when `peer_device_name` is present
+- [x] 8.2 Manual test: full revisit flow end-to-end (pre-trusted devices → mTLS transfer → delivery, no trust endpoints called)
+- [x] 8.3 Manual test: revisit fallback flow (pre-trusted device but cert expired/rotated → TLS handshake fails → fallback trust handshake → transfer succeeds)
+- [x] 8.4 Manual test: first-share flow unchanged (new device → full trust handshake → transfer)
+- [x] 8.5 Manual test: mini-window displays correct peer device name for first-share, revisit, and QR flows
+- [x] 8.6 Manual test: QR mini-window transitions from "Delivered" to "Delivered to {device_name}" when `peer_device_name` is present
