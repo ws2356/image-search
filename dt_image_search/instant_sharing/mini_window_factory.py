@@ -71,6 +71,7 @@ class InstantShareMiniWindowFactory:
         is_new_session = session_id_value and session_id_value != self._current_session_id
 
         if is_new_session:
+            self._current_session_id = session_id_value
             dispatcher.post(lambda: self._create_or_show_window(
                 session_id=session_id_value,
                 state=state_value,
@@ -80,8 +81,8 @@ class InstantShareMiniWindowFactory:
                 file_path=file_path_value,
                 device_name=device_name_value,
             ))
-        elif self._active_window is not None:
-            dispatcher.post(lambda: self._active_window.apply_session_event(
+        elif session_id_value == self._current_session_id:
+            dispatcher.post(lambda: self._apply_event_to_window(
                 state=state_value,
                 payload_class=payload_class_value,
                 error_message=error_message_value,
@@ -137,6 +138,25 @@ class InstantShareMiniWindowFactory:
     def _on_window_destroyed(self) -> None:
         self._active_window = None
         release_activation_policy()
+
+    def _apply_event_to_window(
+        self,
+        state: str,
+        payload_class: str,
+        error_message: str,
+        text_content: str = "",
+        file_path: str = "",
+        device_name: str = "",
+    ) -> None:
+        if self._active_window is not None:
+            self._active_window.apply_session_event(
+                state=state,
+                payload_class=payload_class,
+                error_message=error_message,
+                text_content=text_content,
+                file_path=file_path,
+                device_name=device_name,
+            )
 
     def _close_window(self) -> None:
         if self._active_window is not None:
