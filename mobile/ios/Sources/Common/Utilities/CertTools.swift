@@ -5,6 +5,7 @@
 //  Created by Song Wan on 2026/6/16.
 //
 
+import CryptoKit
 import Foundation
 
 extension SecCertificate {
@@ -19,6 +20,16 @@ extension SecCertificate {
         }
 
         return cfName as String?
+    }
+
+    public var publicKeyHash: Data? {
+        guard let publicKey = SecCertificateCopyKey(self) else {
+            return nil
+        }
+        guard let keyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? else {
+            return nil
+        }
+        return Data(Insecure.SHA1.hash(data: keyData))
     }
     
     public static func fromPEM(_ pem: String) -> SecCertificate? {

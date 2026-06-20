@@ -14,8 +14,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
+from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID, ObjectIdentifier
 import ipaddress
+import socket
 
 from dt_image_search.model.dt_device_id import get_device_id
 
@@ -30,6 +31,8 @@ _KEYCHAIN_ACCOUNT = "device-identity-v1"
 _CERT_VALIDITY_YEARS = 20
 _KEYCHAIN_PATH = Path.home() / "Library" / "Keychains" / "ausearch.keychain"
 _KEY_CHAIN_PASSWORD = "123456"
+
+_DEVICE_ID_OID = ObjectIdentifier("2.25.37020860436019521")
 
 
 def _resolve_keychain_path() -> Path:
@@ -117,7 +120,8 @@ def _load_or_create_identity() -> DeviceIdentity:
     if p12_data is not None:
         return _decode_identity(p12_data, device_id)
 
-    identity = _generate_identity(device_id)
+    desktop_name = socket.gethostname().split('.')[0]  # strip .local suffix
+    identity = _generate_identity(device_id, desktop_name=desktop_name)
     p12_data = pkcs12.serialize_key_and_certificates(
         name=b"AuSearch Device Identity",
         key=identity.private_key,
@@ -327,11 +331,12 @@ def delete_peer_certificate(peer_device_id: str) -> None:
     except subprocess.CalledProcessError:
         pass
 
-def _generate_identity(device_id: str, server_ips: list[str] = None, server_hostnames: list[str] = None) -> DeviceIdentity:
+def _generate_identity(device_id: str, server_ips: list[str] = None, server_hostnames: list[str] = None, desktop_name: str | None = None) -> DeviceIdentity:
     key = ec.generate_private_key(ec.SECP256R1())
     
+    cn_name = (desktop_name or socket.gethostname()).encode("ascii", errors="ignore").decode("ascii")
     subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, device_id),
+        x509.NameAttribute(NameOID.COMMON_NAME, cn_name),
     ])
     
     now = datetime.now(timezone.utc)
@@ -388,6 +393,13 @@ def _generate_identity(device_id: str, server_ips: list[str] = None, server_host
             critical=False,
         )
 
+    # Add device UUID in custom extension
+    device_id_extension = x509.UnrecognizedExtension(
+        oid=_DEVICE_ID_OID,
+        value=device_id.encode("utf-8"),
+    )
+    builder = builder.add_extension(device_id_extension, critical=False)
+
     # 签名生成证书
     cert = builder.sign(key, hashes.SHA256())
     
@@ -398,3 +410,20 @@ def _generate_identity(device_id: str, server_ips: list[str] = None, server_host
         ).decode("utf-8"),
         private_key=key,
     )
+
+
+def extract_device_name(cert: x509.Certificate) -> str:
+    """Extract human-readable device name from certificate CN."""
+    cn_attrs = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+    if cn_attrs:
+        return str(cn_attrs[0].value)
+    return ""
+
+
+def extract_device_id(cert: x509.Certificate) -> str | None:
+    """Extract device UUID from custom extension."""
+    try:
+        ext = cert.extensions.get_extension_for_oid(_DEVICE_ID_OID)
+        return ext.value.value.decode("utf-8")  # type: ignore[attr-defined]
+    except x509.ExtensionNotFound:
+        return None

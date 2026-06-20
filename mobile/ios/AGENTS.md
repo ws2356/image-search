@@ -89,6 +89,5 @@ Utilize Swift's modern concurrency model to keep the UI responsive.
 
 ## **5\. Testing in iOS**
 
-* **XCTest:** Write unit tests for ViewModels and Model logic. Avoid testing SwiftUI view rendering directly in unit tests. Run them with `cd mobile/ios && xcodebuild test -project AlbumTransporterApp.xcodeproj -scheme AlbumTransporterApp -destination "platform=iOS Simulator,name=iPhone 17 Pro Max" -skip-testing:AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests`. For focused runs, add `-only-testing:AlbumTransporterAppSnapshotTests/<TestCaseName>` or `-only-testing:AlbumTransporterAppSnapshotTests/<TestCaseName>/<testMethod>`.  
-* **Snapshot Testing:** Use snapshot testing libraries to verify UI consistency across different device sizes.  
-* **UI Testing (Optional):** Use XCUITest sparingly for critical user flows (e.g., Login, Checkout).
+* **Unit Test:** Run `mobile/ios/scripts/run_unit_tests.sh`. Need to ensure this script runs sucessfully after making changes to the iOS codebase. 
+* **Snapshot Testing:** Run `mobile/ios/scripts/run_snapshot_tests.sh <record|test>`. Use record mode to update snapshots when intentional UI changes are made, and test mode to validate against existing snapshots.

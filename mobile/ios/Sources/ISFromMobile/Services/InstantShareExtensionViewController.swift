@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Common
 
 class InstantShareExtensionViewController: UIViewController {
     private var extensionItems: [NSExtensionItem] = []

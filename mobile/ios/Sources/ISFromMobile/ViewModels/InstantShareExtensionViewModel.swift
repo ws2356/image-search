@@ -32,6 +32,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     let mdnsBrowser: InstantShareMDNSBrowser
     let service: InstantShareService
     private let appIdentityProvider: AppIdentityProviding
+    private let deviceIdentifierProvider: LocalDeviceIdentifierProviding
     private var cancellables: Set<AnyCancellable> = []
 
     public init(
@@ -39,11 +40,13 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         service: InstantShareService,
         appIdentityProvider: AppIdentityProviding = KeychainAppIdentityProvider(
             localDeviceIdentifierProvider: LocalDeviceIdentifierStore()
-        )
+        ),
+        deviceIdentifierProvider: LocalDeviceIdentifierProviding = LocalDeviceIdentifierStore()
     ) {
         self.mdnsBrowser = mdnsBrowser
         self.service = service
         self.appIdentityProvider = appIdentityProvider
+        self.deviceIdentifierProvider = deviceIdentifierProvider
         LocalLog.info("[Extension VM] init, subscribing to mdnsBrowser")
         mdnsBrowser.objectWillChange
             .receive(on: DispatchQueue.main)
@@ -126,7 +129,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         let config = buildConnectionConfig(pc: pc, envelope: envelope)
         service.connectionConfig = config
 
-        let deviceName = await UIDevice.current.name
+        let deviceName = await deviceIdentifierProvider.currentIdentifier().deviceName
 
         LocalLog.info("[Extension VM] attempting blind mTLS transfer to \(pc.host):\(pc.tlsPort)")
         do {
@@ -198,7 +201,6 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 sessionID: revisitSessionID,
                 correlationID: revisitCorrelationID,
                 text: service.sharedText,
-                peerDeviceID: nil,
                 peerDeviceName: deviceName
             )
             LocalLog.info("[Extension VM] revisit text transfer succeeded via TLS port \(pc.tlsPort)")
@@ -212,7 +214,6 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     fileURL: imageFileURL,
                     contentType: service.sharedImageContentType,
                     filename: service.sharedImageFilename,
-                    peerDeviceID: nil,
                     peerDeviceName: deviceName
                 )
                 LocalLog.info("[Extension VM] revisit image transfer succeeded via TLS port \(pc.tlsPort)")
@@ -223,10 +224,12 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         isProcessing = false
     }
 
-    public func confirmPIN(pinCode: String) {
+    public func confirmPIN(pinCode: String) async {
         LocalLog.info("[Extension VM] PIN confirmed with code: \(pinCode)")
         sessionPhase = .transferring
 
+        let deviceName = await deviceIdentifierProvider.currentIdentifier().deviceName
+        
         guard let pc = selectedDevice, let config = service.connectionConfig else {
             sessionPhase = .failed("No connection config available")
             return
@@ -252,17 +255,14 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     pinCode: pinCode,
                     deviceCertificatePEM: myCert
                 )
-                guard let peerCert, let peerDeviceID = SecCertificate.fromPEM(peerCert)?.commonName else {
+                guard let peerCert else {
                     return
                 }
                 do {
-                    try await appIdentityProvider.importPeerCertificate(
-                        pem: peerCert,
-                        for: peerDeviceID
-                    )
-                    LocalLog.info("[Extension VM] imported peer certificate for device=\(peerDeviceID)")
+                    try await appIdentityProvider.importPeerCertificate(pem: peerCert)
+                    LocalLog.info("[Extension VM] imported peer certificate")
                 } catch {
-                    LocalLog.error("[Extension VM] imported peer certificate for device=\(peerDeviceID) failed: \(error)")
+                    LocalLog.error("[Extension VM] imported peer certificate failed: \(error)")
                 }
 
                 switch service.sharedText.isEmpty {
@@ -273,7 +273,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                         sessionID: config.sessionID,
                         correlationID: config.correlationID,
                         text: service.sharedText,
-                        peerDeviceID: peerDeviceID
+                        peerDeviceName: deviceName
                     )
                     LocalLog.info("[Extension VM] text uploaded via TLS port \(pc.tlsPort)")
                 default:
@@ -286,7 +286,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                             fileURL: imageFileURL,
                             contentType: service.sharedImageContentType,
                             filename: service.sharedImageFilename,
-                            peerDeviceID: peerDeviceID
+                            peerDeviceName: deviceName
                         )
                         LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
                     }

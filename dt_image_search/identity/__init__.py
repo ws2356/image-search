@@ -1,6 +1,8 @@
 from dt_image_search.identity.device_identity import (
     DeviceIdentity,
     delete_peer_certificate,
+    extract_device_id,
+    extract_device_name,
     get_device_certificate_pem,
     get_device_private_key_pem,
     get_identity_future,
@@ -15,6 +17,8 @@ from dt_image_search.identity.device_identity import (
 __all__ = [
     "DeviceIdentity",
     "delete_peer_certificate",
+    "extract_device_id",
+    "extract_device_name",
     "get_device_certificate_pem",
     "get_device_private_key_pem",
     "get_identity_future",

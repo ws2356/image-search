@@ -91,7 +91,9 @@ public struct InstantShareExtensionView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             PinCodeInputView(onSubmit: { pinCode in
-                viewModel.confirmPIN(pinCode: pinCode)
+                Task {
+                    await viewModel.confirmPIN(pinCode: pinCode)
+                }
             })
             if let error = viewModel.errorMessage {
                 Text(error)

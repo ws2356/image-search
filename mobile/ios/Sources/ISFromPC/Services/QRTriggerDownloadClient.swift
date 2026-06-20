@@ -283,7 +283,7 @@ public final class QRTriggerDownloadClient: Sendable {
         try await trustHandshake(host: host, port: port, sessionId: sessionId, correlationID: correlationID)
         LocalLog.info("[QRDownload] trust handshake completed session_id=\(sessionId)")
 
-        let peerDeviceID = try await trustConfirm(
+        try await trustConfirm(
             host: host, port: port,
             sessionId: sessionId, correlationID: correlationID,
             optCode: optCode, deviceCertPEM: deviceCertPEM
@@ -292,8 +292,7 @@ public final class QRTriggerDownloadClient: Sendable {
 
         let result = try await download(
             host: host, port: tlsPort,
-            sessionId: sessionId, correlationID: correlationID,
-            peerDeviceId: peerDeviceID
+            sessionId: sessionId, correlationID: correlationID
         )
         LocalLog.info("[QRDownload] download completed session_id=\(sessionId)")
         return result
@@ -371,7 +370,7 @@ public final class QRTriggerDownloadClient: Sendable {
         correlationID: String,
         optCode: String,
         deviceCertPEM: String?
-    ) async throws -> String {
+    ) async throws {
         guard trustSessionManager.isEstablished else {
             throw QRTriggerDownloadClientError.confirmFailed("Session key not established")
         }
@@ -443,18 +442,16 @@ public final class QRTriggerDownloadClient: Sendable {
             throw QRTriggerDownloadClientError.confirmFailed("Expected trust_status=trusted")
         }
 
-        if let pcCertPEM = decryptedPayload["device_certificate_pem"] as? String,
-           let peerDeviceID = SecCertificate.fromPEM(pcCertPEM)?.commonName {
+        if let pcCertPEM = decryptedPayload["device_certificate_pem"] as? String {
             do {
-                try await appIdentityProvider.importPeerCertificate(pem: pcCertPEM, for: peerDeviceID)
-                LocalLog.info("[QRDownload] imported PC certificate for peerId=\(peerDeviceID)")
-                return peerDeviceID
+                try await appIdentityProvider.importPeerCertificate(pem: pcCertPEM)
+                LocalLog.info("[QRDownload] imported PC certificate")
             } catch {
                 LocalLog.error("[QRDownload] failed to import PC cert: \(error.localizedDescription)")
                 throw QRTriggerDownloadClientError.confirmFailed(error.localizedDescription)
             }
         } else {
-            throw QRTriggerDownloadClientError.confirmFailed("No peer cert or no peer device_id")
+            throw QRTriggerDownloadClientError.confirmFailed("No peer cert")
         }
     }
 
@@ -462,8 +459,7 @@ public final class QRTriggerDownloadClient: Sendable {
         host: String,
         port: Int,
         sessionId: String,
-        correlationID: String,
-        peerDeviceId: String
+        correlationID: String
     ) async throws -> QRClaimResult {
         let urlString = "https://\(host):\(port)\(ISPCProtocol.apiPrefix)/transfer/download"
         guard let url = URL(string: urlString) else {
@@ -479,7 +475,6 @@ public final class QRTriggerDownloadClient: Sendable {
         LocalLog.debug("[QRDownload] download request to \(urlString)")
 
         let delegate = ISPCServerTrustDelegate(
-            peerDeviceID: peerDeviceId,
             appIdentityProvider: appIdentityProvider
         )
 
@@ -614,13 +609,11 @@ public final class QRTriggerDownloadClient: Sendable {
 // MARK: - mTLS Server Trust Delegate
 
 private final class ISPCServerTrustDelegate: NSObject, URLSessionTaskDelegate {
-    private let peerDeviceID: String
     private let appIdentityProvider: AppIdentityProviding
 
-    init(peerDeviceID: String, appIdentityProvider: AppIdentityProviding) {
-        self.peerDeviceID = peerDeviceID
+    init(appIdentityProvider: AppIdentityProviding) {
         self.appIdentityProvider = appIdentityProvider
-        LocalLog.debug("[TLS-QR] ISPCServerTrustDelegate created for peer=\(peerDeviceID)")
+        LocalLog.debug("[TLS-QR] ISPCServerTrustDelegate created")
     }
 
     func urlSession(
@@ -648,7 +641,7 @@ private final class ISPCServerTrustDelegate: NSObject, URLSessionTaskDelegate {
             return
         }
 
-        LocalLog.debug("[TLS-QR] received serverTrust challenge for \(peerDeviceID)")
+        LocalLog.debug("[TLS-QR] received serverTrust challenge")
 
         let count = SecTrustGetCertificateCount(serverTrust)
         guard count > 0, let serverCert = SecTrustGetCertificateAtIndex(serverTrust, 0) else {
@@ -657,27 +650,17 @@ private final class ISPCServerTrustDelegate: NSObject, URLSessionTaskDelegate {
             return
         }
 
-        guard let serverCN = SecCertificateCopySubjectSummary(serverCert) as String? else {
-            LocalLog.error("[TLS-QR] failed to extract CN from server cert")
+        guard let pubkeyHash = serverCert.publicKeyHash else {
+            LocalLog.error("[TLS-QR] failed to extract publicKeyHash from server cert")
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
-        LocalLog.debug("[TLS-QR] server cert CN=\(serverCN) peerDeviceID=\(peerDeviceID)")
+        LocalLog.debug("[TLS-QR] server cert pubkeyHash=\(pubkeyHash.base64EncodedString())")
 
-        let storedCert: SecCertificate
-        do {
-            storedCert = try appIdentityProvider.peerCertificate(for: serverCN)
-            LocalLog.debug("[TLS-QR] loaded peer certificate by CN=\(serverCN)")
-        } catch {
-            LocalLog.debug("[TLS-QR] lookup by CN failed, trying peerDeviceID=\(peerDeviceID)")
-            do {
-                storedCert = try appIdentityProvider.peerCertificate(for: peerDeviceID)
-                LocalLog.debug("[TLS-QR] loaded peer certificate by key=\(peerDeviceID)")
-            } catch {
-                LocalLog.error("[TLS-QR] no stored peer certificate for CN=\(serverCN) or key=\(peerDeviceID)")
-                completionHandler(.cancelAuthenticationChallenge, nil)
-                return
-            }
+        guard let storedCert = try? appIdentityProvider.peerCertificate(forPubkeyHash: pubkeyHash) else {
+            LocalLog.error("[TLS-QR] no stored peer certificate for pubkeyHash")
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
         }
 
         guard let serverPubKey = SecCertificateCopyKey(serverCert) else {
@@ -703,7 +686,7 @@ private final class ISPCServerTrustDelegate: NSObject, URLSessionTaskDelegate {
         }
 
         guard serverPubKeyData == storedPubKeyData else {
-            LocalLog.error("[TLS-QR] public key mismatch for \(peerDeviceID)")
+            LocalLog.error("[TLS-QR] public key mismatch")
             LocalLog.debug("[TLS-QR] server pubKey=\(serverPubKeyData.base64EncodedString())")
             LocalLog.debug("[TLS-QR] stored pubKey=\(storedPubKeyData.base64EncodedString())")
             completionHandler(.cancelAuthenticationChallenge, nil)
@@ -721,7 +704,7 @@ private final class ISPCServerTrustDelegate: NSObject, URLSessionTaskDelegate {
         var error: CFError?
         let trusted = SecTrustEvaluateWithError(serverTrust, &error)
         if trusted {
-            LocalLog.debug("[TLS-QR] trust evaluation passed for \(peerDeviceID)")
+            LocalLog.debug("[TLS-QR] trust evaluation passed")
             let credential = URLCredential(trust: serverTrust)
             completionHandler(.useCredential, credential)
         } else {

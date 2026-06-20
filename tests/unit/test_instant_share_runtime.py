@@ -69,10 +69,11 @@ class TestInstantShareRuntime(unittest.TestCase):
         )
 
         session = runtime.bootstrap_connection_config(_connection_config_payload())
+        session_id = session.connection_config.session_id
 
         self.assertEqual(session.state, SessionState.QUEUED)
-        self.assertEqual(runtime.ble_service.active_connection_config.session_id, session.connection_config.session_id)
-        self.assertEqual(runtime.session_registry.get_active_session().state, SessionState.QUEUED)
+        self.assertEqual(runtime.ble_service.active_connection_config.session_id, session_id)
+        self.assertEqual(runtime.session_registry.require_session(session_id).state, SessionState.QUEUED)
 
 
 if __name__ == "__main__":

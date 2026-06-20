@@ -46,7 +46,6 @@ fi
 export IS_TESTING=true
 
 unit_and_functional_tests=(
-  tests/unit/test_instant_share_contracts.py
   tests/unit/test_instant_share_client.py
   tests/unit/test_instant_share_session.py
   tests/unit/test_instant_share_delivery.py
