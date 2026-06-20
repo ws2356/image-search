@@ -1,31 +1,27 @@
 ## ADDED Requirements
 
 ### Requirement: On-the-fly session creation for revisit transfers
-When a transfer request arrives at `/transfer/text`, `/transfer/image`, or `/transfer/download` via mTLS and no active trust session matches the `X-Session-Id` header, the PC SHALL create a session on-the-fly if the client certificate's CN matches a previously-trusted peer certificate in the keychain. The session SHALL be initialized with `TrustMode.TRUSTED_DIRECT` and state `TRANSFERRING`. This session SHALL coexist with any other active sessions.
+When a transfer request arrives at `/transfer/text`, `/transfer/image`, or `/transfer/download` via mTLS and no active trust session matches the `X-Session-Id` header, the PC SHALL create a session on-the-fly if the client certificate's CN matches a previously-trusted peer certificate's device name in the keychain. The session SHALL be initialized with `TrustMode.TRUSTED_DIRECT` and state `TRANSFERRING`.
 
 #### Scenario: Revisit transfer with trusted mTLS client cert
-- **WHEN** a POST request arrives at `/transfer/text` or `/transfer/image` via mTLS with no matching active trust session
-- **AND** the TLS client certificate's CN matches a stored peer certificate in the keychain (verified via `load_peer_certificate()`)
-- **THEN** the PC SHALL create a new `InstantShareSession` with `TrustMode.TRUSTED_DIRECT`, state `TRANSFERRING`, and the payload metadata derived from the endpoint
-- **AND** the PC SHALL process the transfer and deliver the payload normally
+- **WHEN** a POST request arrives at a transfer endpoint via mTLS with no matching active trust session
+- **AND** the TLS client certificate is valid and has been previously stored via `store_peer_certificate`
+- **THEN** the PC SHALL create a new `InstantShareSession` with `TrustMode.TRUSTED_DIRECT`, state `TRANSFERRING`
 
-#### Scenario: Revisit transfer from unknown mTLS client cert
-- **WHEN** a TLS handshake is attempted but the client's certificate is not in the trusted CA bundle
-- **THEN** the TLS handshake SHALL fail at the SSL layer — the PC SHALL NOT receive an HTTP request and SHALL NOT return an HTTP error
+### Requirement: Client certificate CN extraction for revisit peer device name
+The PC SHALL extract the client certificate's Common Name (CN) from the TLS connection scope for UI display as `peer_device_name`. Since CN now stores the human-readable device name, no separate extraction step is needed.
 
-#### Scenario: Revisit transfer when another session is active
-- **WHEN** a revisit transfer request arrives and another active session already exists for a different device
-- **THEN** the PC SHALL create a new session for the revisit transfer and process it normally
-- **AND** the existing session SHALL continue unaffected
+#### Scenario: Extract peer device name from CN
+- **WHEN** a request arrives at a TLS transfer endpoint with a valid client certificate
+- **THEN** the PC SHALL extract the CN from the peer certificate and use it as the `peer_device_name` for session UI display
 
-### Requirement: Client certificate CN extraction for revisit identity
-The PC SHALL extract the client certificate's Common Name (CN) from the TLS connection scope and SHALL use it as the mobile `device_id` for peer certificate lookup and session identification. The TLS layer's existing certificate validation (signature, public key, expiry) SHALL remain intact.
+### Requirement: peerDeviceName in transfer requests
+The mobile SHALL include a human-readable device name in transfer requests. The PC SHALL use the `X-Peer-Device-Name` header if present, with fallback to the client certificate's CN value.
 
-#### Scenario: Extract device_id from TLS client cert CN
-- **WHEN** a request arrives at a TLS transfer endpoint
-- **THEN** the PC SHALL extract the CN from the peer certificate presented during the TLS handshake via the request scope
-- **AND** the PC SHALL use this CN value as the mobile's `device_id` to look up the stored peer certificate in the keychain via `load_peer_certificate()`
-- **AND** the TLS layer's existing cert validation (CA bundle verification, public key comparison) SHALL remain unchanged
+#### Scenario: Peer device name from header or CN
+- **WHEN** a transfer request arrives with `X-Peer-Device-Name` header
+- **THEN** the PC SHALL use it as the device name for UI display
+- **AND** if the header is absent, the PC SHALL use the client certificate's CN value as fallback
 
 ### Requirement: Session metadata extraction from revisit request
 For on-the-fly sessions created during revisit, the PC SHALL derive the session metadata (`payload_class`, `target_intent`) from the transfer endpoint being called. The `flow_id` SHALL be `instant_share` and `trust_mode` SHALL be `trusted_direct`. The `peer_device_name` SHALL be extracted from the `X-Peer-Device-Name` header.

@@ -1,16 +1,22 @@
 ## ADDED Requirements
 
 ### Requirement: Revisit transfer skips trust handshake via direct mTLS
-When the mobile has a stored X.509 peer certificate for a discovered PC (identified by the PC's certificate CN during the mTLS handshake), the mobile SHALL skip the trust handshake (`/trust/handshake`, `/trust/apply`, `/trust/confirm`) and SHALL send the instant-share payload directly via HTTPS with mTLS to the PC's TLS port (from mDNS `tls_port`).
+When the mobile (iOS) has a stored X.509 peer certificate for a discovered PC (matched by the PC's certificate public key hash extracted during the TLS handshake), the mobile SHALL skip the trust handshake and SHALL send the instant-share payload directly via HTTPS with mTLS. The peer certificate lookup SHALL be by public key hash, not by `device_id`.
 
-#### Scenario: Direct transfer when stored peer cert exists
-- **WHEN** mobile has a stored X.509 peer certificate for the PC's `device_id` (extracted from the PC's TLS certificate CN during the mTLS handshake)
-- **THEN** mobile SHALL connect directly to the PC's `tls_port` via HTTPS with its own X.509 client certificate and POST the payload to `/transfer/text` or `/transfer/image`
-- **AND** mobile SHALL NOT call `/trust/handshake`, `/trust/apply`, or `/trust/confirm`
+#### Scenario: Direct transfer when stored peer cert exists by pubkey hash match
+- **WHEN** iOS has a stored X.509 peer certificate whose public key hash matches the server certificate's public key hash
+- **THEN** iOS SHALL connect directly to the PC's `tls_port` via HTTPS with mTLS and POST the payload
+- **AND** iOS SHALL NOT call `/trust/handshake`, `/trust/apply`, or `/trust/confirm`
 
-#### Scenario: Revisit transfer generates fresh session ID
-- **WHEN** mobile initiates a revisit transfer
-- **THEN** mobile SHALL generate a new UUID v4 `X-Session-Id` header and SHALL set `X-Peer-Device-Name` to a human-readable device name
+#### Scenario: No stored cert for pubkey hash falls back to trust handshake
+- **WHEN** iOS discovers a PC but has no stored peer certificate matching the server's public key hash
+- **THEN** iOS SHALL proceed to the full trust handshake flow
+
+#### Scenario: Revisit attempt on device selection uses pubkey hash lookup
+- **WHEN** user selects a PC from the device list
+- **THEN** iOS SHALL extract the server certificate during TLS handshake, compute its public key hash
+- **AND** iOS SHALL query `peerCertificate(forPubkeyHash:)` with that hash
+- **AND** if a match is found, iOS SHALL attempt the revisit flow
 
 ### Requirement: Fallback to full trust handshake on TLS failure
 If the mTLS connection fails during a revisit attempt (TLS handshake failure because the PC doesn't trust the mobile's client cert), the mobile SHALL fall back to the existing full trust handshake flow. On completion of the fallback trust handshake, the mobile SHALL update its stored X.509 certificate for the PC.
