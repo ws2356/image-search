@@ -37,7 +37,7 @@ final class UDSHTTPClient {
     /// main queue so callers can drive UI (`completeRequest` / `cancel`) directly.
     func postJSON(
         path: String,
-        body: [String: String],
+        body: [String: Any],
         completion: @escaping (Result<(Data, Int), Error>) -> Void
     ) {
         guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {

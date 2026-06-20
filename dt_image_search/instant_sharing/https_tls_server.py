@@ -28,6 +28,7 @@ from dt_image_search.instant_sharing.https_bootstrap import (
 from dt_image_search.instant_sharing.contracts import (
     TRANSFER_DOWNLOAD_PATH,
     TRANSFER_IMAGE_PATH,
+    TRANSFER_MANIFEST_PATH,
     TRANSFER_TEXT_PATH,
     ErrorCode,
     InstantShareMetadata,
@@ -179,12 +180,15 @@ def _do_transfer_image(
     return {"state": "delivered", **result.as_dict()}
 
 
-def _do_transfer_download(
+def _do_transfer_manifest(
     deps: _Deps,
     *,
     session_id_header: str,
     correlation_id_header: str,
-) -> tuple[int, bytes, dict[str, str] | None]:
+) -> dict[str, object]:
+    """Return a JSON manifest listing all files available for download.
+    iOS calls this first to discover what's available, then downloads each file
+    via /transfer/download/<index>."""
     if deps.trust_session_registry is None or deps.session_registry is None:
         raise _ServiceUnavailable("Transfer service not initialized")
     trust_session = deps.trust_session_registry.get_session(session_id_header)
@@ -197,7 +201,7 @@ def _do_transfer_download(
     if not trust_session.is_trusted:
         raise InstantShareError(
             error_code=ErrorCode.TRUST_REQUIRED,
-            message="Trust handshake must be completed before transfer download",
+            message="Trust handshake must be completed before transfer",
             status_code=403,
         )
     stash_id = trust_session.stash_id
@@ -210,25 +214,52 @@ def _do_transfer_download(
     if deps.qr_trigger_handler is None:
         raise _ServiceUnavailable("QR trigger service not initialized")
     result = deps.qr_trigger_handler.retrieve_stash_content(stash_id)
-    result_status = result.get("_status", 200)
-    if not isinstance(result_status, int):
-        result_status = 200
-    if result.get("status") == "claimed" and "content" in result:
-        content = str(result.get("content", ""))
-        if result.get("file_bytes") is not None:
-            resp_bytes = result["file_bytes"] if isinstance(result["file_bytes"], bytes) else str(result["file_bytes"]).encode("utf-8")
-        else:
-            resp_bytes = content.encode("utf-8")
-        headers = {"Content-Type": str(result.get("content_type", "application/octet-stream"))}
-        if result.get("filename"):
-            headers["X-Original-Filename"] = str(result["filename"])
-        _logger.info(
-            "[transfer/download] delivering stash_id=%s content_type=%s bytes=%d session_id=%s",
-            stash_id, result.get("content_type"), len(resp_bytes), session_id_header,
+    _logger.info(
+        "[transfer/manifest] served manifest stash_id=%s file_count=%s session_id=%s",
+        stash_id, result.get("file_count", 0), session_id_header,
+    )
+    return {k: v for k, v in result.items() if not k.startswith("_")}
+
+
+def _do_transfer_download_file(
+    deps: _Deps,
+    *,
+    session_id_header: str,
+    correlation_id_header: str,
+    file_index: int,
+) -> tuple[int, bytes, str, str]:
+    """Serve a single file's bytes by index from a stash.
+    Returns (status_code, bytes, content_type, filename)."""
+    if deps.trust_session_registry is None:
+        raise _ServiceUnavailable("Transfer service not initialized")
+    trust_session = deps.trust_session_registry.get_session(session_id_header)
+    if trust_session is None:
+        raise InstantShareError(
+            error_code=ErrorCode.SESSION_NOT_FOUND,
+            message="No active session found",
+            status_code=404,
         )
-        return result_status, resp_bytes, headers
-    safe = {k: v for k, v in result.items() if not k.startswith("_")}
-    return result_status, b"", safe
+    if not trust_session.is_trusted:
+        raise InstantShareError(
+            error_code=ErrorCode.TRUST_REQUIRED,
+            message="Trust handshake must be completed before transfer",
+            status_code=403,
+        )
+    stash_id = trust_session.stash_id
+    if stash_id is None:
+        raise InstantShareError(
+            error_code=ErrorCode.INVALID_REQUEST,
+            message="No stash associated with this session",
+            status_code=400,
+        )
+    if deps.qr_trigger_handler is None:
+        raise _ServiceUnavailable("QR trigger service not initialized")
+    status, file_bytes, content_type, filename = deps.qr_trigger_handler.retrieve_stash_file(stash_id, file_index)
+    _logger.info(
+        "[transfer/download/%d] delivered stash_id=%s content_type=%s bytes=%d session_id=%s",
+        file_index, stash_id, content_type, len(file_bytes), session_id_header,
+    )
+    return status, file_bytes, content_type, filename
 
 
 def _try_create_revisit_session(
@@ -362,25 +393,57 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
                 pass
         return JSONResponse(result, status_code=200)
 
-    @app.post(TRANSFER_DOWNLOAD_PATH)
-    async def transfer_download(request: Request) -> Response:
+    @app.post(TRANSFER_MANIFEST_PATH)
+    async def transfer_manifest(request: Request) -> JSONResponse:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
             raise _ServiceUnavailable("Instant share service not initialized")
         session_id = request.headers.get("X-Session-Id", "")
         _logger.info(
-            "[TLS] transfer_download session_id=%s",
+            "[TLS] transfer_manifest session_id=%s",
             session_id,
         )
-        status, payload, headers = await asyncio.to_thread(
-            _do_transfer_download,
+        result = await asyncio.to_thread(
+            _do_transfer_manifest,
             deps_local,
             session_id_header=session_id,
             correlation_id_header=request.headers.get("X-Correlation-Id", ""),
         )
-        if headers is not None and isinstance(payload, bytes) and payload:
+        return JSONResponse(result, status_code=200)
+
+    @app.post(TRANSFER_DOWNLOAD_PATH + "/{file_index}")
+    async def transfer_download_file(request: Request, file_index: int) -> Response:
+        deps_local: _Deps = getattr(request.app.state, "deps", None)
+        if deps_local is None:
+            raise _ServiceUnavailable("Instant share service not initialized")
+        session_id = request.headers.get("X-Session-Id", "")
+        _logger.info(
+            "[TLS] transfer_download_file session_id=%s index=%d",
+            session_id, file_index,
+        )
+        status, payload, content_type, filename = await asyncio.to_thread(
+            _do_transfer_download_file,
+            deps_local,
+            session_id_header=session_id,
+            correlation_id_header=request.headers.get("X-Correlation-Id", ""),
+            file_index=file_index,
+        )
+        if status == 200:
+            headers: dict[str, str] = {"Content-Type": content_type}
+            if filename:
+                headers["X-Original-Filename"] = filename
             return Response(content=payload, status_code=status, headers=headers)
-        return JSONResponse(payload, status_code=status)
+        error_msg = "Invalid request"
+        if status == 404:
+            error_msg = "Stash not found"
+        elif status == 410:
+            error_msg = "Stash expired or source file unavailable"
+        elif status == 400:
+            error_msg = f"File index {file_index} out of range"
+        return JSONResponse(
+            {"error_code": "INVALID_REQUEST", "message": error_msg},
+            status_code=status,
+        )
 
     return app
 

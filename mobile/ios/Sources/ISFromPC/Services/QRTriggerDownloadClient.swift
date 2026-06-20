@@ -9,7 +9,7 @@ private enum ISPCProtocol {
     static let apiPrefix = "/api/instant-share/v1"
     static let trustHandshakePath = "/trust/handshake"
     static let trustConfirmPath = "/trust/confirm"
-    static let transferDownloadPath = "/transfer/download"
+    static let transferManifestPath = "/transfer/manifest"
     static let trustEnvelopeSchema = "dtis.instant-share.trust-envelope.v1"
     static let trustEnvelopeNonceBytes = 12
 }
@@ -211,11 +211,46 @@ extension QRTriggerDownloadClientError: LocalizedError {
     }
 }
 
+public struct MultiFileManifest: Sendable {
+    public let fileCount: Int
+    public let files: [FileEntry]
+
+    public struct FileEntry: Sendable, Identifiable {
+        public let index: Int
+        public let type: String  // "text", "html", or "file"
+        public let filename: String
+        public let contentType: String
+        public let sizeBytes: Int
+        public let content: String?  // inline content for text/html entries
+
+        public var id: Int { index }
+
+        public var isInline: Bool { type == "text" || type == "html" }
+        public var isFileDownload: Bool { type == "file" }
+    }
+}
+
 public enum QRClaimResult: Sendable {
     case text(String)
     case html(String)
     case image(fileURL: URL, contentType: String, filename: String?)
     case file(fileURL: URL, contentType: String, filename: String?)
+    case multiFile(manifest: MultiFileManifest, host: String, tlsPort: Int, sessionId: String, correlationID: String)
+}
+
+extension QRClaimResult {
+    var fileUrls: [URL] {
+        switch self {
+        case .file(let fileURL, _, _):
+            return [fileURL]
+        case .image(let fileURL, _, _):
+            return [fileURL]
+        case .multiFile:
+            return []
+        default:
+            return []
+        }
+    }
 }
 
 public final class QRTriggerDownloadClient: Sendable {
@@ -461,7 +496,27 @@ public final class QRTriggerDownloadClient: Sendable {
         sessionId: String,
         correlationID: String
     ) async throws -> QRClaimResult {
-        let urlString = "https://\(host):\(port)\(ISPCProtocol.apiPrefix)/transfer/download"
+        // Step 1: Fetch manifest to discover available files
+        let manifest = try await fetchManifest(host: host, port: port, sessionId: sessionId, correlationID: correlationID)
+
+        // Step 2: Single file or multi-file?
+        if manifest.fileCount == 1 {
+            // Download the single file at index 0
+            return try await downloadFileAtIndex(0, host: host, port: port, sessionId: sessionId, correlationID: correlationID, manifest: manifest)
+        }
+
+        // Step 3: Multi-file — return manifest so UI can drive per-file download
+        return .multiFile(manifest: manifest, host: host, tlsPort: port, sessionId: sessionId, correlationID: correlationID)
+    }
+
+    /// Fetch the file manifest from /transfer/manifest.
+    public func fetchManifest(
+        host: String,
+        port: Int,
+        sessionId: String,
+        correlationID: String
+    ) async throws -> MultiFileManifest {
+        let urlString = "https://\(host):\(port)\(ISPCProtocol.apiPrefix)\(ISPCProtocol.transferManifestPath)"
         guard let url = URL(string: urlString) else {
             throw QRTriggerDownloadClientError.downloadFailed("Invalid URL: \(urlString)")
         }
@@ -472,12 +527,81 @@ public final class QRTriggerDownloadClient: Sendable {
         request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
         request.timeoutInterval = timeoutInterval
 
-        LocalLog.debug("[QRDownload] download request to \(urlString)")
+        LocalLog.debug("[QRDownload] manifest request to \(urlString)")
 
-        let delegate = ISPCServerTrustDelegate(
-            appIdentityProvider: appIdentityProvider
-        )
+        let delegate = ISPCServerTrustDelegate(appIdentityProvider: appIdentityProvider)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await urlSession.data(for: request, delegate: delegate)
+        } catch {
+            throw QRTriggerDownloadClientError.networkError(error)
+        }
 
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw QRTriggerDownloadClientError.invalidResponse
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 403:
+            throw QRTriggerDownloadClientError.invalidOptCode
+        case 404:
+            throw QRTriggerDownloadClientError.stashNotFound
+        case 410:
+            throw QRTriggerDownloadClientError.stashExpired
+        default:
+            let message = parseErrorMessage(data) ?? "Server error"
+            throw QRTriggerDownloadClientError.httpError(statusCode: httpResponse.statusCode, message: message)
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let fileCount = json["file_count"] as? Int,
+              let filesArray = json["files"] as? [[String: Any]] else {
+            throw QRTriggerDownloadClientError.invalidResponse
+        }
+
+        let entries = filesArray.compactMap { entry -> MultiFileManifest.FileEntry? in
+            guard let index = entry["index"] as? Int,
+                  let type = entry["type"] as? String else {
+                return nil
+            }
+            let contentType = entry["content_type"] as? String ?? ""
+            let content = entry["content"] as? String
+            let filename = entry["filename"] as? String ?? ""
+            let sizeBytes = entry["size_bytes"] as? Int ?? 0
+            return MultiFileManifest.FileEntry(
+                index: index, type: type, filename: filename,
+                contentType: contentType, sizeBytes: sizeBytes, content: content
+            )
+        }
+
+        return MultiFileManifest(fileCount: fileCount, files: entries)
+    }
+
+    /// Download a single file by index from a batch stash.
+    public func downloadFileAtIndex(
+        _ index: Int,
+        host: String,
+        port: Int,
+        sessionId: String,
+        correlationID: String,
+        manifest: MultiFileManifest? = nil
+    ) async throws -> QRClaimResult {
+        let urlString = "https://\(host):\(port)\(ISPCProtocol.apiPrefix)/transfer/download/\(index)"
+        guard let url = URL(string: urlString) else {
+            throw QRTriggerDownloadClientError.downloadFailed("Invalid URL: \(urlString)")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(sessionId, forHTTPHeaderField: "X-Session-Id")
+        request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
+        request.timeoutInterval = timeoutInterval
+
+        LocalLog.debug("[QRDownload] download file index=\(index) from \(urlString)")
+
+        let delegate = ISPCServerTrustDelegate(appIdentityProvider: appIdentityProvider)
         let (tempFileURL, response): (URL, URLResponse)
         do {
             (tempFileURL, response) = try await urlSession.download(for: request, delegate: delegate)
@@ -492,28 +616,17 @@ public final class QRTriggerDownloadClient: Sendable {
         switch httpResponse.statusCode {
         case 200:
             break
-        case 403:
-            cleanupTempFile(tempFileURL)
-            throw QRTriggerDownloadClientError.invalidOptCode
         case 404:
             cleanupTempFile(tempFileURL)
             throw QRTriggerDownloadClientError.stashNotFound
         case 410:
             cleanupTempFile(tempFileURL)
             throw QRTriggerDownloadClientError.stashExpired
-        case 400..<500:
-            let tempData = try? Data(contentsOf: tempFileURL)
-            cleanupTempFile(tempFileURL)
-            let message = parseErrorMessage(tempData ?? Data()) ?? "Client error"
-            throw QRTriggerDownloadClientError.httpError(
-                statusCode: httpResponse.statusCode,
-                message: message
-            )
         default:
             let tempData = try? Data(contentsOf: tempFileURL)
             cleanupTempFile(tempFileURL)
-            let message = parseErrorMessage(tempData ?? Data()) ?? "Server error"
-            throw QRTriggerDownloadClientError.serverError(message)
+            let message = parseErrorMessage(tempData ?? Data()) ?? "Download failed"
+            throw QRTriggerDownloadClientError.httpError(statusCode: httpResponse.statusCode, message: message)
         }
 
         return try await parseDownloadResponse(tempFileURL: tempFileURL, response: httpResponse)

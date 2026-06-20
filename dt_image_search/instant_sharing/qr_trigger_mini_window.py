@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -84,6 +85,8 @@ class QRTriggerMiniWindow(QDialog):
         lan_ips: list[str] | None = None,
         on_cancel: Callable[[str], None] | None = None,
         parent: QWidget | None = None,
+        file_count: int = 0,
+        filenames: list[str] | None = None,
     ) -> None:
         super().__init__(parent)
         self._stash = stash
@@ -97,6 +100,8 @@ class QRTriggerMiniWindow(QDialog):
         self._auto_close_timer: QTimer | None = None
         self._claimed = False
         self._expired = False
+        self._file_count = file_count
+        self._filenames = filenames or []
         self._setup_ui()
 
     @property
@@ -146,6 +151,40 @@ class QRTriggerMiniWindow(QDialog):
         subtitle_label = QLabel(f"from <b>{self._pc_name}</b>")
         subtitle_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(subtitle_label)
+
+        # Batch file count and filename list (shown when file_count > 1)
+        if self._file_count > 1:
+            layout.addSpacing(4)
+            count_label = QLabel(f"Sharing {self._file_count} files")
+            count_label.setAlignment(Qt.AlignCenter)
+            count_font = count_label.font()
+            count_font.setPointSize(13)
+            count_label.setFont(count_font)
+            layout.addWidget(count_label)
+
+            # Scrollable filename list, truncated to 10 shown items
+            visible_count = min(self._file_count, 10)
+            file_list_widget = QWidget()
+            file_list_layout = QVBoxLayout(file_list_widget)
+            file_list_layout.setContentsMargins(8, 4, 8, 4)
+            file_list_layout.setSpacing(2)
+
+            for i, filename in enumerate(self._filenames[:visible_count]):
+                file_label = QLabel(filename)
+                file_label.setStyleSheet("color: #6B7280; font-size: 12px;")
+                file_list_layout.addWidget(file_label)
+
+            if self._file_count > 10:
+                more_label = QLabel(f"+{self._file_count - 10} more files...")
+                more_label.setStyleSheet("color: #9CA3AF; font-size: 11px; font-style: italic;")
+                file_list_layout.addWidget(more_label)
+
+            scroll = QScrollArea()
+            scroll.setWidget(file_list_widget)
+            scroll.setWidgetResizable(True)
+            scroll.setMaximumHeight(140)
+            scroll.setStyleSheet("QScrollArea { border: 1px solid #E5E7EB; border-radius: 6px; }")
+            layout.addWidget(scroll)
 
         layout.addSpacing(8)
 

@@ -67,6 +67,12 @@ struct QRTransferResultView: View {
             imageContentView(fileURL: fileURL, contentType: contentType, filename: filename)
         case .file(let fileURL, let contentType, let filename):
             fileContentView(fileURL: fileURL, contentType: contentType, filename: filename)
+        case .multiFile:
+            // Multi-file results are routed to MultiFileReceiveView;
+            // if we reach here, show a fallback message.
+            Text("Multiple files received — please go back and try again.")
+                .foregroundStyle(.secondary)
+                .padding()
         }
     }
 
@@ -284,6 +290,8 @@ extension QRClaimResult {
             items = [Self.sanitizedFileURL(fileURL)]
         case .file(let fileURL, _, _):
             items = [Self.sanitizedFileURL(fileURL)]
+        case .multiFile:
+            items = []
         }
         return items
     }

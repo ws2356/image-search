@@ -88,6 +88,12 @@ class QRTriggerMiniWindowFactory:
 
     def _show_window(self, stash: StashEntry) -> None:
         session_id = self._handler.get_session_id_for_stash(stash.stash_id) or ""
+        # Extract batch metadata from stash.files
+        file_count = len(stash.files) if stash.files else 0
+        filenames: list[str] = []
+        for fe in stash.files:
+            if fe.filename:
+                filenames.append(fe.filename)
         window = QRTriggerMiniWindow(
             stash,
             session_id=session_id,
@@ -96,6 +102,8 @@ class QRTriggerMiniWindowFactory:
             pc_tls_port=self._pc_tls_port,
             device_id=self._device_id,
             on_cancel=self._on_cancel,
+            file_count=file_count,
+            filenames=filenames if filenames else None,
         )
         window.show_qr()
         window.show()
@@ -103,9 +111,10 @@ class QRTriggerMiniWindowFactory:
         self._windows[stash.stash_id] = window
         acquire_activation_policy()
         _logger.info(
-            "[QRTriggerMiniWindowFactory] window shown: stash=%s type=%s session_id=%s",
+            "[QRTriggerMiniWindowFactory] window shown: stash=%s type=%s file_count=%d session_id=%s",
             stash.stash_id,
             stash.content_type,
+            file_count,
             session_id,
         )
 

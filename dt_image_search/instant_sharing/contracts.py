@@ -68,8 +68,40 @@ TRUST_APPLY_PATH = f"{API_PREFIX}/trust/apply"
 TRUST_CONFIRM_PATH = f"{API_PREFIX}/trust/confirm"
 TRANSFER_TEXT_PATH = f"{API_PREFIX}/transfer/text"
 TRANSFER_IMAGE_PATH = f"{API_PREFIX}/transfer/image"
+TRANSFER_MANIFEST_PATH = f"{API_PREFIX}/transfer/manifest"
 TRANSFER_DOWNLOAD_PATH = f"{API_PREFIX}/transfer/download"
 QR_TRIGGER_PATH = f"{API_PREFIX}/qr-trigger"
+
+
+@dataclass(frozen=True)
+class FileEntry:
+    """Metadata for a single item within a stash — can be an inline text payload or a file reference."""
+    file_path: str = ""
+    filename: str | None = None
+    content_type: str = "application/octet-stream"
+    size_bytes: int = 0
+    content: str | None = None  # inline text/html content; None for file stashes
+
+    @property
+    def entry_type(self) -> str:
+        """High-level type for manifest consumers: 'text', 'html', or 'file'."""
+        if self.content is not None:
+            if self.content_type == "text/html":
+                return "html"
+            return "text"
+        return "file"
+
+    def as_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {
+            "file_path": self.file_path,
+            "filename": self.filename or "",
+            "content_type": self.content_type,
+            "size_bytes": self.size_bytes,
+            "type": self.entry_type,
+        }
+        if self.content is not None:
+            result["content"] = self.content
+        return result
 
 
 _ALLOWED_TARGETS = {

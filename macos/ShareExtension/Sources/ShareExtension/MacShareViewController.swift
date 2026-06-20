@@ -58,8 +58,8 @@ class MacShareViewController: NSViewController {
     }
 
     private func processExtensionItems(_ items: [NSExtensionItem], with context: NSExtensionContext) {
+        // Phase 1: Scan for rich text or plain text (takes priority over files)
         for item in items {
-            // Check for NSAttributedString properties directly (no attachments)
             let hasTitle = item.attributedTitle?.length ?? 0 > 0
             let hasContent = item.attributedContentText?.length ?? 0 > 0
             
@@ -82,8 +82,6 @@ class MacShareViewController: NSViewController {
             
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
-                os_log("supported types: %{public}@", log: log, type: .info, provider.registeredTypeIdentifiers)
-                // 1. Check for rich text (RTF, HTML) before plain text fallback
                 let richTextTypes = [UTType.rtf.identifier, UTType.html.identifier, "com.apple.flat-rtfd"]
                 for richType in richTextTypes {
                     if provider.hasItemConformingToTypeIdentifier(richType) {
@@ -100,7 +98,6 @@ class MacShareViewController: NSViewController {
                     }
                 }
                 
-                // 2. Plain text
                 if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                     os_log("Matched text attachment", log: log, type: .info)
                     provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] data, error in
@@ -119,57 +116,94 @@ class MacShareViewController: NSViewController {
                     }
                     return
                 }
-                
-                // 3. File/Image — zero-copy mode
+            }
+        }
+        
+        // Phase 2: No text found — collect all file URLs from all items
+        var fileURLs: [(url: URL, isInPlace: Bool)] = []
+        var fileLoadCount = 0
+        var totalProviders = 0
+        let loadGroup = DispatchGroup()
+        let loadLock = NSLock()
+        
+        // Count total file providers across all items
+        for item in items {
+            guard let attachments = item.attachments else { continue }
+            for provider in attachments {
                 if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
-                    os_log("Matched file URL (Zero-Copy Mode)", log: log, type: .info)
-                    
-                    // 使用 loadInPlaceFileRepresentation 明确告知系统：我不需要拷贝，只要原位访问权限
-                    provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.data.identifier) { [weak self] (originalURL, isInPlace, error) in
-                        if let error = error {
-                            os_log("Failed to get in-place URL: %{public}@", log: log, type: .error, error.localizedDescription)
-                            self?.cancel(with: context)
-                            return
-                        }
-                        
-                        guard let safeURL = originalURL else {
-                            os_log("Original URL is nil", log: log, type: .error)
-                            self?.cancel(with: context)
-                            return
-                        }
-
-                        let attrs = try? FileManager.default.attributesOfItem(
-                            atPath: safeURL.path
-                        )
-                        os_log("url=%{public}@ size=%{public}@", log: log, type: .info, safeURL.path, String(describing: attrs?[.size]))
-                        let values = try? safeURL.resourceValues(forKeys: [
-                            .contentTypeKey,
-                            .fileSizeKey,
-                            .isAliasFileKey])
-                        os_log("url=%{public}@ contentType=%{public}@ size=%{public}@ isAlias=%{public}@", log: log, type: .info, safeURL.path, String(describing: values?.contentType), String(describing: values?.fileSize), String(describing: values?.isAliasFile))
-                                        
-                        let isSecurityScoped = safeURL.startAccessingSecurityScopedResource()
-                        
-                        os_log("Successfully grabbed original path: %{public}@, isInPlace: %{bool}d", log: log, type: .info, safeURL.path, isInPlace)
-                        
-                        if isInPlace {
-                            os_log("In-place file — sending original URL directly", log: log, type: .info)
-                            self?.stashFilePayload(safeURL, with: context)
-                        } else {
-                            os_log("Non-in-place file — creating hard link in sandbox", log: log, type: .info)
-                            self?.createHardLinkAndSend(originalURL: safeURL, with: context)
-                        }
-                        
-                        if isSecurityScoped {
-                            safeURL.stopAccessingSecurityScopedResource()
-                        }
-                    }
-                    return
+                    totalProviders += 1
                 }
             }
         }
-        os_log("No supported attachments found — cancelling", log: log, type: .error)
-        cancel(with: context)
+        
+        if totalProviders == 0 {
+            os_log("No supported attachments found — cancelling", log: log, type: .error)
+            cancel(with: context)
+            return
+        }
+        
+        os_log("Collecting %d file URLs from extension items", log: log, type: .info, totalProviders)
+        
+        for item in items {
+            guard let attachments = item.attachments else { continue }
+            for provider in attachments {
+                guard provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) else { continue }
+                
+                loadGroup.enter()
+                provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.data.identifier) { (originalURL, isInPlace, error) in
+                    defer { loadGroup.leave() }
+                    
+                    if let error = error {
+                        os_log("Failed to get in-place URL: %{public}@", log: log, type: .error, error.localizedDescription)
+                        return
+                    }
+                    
+                    guard let safeURL = originalURL else {
+                        os_log("Original URL is nil", log: log, type: .error)
+                        return
+                    }
+                    
+                    loadLock.lock()
+                    fileURLs.append((url: safeURL, isInPlace: isInPlace))
+                    fileLoadCount += 1
+                    
+                    let attrs = try? FileManager.default.attributesOfItem(atPath: safeURL.path)
+                    os_log("File %d/%d: url=%{public}@ size=%{public}@ isInPlace=%{bool}d",
+                           log: log, type: .info, fileLoadCount, totalProviders,
+                           safeURL.path, String(describing: attrs?[.size]), isInPlace)
+                    loadLock.unlock()
+                }
+            }
+        }
+        
+        // Wait for all file loads to complete, then stash
+        loadGroup.notify(queue: .main) { [weak self] in
+            guard let self = self else { return }
+            
+            if fileURLs.isEmpty {
+                os_log("No file URLs resolved — cancelling", log: log, type: .error)
+                self.cancel(with: context)
+                return
+            }
+            
+            if !fileURLs.allSatisfy({ $0.isInPlace }) {
+                os_log("Non-in-place files detected — using hard links for batch", log: log, type: .info)
+            }
+            
+            // Resolve URLs: in-place ones use original; non-in-place get hard links
+            let resolvedURLs: [URL] = fileURLs.map { entry in
+                if entry.isInPlace {
+                    return entry.url
+                }
+                return self.createHardLink(for: entry.url) ?? entry.url
+            }
+            
+            if resolvedURLs.count == 1 {
+                self.stashFilePayload(resolvedURLs[0], with: context)
+            } else {
+                self.stashBatchFilePayload(resolvedURLs, with: context)
+            }
+        }
     }
 
     private func convertAndStashRichText(_ attributedString: NSAttributedString, with context: NSExtensionContext) {
@@ -257,6 +291,15 @@ class MacShareViewController: NSViewController {
     }
 
     private func createHardLinkAndSend(originalURL: URL, with context: NSExtensionContext) {
+        let hardLinkURL = createHardLink(for: originalURL)
+        if let url = hardLinkURL {
+            stashFilePayload(url, with: context)
+        } else {
+            stashFilePayload(originalURL, with: context)
+        }
+    }
+
+    private func createHardLink(for originalURL: URL) -> URL? {
         let containerURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         let hardLinkURL = containerURL.appendingPathComponent(originalURL.lastPathComponent)
@@ -267,19 +310,21 @@ class MacShareViewController: NSViewController {
             }
             try FileManager.default.linkItem(at: originalURL, to: hardLinkURL)
             os_log("Hard link created: %{public}@", log: log, type: .info, hardLinkURL.path)
-            stashFilePayload(hardLinkURL, with: context)
+            return hardLinkURL
         } catch {
-            os_log("Failed to create hard link: %{public}@ — falling back to original URL", log: log, type: .error, error.localizedDescription)
-            stashFilePayload(originalURL, with: context)
+            os_log("Failed to create hard link: %{public}@", log: log, type: .error, error.localizedDescription)
+            return nil
         }
     }
 
     private func stashFilePayload(_ url: URL, with context: NSExtensionContext) {
         os_log("Stashing file payload: %{public}@", log: log, type: .info, url.path)
-        let body: [String: String] = [
-            "type": "image",
-            "file_path": url.path,
-            "filename": url.lastPathComponent
+        let files: [[String: String]] = [
+            ["file_path": url.path, "filename": url.lastPathComponent]
+        ]
+        let body: [String: Any] = [
+            "type": "file",
+            "files": files
         ]
         sendStashRequest(body) { [weak self] success in
             if success {
@@ -292,7 +337,27 @@ class MacShareViewController: NSViewController {
         }
     }
 
-    private func sendStashRequest(_ body: [String: String], completion: @escaping (Bool) -> Void) {
+    private func stashBatchFilePayload(_ urls: [URL], with context: NSExtensionContext) {
+        os_log("Stashing batch file payload: %d files", log: log, type: .info, urls.count)
+        let files: [[String: String]] = urls.map { url in
+            ["file_path": url.path, "filename": url.lastPathComponent]
+        }
+        let body: [String: Any] = [
+            "type": "file",
+            "files": files
+        ]
+        sendStashRequest(body) { [weak self] success in
+            if success {
+                os_log("Batch file stash succeeded — completing extension", log: log, type: .info)
+                self?.completeRequest(with: context)
+            } else {
+                os_log("Batch file stash failed — cancelling extension", log: log, type: .error)
+                self?.cancel(with: context)
+            }
+        }
+    }
+
+    private func sendStashRequest(_ body: [String: Any], completion: @escaping (Bool) -> Void) {
         os_log("Sending stash request via async-http-client over UDS", log: log, type: .info)
         httpClient.postJSON(path: "/api/instant-share/v1/qr-trigger", body: body) { result in
             switch result {

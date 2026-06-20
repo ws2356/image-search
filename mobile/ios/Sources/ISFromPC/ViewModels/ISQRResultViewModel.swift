@@ -8,7 +8,7 @@
 import SwiftUI
 
 @MainActor
-protocol ISQRDeliverDelegate {
+public protocol ISQRDeliverDelegate {
     func onDeliverComplete() -> Void
 }
 

@@ -16,9 +16,11 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
     
     var qrClaimResult: QRClaimResult? {
         didSet {
-            if let oldFile = oldValue?.fileUrl, oldFile != qrClaimResult?.fileUrl {
+            let oldUrls = oldValue?.fileUrls ?? []
+            let newUrls = qrClaimResult?.fileUrls ?? []
+            for oldUrl in oldUrls where !newUrls.contains(oldUrl) {
                 Task {
-                    await self.cleanupStashedFile(oldFile)
+                    await self.cleanupStashedFile(oldUrl)
                 }
             }
         }
@@ -54,7 +56,7 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
         }
     }
     
-    func onDeliverComplete() {
+    public func onDeliverComplete() {
         navigator.requestExit()
     }
     
@@ -71,9 +73,9 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
     }
     
     func onDisappear() {
-        if let oldFile = qrClaimResult?.fileUrl {
+        for fileUrl in qrClaimResult?.fileUrls ?? [] {
             Task {
-                await self.cleanupStashedFile(oldFile)
+                await self.cleanupStashedFile(fileUrl)
             }
         }
     }
@@ -92,20 +94,6 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
             try await FileManager.default.removeItem(at: fileUrl)
         } catch (let error) {
             LocalLog.error("cleanup stashed file failed: \(error)")
-        }
-    }
-}
-
-
-extension QRClaimResult {
-    var fileUrl: URL? {
-        switch self {
-        case .file(let fileURL, let contentType, let filename):
-            return fileURL
-        case .image(let fileURL, let contentType, let filename):
-            return fileURL
-        default:
-            return nil
         }
     }
 }

@@ -39,7 +39,20 @@ public struct ISQRRootView: View {
         case .claiming:
             QRClaimView(qrClaimPayload: viewModel.qrClaimPayload, delegate: viewModel)
         case .result(let result):
-            QRTransferResultView(result: result, delegate: viewModel)
+            switch result {
+            case .multiFile(let manifest, let host, let tlsPort, let sessionId, let correlationID):
+                let vm = MultiFileReceiveViewModel(
+                    manifest: manifest,
+                    host: host,
+                    tlsPort: tlsPort,
+                    sessionId: sessionId,
+                    correlationID: correlationID,
+                    delegate: viewModel
+                )
+                MultiFileReceiveView(viewModel: vm)
+            default:
+                QRTransferResultView(result: result, delegate: viewModel)
+            }
         case .error(let title, let message):
             let errorVMFactory = {
                 ISQRErrorViewModel(

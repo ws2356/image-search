@@ -31,39 +31,38 @@ The iOS client SHALL download files sequentially (one at a time), showing aggreg
 - **THEN** the client SHALL stop the batch immediately
 - **AND** display "This share has expired. 2 of 5 files saved. Please share the remaining files again from your Mac."
 
-### Requirement: MultiFileReceiveView displays file list with save options
-The `MultiFileReceiveView` SHALL display a scrollable list of files with filename, type icon, and size. Each file SHALL have a "Save" button. A "Save All" button SHALL download and save all files.
+### Requirement: MultiFileReceiveView displays a selectable file list for resharing
+The `MultiFileReceiveView` SHALL display a scrollable, selectable list of files with filename, type icon, and formatted size. The user SHALL select one or more files via built-in SwiftUI `List` selection. A "Share N selected" button SHALL download the selected files and present the iOS system share sheet.
 
-#### Scenario: View renders file list
+#### Scenario: View renders selectable file list
 - **WHEN** `MultiFileReceiveView` receives a manifest with 4 files
-- **THEN** a `List` SHALL display each file with its filename, MIME-type-based SF Symbol icon, and formatted size (e.g., "2.3 MB")
-- **AND** each row SHALL have a "Save" button
+- **THEN** a `List` with selection binding SHALL display each file with its filename, MIME-type-based SF Symbol icon, and formatted size (e.g., "2.3 MB")
+- **AND** each row SHALL show a selection circle indicator
+- **AND** inline text/html entries SHALL show their content preview and a green checkmark (already delivered)
 
-#### Scenario: Save individual file
-- **WHEN** user taps "Save" on the second file row
-- **THEN** the client SHALL download only file index 1
-- **AND** after download, save to Photos (for images) or Files app
-- **AND** show checkmark on that row upon success
+#### Scenario: Select multiple files
+- **WHEN** user taps 3 of 4 file rows
+- **THEN** the selection count SHALL update to "3 selected"
+- **AND** the share button SHALL read "Share (3 selected)"
 
-#### Scenario: Save All downloads and saves all files
-- **WHEN** user taps "Save All" button
-- **THEN** the client SHALL sequentially download all files
-- **AND** save each file to the appropriate destination (Photos for images, Files app for other types)
-- **AND** show checkmarks on all successfully saved rows
-- **AND** show error indicators on any that failed
+#### Scenario: Share selected files
+- **WHEN** user taps "Share (3 selected)"
+- **THEN** the client SHALL download any selected files that are not yet downloaded (skipping already-downloaded and inline items)
+- **AND** show a "Downloading..." progress indicator during downloads
+- **AND** upon completion, present the iOS system share sheet with the downloaded file URLs and inline text content
+- **AND** failed downloads SHALL be skipped and shown with a red error indicator
 
-### Requirement: Per-file save destination
-For each downloaded file, the iOS client SHALL save images to the Photos library and non-image files to the Files app. The user SHALL be prompted for Photo Library permission on first save.
+#### Scenario: Inline text entries are shareable without download
+- **WHEN** a selected entry has `type: "text"` or `type: "html"`
+- **THEN** the text content SHALL be included in the share sheet items directly (no download needed)
 
-#### Scenario: Save JPEG to Photos
-- **WHEN** a file with `content_type: "image/jpeg"` is downloaded
-- **THEN** the client SHALL save it to the Photos library using `PHPhotoLibrary`
+### Requirement: No saving to Photos or Files for multi-file receive
+The `MultiFileReceiveView` SHALL NOT save downloaded files to the Photos library or Files app. The only action available after downloading is sharing via the system share sheet. This keeps the receive flow simple and avoids polluting the user's library.
 
-#### Scenario: Save unsupported file type to Files
-- **WHEN** a file with `content_type: "application/pdf"` is downloaded
-- **THEN** the client SHALL open a document picker or save to the Files app
+#### Scenario: File downloaded but not saved to Photos
+- **WHEN** a JPEG file is downloaded in `MultiFileReceiveView`
+- **THEN** the file SHALL NOT be saved to `PHPhotoLibrary`
+- **AND** the file URL SHALL only be used as a share sheet item
 
-#### Scenario: Batch save requesting Photos permission
-- **WHEN** "Save All" is tapped and Photos permission has not been granted
-- **THEN** the client SHALL request permission
-- **THEN** on grant, proceed with saving; on denial, skip image files and save only non-image files
+### Requirement: Cleanup of downloaded temporary files
+The `MultiFileReceiveView` SHALL clean up downloaded file URLs when the view disappears, removing temporary files from the `QRDownloads` directory.
