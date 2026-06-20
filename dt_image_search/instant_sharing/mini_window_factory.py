@@ -65,6 +65,8 @@ class InstantShareMiniWindowFactory:
         text_content: object = "",
         file_path: object = "",
         device_name: object = "",
+        image_count: object = 0,
+        received_count: object = 0,
         **_: object,
     ) -> None:
         state_value = str(state) if state is not None else "unknown"
@@ -74,6 +76,8 @@ class InstantShareMiniWindowFactory:
         text_content_value = str(text_content) if text_content is not None else ""
         file_path_value = str(file_path) if file_path is not None else ""
         device_name_value = str(device_name) if device_name else ""
+        image_count_value = int(image_count) if image_count else 0
+        received_count_value = int(received_count) if received_count else 0
 
         if session_id_value and session_id_value not in self._windows:
             # New session: create a placeholder and schedule window creation
@@ -86,6 +90,8 @@ class InstantShareMiniWindowFactory:
                 text_content=text_content_value,
                 file_path=file_path_value,
                 device_name=device_name_value,
+                image_count=image_count_value,
+                received_count=received_count_value,
             ))
         elif session_id_value in self._windows:
             # Existing session: apply event to its window
@@ -97,6 +103,8 @@ class InstantShareMiniWindowFactory:
                 text_content=text_content_value,
                 file_path=file_path_value,
                 device_name=device_name_value,
+                image_count=image_count_value,
+                received_count=received_count_value,
             ))
 
     def _create_or_show_window(
@@ -108,6 +116,8 @@ class InstantShareMiniWindowFactory:
         text_content: str = "",
         file_path: str = "",
         device_name: str = "",
+        image_count: int = 0,
+        received_count: int = 0,
     ) -> None:
         existing = self._windows.get(session_id)
         if existing is not None:
@@ -131,6 +141,8 @@ class InstantShareMiniWindowFactory:
             text_content=text_content,
             file_path=file_path,
             device_name=device_name,
+            image_count=image_count,
+            received_count=received_count,
         )
         window.destroyed.connect(lambda sid=session_id: self._on_window_destroyed(sid))
         window.show()
@@ -175,6 +187,8 @@ class InstantShareMiniWindowFactory:
         text_content: str = "",
         file_path: str = "",
         device_name: str = "",
+        image_count: int = 0,
+        received_count: int = 0,
     ) -> None:
         window = self._windows.get(session_id)
         if window is not None:
@@ -186,6 +200,8 @@ class InstantShareMiniWindowFactory:
                     text_content=text_content,
                     file_path=file_path,
                     device_name=device_name,
+                    image_count=image_count,
+                    received_count=received_count,
                 )
             except RuntimeError:
                 # Window was already deleted (e.g. auto-close race); clean up

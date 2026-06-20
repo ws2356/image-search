@@ -134,6 +134,12 @@ class TransferHandler:
                 f"Session {session_id} expects payload_class=text, got image.",
                 correlation_id=correlation_id,
             )
+        if session.image_count > 0 and session.received_count >= session.image_count:
+            raise InstantShareError(
+                ErrorCode.TRANSFER_LIMIT_EXCEEDED,
+                f"Expected {session.image_count} images, but received more.",
+                correlation_id=correlation_id,
+            )
         if not body and not temp_file_path:
             raise InstantShareError(
                 ErrorCode.PAYLOAD_UNREADABLE,

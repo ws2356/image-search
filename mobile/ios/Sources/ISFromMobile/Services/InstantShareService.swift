@@ -16,20 +16,20 @@ public final class InstantShareService: ObservableObject {
     @Published public var connectionConfig: InstantShareConnectionConfig?
     @Published private(set) var selectedPC: InstantShareDiscoveredPC?
     @Published private(set) var sharedText: String = ""
-    @Published private(set) var sharedImage: (fileURL: URL, filename: String, contentType: String)?
+    @Published private(set) var sharedImages: [(fileURL: URL, filename: String, contentType: String)] = []
     @Published private(set) var lastError: String?
     @Published private(set) var statusLog: [String] = []
 
     var sharedImageFileURL: URL? {
-        sharedImage?.fileURL
+        sharedImages.first?.fileURL
     }
 
     var sharedImageFilename: String {
-        sharedImage?.filename ?? ""
+        sharedImages.first?.filename ?? ""
     }
 
     var sharedImageContentType: String {
-        sharedImage?.contentType ?? "application/octet-stream"
+        sharedImages.first?.contentType ?? "application/octet-stream"
     }
 
     public init() {
@@ -61,10 +61,16 @@ public final class InstantShareService: ObservableObject {
         log("Shared text set (\(text.count) chars)")
     }
 
-    /// Configure the shared image payload from a file URL.
+    /// Set all shared images at once (batch).
+    func setSharedImages(_ images: [(fileURL: URL, filename: String, contentType: String)]) {
+        self.sharedImages = images
+        log("Shared images set (\(images.count) images)")
+    }
+
+    /// Append a shared image payload from a file URL (convenience for single-image flows).
     func setSharedImage(fileURL: URL, filename: String, contentType: String) {
-        self.sharedImage = (fileURL, filename, contentType)
-        log("Shared image set (file: \(fileURL.lastPathComponent), \(filename))")
+        self.sharedImages.append((fileURL, filename, contentType))
+        log("Shared image appended (file: \(fileURL.lastPathComponent), \(filename))")
     }
 
     /// Start the instant-share session by storing the connection config.
@@ -81,7 +87,7 @@ public final class InstantShareService: ObservableObject {
         connectionConfig = nil
         selectedPC = nil
         sharedText = ""
-        sharedImage = nil
+        sharedImages = []
         log("Session stopped")
     }
 

@@ -21,13 +21,19 @@ public enum ExtensionSessionPhase {
 public final class InstantShareExtensionViewModel: ObservableObject {
     @Published public var discoveredDevices: [InstantShareDiscoveredPC] = []
     @Published public var selectedDevice: InstantShareDiscoveredPC?
-    @Published public var payloadEnvelope: InstantSharePayloadEnvelope?
+    @Published public var payloadEnvelopes: [InstantSharePayloadEnvelope] = []
     @Published public var errorMessage: String?
     @Published public var sessionPhase: ExtensionSessionPhase = .scanning
     @Published public var isProcessing: Bool = false
     @Published public var sharedText: String = ""
     @Published public var sharedImageFilename: String = ""
     @Published public var sharedImageContentType: String = ""
+    @Published public var totalImageCount: Int = 0
+    @Published public var sentImageCount: Int = 0
+
+    public var batchProgress: Float {
+        totalImageCount > 0 ? Float(sentImageCount) / Float(totalImageCount) : 0
+    }
 
     let mdnsBrowser: InstantShareMDNSBrowser
     let service: InstantShareService
@@ -77,10 +83,12 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         defer { isProcessing = false }
         do {
             nonisolated(unsafe) let items = extensionItems
-            let envelope = try await InstantSharePayloadExtractor.extract(from: items)
-            self.payloadEnvelope = envelope
-            LocalLog.info("[Extension VM] payload extracted: type=\(envelope.payloadType)")
-            if envelope.payloadType == .text, let text = envelope.textContent {
+            let envelopes = try await InstantSharePayloadExtractor.extract(from: items)
+            self.payloadEnvelopes = envelopes
+            LocalLog.info("[Extension VM] payloads extracted: count=\(envelopes.count)")
+            // Set sharedText from the first text envelope if present
+            if let textEnvelope = envelopes.first(where: { $0.payloadType == .text }),
+               let text = textEnvelope.textContent {
                 self.sharedText = text
             }
         } catch {
@@ -96,11 +104,11 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     }
 
     public var canSend: Bool {
-        selectedDevice != nil && payloadEnvelope != nil && !isProcessing
+        selectedDevice != nil && !payloadEnvelopes.isEmpty && !isProcessing
     }
 
     public func send() async {
-        guard let pc = selectedDevice, let envelope = payloadEnvelope else {
+        guard let pc = selectedDevice, !payloadEnvelopes.isEmpty else {
             errorMessage = "No device selected or no payload."
             return
         }
@@ -109,24 +117,33 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         isProcessing = true
         errorMessage = nil
 
-        switch envelope.payloadType {
-        case .text:
-            if let text = envelope.textContent {
-                service.setSharedText(text)
+        // Process all envelopes
+        var images: [(fileURL: URL, filename: String, contentType: String)] = []
+        for envelope in payloadEnvelopes {
+            switch envelope.payloadType {
+            case .text:
+                if let text = envelope.textContent {
+                    service.setSharedText(text)
+                }
+            case .image:
+                if let fileURL = envelope.fileURL {
+                    let filename = envelope.filename ?? "image"
+                    let contentType = envelope.contentType ?? "image/jpeg"
+                    images.append((fileURL, filename, contentType))
+                }
+            default:
+                break
             }
-        case .image:
-            if let fileURL = envelope.fileURL {
-                service.setSharedImage(
-                    fileURL: fileURL,
-                    filename: envelope.filename ?? "image",
-                    contentType: envelope.contentType ?? "image/jpeg"
-                )
-            }
-        default:
-            break
         }
 
-        let config = buildConnectionConfig(pc: pc, envelope: envelope)
+        // Store images in the service
+        if images.count == 1, let first = images.first {
+            service.setSharedImage(fileURL: first.fileURL, filename: first.filename, contentType: first.contentType)
+        } else if !images.isEmpty {
+            service.setSharedImages(images)
+        }
+
+        let config = buildConnectionConfig(pc: pc, envelopes: payloadEnvelopes)
         service.connectionConfig = config
 
         let deviceName = await deviceIdentifierProvider.currentIdentifier().deviceName
@@ -277,6 +294,8 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     )
                     LocalLog.info("[Extension VM] text uploaded via TLS port \(pc.tlsPort)")
                 default:
+                    let imageCount = service.sharedImages.count
+                    LocalLog.info("[Extension VM] uploading first of \(imageCount) image(s) via TLS port \(pc.tlsPort) (batch upload pending)")
                     if let imageFileURL = service.sharedImageFileURL {
                         try await uploadClient.uploadImage(
                             host: handshakeHost,
@@ -288,7 +307,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                             filename: service.sharedImageFilename,
                             peerDeviceName: deviceName
                         )
-                        LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
+                        LocalLog.info("[Extension VM] first image uploaded via TLS port \(pc.tlsPort)")
                     }
                 }
 
@@ -322,8 +341,9 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         sessionPhase = .scanning
     }
 
-    private func buildConnectionConfig(pc: InstantShareDiscoveredPC, envelope: InstantSharePayloadEnvelope) -> InstantShareConnectionConfig {
-        let payloadClass: InstantSharePayloadClass = envelope.payloadType == .text ? .text : .image
+    private func buildConnectionConfig(pc: InstantShareDiscoveredPC, envelopes: [InstantSharePayloadEnvelope]) -> InstantShareConnectionConfig {
+        let hasImage = envelopes.contains(where: { $0.payloadType == .image })
+        let payloadClass: InstantSharePayloadClass = hasImage ? .image : .text
         let targetIntent: InstantShareTargetIntent = payloadClass == .text ? .clipboardOnly : .clipboardOrFile
         let trustMode: InstantShareTrustMode = .firstShare
 

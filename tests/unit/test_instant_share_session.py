@@ -115,6 +115,47 @@ class TestInstantShareSessionRegistry(unittest.TestCase):
         registry = InstantShareSessionRegistry()
         self.assertIsNone(registry.get_session("nonexistent"))
 
+    def test_set_batch_metadata(self):
+        """Setting batch metadata updates image_count and keeps session frozen."""
+        registry = InstantShareSessionRegistry()
+        session = registry.bootstrap(_config())
+        updated = registry.set_batch_metadata(session.connection_config.session_id, image_count=5)
+
+        self.assertEqual(updated.image_count, 5)
+        self.assertEqual(updated.received_count, 0)
+        # Verify the stored session is updated
+        stored = registry.get_session(session.connection_config.session_id)
+        self.assertEqual(stored.image_count, 5)
+
+    def test_increment_received_count(self):
+        """Increment received_count atomically within a batch."""
+        registry = InstantShareSessionRegistry()
+        session = registry.bootstrap(_config())
+        registry.set_batch_metadata(session.connection_config.session_id, image_count=3)
+
+        for i in range(1, 4):
+            updated = registry.increment_received_count(session.connection_config.session_id)
+            self.assertEqual(updated.received_count, i)
+
+        stored = registry.get_session(session.connection_config.session_id)
+        self.assertEqual(stored.received_count, 3)
+        self.assertEqual(stored.image_count, 3)
+
+    def test_session_defaults_to_zero_counts(self):
+        """New sessions start with image_count=0 and received_count=0."""
+        registry = InstantShareSessionRegistry()
+        session = registry.bootstrap(_config())
+        self.assertEqual(session.image_count, 0)
+        self.assertEqual(session.received_count, 0)
+
+    def test_increment_received_count_without_batch_metadata(self):
+        """Increment works even without setting image_count first (default 0)."""
+        registry = InstantShareSessionRegistry()
+        session = registry.bootstrap(_config())
+        updated = registry.increment_received_count(session.connection_config.session_id)
+        self.assertEqual(updated.received_count, 1)
+        self.assertEqual(updated.image_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

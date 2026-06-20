@@ -135,8 +135,15 @@ final class InstantShareUploadClient: Sendable {
         if let peerDeviceName {
             request.setValue(peerDeviceName, forHTTPHeaderField: "X-Peer-Device-Name")
         }
+        request.setValue("1", forHTTPHeaderField: "X-Image-Count")
         request.timeoutInterval = timeoutInterval
 
+        try await performImageUpload(request: request, fileURL: fileURL)
+    }
+
+    /// Core upload logic shared by single and batch image uploads.
+    /// Sets up the TLS delegate, performs the upload, and validates the response.
+    private func performImageUpload(request: URLRequest, fileURL: URL) async throws {
         let delegate = TlsTrustDelegate(
             appIdentityProvider: appIdentityProvider
         )
@@ -165,6 +172,41 @@ final class InstantShareUploadClient: Sendable {
                 errorCode: errorInfo.errorCode,
                 message: errorInfo.message
             )
+        }
+    }
+
+    /// Uploads multiple images sequentially within the same session.
+    /// Each request includes an `X-Image-Count` header set to the total batch size.
+    /// Stops on the first error — already-uploaded images remain on the PC.
+    func uploadImages(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String,
+        urls: [(fileURL: URL, filename: String, contentType: String)],
+        peerDeviceName: String? = nil
+    ) async throws {
+        let urlString = "https://\(host):\(port)\(InstantShareProtocol.apiPrefix)/transfer/image"
+        guard let url = URL(string: urlString) else {
+            throw InstantShareUploadClientError.uploadFailed("Invalid URL: \(urlString)")
+        }
+
+        let imageCount = urls.count
+
+        for (_, item) in urls.enumerated() {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue(item.contentType, forHTTPHeaderField: "Content-Type")
+            request.setValue(sessionID, forHTTPHeaderField: "X-Session-Id")
+            request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
+            request.setValue(item.filename, forHTTPHeaderField: "X-Instant-Share-Filename")
+            request.setValue(String(imageCount), forHTTPHeaderField: "X-Image-Count")
+            if let peerDeviceName {
+                request.setValue(peerDeviceName, forHTTPHeaderField: "X-Peer-Device-Name")
+            }
+            request.timeoutInterval = timeoutInterval
+
+            try await performImageUpload(request: request, fileURL: item.fileURL)
         }
     }
 

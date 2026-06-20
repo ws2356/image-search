@@ -30,6 +30,7 @@ enum InstantSharePayloadExtractorError: Error, LocalizedError {
     case noSupportedItems
     case unreadableContent(String)
     case unsupportedType(String)
+    case batchSizeExceeded(limit: Int)
 
     var errorDescription: String? {
         switch self {
@@ -39,11 +40,15 @@ enum InstantSharePayloadExtractorError: Error, LocalizedError {
             return "Unable to read shared content: \(reason)"
         case .unsupportedType(let type):
             return "This content type is not supported for instant sharing: \(type)"
+        case .batchSizeExceeded(let limit):
+            return "Cannot share more than \(limit) items at once."
         }
     }
 }
 
 struct InstantSharePayloadExtractor {
+    static let maxBatchSize = 10
+
     static let supportedTextTypes: Set<String> = [
         UTType.plainText.identifier,
         UTType.utf8PlainText.identifier,
@@ -73,25 +78,35 @@ struct InstantSharePayloadExtractor {
         return nil
     }
 
-    static func extract(from extensionItems: [NSExtensionItem]) async throws -> InstantSharePayloadEnvelope {
+    static func extract(from extensionItems: [NSExtensionItem]) async throws -> [InstantSharePayloadEnvelope] {
+        var envelopes: [InstantSharePayloadEnvelope] = []
         for item in extensionItems {
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
                 if let textEnvelope = try await extractText(from: provider) {
-                    return textEnvelope
+                    envelopes.append(textEnvelope)
+                    continue
                 }
                 if let imageEnvelope = try await extractMedia(from: provider, preferredType: .image) {
-                    return imageEnvelope
+                    envelopes.append(imageEnvelope)
+                    continue
                 }
                 if let videoEnvelope = try await extractMedia(from: provider, preferredType: .video) {
-                    return videoEnvelope
+                    envelopes.append(videoEnvelope)
+                    continue
                 }
                 if let fileEnvelope = try await extractFile(from: provider) {
-                    return fileEnvelope
+                    envelopes.append(fileEnvelope)
                 }
             }
         }
-        throw InstantSharePayloadExtractorError.noSupportedItems
+        guard !envelopes.isEmpty else {
+            throw InstantSharePayloadExtractorError.noSupportedItems
+        }
+        guard envelopes.count <= Self.maxBatchSize else {
+            throw InstantSharePayloadExtractorError.batchSizeExceeded(limit: Self.maxBatchSize)
+        }
+        return envelopes
     }
 
     private static func loadItem(provider: NSItemProvider, typeIdentifier: String) async throws -> Any {

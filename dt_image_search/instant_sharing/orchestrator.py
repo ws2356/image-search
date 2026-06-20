@@ -69,20 +69,37 @@ class InstantShareReceiverOrchestrator:
                 attributes=_session_attributes(updated.connection_config, correlation_id=correlation_id),
             )
 
-    def handle_transfer_received(self, *, session_id: str, correlation_id: str) -> None:
+    def handle_transfer_received(
+        self, *, session_id: str, correlation_id: str, image_count: int | None = None,
+    ) -> bool:
         session = self._session_registry.require_session(session_id)
         with add_span(
             "instant_share.transfer.received",
             attributes=_session_attributes(session.connection_config, correlation_id=correlation_id),
         ):
-            updated = self._session_registry.transition(session_id, SessionState.TRANSFERRING)
-            self._publish(updated)
+            # Set batch metadata if provided and not already set
+            if image_count is not None and session.image_count == 0:
+                self._session_registry.set_batch_metadata(session_id, image_count)
+            # Increment received count
+            self._session_registry.increment_received_count(session_id)
+            # Only transition if not already in TRANSFERRING state
+            if session.state is not SessionState.TRANSFERRING:
+                session = self._session_registry.transition(session_id, SessionState.TRANSFERRING)
+            else:
+                session = self._session_registry.require_session(session_id)
+            self._publish(session)
+
+        # Check batch completion
+        session = self._session_registry.require_session(session_id)
+        batch_complete = session.image_count == 0 or session.received_count >= session.image_count
+        return batch_complete
 
     def handle_revisit_transfer(
         self,
         *,
         connection_config,
         peer_device_name: str = "",
+        image_count: int | None = None,
     ) -> InstantShareSession:
         with add_span(
             "instant_share.revisit.transfer",
@@ -90,6 +107,11 @@ class InstantShareReceiverOrchestrator:
         ):
             session = self._session_registry.bootstrap(connection_config)
             session = self._session_registry.transition(connection_config.session_id, SessionState.TRANSFERRING)
+            # Apply batch tracking metadata if provided
+            if image_count is not None:
+                self._session_registry.set_batch_metadata(connection_config.session_id, image_count)
+                self._session_registry.increment_received_count(connection_config.session_id)
+            session = self._session_registry.require_session(connection_config.session_id)
             self._publish(session, device_name=peer_device_name)
             log(
                 "info",
@@ -108,6 +130,14 @@ class InstantShareReceiverOrchestrator:
         file_path: str = "",
     ) -> None:
         session = self._session_registry.require_session(session_id)
+        # For batch transfers, only deliver when all images received
+        if session.image_count > 0 and session.received_count < session.image_count:
+            log(
+                "info",
+                message=f"Batch transfer in progress: {session.received_count}/{session.image_count} images received, deferring delivery",
+                where="instant_share.orchestrator.handle_delivery_complete",
+            )
+            return
         if session.state is not SessionState.DELIVERING:
             delivering = self._session_registry.transition(session_id, SessionState.DELIVERING)
             self._publish(delivering, text_content=text_content, file_path=file_path)
@@ -177,6 +207,8 @@ class InstantShareReceiverOrchestrator:
             "payload_class": session.connection_config.metadata.payload_class.value,
             "target_intent": session.connection_config.metadata.target_intent.value,
             "trust_mode": session.connection_config.metadata.trust_mode.value,
+            "image_count": session.image_count,
+            "received_count": session.received_count,
         }
         if device_name:
             event["device_name"] = device_name

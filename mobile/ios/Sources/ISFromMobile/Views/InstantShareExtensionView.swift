@@ -278,7 +278,8 @@ public struct InstantShareExtensionView: View {
     // MARK: - Helpers
 
     private var payloadDescription: String {
-        switch viewModel.payloadEnvelope?.payloadType {
+        guard let first = viewModel.payloadEnvelopes.first else { return "file" }
+        switch first.payloadType {
         case .text: return "text"
         case .image: return "image"
         default: return "file"
@@ -286,34 +287,39 @@ public struct InstantShareExtensionView: View {
     }
 
     private var payloadIcon: String {
-        switch viewModel.payloadEnvelope?.payloadType {
+        guard let first = viewModel.payloadEnvelopes.first else {
+            return viewModel.isProcessing ? "arrow.down.circle" : "questionmark.circle"
+        }
+        switch first.payloadType {
         case .text: return "text.alignleft"
         case .image: return "photo"
         case .video: return "video"
         case .file: return "doc"
-        case .none: return viewModel.isProcessing ? "arrow.down.circle" : "questionmark.circle"
         }
     }
 
     private var payloadTitle: String {
-        guard let envelope = viewModel.payloadEnvelope else {
+        guard let first = viewModel.payloadEnvelopes.first else {
             return viewModel.isProcessing ? "Loading..." : "No content"
         }
-        switch envelope.payloadType {
+        if viewModel.payloadEnvelopes.count > 1 {
+            return "\(viewModel.payloadEnvelopes.count) Images"
+        }
+        switch first.payloadType {
         case .text:
-            let preview = envelope.textContent ?? ""
+            let preview = first.textContent ?? ""
             return preview.count > 50 ? String(preview.prefix(50)) + "..." : preview
         case .image: return "Image"
         case .video: return "Video"
-        case .file: return envelope.filename ?? "File"
+        case .file: return first.filename ?? "File"
         }
     }
 
     private var payloadSubtitle: String {
-        guard let envelope = viewModel.payloadEnvelope else { return "" }
-        if let size = envelope.fileSizeBytes {
+        guard let first = viewModel.payloadEnvelopes.first else { return "" }
+        if let size = first.fileSizeBytes {
             return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         }
-        return envelope.contentType ?? ""
+        return first.contentType ?? ""
     }
 }

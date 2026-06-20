@@ -54,9 +54,11 @@ class MiniWindowState:
     pin_code: str = ""
     text_content: str = ""
     file_path: str = ""
+    image_count: int = 0
+    received_count: int = 0
 
 
-def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str, pin_code: str = "") -> str:
+def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str, pin_code: str = "", image_count: int = 0, received_count: int = 0) -> str:
     name = device_name or "your phone"
     if phase == MiniWindowPhase.CONNECTING:
         return f"Connecting to {name}..."
@@ -65,6 +67,8 @@ def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str,
     if phase == MiniWindowPhase.DISPLAYING_PIN:
         return f"Verify this PIN matches the one on your iPhone:\n{pin_code}"
     if phase == MiniWindowPhase.TRANSFERRING:
+        if image_count > 1:
+            return f"Receiving image {received_count} of {image_count}..."
         return f"Receiving {payload_label} from iPhone..."
     if phase == MiniWindowPhase.DELIVERING:
         return f"Saving {payload_label}..."
@@ -120,20 +124,32 @@ class InstantShareMiniWindow(QDialog):
         error_message: str = "",
         text_content: str = "",
         file_path: str = "",
+        image_count: int = 0,
+        received_count: int = 0,
     ) -> None:
         phase = self.build_phase(state)
         label = _payload_label(payload_class) if payload_class else self._state.payload_label
         device = device_name or self._state.device_name
+
+        # Calculate progress based on batch count when multiple images
+        if image_count > 1 and received_count > 0:
+            download_progress = received_count / image_count
+        elif phase == MiniWindowPhase.SUCCESS:
+            download_progress = 1.0
+        else:
+            download_progress = 0.0
 
         self._state = MiniWindowState(
             phase=phase,
             device_name=device,
             payload_label=label,
             error_message=error_message,
-            download_progress=1.0 if phase == MiniWindowPhase.SUCCESS else 0.0,
+            download_progress=download_progress,
             pin_code=self._state.pin_code,
             text_content=text_content or self._state.text_content,
             file_path=file_path or self._state.file_path,
+            image_count=image_count or self._state.image_count,
+            received_count=received_count or self._state.received_count,
         )
         self._refresh_ui()
         self._bring_to_front()
@@ -279,6 +295,8 @@ class InstantShareMiniWindow(QDialog):
             self._state.device_name,
             self._state.payload_label,
             self._state.pin_code,
+            self._state.image_count,
+            self._state.received_count,
         )
         self._message_label.setText(message)
 

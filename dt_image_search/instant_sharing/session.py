@@ -47,6 +47,8 @@ class InstantShareSession:
     state: SessionState = SessionState.BOOTSTRAPPED
     started_monotonic: float = 0.0
     last_updated: float = 0.0
+    image_count: int = 0
+    received_count: int = 0
 
     def __post_init__(self) -> None:
         if self.started_monotonic <= 0:
@@ -129,6 +131,22 @@ class InstantShareSessionRegistry:
             if next_state not in _ACTIVE_STATES:
                 self._schedule_cleanup(session_id)
             return updated_session
+
+    def set_batch_metadata(self, session_id: str, image_count: int) -> InstantShareSession:
+        """Set the expected image count for a batch transfer session."""
+        with self._lock:
+            session = self.require_session(session_id)
+            updated = replace(session, image_count=image_count, last_updated=time.monotonic())
+            self._active_sessions[session_id] = updated
+            return updated
+
+    def increment_received_count(self, session_id: str) -> InstantShareSession:
+        """Increment the received image count. Returns updated session."""
+        with self._lock:
+            session = self.require_session(session_id)
+            updated = replace(session, received_count=session.received_count + 1, last_updated=time.monotonic())
+            self._active_sessions[session_id] = updated
+            return updated
 
     def _schedule_cleanup(self, session_id: str) -> None:
         timer = threading.Timer(_TERMINAL_SESSION_CLEANUP_SECONDS, self._cleanup_session, args=[session_id])

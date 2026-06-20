@@ -239,6 +239,17 @@ final class InstantSharePayloadExtractorTests: XCTestCase {
         )
         XCTAssertEqual(envelope.targetIntent, "clipboard_or_file")
     }
+
+    func test_batch_size_exceeded_error_description() {
+        let error = InstantSharePayloadExtractorError.batchSizeExceeded(limit: 10)
+        XCTAssertNotNil(error.errorDescription)
+        XCTAssertTrue(error.errorDescription!.contains("10"))
+        XCTAssertTrue(error.errorDescription!.contains("items"))
+    }
+
+    func test_max_batch_size_constant() {
+        XCTAssertEqual(InstantSharePayloadExtractor.maxBatchSize, 10)
+    }
 }
 
 final class InstantShareHandoffContextTests: XCTestCase {
@@ -285,5 +296,92 @@ final class InstantShareHandoffContextTests: XCTestCase {
             from: envelope, selectedDeviceID: nil, selectedDeviceName: nil, isTrustedDevice: false
         )
         XCTAssertEqual(context.fileURL, url)
+    }
+}
+
+@MainActor
+final class InstantShareExtensionViewModelBatchTests: XCTestCase {
+    var viewModel: InstantShareExtensionViewModel!
+    var service: InstantShareService!
+    
+    override func setUp() {
+        super.setUp()
+        service = InstantShareService()
+        let browser = InstantShareMDNSBrowser()
+        viewModel = InstantShareExtensionViewModel(mdnsBrowser: browser, service: service)
+    }
+    
+    override func tearDown() {
+        viewModel = nil
+        service = nil
+        super.tearDown()
+    }
+    
+    func test_viewModel_starts_with_empty_payload_envelopes() {
+        XCTAssertTrue(viewModel.payloadEnvelopes.isEmpty)
+        XCTAssertEqual(viewModel.totalImageCount, 0)
+        XCTAssertEqual(viewModel.sentImageCount, 0)
+    }
+    
+    func test_canSend_returns_false_when_no_payloads() {
+        XCTAssertFalse(viewModel.canSend)
+    }
+    
+    func test_canSend_returns_false_when_no_device_selected() {
+        viewModel.payloadEnvelopes = [
+            InstantSharePayloadEnvelope(
+                payloadType: .image, textContent: nil,
+                fileURL: URL(string: "file:///test.jpg"),
+                filename: "test.jpg", contentType: "image/jpeg", fileSizeBytes: 1024
+            )
+        ]
+        XCTAssertFalse(viewModel.canSend)
+    }
+    
+    func test_batch_progress_computed_property() {
+        viewModel.totalImageCount = 5
+        viewModel.sentImageCount = 3
+        let progress = viewModel.batchProgress
+        XCTAssertEqual(progress, 0.6, accuracy: 0.01)
+    }
+    
+    func test_batch_progress_zero_when_no_images() {
+        viewModel.totalImageCount = 0
+        viewModel.sentImageCount = 0
+        XCTAssertEqual(viewModel.batchProgress, 0.0)
+    }
+    
+    func test_batch_progress_handles_division_by_zero() {
+        viewModel.totalImageCount = 0
+        viewModel.sentImageCount = 5
+        XCTAssertEqual(viewModel.batchProgress, 0.0)
+    }
+    
+    func test_service_shared_images_defaults_to_empty() {
+        XCTAssertTrue(service.sharedImages.isEmpty)
+    }
+    
+    func test_service_set_shared_images_batch() {
+        let images: [(fileURL: URL, filename: String, contentType: String)] = [
+            (URL(string: "file:///a.jpg")!, "a.jpg", "image/jpeg"),
+            (URL(string: "file:///b.jpg")!, "b.jpg", "image/png"),
+        ]
+        service.setSharedImages(images)
+        XCTAssertEqual(service.sharedImages.count, 2)
+        XCTAssertEqual(service.sharedImages[0].filename, "a.jpg")
+        XCTAssertEqual(service.sharedImages[1].filename, "b.jpg")
+    }
+    
+    func test_service_set_shared_image_append() {
+        service.setSharedImage(fileURL: URL(string: "file:///a.jpg")!, filename: "a.jpg", contentType: "image/jpeg")
+        service.setSharedImage(fileURL: URL(string: "file:///b.jpg")!, filename: "b.jpg", contentType: "image/png")
+        XCTAssertEqual(service.sharedImages.count, 2)
+    }
+    
+    func test_service_stop_session_clears_shared_images() {
+        service.setSharedImage(fileURL: URL(string: "file:///a.jpg")!, filename: "a.jpg", contentType: "image/jpeg")
+        XCTAssertEqual(service.sharedImages.count, 1)
+        service.stopSession()
+        XCTAssertTrue(service.sharedImages.isEmpty)
     }
 }

@@ -109,6 +109,7 @@ def _do_transfer_image(
     filename: str | None,
     peer_device_name: str = "",
     temp_file_path: str | None = None,
+    image_count: int = 0,
 ) -> dict[str, object]:
     if deps.trust_session_registry is None or deps.transfer_handler is None or deps.session_registry is None:
         raise _ServiceUnavailable("Transfer service not initialized")
@@ -122,6 +123,7 @@ def _do_transfer_image(
             payload_class=PayloadClass.IMAGE,
             target_intent=TargetIntent.CLIPBOARD_OR_FILE,
             peer_device_name=peer_device_name,
+            image_count=image_count,
         ):
             raise InstantShareError(
                 error_code=ErrorCode.SESSION_NOT_FOUND,
@@ -148,15 +150,27 @@ def _do_transfer_image(
     if deps.orchestrator is not None:
         try:
             if not is_revisit:
-                deps.orchestrator.handle_transfer_received(
+                batch_complete = deps.orchestrator.handle_transfer_received(
                     session_id=session_id_header,
                     correlation_id=correlation_id_header,
+                    image_count=image_count if image_count > 0 else None,
                 )
-            deps.orchestrator.handle_delivery_complete(
-                session_id=session_id_header,
-                correlation_id=correlation_id_header,
-                file_path=file_path,
-            )
+            else:
+                # For revisit transfers (multi-image batch), check session state
+                session = deps.session_registry.get_session(session_id_header)
+                batch_complete = (
+                    session is not None
+                    and session.image_count > 0
+                    and session.received_count >= session.image_count
+                ) if session is not None else True
+
+            # Only deliver when batch is complete (single images always deliver)
+            if batch_complete:
+                deps.orchestrator.handle_delivery_complete(
+                    session_id=session_id_header,
+                    correlation_id=correlation_id_header,
+                    file_path=file_path,
+                )
         except Exception as exc:
             _logger.warning("Failed to publish transfer lifecycle event: %s", exc)
     return {"state": "delivered", **result.as_dict()}
@@ -222,6 +236,7 @@ def _try_create_revisit_session(
     payload_class: PayloadClass,
     target_intent: TargetIntent,
     peer_device_name: str = "",
+    image_count: int = 0,
 ) -> bool:
     if deps.session_registry is None or deps.orchestrator is None:
         return False
@@ -248,6 +263,7 @@ def _try_create_revisit_session(
     deps.orchestrator.handle_revisit_transfer(
         connection_config=connection_config,
         peer_device_name=peer_device_name,
+        image_count=image_count if image_count > 0 else None,
     )
     return True
 
@@ -310,6 +326,8 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         content_type = request.headers.get("Content-Type", "application/octet-stream")
         filename = request.headers.get("X-Instant-Share-Filename")
         correlation_id_header = request.headers.get("X-Correlation-Id", "")
+        image_count_header = request.headers.get("X-Image-Count")
+        image_count = int(image_count_header) if image_count_header else 0
 
         from tempfile import NamedTemporaryFile
         tmp = NamedTemporaryFile(delete=False, suffix=".upload")
@@ -332,6 +350,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
                 filename=filename,
                 peer_device_name=peer_device_name,
                 temp_file_path=temp_path,
+                image_count=image_count,
             )
         finally:
             try:
