@@ -36,8 +36,7 @@
 - [ ] 5.1 Update existing tests for new API signatures (remove `peerDeviceID` params)
 - [ ] 5.2 Add tests for pubkey-based store/query/delete cycle
 - [ ] 5.3 Add tests for `loadAllPeerCertificates()` batch query
-- [ ] 5.4 Add tests for v2→v3 cert migration (name in CN, UUID in extension, old peer cert cleanup)
-- [ ] 5.5 Run `xcodebuild test` to verify all tests pass
+- [ ] 5.4 Run `mobile/ios/scripts/run_unit_tests.sh` to verify all tests pass
 
 ## 6. PC: device_identity.py — Self-Cert Content Only
 
