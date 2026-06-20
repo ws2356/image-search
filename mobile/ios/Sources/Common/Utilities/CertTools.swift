@@ -7,6 +7,8 @@
 
 import CryptoKit
 import Foundation
+import SwiftASN1
+import X509
 
 extension SecCertificate {
     public var commonName: String? {
@@ -30,6 +32,36 @@ extension SecCertificate {
             return nil
         }
         return Data(Insecure.SHA1.hash(data: keyData))
+    }
+
+    public func certVersionFromExtension(_ versionOID: ASN1ObjectIdentifier) -> Int? {
+        guard let derData = SecCertificateCopyData(self) as Data?,
+              let cert = try? Certificate(derEncoded: Array(derData)),
+              let ext = cert.extensions[oid: versionOID] else {
+            return nil
+        }
+        return try? Int(derEncoded: ext.value)
+    }
+
+    public func deviceUUIDFromExtension(_ deviceIdOID: ASN1ObjectIdentifier) -> String? {
+        guard let derData = SecCertificateCopyData(self) as Data?,
+              let cert = try? Certificate(derEncoded: Array(derData)),
+              let ext = cert.extensions[oid: deviceIdOID] else {
+            return nil
+        }
+        let bytes = Array(ext.value)
+        // Skip DER tag (1 byte) and length (1-2 bytes); remainder is UTF-8 content
+        guard bytes.count > 2 else { return nil }
+        let firstLength = Int(bytes[1])
+        let contentStart: Int
+        if firstLength < 128 {
+            contentStart = 2
+        } else {
+            let numLengthBytes = firstLength - 128
+            contentStart = 2 + numLengthBytes
+        }
+        guard contentStart < bytes.count else { return nil }
+        return String(bytes: bytes[contentStart...], encoding: .utf8)
     }
     
     public static func fromPEM(_ pem: String) -> SecCertificate? {

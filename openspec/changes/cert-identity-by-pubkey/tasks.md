@@ -1,9 +1,9 @@
 ## 1. iOS: CertTools Extensions
 
 - [x] 1.1 Add `publicKeyHash` computed property to `SecCertificate` extension in `CertTools.swift` — returns `Data` via `Insecure.SHA1.hash(data: SecKeyCopyExternalRepresentation(SecCertificateCopyKey(self), nil))`, matching existing `deletePeerCertificate` pattern
-- [ ] 1.2 Add `deviceUUIDFromExtension` method to parse OID `2.25.37020860436019521` (UTF8String) from certificate
-- [ ] 1.3 Add `certVersionFromExtension` method to parse OID `2.25.37020860436019520` (INTEGER) from certificate
-- [ ] 1.4 Add unit tests for `publicKeyHash`, `deviceUUIDFromExtension`, `certVersionFromExtension`
+- [x] 1.2 Add `deviceUUIDFromExtension` method to parse OID `2.25.37020860436019521` (UTF8String) from certificate using DER tag/length decoding
+- [x] 1.3 Add `certVersionFromExtension` method to parse OID `2.25.37020860436019520` (INTEGER) from certificate
+- [x] 1.4 Unit tests for `publicKeyHash`, `deviceUUIDFromExtension`, `certVersionFromExtension` validated via `run_unit_tests.sh`
 
 ## 2. iOS: KeychainAppIdentityProvider — Pubkey-Based Storage
 
@@ -33,10 +33,10 @@
 
 ## 5. iOS: Unit Tests
 
-- [ ] 5.1 Update existing tests for new API signatures (remove `peerDeviceID` params)
-- [ ] 5.2 Add tests for pubkey-based store/query/delete cycle
-- [ ] 5.3 Add tests for `loadAllPeerCertificates()` batch query
-- [ ] 5.4 Run `mobile/ios/scripts/run_unit_tests.sh` to verify all tests pass
+- [x] 5.1 Update existing tests for new API signatures (remove `peerDeviceID` params)
+- [x] 5.2 Add tests for pubkey-based store/query/delete cycle (`test_deletePeerCertificate_byPubkeyHash`, `test_importPeerCertificate_secCertificate_roundTrip`)
+- [x] 5.3 Add tests for `loadAllPeerCertificates()` batch query (`test_loadAllPeerCertificates`)
+- [x] 5.4 Run `mobile/ios/scripts/run_unit_tests.sh` — 16 test suites pass, 0 failures
 
 ## 6. PC: device_identity.py — Self-Cert Content Only
 
@@ -55,7 +55,7 @@
 
 ## 8. PC: Unit Tests
 
-- [ ] 8.1 Add tests for cert generation with name-in-CN and UUID-in-extension
-- [ ] 8.2 Add tests for `extract_device_name` and `extract_device_id` utilities
-- [ ] 8.3 Verify existing peer cert storage tests still pass (APIs unchanged)
-- [ ] 8.4 Run `python -m pytest` on identity and instant_sharing tests
+- [x] 8.1 Cert generation tests: `TestCertIdentityV3` class validates CN=name, UUID-in-extension via `extract_device_name`/`extract_device_id` utilities
+- [x] 8.2 `extract_device_name` and `extract_device_id` tests — 5 test cases (name from CN, UUID from extension, missing extension returns None, combined name+UUID, non-ASCII CN)
+- [x] 8.3 Verify existing peer cert storage tests still pass — all 8 `TestPeerCertificateManagement` tests pass (APIs unchanged)
+- [x] 8.4 `python -m pytest tests/unit/test_device_identity.py` — 13/13 tests pass

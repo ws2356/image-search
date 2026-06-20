@@ -121,7 +121,7 @@ def _load_or_create_identity() -> DeviceIdentity:
         return _decode_identity(p12_data, device_id)
 
     desktop_name = socket.gethostname().split('.')[0]  # strip .local suffix
-    identity = _generate_identity(device_id, desktop_name=desktop_name)
+    identity = generate_identity(device_id, desktop_name=desktop_name)
     p12_data = pkcs12.serialize_key_and_certificates(
         name=b"AuSearch Device Identity",
         key=identity.private_key,
@@ -331,7 +331,7 @@ def delete_peer_certificate(peer_device_id: str) -> None:
     except subprocess.CalledProcessError:
         pass
 
-def _generate_identity(device_id: str, server_ips: list[str] = None, server_hostnames: list[str] = None, desktop_name: str | None = None) -> DeviceIdentity:
+def generate_identity(device_id: str, server_ips: list[str] = None, server_hostnames: list[str] = None, desktop_name: str | None = None) -> DeviceIdentity:
     key = ec.generate_private_key(ec.SECP256R1())
     
     cn_name = (desktop_name or socket.gethostname()).encode("ascii", errors="ignore").decode("ascii")
