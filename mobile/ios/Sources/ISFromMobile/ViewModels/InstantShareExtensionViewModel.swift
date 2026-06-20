@@ -222,18 +222,29 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             )
             LocalLog.info("[Extension VM] revisit text transfer succeeded via TLS port \(pc.tlsPort)")
         default:
-            if let imageFileURL = service.sharedImageFileURL {
+            let images = service.sharedImages
+            if images.count == 1, let img = images.first {
                 try await uploadClient.uploadImage(
                     host: pc.host,
                     port: pc.tlsPort,
                     sessionID: revisitSessionID,
                     correlationID: revisitCorrelationID,
-                    fileURL: imageFileURL,
-                    contentType: service.sharedImageContentType,
-                    filename: service.sharedImageFilename,
+                    fileURL: img.fileURL,
+                    contentType: img.contentType,
+                    filename: img.filename,
                     peerDeviceName: deviceName
                 )
                 LocalLog.info("[Extension VM] revisit image transfer succeeded via TLS port \(pc.tlsPort)")
+            } else if !images.isEmpty {
+                try await uploadClient.uploadImages(
+                    host: pc.host,
+                    port: pc.tlsPort,
+                    sessionID: revisitSessionID,
+                    correlationID: revisitCorrelationID,
+                    urls: images.map { ($0.fileURL, $0.filename, $0.contentType) },
+                    peerDeviceName: deviceName
+                )
+                LocalLog.info("[Extension VM] revisit batch transfer (\(images.count) images) succeeded via TLS port \(pc.tlsPort)")
             }
         }
 
@@ -294,20 +305,29 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     )
                     LocalLog.info("[Extension VM] text uploaded via TLS port \(pc.tlsPort)")
                 default:
-                    let imageCount = service.sharedImages.count
-                    LocalLog.info("[Extension VM] uploading first of \(imageCount) image(s) via TLS port \(pc.tlsPort) (batch upload pending)")
-                    if let imageFileURL = service.sharedImageFileURL {
+                    let images = service.sharedImages
+                    if images.count == 1, let img = images.first {
                         try await uploadClient.uploadImage(
                             host: handshakeHost,
                             port: pc.tlsPort,
                             sessionID: config.sessionID,
                             correlationID: config.correlationID,
-                            fileURL: imageFileURL,
-                            contentType: service.sharedImageContentType,
-                            filename: service.sharedImageFilename,
+                            fileURL: img.fileURL,
+                            contentType: img.contentType,
+                            filename: img.filename,
                             peerDeviceName: deviceName
                         )
-                        LocalLog.info("[Extension VM] first image uploaded via TLS port \(pc.tlsPort)")
+                        LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
+                    } else if !images.isEmpty {
+                        try await uploadClient.uploadImages(
+                            host: handshakeHost,
+                            port: pc.tlsPort,
+                            sessionID: config.sessionID,
+                            correlationID: config.correlationID,
+                            urls: images.map { ($0.fileURL, $0.filename, $0.contentType) },
+                            peerDeviceName: deviceName
+                        )
+                        LocalLog.info("[Extension VM] batch transfer (\(images.count) images) succeeded via TLS port \(pc.tlsPort)")
                     }
                 }
 

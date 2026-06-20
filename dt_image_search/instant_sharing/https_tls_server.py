@@ -156,13 +156,16 @@ def _do_transfer_image(
                     image_count=image_count if image_count > 0 else None,
                 )
             else:
-                # For revisit transfers (multi-image batch), check session state
-                session = deps.session_registry.get_session(session_id_header)
-                batch_complete = (
-                    session is not None
-                    and session.image_count > 0
-                    and session.received_count >= session.image_count
-                ) if session is not None else True
+                # For revisit transfers, also call handle_transfer_received to
+                # increment received_count.  Pass image_count only on the first
+                # request (when session.image_count is still 0), so subsequent
+                # requests don't overwrite it.
+                first_image = image_count if image_count > 0 else None
+                batch_complete = deps.orchestrator.handle_transfer_received(
+                    session_id=session_id_header,
+                    correlation_id=correlation_id_header,
+                    image_count=first_image,
+                )
 
             # Only deliver when batch is complete (single images always deliver)
             if batch_complete:

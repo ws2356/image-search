@@ -151,7 +151,7 @@ final class InstantShareUploadClient: Sendable {
         do {
             (data, response) = try await urlSession.upload(for: request, fromFile: fileURL, delegate: delegate)
         } catch {
-            LocalLog.debug("[UploadClient] uploadImage network error: \(error.localizedDescription)")
+            LocalLog.error("[UploadClient] uploadImage network error: \(error.localizedDescription)")
             throw InstantShareUploadClientError.networkError(error)
         }
 

@@ -106,11 +106,16 @@ class InstantShareReceiverOrchestrator:
             attributes=_session_attributes(connection_config),
         ):
             session = self._session_registry.bootstrap(connection_config)
-            session = self._session_registry.transition(connection_config.session_id, SessionState.TRANSFERRING)
-            # Apply batch tracking metadata if provided
+            # Only transition if not already in an active transfer state
+            # (subsequent images in a revisit batch reuse the same session).
+            if session.state is not SessionState.TRANSFERRING:
+                session = self._session_registry.transition(connection_config.session_id, SessionState.TRANSFERRING)
+            # Apply batch tracking metadata if provided.
+            # Do NOT increment received_count here — the image hasn't been
+            # received yet.  The increment happens in handle_transfer_received()
+            # (or equivalent revisit logic) AFTER receive_image() succeeds.
             if image_count is not None:
                 self._session_registry.set_batch_metadata(connection_config.session_id, image_count)
-                self._session_registry.increment_received_count(connection_config.session_id)
             session = self._session_registry.require_session(connection_config.session_id)
             self._publish(session, device_name=peer_device_name)
             log(
