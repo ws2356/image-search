@@ -1,5 +1,6 @@
-## ADDED Requirements
-
+## Purpose
+Secure device discovery and trust establishment for instant sharing between mobile and PC, including mDNS-based PC browsing, DH-based PIN verification, and X509 certificate exchange for mTLS reuse.
+## Requirements
 ### Requirement: mDNS candidate PC discovery before send
 The mobile system SHALL discover PCs via mDNS (Bonjour) on the local network and SHALL maintain a user-selectable list of candidate PCs in the iOS Share Extension. No AuBackup handoff — extension handles the full flow natively.
 
@@ -92,12 +93,12 @@ The `TrustSessionRegistry` SHALL maintain a collection of active trust sessions 
 - **AND** session `bbb` SHALL be unaffected
 
 ### Requirement: X509 public certificate exchange for HTTPS trust
-After successful PIN confirmation, both sides SHALL exchange X509 public certificates. The mobile (iOS) SHALL store the PC's certificate in the iOS Keychain keyed by `kSecAttrPublicKeyHash` (SHA-1 of public key). The PC side SHALL continue storing certificates using its existing API. The mobile SHALL also include `peer_device_name` in the `/trust/confirm` encrypted request body.
+After successful PIN confirmation, both sides SHALL exchange X509 public certificates. The mobile SHALL store the PC's certificate keyed by public key hash. The PC SHALL store the mobile's certificate using its existing API. The mobile SHALL also include `peer_device_name` in the `/trust/confirm` encrypted request body. Batch image transfer metadata (image count) SHALL be communicated via HTTP headers on `/transfer/image` requests, not in the trust confirm body.
 
-#### Scenario: iOS stores peer cert by pubkey hash after first sharing
-- **WHEN** first-share trust establishment completes successfully on iOS
-- **THEN** the iOS client SHALL store the PC's X509 certificate keyed by its public key hash (`kSecAttrPublicKeyHash`)
-- **AND** the PC SHALL persist the mobile's certificate using its existing `store_peer_certificate` API
+#### Scenario: Trust material persisted after first sharing (batch)
+- **WHEN** first-share trust establishment completes successfully with a batch of images
+- **THEN** the certificate exchange SHALL proceed identically to single-image flow
+- **AND** the batch metadata SHALL be communicated via `X-Image-Count` header on subsequent `/transfer/image` requests
 
 ### Requirement: Direct mTLS for future sharing via certificate-based identity
 For subsequent shares, the iOS client SHALL extract the server certificate's public key hash via `SecCertificateCopyKey` → `SecKeyCopyExternalRepresentation` → `Insecure.SHA1` during the TLS handshake, and look up the stored peer certificate by `kSecAttrPublicKeyHash`. If found, it SHALL proceed with direct mTLS transfer. If no match is found, SHALL fall back to the full trust handshake.
@@ -135,3 +136,4 @@ Instant-sharing SHALL NOT require a dedicated `/sessions/bootstrap` endpoint. Se
 #### Scenario: Session created from trust handshake
 - **WHEN** iOS sends `/trust/handshake` with bootstrap metadata
 - **THEN** PC creates a session from the embedded bootstrap data and subsequent requests are matched by `X-Session-Id`
+
