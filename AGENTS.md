@@ -71,6 +71,7 @@ This is a monorepo containing source code for the following products:
     Comments should explain *why* something is done, not *what* is being done. The code itself should be clear enough to explain the "what".
     * **Docstrings:** Provide standard docstrings for public APIs and complex functions.  
     * **READMEs:** Every major module or repository must have a README explaining setup, usage, and architecture.
+    * **File Header:** Each new file should have a header comment block with the file's purpose (one-line description of why it exists, not what it does), author, and date of creation.
 - **Data Lifecycle Management**: Properly categorizing and handling data based on its lifecycle is crucial for performance, memory management, and data integrity.
 
   | Data Type | Recommended Handling Guidance   |
