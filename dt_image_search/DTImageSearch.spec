@@ -75,6 +75,8 @@ a = Analysis(
         'pymobiledevice3.usbmux',
         'AppKit',
         *heif_hiddenimports,
+        'SystemConfiguration',
+        'CFNetwork',
     ],
     hookspath=[],
     hooksconfig={},

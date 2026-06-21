@@ -15,6 +15,8 @@ from dt_image_search.instant_sharing.mdns import (
     InstantShareBleService,
     InstantShareMDNSAdvertiser,
 )
+from dt_image_search.tools.dts_event_bus import default_bus
+from dt_image_search.tools.dts_network_monitor import default_monitor
 from dt_image_search.instant_sharing.https_bootstrap import InstantShareHTTPServer
 from dt_image_search.instant_sharing.https_tls_server import InstantShareTLSServer
 from dt_image_search.instant_sharing.contracts import TrustMode
@@ -129,6 +131,8 @@ class InstantShareRuntime:
             poll_interval_seconds=poll_interval_seconds,
             mdns_advertiser=self._mdns_advertiser,
         )
+        self._network_monitor = default_monitor
+        self._network_change_subscription = None  # type: ignore[assignment] — EventBus._Subscription (private inner class)
 
     @property
     def device_id(self) -> str:
@@ -199,6 +203,11 @@ class InstantShareRuntime:
             "[InstantShareRuntime] start() called, is_enabled=%s",
             is_enabled_val,
         )
+        # Subscribe to IP change events for mDNS auto-restart
+        self._network_change_subscription = default_bus.subscribe(
+            "is.network.ip_changed", self._on_ip_changed
+        )
+        self._network_monitor.start()
         if not is_enabled_val:
             _logger.warning("[InstantShareRuntime] feature flag disabled, refusing to start")
         http_ok = self._http_server.start()
@@ -238,6 +247,10 @@ class InstantShareRuntime:
     def stop(self) -> None:
         _logger = logging.getLogger(__name__)
         _logger.info("[InstantShareRuntime] stop() called")
+        self._network_monitor.stop()
+        if self._network_change_subscription is not None:
+            self._network_change_subscription.dispose()
+            self._network_change_subscription = None
         self._unix_socket_server.stop()
         self._tls_server.stop()
         self._http_server.stop()
@@ -268,6 +281,32 @@ class InstantShareRuntime:
             device_name=self._desktop_name_provider(),
             receiver_id=self._device_id_provider(),
         )
+
+    def _on_ip_changed(self, old_ips: set[str], new_ips: set[str]) -> None:
+        """Restart the mDNS advertiser when the PC's IP addresses change.
+
+        Runs on a background thread to avoid blocking the event callback.
+        """
+        _logger = logging.getLogger(__name__)
+        _logger.info(
+            "[InstantShareRuntime] IP changed old=%s new=%s, restarting mDNS advertiser",
+            sorted(old_ips) if old_ips else old_ips,
+            sorted(new_ips) if new_ips else new_ips,
+        )
+
+        def _restart() -> None:
+            if not self._mdns_advertiser.is_running:
+                _logger.info("[InstantShareRuntime] mDNS advertiser not running, skipping restart")
+                return
+            _logger.info("[InstantShareRuntime] stopping mDNS advertiser for IP change...")
+            self._mdns_advertiser.stop()
+            _logger.info("[InstantShareRuntime] restarting mDNS advertiser...")
+            if not self._mdns_advertiser.start():
+                _logger.error("[InstantShareRuntime] failed to restart mDNS advertiser after IP change")
+            else:
+                _logger.info("[InstantShareRuntime] mDNS advertiser restarted successfully")
+
+        threading.Thread(target=_restart, name="mdns_restart_on_ip_change", daemon=True).start()
 
     def _create_default_sender_identity(self, config_dir: Path | None) -> SenderIdentity:
         identity_dir = config_dir or Path.home() / ".config" / "ausearch"
