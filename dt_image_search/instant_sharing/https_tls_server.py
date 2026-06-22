@@ -255,10 +255,16 @@ def _do_transfer_download_file(
     if deps.qr_trigger_handler is None:
         raise _ServiceUnavailable("QR trigger service not initialized")
     status, file_bytes, content_type, filename = deps.qr_trigger_handler.retrieve_stash_file(stash_id, file_index)
-    _logger.info(
-        "[transfer/download/%d] delivered stash_id=%s content_type=%s bytes=%d session_id=%s",
-        file_index, stash_id, content_type, len(file_bytes), session_id_header,
-    )
+    if status != 200:
+        _logger.warning(
+            "[transfer/download/%d] FAILED stash_id=%s status=%d session_id=%s",
+            file_index, stash_id, status, session_id_header,
+        )
+    else:
+        _logger.info(
+            "[transfer/download/%d] delivered stash_id=%s content_type=%s bytes=%d session_id=%s",
+            file_index, stash_id, content_type, len(file_bytes), session_id_header,
+        )
     return status, file_bytes, content_type, filename
 
 
@@ -435,11 +441,15 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
             return Response(content=payload, status_code=status, headers=headers)
         error_msg = "Invalid request"
         if status == 404:
-            error_msg = "Stash not found"
+            error_msg = "Stash not found or source file not accessible"
         elif status == 410:
             error_msg = "Stash expired or source file unavailable"
         elif status == 400:
             error_msg = f"File index {file_index} out of range"
+        _logger.warning(
+            "[transfer/download/%d] ERROR RESPONSE status=%d session_id=%s message=%s",
+            file_index, status, session_id, error_msg,
+        )
         return JSONResponse(
             {"error_code": "INVALID_REQUEST", "message": error_msg},
             status_code=status,

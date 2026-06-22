@@ -40,6 +40,13 @@ class MacShareViewController: NSViewController {
         
         os_log("ShareExtension viewDidAppear — Ready to safely load items", log: log, type: .info)
         
+        // Diagnostic: log sandbox context for debugging file access issues
+        let homeDir = NSHomeDirectory()
+        let tmpDir = NSTemporaryDirectory()
+        let docDirs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.path ?? "?"
+        os_log("[SHARE_EXT] viewDidAppear context: home=%{public}@ tmp=%{public}@ documents=%{public}@",
+               log: log, type: .info, homeDir, tmpDir, docDirs)
+        
         guard let context = self.extensionContextRef else {
             os_log("No extensionContext available", log: log, type: .error)
             return
@@ -99,6 +106,14 @@ class MacShareViewController: NSViewController {
                 }
                 
                 if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+                    // If this plain-text item is backed by an actual file (e.g. .sh, .txt,
+                    // .csv, .py), prefer sharing the file path so the LaunchAgent can read
+                    // the original file.  Fall through to Phase 2 for file collection.
+                    if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
+                        os_log("[SHARE_EXT] Plain-text file detected — delegating to Phase 2 for file-path sharing",
+                               log: log, type: .info)
+                        continue
+                    }
                     os_log("Matched text attachment", log: log, type: .info)
                     provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] data, error in
                         if let error = error {
@@ -120,6 +135,9 @@ class MacShareViewController: NSViewController {
         }
         
         // Phase 2: No text found — collect all file URLs from all items
+        let containerURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
+        os_log("[SHARE_EXT] Starting file collection: containerLibrary=%{public}@",
+               log: log, type: .info, containerURL?.path ?? "?")
         var fileURLs: [(url: URL, isInPlace: Bool)] = []
         var fileLoadCount = 0
         var totalProviders = 0
@@ -167,10 +185,23 @@ class MacShareViewController: NSViewController {
                     fileURLs.append((url: safeURL, isInPlace: isInPlace))
                     fileLoadCount += 1
                     
-                    let attrs = try? FileManager.default.attributesOfItem(atPath: safeURL.path)
-                    os_log("File %d/%d: url=%{public}@ size=%{public}@ isInPlace=%{bool}d",
+                    let fm = FileManager.default
+                    let attrs = try? fm.attributesOfItem(atPath: safeURL.path)
+                    let isReadable = fm.isReadableFile(atPath: safeURL.path)
+                    let isWritable = fm.isWritableFile(atPath: safeURL.path)
+                    let fileExists = fm.fileExists(atPath: safeURL.path)
+                    let isDirectory: Bool = {
+                        var isDir: ObjCBool = false
+                        return fm.fileExists(atPath: safeURL.path, isDirectory: &isDir) && isDir.boolValue
+                    }()
+                    let posixPermissions = (attrs?[.posixPermissions] as? NSNumber).map { String(format: "0o%o", $0.uint16Value) } ?? "?"
+                    let ownerAccountID = attrs?[.ownerAccountID] as? NSNumber
+                    let fileSize = attrs?[.size] as? NSNumber
+                    os_log("[SHARE_EXT] File %d/%d: url=%{public}@ size=%{public}@ isInPlace=%{bool}d exists=%{bool}d isDir=%{bool}d readable=%{bool}d writable=%{bool}d mode=%{public}@ owner=%{public}@",
                            log: log, type: .info, fileLoadCount, totalProviders,
-                           safeURL.path, String(describing: attrs?[.size]), isInPlace)
+                           safeURL.path, String(describing: fileSize), isInPlace,
+                           fileExists, isDirectory, isReadable, isWritable,
+                           posixPermissions, String(describing: ownerAccountID))
                     loadLock.unlock()
                 }
             }
@@ -304,21 +335,39 @@ class MacShareViewController: NSViewController {
             ?? FileManager.default.temporaryDirectory
         let hardLinkURL = containerURL.appendingPathComponent(originalURL.lastPathComponent)
         
+        let fm = FileManager.default
+        let sourceExists = fm.fileExists(atPath: originalURL.path)
+        let sourceReadable = fm.isReadableFile(atPath: originalURL.path)
+        os_log("[SHARE_EXT] createHardLink: source=%{public}@ target=%{public}@ sourceExists=%{bool}d sourceReadable=%{bool}d",
+               log: log, type: .info, originalURL.path, hardLinkURL.path,
+               sourceExists, sourceReadable)
+        
         do {
-            if FileManager.default.fileExists(atPath: hardLinkURL.path) {
-                try FileManager.default.removeItem(at: hardLinkURL)
+            if fm.fileExists(atPath: hardLinkURL.path) {
+                try fm.removeItem(at: hardLinkURL)
             }
-            try FileManager.default.linkItem(at: originalURL, to: hardLinkURL)
-            os_log("Hard link created: %{public}@", log: log, type: .info, hardLinkURL.path)
+            try fm.linkItem(at: originalURL, to: hardLinkURL)
+            
+            // Verify the hard link is accessible
+            let targetReadable = fm.isReadableFile(atPath: hardLinkURL.path)
+            let targetAttrs = try? fm.attributesOfItem(atPath: hardLinkURL.path)
+            let targetSize = targetAttrs?[.size] as? NSNumber
+            os_log("[SHARE_EXT] Hard link created: %{public}@ readable=%{bool}d size=%{public}@",
+                   log: log, type: .info, hardLinkURL.path, targetReadable,
+                   String(describing: targetSize))
             return hardLinkURL
         } catch {
-            os_log("Failed to create hard link: %{public}@", log: log, type: .error, error.localizedDescription)
+            let nsError = error as NSError
+            os_log("[SHARE_EXT] Failed to create hard link: source=%{public}@ target=%{public}@ domain=%{public}@ code=%d description=%{public}@",
+                   log: log, type: .error, originalURL.path, hardLinkURL.path,
+                   nsError.domain, nsError.code, error.localizedDescription)
             return nil
         }
     }
 
     private func stashFilePayload(_ url: URL, with context: NSExtensionContext) {
-        os_log("Stashing file payload: %{public}@", log: log, type: .info, url.path)
+        os_log("[SHARE_EXT] Stashing single file: path=%{public}@ filename=%{public}@",
+               log: log, type: .info, url.path, url.lastPathComponent)
         let files: [[String: String]] = [
             ["file_path": url.path, "filename": url.lastPathComponent]
         ]
@@ -328,48 +377,62 @@ class MacShareViewController: NSViewController {
         ]
         sendStashRequest(body) { [weak self] success in
             if success {
-                os_log("File stash succeeded — completing extension", log: log, type: .info)
+                os_log("[SHARE_EXT] File stash succeeded — completing extension", log: log, type: .info)
                 self?.completeRequest(with: context)
             } else {
-                os_log("File stash failed — cancelling extension", log: log, type: .error)
+                os_log("[SHARE_EXT] File stash FAILED — cancelling extension for path=%{public}@",
+                       log: log, type: .error, url.path)
                 self?.cancel(with: context)
             }
         }
     }
 
     private func stashBatchFilePayload(_ urls: [URL], with context: NSExtensionContext) {
-        os_log("Stashing batch file payload: %d files", log: log, type: .info, urls.count)
-        let files: [[String: String]] = urls.map { url in
+        let fileList: [[String: String]] = urls.map { url in
             ["file_path": url.path, "filename": url.lastPathComponent]
         }
+        os_log("[SHARE_EXT] Stashing batch: count=%d paths=%{public}@",
+               log: log, type: .info, urls.count, fileList.map { $0["file_path"] ?? "?" }.joined(separator: " | "))
         let body: [String: Any] = [
             "type": "file",
-            "files": files
+            "files": fileList
         ]
         sendStashRequest(body) { [weak self] success in
             if success {
-                os_log("Batch file stash succeeded — completing extension", log: log, type: .info)
+                os_log("[SHARE_EXT] Batch file stash succeeded — completing extension", log: log, type: .info)
                 self?.completeRequest(with: context)
             } else {
-                os_log("Batch file stash failed — cancelling extension", log: log, type: .error)
+                os_log("[SHARE_EXT] Batch file stash FAILED — cancelling extension for %d files",
+                       log: log, type: .error, urls.count)
                 self?.cancel(with: context)
             }
         }
     }
 
     private func sendStashRequest(_ body: [String: Any], completion: @escaping (Bool) -> Void) {
-        os_log("Sending stash request via async-http-client over UDS", log: log, type: .info)
+        let filePaths = (body["files"] as? [[String: String]])?.compactMap { $0["file_path"] }.joined(separator: " | ") ?? "?"
+        os_log("[SHARE_EXT] Sending stash request to UDS: type=%{public}@ paths=%{public}@",
+               log: log, type: .info, body["type"] as? String ?? "?", filePaths)
         httpClient.postJSON(path: "/api/instant-share/v1/qr-trigger", body: body) { result in
             switch result {
             case .success(let (data, statusCode)):
                 let success = statusCode == 201
                 let preview = String(data: data, encoding: .utf8) ?? "<binary>"
-                os_log("Stash response (status=%d, success=%{bool}d, %d bytes): %{public}@",
-                       log: log, type: .info, statusCode, success, data.count,
-                       String(preview.prefix(200)))
+                if success {
+                    os_log("[SHARE_EXT] Stash response OK (status=%d, %d bytes): %{public}@",
+                           log: log, type: .info, statusCode, data.count,
+                           String(preview.prefix(200)))
+                } else {
+                    os_log("[SHARE_EXT] Stash response FAILED (status=%d, %d bytes): %{public}@%{public}@",
+                           log: log, type: .error, statusCode, data.count,
+                           String(preview.prefix(500)),
+                           preview.count > 500 ? " [TRUNCATED]" : "")
+                }
                 completion(success)
             case .failure(let error):
-                os_log("Stash request failed: %{public}@", log: log, type: .error, error.localizedDescription)
+                let nsError = error as NSError
+                os_log("[SHARE_EXT] Stash request FAILED: domain=%{public}@ code=%d description=%{public}@ paths=%{public}@",
+                       log: log, type: .error, nsError.domain, nsError.code, error.localizedDescription, filePaths)
                 completion(false)
             }
         }

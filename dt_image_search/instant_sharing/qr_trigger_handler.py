@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 import threading
 import time
@@ -204,6 +205,12 @@ class QRTriggerHandler:
             "Batch stash created: id=%s count=%d opt=%s ttl=%ds",
             stash_id, len(file_entries), opt_code, OPT_CODE_TTL_SECONDS,
         )
+        # Diagnostic: log each file path for debugging read-access issues
+        for i, fe in enumerate(file_entries):
+            _logger.info(
+                "[STASH_CREATE] stash_id=%s file[%d] path=%s size=%d mime=%s",
+                stash_id, i, fe.file_path, fe.size_bytes, fe.content_type,
+            )
         return entry
 
     def get_session_id_for_stash(self, stash_id: str) -> str | None:
@@ -270,20 +277,40 @@ class QRTriggerHandler:
         Actual file bytes are served by the per-index /transfer/download/<index> endpoint.
         """
         stash_id = stash_id.strip()
+        _logger.info(
+            "[QRTriggerHandler] retrieve_stash_content requested stash_id=%s",
+            stash_id,
+        )
         with self._lock:
             entry = self._stashes.get(stash_id)
 
         if entry is None:
+            _logger.warning(
+                "[QRTriggerHandler] retrieve_stash_content stash not found: stash_id=%s",
+                stash_id,
+            )
             return {"_status": 404, "status": "not_found", "error": "Stash not found"}
 
         if entry.expired:
+            _logger.info(
+                "[QRTriggerHandler] retrieve_stash_content stash expired: stash_id=%s",
+                stash_id,
+            )
             return {"_status": 410, "status": "expired", "error": "Stash has expired"}
 
         if entry.claimed:
+            _logger.info(
+                "[QRTriggerHandler] retrieve_stash_content stash already claimed: stash_id=%s",
+                stash_id,
+            )
             return {"_status": 410, "status": "expired", "error": "Stash already claimed"}
 
         if time.time() > entry.expires_at:
             self._invalidate_stash(entry, expired=True)
+            _logger.info(
+                "[QRTriggerHandler] retrieve_stash_content stash expired by timer: stash_id=%s",
+                stash_id,
+            )
             return {"_status": 410, "status": "expired", "error": "Stash has expired"}
 
         # Manifest fetch is discovery-only — do not claim the stash.
@@ -325,25 +352,129 @@ class QRTriggerHandler:
         Returns (status_code, bytes, content_type, filename).
         """
         stash_id = stash_id.strip()
+        _logger.info(
+            "[QRTriggerHandler] retrieve_stash_file requested stash_id=%s file_index=%d",
+            stash_id, file_index,
+        )
         with self._lock:
             entry = self._stashes.get(stash_id)
 
         if entry is None:
+            _logger.warning(
+                "[QRTriggerHandler] retrieve_stash_file stash not found: stash_id=%s",
+                stash_id,
+            )
             return 404, b"", "", ""
         if entry.expired:
+            _logger.info(
+                "[QRTriggerHandler] retrieve_stash_file stash expired: stash_id=%s",
+                stash_id,
+            )
             return 410, b"", "", ""
 
         if not entry.files:
+            _logger.warning(
+                "[QRTriggerHandler] retrieve_stash_file stash has no files: stash_id=%s",
+                stash_id,
+            )
             return 400, b"", "", ""
         if file_index < 0 or file_index >= len(entry.files):
+            _logger.warning(
+                "[QRTriggerHandler] retrieve_stash_file index out of range: stash_id=%s file_index=%d file_count=%d",
+                stash_id, file_index, len(entry.files),
+            )
             return 400, b"", "", ""
         fe = entry.files[file_index]
+        file_path = fe.file_path
+
+        # In-memory content (text stashes created by Share Extension Phase 1
+        # when macOS provides .sh/.txt/etc. file content as plain text).
+        # Skip disk I/O — content was stored directly in the FileEntry.
+        if fe.content is not None:
+            file_bytes = fe.content.encode("utf-8")
+            if not entry.claimed:
+                entry.claimed = True
+                self._cancel_timer(stash_id)
+                if self._on_stash_claimed is not None:
+                    peer_name = self._get_peer_device_name_for_stash(stash_id)
+                    self._on_stash_claimed(stash_id, peer_name)
+            _logger.info(
+                "[QRTriggerHandler] retrieve_stash_file SUCCESS (in-memory): stash_id=%s file_index=%d content_type=%s bytes=%d",
+                stash_id, file_index, fe.content_type, len(file_bytes),
+            )
+            return 200, file_bytes, fe.content_type, fe.filename or ""
+
+        # --- Diagnostic: file accessibility check before read ---
+        path_obj = Path(file_path)
+        _logger.info(
+            "[QRTriggerHandler] retrieve_stash_file attempting read: stash_id=%s file_index=%d path=%s size_bytes=%d",
+            stash_id, file_index, file_path, fe.size_bytes,
+        )
+        if not path_obj.exists():
+            _logger.error(
+                "[QRTriggerHandler] retrieve_stash_file FILE MISSING: stash_id=%s file_index=%d path=%s "
+                "(path does not exist on filesystem — may have been moved/deleted after stash creation)",
+                stash_id, file_index, file_path,
+            )
+        elif not path_obj.is_file():
+            _logger.error(
+                "[QRTriggerHandler] retrieve_stash_file PATH IS NOT A FILE: stash_id=%s file_index=%d path=%s "
+                "(path exists but is not a regular file — directory, symlink, or special file?)",
+                stash_id, file_index, file_path,
+            )
+        else:
+            # File exists and is a regular file — check readability
+            readable = os.access(file_path, os.R_OK)
+            try:
+                stat_info = path_obj.stat()
+                _logger.info(
+                    "[QRTriggerHandler] retrieve_stash_file file stat: stash_id=%s file_index=%d path=%s "
+                    "size=%d mode=0o%o uid=%d gid=%d readable=%s",
+                    stash_id, file_index, file_path,
+                    stat_info.st_size, stat_info.st_mode, stat_info.st_uid, stat_info.st_gid,
+                    str(readable),
+                )
+            except OSError as stat_err:
+                _logger.error(
+                    "[QRTriggerHandler] retrieve_stash_file stat failed: stash_id=%s file_index=%d path=%s error=%s",
+                    stash_id, file_index, file_path, stat_err,
+                )
+            if not readable:
+                _logger.error(
+                    "[QRTriggerHandler] retrieve_stash_file FILE NOT READABLE: stash_id=%s file_index=%d path=%s "
+                    "(file exists but process does not have read permission — likely macOS TCC/sandbox restriction "
+                    "preventing LaunchAgent from accessing user directory like Downloads, Desktop, or Documents)",
+                    stash_id, file_index, file_path,
+                )
+        # --- End diagnostic ---
+
         try:
-            with open(fe.file_path, "rb") as f:
+            with open(file_path, "rb") as f:
                 file_bytes = f.read()
-        except FileNotFoundError:
+        except PermissionError:
+            _logger.error(
+                "[QRTriggerHandler] retrieve_stash_file PERMISSION DENIED: stash_id=%s file_index=%d path=%s "
+                "(macOS TCC/sandbox prevented LaunchAgent from reading this file — "
+                "the file exists but the background process lacks access to the directory)",
+                stash_id, file_index, file_path,
+            )
             self._invalidate_stash(entry, expired=True)
-            return 410, b"", "", ""
+            return 404, b"", "", ""
+        except FileNotFoundError:
+            _logger.error(
+                "[QRTriggerHandler] retrieve_stash_file FILE NOT FOUND at read time: stash_id=%s file_index=%d path=%s "
+                "(file was deleted or moved between stash creation and claim)",
+                stash_id, file_index, file_path,
+            )
+            self._invalidate_stash(entry, expired=True)
+            return 404, b"", "", ""
+        except OSError as os_err:
+            _logger.error(
+                "[QRTriggerHandler] retrieve_stash_file OS ERROR: stash_id=%s file_index=%d path=%s error=%s",
+                stash_id, file_index, file_path, os_err,
+            )
+            self._invalidate_stash(entry, expired=True)
+            return 404, b"", "", ""
 
         # Claim on first file download
         if not entry.claimed:
@@ -353,6 +484,10 @@ class QRTriggerHandler:
                 peer_name = self._get_peer_device_name_for_stash(stash_id)
                 self._on_stash_claimed(stash_id, peer_name)
 
+        _logger.info(
+            "[QRTriggerHandler] retrieve_stash_file SUCCESS: stash_id=%s file_index=%d path=%s bytes=%d",
+            stash_id, file_index, file_path, len(file_bytes),
+        )
         return 200, file_bytes, fe.content_type, fe.filename or ""
 
     def cancel_stash(self, stash_id: str) -> bool:
