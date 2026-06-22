@@ -10,6 +10,11 @@ public protocol AppIdentityProviding: Sendable {
     func selfCertificate() throws -> SecCertificate
     func selfIdentity() throws -> SecIdentity
     func deleteSelfIdentity() throws
+    func signSessionID(_ sessionID: String) async throws -> (signature: String, algorithm: String)
+    /// Returns the device UUID embedded in the self-signed identity certificate.
+    /// This is the same UUID the PC will extract from the certificate during trust,
+    /// so it must be used as ``X-Peer-Device-Id`` on transfer requests.
+    func deviceUUID() throws -> String
     
     func importPeerCertificate(_ cert: SecCertificate) async throws
     func importPeerCertificate(pem: String) async throws
@@ -49,7 +54,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
     private static let keyLabel = "AuBackup App Identity"
     private static let SELF_CERT_VERSION = 3
     private static let certVersionOID = ASN1ObjectIdentifier("2.25.37020860436019520")
-    private static let deviceIdOID = ASN1ObjectIdentifier("2.25.37020860436019521")
+    static let deviceIdOID = ASN1ObjectIdentifier("2.25.37020860436019521")
     
     static var sharedAccessGroup: String {
         return Bundle.main.object(
@@ -70,6 +75,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         case certificateNotFound
         case privateKeyNotFound
         case publicKeyExportFailed
+        case signatureCreationFailed
 
         var errorDescription: String? {
             switch self {
@@ -79,6 +85,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
             case .certificateNotFound: return "Could not extract certificate from app identity."
             case .privateKeyNotFound: return "Could not extract private key from app identity."
             case .publicKeyExportFailed: return "Failed to export public key as PEM."
+            case .signatureCreationFailed: return "Failed to create session signature."
             }
         }
     }
@@ -107,6 +114,43 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
 
     public func selfIdentity() throws -> SecIdentity {
         try retrieveExistingIdentity()
+    }
+
+    public func signSessionID(_ sessionID: String) async throws -> (signature: String, algorithm: String) {
+        let identity = try selfIdentity()
+        var privateKey: SecKey?
+        let status = SecIdentityCopyPrivateKey(identity, &privateKey)
+        guard status == errSecSuccess, let privateKey else {
+            throw IdentityError.privateKeyNotFound
+        }
+
+        var error: Unmanaged<CFError>?
+        guard let signatureData = SecKeyCreateSignature(
+            privateKey,
+            .ecdsaSignatureMessageX962SHA256,
+            sessionID.data(using: .utf8)! as CFData,
+            &error
+        ) as Data? else {
+            if let err = error?.takeRetainedValue() {
+                LocalLog.error("[IdentityProvider] signature creation failed: \(err.localizedDescription)")
+            }
+            throw IdentityError.signatureCreationFailed
+        }
+
+        let base64url = signatureData.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+
+        return (signature: base64url, algorithm: "ecdsa-sha256")
+    }
+
+    public func deviceUUID() throws -> String {
+        let cert = try selfCertificate()
+        guard let uuid = cert.deviceUUIDFromExtension(Self.deviceIdOID) else {
+            throw IdentityError.certificateNotFound
+        }
+        return uuid
     }
 
     public func deleteSelfIdentity() throws {

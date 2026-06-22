@@ -72,6 +72,11 @@ final class InstantShareUploadClient: Sendable {
             request.setValue(peerDeviceName, forHTTPHeaderField: "X-Peer-Device-Name")
         }
 
+        let sigHeaders = try await signatureHeaders(for: sessionID)
+        request.setValue(sigHeaders.signature, forHTTPHeaderField: "X-Session-Signature")
+        request.setValue(sigHeaders.algorithm, forHTTPHeaderField: "X-Session-Signature-Alg")
+        request.setValue(sigHeaders.deviceUUID, forHTTPHeaderField: "X-Peer-Device-Id")
+
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         } catch {
@@ -138,6 +143,11 @@ final class InstantShareUploadClient: Sendable {
         request.setValue("1", forHTTPHeaderField: "X-Image-Count")
         request.timeoutInterval = timeoutInterval
 
+        let sigHeaders = try await signatureHeaders(for: sessionID)
+        request.setValue(sigHeaders.signature, forHTTPHeaderField: "X-Session-Signature")
+        request.setValue(sigHeaders.algorithm, forHTTPHeaderField: "X-Session-Signature-Alg")
+        request.setValue(sigHeaders.deviceUUID, forHTTPHeaderField: "X-Peer-Device-Id")
+
         try await performImageUpload(request: request, fileURL: fileURL)
     }
 
@@ -192,6 +202,7 @@ final class InstantShareUploadClient: Sendable {
         }
 
         let imageCount = urls.count
+        let sigHeaders = try await signatureHeaders(for: sessionID)
 
         for (_, item) in urls.enumerated() {
             var request = URLRequest(url: url)
@@ -204,10 +215,21 @@ final class InstantShareUploadClient: Sendable {
             if let peerDeviceName {
                 request.setValue(peerDeviceName, forHTTPHeaderField: "X-Peer-Device-Name")
             }
+            request.setValue(sigHeaders.signature, forHTTPHeaderField: "X-Session-Signature")
+            request.setValue(sigHeaders.algorithm, forHTTPHeaderField: "X-Session-Signature-Alg")
+            request.setValue(sigHeaders.deviceUUID, forHTTPHeaderField: "X-Peer-Device-Id")
             request.timeoutInterval = timeoutInterval
 
             try await performImageUpload(request: request, fileURL: item.fileURL)
         }
+    }
+
+    /// Builds the three app-layer signature headers for the given sessionID.
+    private func signatureHeaders(for sessionID: String) async throws -> (signature: String, algorithm: String, deviceUUID: String) {
+        let (signature, algorithm) = try await appIdentityProvider.signSessionID(sessionID)
+        let deviceID = try appIdentityProvider.deviceUUID()
+        LocalLog.debug("[UploadClient] signature headers session_id=\(sessionID) device_uuid=\(deviceID)")
+        return (signature, algorithm, deviceID)
     }
 
     private func tryParseErrorBody(_ data: Data) -> (errorCode: String, message: String) {

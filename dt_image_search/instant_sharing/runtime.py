@@ -122,7 +122,6 @@ class InstantShareRuntime:
             transfer_handler=self._transfer_handler,
             pin_display_callback=self._pin_display_callback,
             qr_trigger_handler=self._qr_trigger_handler,
-            tls_server=self._tls_server,
         )
         self._ble_daemon = InstantShareBleDaemon(
             ble_service=self._ble_service,

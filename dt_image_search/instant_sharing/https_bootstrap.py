@@ -31,7 +31,7 @@ from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
 from dt_image_search.instant_sharing.transfer_server import TransferHandler
 from cryptography import x509 as crypto_x509
 
-from dt_image_search.identity import get_device_certificate_pem, store_peer_certificate
+from dt_image_search.identity import extract_device_id, get_device_certificate_pem, store_peer_certificate
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 
 _logger = logging.getLogger(__name__)
@@ -50,9 +50,7 @@ class _Deps:
     pin_display_callback: Callable[[str, str], None] | None = None
     # TODO: Define a proper protocol for this instead of Any
     qr_trigger_handler: Any = None
-    # Reference to the TLS server, so the trust-confirm handler can
-    # inject the newly-trusted peer certificate into the running SSL context.
-    tls_server: Any | None = None
+    # (removed tls_server — mTLS replaced by app-layer signature verification)
 
 
 class TrustHandshakeRequest(BaseModel):
@@ -253,8 +251,18 @@ def _do_trust_confirm(
         trust_session.store_mobile_certificate(mobile_cert_pem)
         try:
             parsed = crypto_x509.load_pem_x509_certificate(mobile_cert_pem.encode("utf-8"))
-            cn_attrs = parsed.subject.get_attributes_for_oid(crypto_x509.oid.NameOID.COMMON_NAME)
-            mobile_device_id = cn_attrs[0].value if cn_attrs else correlation_id_header
+            mobile_device_id = extract_device_id(parsed)
+            _logger.info(
+                "[trust/confirm] extracted mobile_device_id=%s from cert session_id=%s",
+                mobile_device_id, session_id_header,
+            )
+            if mobile_device_id is None:
+                cn_attrs = parsed.subject.get_attributes_for_oid(crypto_x509.oid.NameOID.COMMON_NAME)
+                mobile_device_id = cn_attrs[0].value if cn_attrs else correlation_id_header
+                _logger.warning(
+                    "[trust/confirm] no device_id extension, falling back to CN=%s session_id=%s",
+                    mobile_device_id, session_id_header,
+                )
         except Exception as exc:
             _logger.error("Failed to parse mobile certificate PEM: %s", exc)
             mobile_device_id = correlation_id_header
@@ -263,12 +271,6 @@ def _do_trust_confirm(
             "Stored peer certificate device=%s session_id=%s flow_type=%s",
             mobile_device_id, session_id_header, trust_session.flow_type.value,
         )
-        if deps.tls_server is not None:
-            injected = deps.tls_server.add_peer_certificate(mobile_cert_pem)
-            _logger.info(
-                "Dynamic mTLS cert injection for device=%s: %s",
-                mobile_device_id, "success" if injected else "failed",
-            )
 
     trust_session.mark_trusted()
     pc_cert_pem = get_device_certificate_pem()
@@ -357,7 +359,6 @@ class InstantShareHTTPServer:
         transfer_handler: TransferHandler | None = None,
         pin_display_callback: Callable[[str, str], None] | None = None,
         qr_trigger_handler: Any = None,
-        tls_server: Any | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -369,7 +370,6 @@ class InstantShareHTTPServer:
             transfer_handler=transfer_handler,
             pin_display_callback=pin_display_callback,
             qr_trigger_handler=qr_trigger_handler,
-            tls_server=tls_server,
         )
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None

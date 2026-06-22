@@ -11,7 +11,7 @@ public final class TlsTrustDelegate: NSObject, URLSessionTaskDelegate {
 
     public init(appIdentityProvider: AppIdentityProviding) {
         self.appIdentityProvider = appIdentityProvider
-        LocalLog.debug("[TLS] ISPCServerTrustDelegate created")
+        LocalLog.debug("[TLS] TlsTrustDelegate created")
     }
 
     public func urlSession(
@@ -115,21 +115,8 @@ public final class TlsTrustDelegate: NSObject, URLSessionTaskDelegate {
     private func handleClientCertificateChallenge(
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        LocalLog.debug("[TLS] received client certificate challenge")
-        do {
-            let identity = try appIdentityProvider.selfIdentity()
-            let cert = try appIdentityProvider.selfCertificate()
-            LocalLog.debug("[TLS] providing client identity for mTLS")
-            let credential = URLCredential(
-                identity: identity,
-                certificates: [cert],
-                persistence: .forSession
-            )
-            completionHandler(.useCredential, credential)
-        } catch {
-            LocalLog.error("[TLS] failed to get client identity: \(error.localizedDescription)")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-        }
+        LocalLog.debug("[TLS] received client certificate challenge — app-layer auth used instead")
+        completionHandler(.performDefaultHandling, nil)
     }
 }
 

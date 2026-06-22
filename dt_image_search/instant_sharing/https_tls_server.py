@@ -17,7 +17,6 @@ from pydantic import BaseModel, ConfigDict, RootModel
 from dt_image_search.identity import (
     get_device_certificate_pem,
     get_device_private_key_pem,
-    load_all_peer_certificates,
 )
 from dt_image_search.instant_sharing.errors import InstantShareError
 from dt_image_search.instant_sharing.https_bootstrap import (
@@ -37,11 +36,60 @@ from dt_image_search.instant_sharing.contracts import (
     TrustMode,
 )
 from dt_image_search.instant_sharing.mdns import ConnectionConfig
+from dt_image_search.instant_sharing.security import verify_session_signature
 
 _TrustEnvelope = RootModel[dict[str, Any]]
 
 
 _logger = logging.getLogger(__name__)
+
+
+_SIGNATURE_REQUIRED_HEADERS = (
+    "X-Session-Id",
+    "X-Peer-Device-Id",
+    "X-Session-Signature",
+    "X-Session-Signature-Alg",
+)
+
+
+def _extract_signature_headers(request: Request) -> tuple[str, str, str, str]:
+    """Extract and validate the signature headers from a transfer request.
+
+    Returns:
+        (session_id, peer_device_id, signature, algorithm)
+
+    Raises:
+        InstantShareError if any required header is missing.
+    """
+    session_id = request.headers.get("X-Session-Id", "")
+    peer_device_id = request.headers.get("X-Peer-Device-Id", "")
+    signature = request.headers.get("X-Session-Signature", "")
+    algorithm = request.headers.get("X-Session-Signature-Alg", "")
+    _logger.info(
+        "[TLS] signature headers session_id=%s peer_device_id=%s has_signature=%s algorithm=%s",
+        session_id,
+        peer_device_id,
+        bool(signature),
+        algorithm,
+    )
+    missing = [h for h, v in (
+        ("X-Session-Id", session_id),
+        ("X-Peer-Device-Id", peer_device_id),
+        ("X-Session-Signature", signature),
+        ("X-Session-Signature-Alg", algorithm),
+    ) if not v]
+    if missing:
+        _logger.warning(
+            "[TLS] missing signature headers: %s",
+            ", ".join(missing),
+        )
+        raise InstantShareError(
+            error_code=ErrorCode.INVALID_REQUEST,
+            message=f"Missing required signature headers: {', '.join(missing)}",
+            status_code=401,
+        )
+    return session_id, peer_device_id, signature, algorithm
+
 
 def _do_transfer_text(
     deps: _Deps,
@@ -330,16 +378,19 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
             raise _ServiceUnavailable("Instant share service not initialized")
+        session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
+        await asyncio.to_thread(
+            verify_session_signature, peer_device_id, session_id, signature, algorithm,
+        )
         raw_body = await request.body()
         try:
             payload_text_utf8 = payload.text_utf8
         except Exception:
             payload_text_utf8 = ""
-        session_id = request.headers.get("X-Session-Id", "")
         peer_device_name = request.headers.get("X-Peer-Device-Name", "")
         _logger.info(
-            "[TLS] transfer_text session_id=%s",
-            session_id,
+            "[TLS] transfer_text session_id=%s peer_device_id=%s",
+            session_id, peer_device_id,
         )
         result = await asyncio.to_thread(
             _do_transfer_text,
@@ -357,11 +408,14 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
             raise _ServiceUnavailable("Instant share service not initialized")
-        session_id = request.headers.get("X-Session-Id", "")
+        session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
+        await asyncio.to_thread(
+            verify_session_signature, peer_device_id, session_id, signature, algorithm,
+        )
         peer_device_name = request.headers.get("X-Peer-Device-Name", "")
         _logger.info(
-            "[TLS] transfer_image session_id=%s",
-            session_id,
+            "[TLS] transfer_image session_id=%s peer_device_id=%s",
+            session_id, peer_device_id,
         )
         content_type = request.headers.get("Content-Type", "application/octet-stream")
         filename = request.headers.get("X-Instant-Share-Filename")
@@ -404,10 +458,13 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
             raise _ServiceUnavailable("Instant share service not initialized")
-        session_id = request.headers.get("X-Session-Id", "")
+        session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
+        await asyncio.to_thread(
+            verify_session_signature, peer_device_id, session_id, signature, algorithm,
+        )
         _logger.info(
-            "[TLS] transfer_manifest session_id=%s",
-            session_id,
+            "[TLS] transfer_manifest session_id=%s peer_device_id=%s",
+            session_id, peer_device_id,
         )
         result = await asyncio.to_thread(
             _do_transfer_manifest,
@@ -422,10 +479,13 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
             raise _ServiceUnavailable("Instant share service not initialized")
-        session_id = request.headers.get("X-Session-Id", "")
+        session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
+        await asyncio.to_thread(
+            verify_session_signature, peer_device_id, session_id, signature, algorithm,
+        )
         _logger.info(
-            "[TLS] transfer_download_file session_id=%s index=%d",
-            session_id, file_index,
+            "[TLS] transfer_download_file session_id=%s index=%d peer_device_id=%s",
+            session_id, file_index, peer_device_id,
         )
         status, payload, content_type, filename = await asyncio.to_thread(
             _do_transfer_download_file,
@@ -489,8 +549,6 @@ class InstantShareTLSServer:
         self._lock = threading.RLock()
         self._cert_file: tempfile.NamedTemporaryFile | None = None
         self._key_file: tempfile.NamedTemporaryFile | None = None
-        self._ca_bundle_file: tempfile.NamedTemporaryFile | None = None
-        self._ssl_ctx: ssl.SSLContext | None = None
 
     @property
     def is_running(self) -> bool:
@@ -527,26 +585,6 @@ class InstantShareTLSServer:
             self._key_file.write(key_pem)
             self._key_file.flush()
 
-            # Load all previously trusted peer device certs from keychain
-            # and write them into a temp CA bundle for mTLS verification.
-            existing_certs = load_all_peer_certificates()
-            ca_bundle_path: str | None = None
-            if existing_certs:
-                self._ca_bundle_file = tempfile.NamedTemporaryFile(
-                    suffix=".pem", mode="w", delete=False
-                )
-                for _device_id, pem in existing_certs:
-                    self._ca_bundle_file.write(pem)
-                    self._ca_bundle_file.write("\n")
-                self._ca_bundle_file.flush()
-                ca_bundle_path = self._ca_bundle_file.name
-                _logger.info(
-                    "Loaded %d trusted peer cert(s) into mTLS CA bundle",
-                    len(existing_certs),
-                )
-            else:
-                _logger.info("No existing trusted peer certs found; mTLS will require client certs after first trust")
-
             app = _build_tls_app(self._deps)
             config = uvicorn.Config(
                 app,
@@ -558,8 +596,7 @@ class InstantShareTLSServer:
                 loop="asyncio",
                 ssl_certfile=self._cert_file.name,
                 ssl_keyfile=self._key_file.name,
-                ssl_ca_certs=ca_bundle_path,
-                ssl_cert_reqs=ssl.CERT_REQUIRED,
+                ssl_cert_reqs=ssl.CERT_NONE,
             )
             self._server = uvicorn.Server(config)
             self._thread = threading.Thread(
@@ -571,43 +608,10 @@ class InstantShareTLSServer:
             thread = self._thread
         thread.start()
         _logger.info(
-            "Instant-share TLS server started on %s:%d (mTLS required)",
+            "Instant-share TLS server started on %s:%d (HTTPS with app-layer signature auth)",
             self._host, self._port,
         )
         return True
-
-    def add_peer_certificate(self, cert_pem: str) -> bool:
-        """Dynamically inject a peer certificate into the running TLS server's SSL context.
-
-        The certificate will be trusted for mTLS client verification immediately,
-        without requiring a server restart.  Should be called after a successful
-        /trust/confirm to allow the newly-trusted device to start transferring
-        data right away.
-
-        Returns True if the certificate was injected, False if the SSL context
-        was not yet available (unlikely after server startup).
-        """
-        if self._ssl_ctx is None:
-            ssl_ctx = getattr(getattr(self._server, 'config', None), 'ssl', None)
-            self._ssl_ctx = ssl_ctx
-        if self._ssl_ctx is None:
-            _logger.warning(
-                "SSL context not ready yet, cannot inject peer cert. "
-                "The certificate is saved in the keychain and will be used "
-                "on the next server restart.",
-            )
-            return False
-        try:
-            self._ssl_ctx.load_verify_locations(cadata=cert_pem)
-            _logger.info(
-                "Injected peer certificate into running TLS SSL context",
-            )
-            return True
-        except ssl.SSLError as exc:
-            _logger.error(
-                "Failed to inject peer certificate into SSL context: %s", exc,
-            )
-            return False
 
     def stop(self) -> None:
         with self._lock:
@@ -617,7 +621,6 @@ class InstantShareTLSServer:
             self._server = None
             self._thread = None
             self._sock = None
-            self._ssl_ctx = None
         if server is not None:
             server.should_exit = True
         if thread is not None:
@@ -629,7 +632,6 @@ class InstantShareTLSServer:
                 pass
         cert_path = None
         key_path = None
-        ca_bundle_path = None
         with self._lock:
             if self._cert_file is not None:
                 cert_path = self._cert_file.name
@@ -639,14 +641,8 @@ class InstantShareTLSServer:
                 key_path = self._key_file.name
                 self._key_file.close()
                 self._key_file = None
-            if self._ca_bundle_file is not None:
-                ca_bundle_path = self._ca_bundle_file.name
-                self._ca_bundle_file.close()
-                self._ca_bundle_file = None
         if cert_path is not None and os.path.exists(cert_path):
             os.unlink(cert_path)
         if key_path is not None and os.path.exists(key_path):
             os.unlink(key_path)
-        if ca_bundle_path is not None and os.path.exists(ca_bundle_path):
-            os.unlink(ca_bundle_path)
         _logger.info("Instant-share TLS server stopped")

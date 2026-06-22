@@ -393,10 +393,10 @@ def generate_identity(device_id: str, server_ips: list[str] = None, server_hostn
             critical=False,
         )
 
-    # Add device UUID in custom extension
+    # Add device UUID in custom extension as an ASN.1 DER UTF8String.
     device_id_extension = x509.UnrecognizedExtension(
         oid=_DEVICE_ID_OID,
-        value=device_id.encode("utf-8"),
+        value=_encode_asn1_utf8_string(device_id),
     )
     builder = builder.add_extension(device_id_extension, critical=False)
 
@@ -420,10 +420,49 @@ def extract_device_name(cert: x509.Certificate) -> str:
     return ""
 
 
+def _encode_asn1_utf8_string(value: str) -> bytes:
+    """Return the DER encoding of a UTF8String containing ``value``."""
+    data = value.encode("utf-8")
+    length = len(data)
+    if length < 128:
+        return bytes([0x0C, length]) + data
+    length_bytes = []
+    n = length
+    while n > 0:
+        length_bytes.insert(0, n & 0xFF)
+        n >>= 8
+    return bytes([0x0C, 0x80 | len(length_bytes)] + length_bytes) + data
+
+
+def _decode_asn1_utf8_string(data: bytes) -> str | None:
+    """Decode an ASN.1 DER UTF8String value.
+
+    Returns ``None`` if the value is not a valid DER UTF8String.
+    """
+    if not data or data[0] != 0x0C or len(data) < 2:
+        return None
+    length_byte = data[1]
+    if length_byte & 0x80:
+        num_length_bytes = length_byte & 0x7F
+        if len(data) < 2 + num_length_bytes:
+            return None
+        length = int.from_bytes(data[2 : 2 + num_length_bytes], "big")
+        value_start = 2 + num_length_bytes
+    else:
+        length = length_byte
+        value_start = 2
+    if len(data) < value_start + length:
+        return None
+    try:
+        return data[value_start : value_start + length].decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def extract_device_id(cert: x509.Certificate) -> str | None:
-    """Extract device UUID from custom extension."""
+    """Extract device UUID from the custom ASN.1 DER UTF8String extension."""
     try:
         ext = cert.extensions.get_extension_for_oid(_DEVICE_ID_OID)
-        return ext.value.value.decode("utf-8")  # type: ignore[attr-defined]
+        return _decode_asn1_utf8_string(ext.value.value)  # type: ignore[attr-defined]
     except x509.ExtensionNotFound:
         return None

@@ -150,6 +150,51 @@ class TestCertIdentityV3(unittest.TestCase):
         self.assertIn("-----BEGIN CERTIFICATE-----", identity.certificate_pem)
         self.assertIsNotNone(identity.private_key)
 
+    def test_extract_device_id_decodes_asn1_utf8string_extension(self):
+        """The device UUID is stored as an ASN.1 DER UTF8String in the custom extension."""
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from dt_image_search.identity.device_identity import _DEVICE_ID_OID
+
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "iPhone")])
+        device_uuid = "4506ab98-cfb6-42c1-a937-56c3b88ba8bf"
+        # DER-encoded UTF8String: tag 0x0c, length 0x24 (36), then UTF-8 bytes
+        extension_value = bytes([0x0C, 36]) + device_uuid.encode("utf-8")
+        ext = x509.UnrecognizedExtension(_DEVICE_ID_OID, extension_value)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(private_key.public_key())
+            .serial_number(1)
+            .not_valid_before(datetime.utcnow() - timedelta(days=1))
+            .not_valid_after(datetime.utcnow() + timedelta(days=365))
+            .add_extension(ext, critical=False)
+            .sign(private_key, hashes.SHA256())
+        )
+        self.assertEqual(extract_device_id(cert), device_uuid)
+
+    def test_extract_device_id_rejects_raw_bytes_extension(self):
+        """Raw UTF-8 bytes in the extension are no longer accepted."""
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from dt_image_search.identity.device_identity import _DEVICE_ID_OID
+
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "iPhone")])
+        ext = x509.UnrecognizedExtension(_DEVICE_ID_OID, b"4506ab98-cfb6-42c1-a937-56c3b88ba8bf")
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(private_key.public_key())
+            .serial_number(1)
+            .not_valid_before(datetime.utcnow() - timedelta(days=1))
+            .not_valid_after(datetime.utcnow() + timedelta(days=365))
+            .add_extension(ext, critical=False)
+            .sign(private_key, hashes.SHA256())
+        )
+        self.assertIsNone(extract_device_id(cert))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -527,6 +527,11 @@ public final class QRTriggerDownloadClient: Sendable {
         request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
         request.timeoutInterval = timeoutInterval
 
+        let sigHeaders = try await signatureHeaders(for: sessionId)
+        request.setValue(sigHeaders.signature, forHTTPHeaderField: "X-Session-Signature")
+        request.setValue(sigHeaders.algorithm, forHTTPHeaderField: "X-Session-Signature-Alg")
+        request.setValue(sigHeaders.deviceUUID, forHTTPHeaderField: "X-Peer-Device-Id")
+
         LocalLog.debug("[QRDownload] manifest request to \(urlString)")
 
         let delegate = TlsTrustDelegate(appIdentityProvider: appIdentityProvider)
@@ -598,6 +603,11 @@ public final class QRTriggerDownloadClient: Sendable {
         request.setValue(sessionId, forHTTPHeaderField: "X-Session-Id")
         request.setValue(correlationID, forHTTPHeaderField: "X-Correlation-Id")
         request.timeoutInterval = timeoutInterval
+
+        let sigHeaders = try await signatureHeaders(for: sessionId)
+        request.setValue(sigHeaders.signature, forHTTPHeaderField: "X-Session-Signature")
+        request.setValue(sigHeaders.algorithm, forHTTPHeaderField: "X-Session-Signature-Alg")
+        request.setValue(sigHeaders.deviceUUID, forHTTPHeaderField: "X-Peer-Device-Id")
 
         LocalLog.debug("[QRDownload] download file index=\(index) from \(urlString)")
 
@@ -706,6 +716,14 @@ public final class QRTriggerDownloadClient: Sendable {
             return nil
         }
         return (decoded["error"] as? String) ?? (decoded["message"] as? String)
+    }
+
+    /// Builds the three app-layer signature headers for the given sessionId.
+    private func signatureHeaders(for sessionId: String) async throws -> (signature: String, algorithm: String, deviceUUID: String) {
+        let (signature, algorithm) = try await appIdentityProvider.signSessionID(sessionId)
+        let deviceID = try appIdentityProvider.deviceUUID()
+        LocalLog.debug("[QRDownload] signature headers session_id=\(sessionId) device_uuid=\(deviceID)")
+        return (signature, algorithm, deviceID)
     }
 
     private func tryParseErrorBody(_ data: Data) -> (errorCode: String, message: String) {

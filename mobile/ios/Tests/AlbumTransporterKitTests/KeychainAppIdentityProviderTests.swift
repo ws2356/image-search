@@ -97,6 +97,45 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
         XCTAssertFalse(allCerts.isEmpty)
     }
 
+    func test_signSessionID_returns_valid_signature() async throws {
+        // ensureSelfIdentity creates a persistent keychain identity
+        try await provider.ensureSelfIdentity()
+        defer { try? provider.deleteSelfIdentity() }
+
+        let (signature, algorithm) = try await provider.signSessionID("test-session-id")
+
+        XCTAssertFalse(signature.isEmpty, "Signature must not be empty")
+        // Verify base64url encoding: only alphanumeric, '-', and '_' allowed
+        let allowedChars = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        XCTAssertTrue(signature.allSatisfy { allowedChars.contains($0.unicodeScalars.first!) })
+        XCTAssertEqual(algorithm, "ecdsa-sha256")
+    }
+
+    func test_signSessionID_throws_when_no_identity() async {
+        // Ensure no persistent identity exists
+        try? provider.deleteSelfIdentity()
+
+        do {
+            _ = try await provider.signSessionID("test-session-id")
+            XCTFail("Expected IdentityError.identityNotFound")
+        } catch let error as KeychainAppIdentityProvider.IdentityError {
+            if case .identityNotFound = error {
+                // expected
+            } else {
+                XCTFail("Expected identityNotFound but got \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func test_deviceUUID_matches_certificate_extension() async throws {
+        let expectedUUID = UUID().uuidString.lowercased()
+        let cert = try await provider.createIdentity(commonName: "Test Device", deviceUUID: expectedUUID, isPersist: false)
+        let extractedUUID = try XCTUnwrap(cert.deviceUUIDFromExtension(KeychainAppIdentityProvider.deviceIdOID))
+        XCTAssertEqual(extractedUUID, expectedUUID)
+    }
+
     // MARK: - Helpers
 
     private func derDataToPem(_ derData: Data) -> String {
