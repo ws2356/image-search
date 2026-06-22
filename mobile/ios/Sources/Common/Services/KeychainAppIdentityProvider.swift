@@ -9,6 +9,7 @@ public protocol AppIdentityProviding: Sendable {
     func ensureSelfIdentity() async throws
     func selfCertificate() throws -> SecCertificate
     func selfIdentity() throws -> SecIdentity
+    func deleteSelfIdentity() throws
     
     func importPeerCertificate(_ cert: SecCertificate) async throws
     func importPeerCertificate(pem: String) async throws
@@ -106,6 +107,46 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
 
     public func selfIdentity() throws -> SecIdentity {
         try retrieveExistingIdentity()
+    }
+
+    public func deleteSelfIdentity() throws {
+        LocalLog.info("Deleting app self identity from keychain...")
+        var anyError: Error?
+        
+        // Delete identity (certificate + private key pair)
+        let identityDeleteStatus = SecItemDelete([
+            kSecClass: kSecClassIdentity,
+            kSecAttrLabel: Self.keyLabel,
+            kSecAttrAccessGroup: Self.sharedAccessGroup] as CFDictionary)
+        if identityDeleteStatus != errSecSuccess && identityDeleteStatus != errSecItemNotFound {
+            LocalLog.error("[Keychain] deleteSelfIdentity: failed to delete identity, status=\(identityDeleteStatus)")
+            anyError = KeychainError.deleteFailed(identityDeleteStatus)
+        }
+        
+        // Delete certificate
+        let certDeleteStatus = SecItemDelete([
+            kSecClass: kSecClassCertificate,
+            kSecAttrLabel: Self.keyLabel,
+            kSecAttrAccessGroup: Self.sharedAccessGroup] as CFDictionary)
+        if certDeleteStatus != errSecSuccess && certDeleteStatus != errSecItemNotFound {
+            LocalLog.error("[Keychain] deleteSelfIdentity: failed to delete certificate, status=\(certDeleteStatus)")
+            anyError = KeychainError.deleteFailed(certDeleteStatus)
+        }
+        
+        // Delete private key
+        let keyDeleteStatus = SecItemDelete([
+            kSecClass: kSecClassKey,
+            kSecAttrLabel: Self.keyLabel,
+            kSecAttrAccessGroup: Self.sharedAccessGroup] as CFDictionary)
+        if keyDeleteStatus != errSecSuccess && keyDeleteStatus != errSecItemNotFound {
+            LocalLog.error("[Keychain] deleteSelfIdentity: failed to delete private key, status=\(keyDeleteStatus)")
+            anyError = KeychainError.deleteFailed(keyDeleteStatus)
+        }
+        
+        if let error = anyError {
+            throw error
+        }
+        LocalLog.info("App self identity deleted successfully")
     }
 
     private func retrieveExistingIdentity() throws -> SecIdentity {

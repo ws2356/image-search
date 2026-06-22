@@ -23,7 +23,7 @@ import signal
 import sys
 import time
 from pathlib import Path
-
+import faulthandler
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
@@ -186,4 +186,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    try:
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
+    except Exception:
+        pass
+
     sys.exit(main())

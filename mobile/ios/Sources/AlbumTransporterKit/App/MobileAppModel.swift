@@ -318,6 +318,14 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         }
 
         hasLoaded = true
+        
+        // Check if this is the first launch after installation
+        if isFirstLaunchAfterInstallation() {
+            LocalLog.info("First launch after installation detected, deleting existing self identity")
+            try? appIdentityProvider.deleteSelfIdentity()
+            markFirstLaunchCompleted()
+        }
+        
         try? await appIdentityProvider.ensureSelfIdentity()
         do {
             let cert = try appIdentityProvider.selfCertificate()
@@ -1019,6 +1027,18 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
                 ]
             )
         }
+    }
+
+    // MARK: - First Launch Detection
+
+    private static let hasLaunchedBeforeKey = "hasLaunchedBefore"
+
+    private func isFirstLaunchAfterInstallation() -> Bool {
+        return !UserDefaults.standard.bool(forKey: Self.hasLaunchedBeforeKey)
+    }
+
+    private func markFirstLaunchCompleted() {
+        UserDefaults.standard.set(true, forKey: Self.hasLaunchedBeforeKey)
     }
 
 }
