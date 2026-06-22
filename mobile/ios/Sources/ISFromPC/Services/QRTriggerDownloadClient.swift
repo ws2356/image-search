@@ -529,7 +529,7 @@ public final class QRTriggerDownloadClient: Sendable {
 
         LocalLog.debug("[QRDownload] manifest request to \(urlString)")
 
-        let delegate = ISPCServerTrustDelegate(appIdentityProvider: appIdentityProvider)
+        let delegate = TlsTrustDelegate(appIdentityProvider: appIdentityProvider)
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await urlSession.data(for: request, delegate: delegate)
@@ -601,7 +601,7 @@ public final class QRTriggerDownloadClient: Sendable {
 
         LocalLog.debug("[QRDownload] download file index=\(index) from \(urlString)")
 
-        let delegate = ISPCServerTrustDelegate(appIdentityProvider: appIdentityProvider)
+        let delegate = TlsTrustDelegate(appIdentityProvider: appIdentityProvider)
         let (tempFileURL, response): (URL, URLResponse)
         do {
             (tempFileURL, response) = try await urlSession.download(for: request, delegate: delegate)
@@ -716,147 +716,5 @@ public final class QRTriggerDownloadClient: Sendable {
             errorCode: decoded["error_code"] as? String ?? "UNKNOWN",
             message: decoded["message"] as? String ?? "Unknown error"
         )
-    }
-}
-
-// MARK: - mTLS Server Trust Delegate
-
-private final class ISPCServerTrustDelegate: NSObject, URLSessionTaskDelegate {
-    private let appIdentityProvider: AppIdentityProviding
-
-    init(appIdentityProvider: AppIdentityProviding) {
-        self.appIdentityProvider = appIdentityProvider
-        LocalLog.debug("[TLS-QR] ISPCServerTrustDelegate created")
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        switch challenge.protectionSpace.authenticationMethod {
-        case NSURLAuthenticationMethodServerTrust:
-            handleServerTrustChallenge(challenge, completionHandler: completionHandler)
-        case NSURLAuthenticationMethodClientCertificate:
-            handleClientCertificateChallenge(completionHandler: completionHandler)
-        default:
-            completionHandler(.performDefaultHandling, nil)
-        }
-    }
-
-    private func handleServerTrustChallenge(
-        _ challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        guard let serverTrust = challenge.protectionSpace.serverTrust else {
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        LocalLog.debug("[TLS-QR] received serverTrust challenge")
-
-        let count = SecTrustGetCertificateCount(serverTrust)
-        guard count > 0, let serverCert = SecTrustGetCertificateAtIndex(serverTrust, 0) else {
-            LocalLog.error("[TLS-QR] no certificate in server trust chain")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        guard let pubkeyHash = serverCert.publicKeyHash else {
-            LocalLog.error("[TLS-QR] failed to extract publicKeyHash from server cert")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-        LocalLog.debug("[TLS-QR] server cert pubkeyHash=\(pubkeyHash.base64EncodedString())")
-
-        guard let storedCert = try? appIdentityProvider.peerCertificate(forPubkeyHash: pubkeyHash) else {
-            LocalLog.error("[TLS-QR] no stored peer certificate for pubkeyHash")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        guard let serverPubKey = SecCertificateCopyKey(serverCert) else {
-            LocalLog.error("[TLS-QR] failed to copy public key from server cert")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-        guard let serverPubKeyData = serverPubKey.externalRepresentation else {
-            LocalLog.error("[TLS-QR] failed to export server public key bytes")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        guard let storedPubKey = SecCertificateCopyKey(storedCert) else {
-            LocalLog.error("[TLS-QR] failed to copy public key from stored cert")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-        guard let storedPubKeyData = storedPubKey.externalRepresentation else {
-            LocalLog.error("[TLS-QR] failed to export stored public key bytes")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        guard serverPubKeyData == storedPubKeyData else {
-            LocalLog.error("[TLS-QR] public key mismatch")
-            LocalLog.debug("[TLS-QR] server pubKey=\(serverPubKeyData.base64EncodedString())")
-            LocalLog.debug("[TLS-QR] stored pubKey=\(storedPubKeyData.base64EncodedString())")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-            return
-        }
-
-        let policy = SecPolicyCreateSSL(false, nil)
-        SecTrustSetPolicies(serverTrust, policy)
-
-        let anchors = [serverCert] as CFArray
-        SecTrustSetAnchorCertificates(serverTrust, anchors)
-        SecTrustSetAnchorCertificatesOnly(serverTrust, true)
-
-        LocalLog.debug("[TLS-QR] public keys match, evaluating trust...")
-        var error: CFError?
-        let trusted = SecTrustEvaluateWithError(serverTrust, &error)
-        if trusted {
-            LocalLog.debug("[TLS-QR] trust evaluation passed")
-            let credential = URLCredential(trust: serverTrust)
-            completionHandler(.useCredential, credential)
-        } else {
-            let errDesc = error?.localizedDescription ?? "unknown error"
-            LocalLog.error("[TLS-QR] trust evaluation failed: \(errDesc)")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-        }
-    }
-
-    private func handleClientCertificateChallenge(
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        LocalLog.debug("[TLS-QR] received client certificate challenge")
-        do {
-            let identity = try appIdentityProvider.selfIdentity()
-            let cert = try appIdentityProvider.selfCertificate()
-            LocalLog.debug("[TLS-QR] providing client identity for mTLS")
-            let credential = URLCredential(
-                identity: identity,
-                certificates: [cert],
-                persistence: .forSession
-            )
-            completionHandler(.useCredential, credential)
-        } catch {
-            LocalLog.error("[TLS-QR] failed to get client identity: \(error.localizedDescription)")
-            completionHandler(.cancelAuthenticationChallenge, nil)
-        }
-    }
-}
-
-private extension SecKey {
-    var externalRepresentation: Data? {
-        var error: Unmanaged<CFError>?
-        guard let data = SecKeyCopyExternalRepresentation(self, &error) as Data? else {
-            if let err = error?.takeRetainedValue() {
-                LocalLog.error("[TLS-QR] SecKeyCopyExternalRepresentation failed: \(err.localizedDescription)")
-            }
-            return nil
-        }
-        return data
     }
 }
