@@ -226,6 +226,51 @@ class QRTriggerHandler:
             return ""
         return trust_session.peer_device_name
 
+    # Extensions that map to text/* MIME types — these will be rendered as text
+    # by the iOS client without any iOS-side changes (parseDownloadResponse checks
+    # hasPrefix("text/") to decide text vs file rendering).
+    _TEXT_EXTENSIONS: dict[tuple[str, ...], str] = {
+        # Plain text / generic
+        (".txt", ".text", ".log", ".diff", ".patch"): "text/plain",
+        # Config / data formats
+        (".cfg", ".conf", ".ini", ".toml", ".env", ".properties", ".editorconfig"): "text/plain",
+        # Shell scripts
+        (".sh", ".bash", ".zsh", ".fish", ".command"): "text/plain",
+        # Source code (text/plain for Phase 1 simplicity; refine in Phase 3)
+        (".py", ".pyi", ".pyx"): "text/plain",
+        (".js", ".jsx", ".mjs", ".cjs"): "text/plain",
+        (".ts", ".tsx"): "text/plain",
+        (".swift",): "text/plain",
+        (".kt", ".kts"): "text/plain",
+        (".java", ".scala", ".groovy"): "text/plain",
+        (".c", ".h"): "text/plain",
+        (".cpp", ".cxx", ".cc", ".hpp", ".hxx"): "text/plain",
+        (".rs",): "text/plain",
+        (".go",): "text/plain",
+        (".rb", ".rake"): "text/plain",
+        (".php", ".phtml"): "text/plain",
+        (".lua",): "text/plain",
+        (".r", ".R"): "text/plain",
+        (".pl", ".pm"): "text/plain",
+        (".dart",): "text/plain",
+        # Markup
+        (".md", ".markdown", ".mdown", ".mkd", ".rst", ".adoc"): "text/plain",
+        # Web
+        (".html", ".htm", ".xhtml"): "text/html",
+        (".css", ".scss", ".sass", ".less"): "text/css",
+        # Data interchange (text/* types for iOS compatibility)
+        (".xml", ".plist", ".svg", ".xaml", ".rss", ".atom"): "text/xml",
+        (".yaml", ".yml"): "text/yaml",
+        (".json", ".geojson", ".har"): "text/plain",
+        (".csv", ".tsv"): "text/plain",
+        (".sql",): "text/plain",
+        # Docker / CI
+        (".dockerignore",): "text/plain",
+        (".gitignore", ".gitattributes"): "text/plain",
+        # Virtualenv / env markers
+        (".python-version", ".ruby-version", ".node-version", ".nvmrc"): "text/plain",
+    }
+
     @staticmethod
     def _detect_mime(file_path: str) -> str:
         lower = file_path.lower()
@@ -239,6 +284,17 @@ class QRTriggerHandler:
             return "image/webp"
         if lower.endswith(".bmp"):
             return "image/bmp"
+        # Filename-only checks (no extension)
+        basename = lower.rsplit("/", 1)[-1] if "/" in lower else lower
+        if basename in ("makefile", "dockerfile", "vagrantfile", "gemfile", "rakefile",
+                        "procfile", "brewfile", "berksfile", "pipfile", "jenkinsfile"):
+            return "text/plain"
+        if basename == "license":
+            return "text/plain"
+        # Text extensions
+        for exts, mime in QRTriggerHandler._TEXT_EXTENSIONS.items():
+            if lower.endswith(exts):
+                return mime
         return "application/octet-stream"
 
     def _create_text_stash(

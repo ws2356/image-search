@@ -34,6 +34,14 @@ public class MultiFileReceiveViewModel: ObservableObject {
 
         public var id: Int { index }
         public var isInline: Bool { entryType == "text" || entryType == "html" }
+        /// Whether the file has been downloaded and contains renderable text content.
+        public var downloadedTextContent: String? {
+            switch result {
+            case .text(let content): return content
+            case .html(let html): return html
+            default: return nil
+            }
+        }
         /// Only selectable once fully downloaded (or inline).
         public var isSelectable: Bool { isInline || status == .downloaded }
 
@@ -303,6 +311,13 @@ public struct MultiFileReceiveView: View {
                     Text(state.inlineContent ?? "")
                         .font(.subheadline)
                         .lineLimit(2)
+                } else if let textContent = state.downloadedTextContent {
+                    Text(textContent)
+                        .font(.subheadline)
+                        .lineLimit(5)
+                    Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 } else {
                     Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
                         .font(.subheadline)
