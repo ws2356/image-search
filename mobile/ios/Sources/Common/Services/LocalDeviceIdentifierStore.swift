@@ -27,14 +27,19 @@ public struct LocalDeviceIdentifier: Codable, Equatable, Sendable {
 }
 
 public actor LocalDeviceIdentifierStore: LocalDeviceIdentifierProviding {
+    /// App Group used to share device identity between the main app and extensions.
+    public static let appGroupIdentifier = "group.com.aubackup.instant-share"
+    public static let installIDKey: String = "albumtransporter.install-id"
+    public static let deviceUUIDKey: String = "albumtransporter.device-uuid"
+
     private let userDefaults: UserDefaults
     private let installIDKey: String
     private let deviceUUIDKey: String
 
     public init(
-        userDefaults: UserDefaults = .standard,
-        installIDKey: String = "albumtransporter.install-id",
-        deviceUUIDKey: String = "albumtransporter.device-uuid"
+        userDefaults: UserDefaults,
+        installIDKey: String,
+        deviceUUIDKey: String
     ) {
         self.userDefaults = userDefaults
         self.installIDKey = installIDKey

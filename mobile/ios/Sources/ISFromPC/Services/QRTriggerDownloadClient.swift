@@ -313,7 +313,7 @@ public final class QRTriggerDownloadClient: Sendable {
         LocalLog.info("[QRDownload] starting pc-to-mobile flow host=\(host):\(port) session_id=\(sessionId)")
 
         let correlationID = UUID().uuidString
-        let deviceCertPEM = try? appIdentityProvider.selfCertificatePEM()
+        let deviceCertPEM = try? await appIdentityProvider.selfCertificatePEM()
 
         try await trustHandshake(host: host, port: port, sessionId: sessionId, correlationID: correlationID)
         LocalLog.info("[QRDownload] trust handshake completed session_id=\(sessionId)")
@@ -721,7 +721,7 @@ public final class QRTriggerDownloadClient: Sendable {
     /// Builds the three app-layer signature headers for the given sessionId.
     private func signatureHeaders(for sessionId: String) async throws -> (signature: String, algorithm: String, deviceUUID: String) {
         let (signature, algorithm) = try await appIdentityProvider.signSessionID(sessionId)
-        let deviceID = try appIdentityProvider.deviceUUID()
+        let deviceID = try await appIdentityProvider.deviceUUID()
         LocalLog.debug("[QRDownload] signature headers session_id=\(sessionId) device_uuid=\(deviceID)")
         return (signature, algorithm, deviceID)
     }

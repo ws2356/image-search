@@ -318,21 +318,7 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         }
 
         hasLoaded = true
-        
-        // Check if this is the first launch after installation
-        if isFirstLaunchAfterInstallation() {
-            LocalLog.info("First launch after installation detected, deleting existing self identity")
-            try? appIdentityProvider.deleteSelfIdentity()
-            markFirstLaunchCompleted()
-        }
-        
         try? await appIdentityProvider.ensureSelfIdentity()
-        do {
-            let cert = try appIdentityProvider.selfCertificate()
-            DebugPrintCert(cert)
-        } catch (let error) {
-            LocalLog.error("[identity] failed to get cert: \(error)")
-        }
         
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
@@ -1040,5 +1026,4 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
     private func markFirstLaunchCompleted() {
         UserDefaults.standard.set(true, forKey: Self.hasLaunchedBeforeKey)
     }
-
 }

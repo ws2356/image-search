@@ -1,5 +1,6 @@
 import SwiftUI
 import Common
+import Factory
 
 @MainActor
 protocol QRClaimDelegate {
@@ -10,19 +11,15 @@ protocol QRClaimDelegate {
 class QRClaimViewModel: ObservableObject {
     let qrClaimPayload: QRClaimPayload
     let delegate: QRClaimDelegate
-    let appIdentityProvider: AppIdentityProviding
+    @Injected(\.appIdentityProvider) private(set) var appIdentityProvider: AppIdentityProviding
     var onCompletion: ((Result<QRClaimResult, Error>) -> Void)?
 
     init(
         qrClaimPayload: QRClaimPayload,
         delegate: QRClaimDelegate,
-        appIdentityProvider: AppIdentityProviding = KeychainAppIdentityProvider(
-            localDeviceIdentifierProvider: LocalDeviceIdentifierStore()
-        )
     ) {
         self.qrClaimPayload = qrClaimPayload
         self.delegate = delegate
-        self.appIdentityProvider = appIdentityProvider
     }
 
     func claim() async {

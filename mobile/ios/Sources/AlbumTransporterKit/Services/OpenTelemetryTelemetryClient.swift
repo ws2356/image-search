@@ -36,7 +36,7 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
     private var backupCompletedItemsCounter: any LongCounter
 
     init(
-        identityProvider: LocalDeviceIdentifierProviding = LocalDeviceIdentifierStore(),
+        identityProvider: LocalDeviceIdentifierProviding,
         serviceName: String = "AuBackup.iOS",
         instrumentationName: String = "AlbumTransporterKit.MobileFolder",
         instrumentationVersion: String = "0.1.0",

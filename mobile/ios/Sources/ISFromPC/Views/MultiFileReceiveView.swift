@@ -1,4 +1,5 @@
 import SwiftUI
+import Factory
 import Common
 
 // MARK: - ViewModel
@@ -19,7 +20,7 @@ public class MultiFileReceiveViewModel: ObservableObject {
     @Published public var showShareSheet = false
     @Published public var downloadError: String? = nil
 
-    private let appIdentityProvider: AppIdentityProviding
+    @Injected(\.appIdentityProvider) private(set) var appIdentityProvider: AppIdentityProviding
 
     public struct FileDownloadState: Identifiable {
         public let index: Int
@@ -60,9 +61,6 @@ public class MultiFileReceiveViewModel: ObservableObject {
         sessionId: String,
         correlationID: String,
         delegate: ISQRDeliverDelegate,
-        appIdentityProvider: AppIdentityProviding = KeychainAppIdentityProvider(
-            localDeviceIdentifierProvider: LocalDeviceIdentifierStore()
-        )
     ) {
         self.manifest = manifest
         self.host = host
@@ -70,7 +68,6 @@ public class MultiFileReceiveViewModel: ObservableObject {
         self.sessionId = sessionId
         self.correlationID = correlationID
         self.delegate = delegate
-        self.appIdentityProvider = appIdentityProvider
         self.fileStates = manifest.files.map { entry in
             let initialStatus: FileDownloadState.DownloadStatus = entry.isInline ? .downloaded : .pending
             let result: QRClaimResult? = entry.isInline

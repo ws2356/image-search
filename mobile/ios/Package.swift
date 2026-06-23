@@ -62,6 +62,7 @@ let package = Package(
                resources: []),
         .target(name: "ISFromMobile",
                dependencies: [
+                .product(name: "Factory", package: "Factory"),
                 "Common"
                ],
                resources: []),

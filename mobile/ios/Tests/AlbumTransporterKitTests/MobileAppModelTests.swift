@@ -302,6 +302,7 @@ final class MobileAppModelTests: XCTestCase {
             contextProvider: resolvedTelemetryContextProvider
         )
         let backupSessionProvider = AppStateStoreBackedBackupSessionProvider(store: stateStore)
+        let localDeviceIdProvoder = LocalDeviceIdentifierStore(userDefaults: .standard, installIDKey: LocalDeviceIdentifierStore.installIDKey, deviceUUIDKey: LocalDeviceIdentifierStore.deviceUUIDKey)
         return MobileAppModel(
             backupSessionProvider: backupSessionProvider,
             qrCodePayloadDecoder: qrCodePayloadDecoder,
@@ -312,7 +313,7 @@ final class MobileAppModelTests: XCTestCase {
             appVersionProvider: appVersionProvider,
             telemetryService: resolvedTelemetryService,
             telemetryContextProvider: resolvedTelemetryContextProvider,
-            appIdentityProvider: KeychainAppIdentityProvider(localDeviceIdentifierProvider: LocalDeviceIdentifierStore(deviceUUIDKey: "test-device-uuid-key"))
+            appIdentityProvider: KeychainAppIdentityProvider(localDeviceIdentifierProvider: localDeviceIdProvoder, userDefaults: .standard)
         )
     }
 

@@ -227,7 +227,7 @@ final class InstantShareUploadClient: Sendable {
     /// Builds the three app-layer signature headers for the given sessionID.
     private func signatureHeaders(for sessionID: String) async throws -> (signature: String, algorithm: String, deviceUUID: String) {
         let (signature, algorithm) = try await appIdentityProvider.signSessionID(sessionID)
-        let deviceID = try appIdentityProvider.deviceUUID()
+        let deviceID = try await appIdentityProvider.deviceUUID()
         LocalLog.debug("[UploadClient] signature headers session_id=\(sessionID) device_uuid=\(deviceID)")
         return (signature, algorithm, deviceID)
     }

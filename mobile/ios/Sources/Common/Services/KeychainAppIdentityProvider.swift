@@ -7,25 +7,24 @@ import UIKit
 
 public protocol AppIdentityProviding: Sendable {
     func ensureSelfIdentity() async throws
-    func selfCertificate() throws -> SecCertificate
-    func selfIdentity() throws -> SecIdentity
-    func deleteSelfIdentity() throws
+    func selfCertificate() async throws -> SecCertificate
+    func selfIdentity() async throws -> SecIdentity
     func signSessionID(_ sessionID: String) async throws -> (signature: String, algorithm: String)
     /// Returns the device UUID embedded in the self-signed identity certificate.
     /// This is the same UUID the PC will extract from the certificate during trust,
     /// so it must be used as ``X-Peer-Device-Id`` on transfer requests.
-    func deviceUUID() throws -> String
+    func deviceUUID() async throws -> String
     
     func importPeerCertificate(_ cert: SecCertificate) async throws
     func importPeerCertificate(pem: String) async throws
-    func peerCertificate(forPubkeyHash hash: Data) throws -> SecCertificate?
-    func peerCertificate(for cert: SecCertificate) throws -> SecCertificate?
-    func deletePeerCertificate(forPubkeyHash hash: Data) throws
+    func peerCertificate(forPubkeyHash hash: Data) async throws -> SecCertificate?
+    func peerCertificate(for cert: SecCertificate) async throws -> SecCertificate?
+    func deletePeerCertificate(forPubkeyHash hash: Data) async throws
 }
 
 public extension AppIdentityProviding {
-    func selfCertificatePEM() throws -> String {
-        let cert = try selfCertificate()
+    func selfCertificatePEM() async throws -> String {
+        let cert = try await selfCertificate()
         let derData = SecCertificateCopyData(cert) as Data
         let base64 = derData.base64EncodedString(options: .lineLength64Characters)
         return "-----BEGIN CERTIFICATE-----\n\(base64)\n-----END CERTIFICATE-----\n"
@@ -48,7 +47,9 @@ public enum KeychainError: Swift.Error, LocalizedError {
     }
 }
 
-public final class KeychainAppIdentityProvider: AppIdentityProviding {
+let hasLaunchedKey = "hasLaunchedKey"
+
+public actor KeychainAppIdentityProvider: AppIdentityProviding {
     private static let peerCertLabel = "AuSearch Trusted Device"
 
     private static let keyLabel = "AuBackup App Identity"
@@ -63,9 +64,12 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
     }
 
     private let localDeviceIdentifierProvider: LocalDeviceIdentifierProviding
+    
+    private let userDefaults: UserDefaults
 
-    public init(localDeviceIdentifierProvider: LocalDeviceIdentifierProviding) {
+    public init(localDeviceIdentifierProvider: LocalDeviceIdentifierProviding, userDefaults: UserDefaults) {
         self.localDeviceIdentifierProvider = localDeviceIdentifierProvider
+        self.userDefaults = userDefaults
     }
 
     enum IdentityError: Swift.Error, LocalizedError {
@@ -91,18 +95,26 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
     }
 
     public func ensureSelfIdentity() async throws {
+        try? await cleanupSelfIdentityAfterReinstall()
+        
         LocalLog.info("Ensuring app identity...")
         if let identity = try? retrieveExistingIdentity() {
             LocalLog.info("Existing app identity found")
             try await migrateCertsIfNeeded(identity: identity)
+            let deviceId1 = try? await self.localDeviceIdentifierProvider.currentIdentifier().deviceUUID
+            let deviceId2 = try? await self.deviceUUID()
+            LocalLog.info("[debug] deviceId1 \(deviceId1) == deviceId2 \(deviceId2)")
             return
         }
         LocalLog.info("No existing identity found, creating new self-signed certificate")
         try await createAndSaveIdentity()
         LocalLog.info("App identity created successfully")
+        let deviceId1 = try? await self.localDeviceIdentifierProvider.currentIdentifier().deviceUUID
+        let deviceId2 = try? await self.deviceUUID()
+        LocalLog.info("[debug] deviceId1 \(deviceId1) == deviceId2 \(deviceId2)")
     }
 
-    public func selfCertificate() throws -> SecCertificate {
+    public func selfCertificate() async throws -> SecCertificate {
         let identity = try retrieveExistingIdentity()
         var cert: SecCertificate?
         let status = SecIdentityCopyCertificate(identity, &cert)
@@ -112,12 +124,12 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return cert
     }
 
-    public func selfIdentity() throws -> SecIdentity {
+    public nonisolated func selfIdentity() async throws -> SecIdentity {
         try retrieveExistingIdentity()
     }
 
     public func signSessionID(_ sessionID: String) async throws -> (signature: String, algorithm: String) {
-        let identity = try selfIdentity()
+        let identity = try await selfIdentity()
         var privateKey: SecKey?
         let status = SecIdentityCopyPrivateKey(identity, &privateKey)
         guard status == errSecSuccess, let privateKey else {
@@ -145,15 +157,20 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return (signature: base64url, algorithm: "ecdsa-sha256")
     }
 
-    public func deviceUUID() throws -> String {
-        let cert = try selfCertificate()
+    public func deviceUUID() async throws -> String {
+        let cert = try await selfCertificate()
         guard let uuid = cert.deviceUUIDFromExtension(Self.deviceIdOID) else {
             throw IdentityError.certificateNotFound
         }
         return uuid
     }
 
-    public func deleteSelfIdentity() throws {
+    func cleanupSelfIdentityAfterReinstall() async throws {
+        if self.userDefaults.bool(forKey: hasLaunchedKey) {
+            return
+        }
+        self.userDefaults.set(true, forKey: hasLaunchedKey)
+
         LocalLog.info("Deleting app self identity from keychain...")
         var anyError: Error?
         
@@ -193,7 +210,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         LocalLog.info("App self identity deleted successfully")
     }
 
-    private func retrieveExistingIdentity() throws -> SecIdentity {
+    private nonisolated func retrieveExistingIdentity() throws -> SecIdentity {
         let query: [String: Any] = [
             kSecClass as String: kSecClassIdentity,
             kSecAttrLabel as String: Self.keyLabel,
@@ -299,7 +316,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         guard let hashData = cert.publicKeyHash else {
             throw KeychainError.unexpectedData
         }
-        try? deletePeerCertificate(forPubkeyHash: hashData)
+        try? await deletePeerCertificate(forPubkeyHash: hashData)
         
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
@@ -328,7 +345,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         try await importPeerCertificate(cert)
     }
 
-    public func peerCertificate(forPubkeyHash hash: Data) throws -> SecCertificate? {
+    public func peerCertificate(forPubkeyHash hash: Data) async throws -> SecCertificate? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
             kSecAttrPublicKeyHash as String: hash,
@@ -343,14 +360,14 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         return cert
     }
 
-    public func peerCertificate(for cert: SecCertificate) throws -> SecCertificate? {
+    public func peerCertificate(for cert: SecCertificate) async throws -> SecCertificate? {
         guard let hashData = cert.publicKeyHash else {
             return nil
         }
-        return try peerCertificate(forPubkeyHash: hashData)
+        return try await peerCertificate(forPubkeyHash: hashData)
     }
 
-    public func deletePeerCertificate(forPubkeyHash hash: Data) throws {
+    public func deletePeerCertificate(forPubkeyHash hash: Data) async throws {
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
             kSecAttrPublicKeyHash as String: hash,
@@ -360,7 +377,7 @@ public final class KeychainAppIdentityProvider: AppIdentityProviding {
         LocalLog.debug("[Keychain] deletePeerCertificate by publicKeyHash status=\(status)")
     }
     
-    public func loadAllPeerCertificates() throws -> [SecCertificate] {
+    public func loadAllPeerCertificates() async throws -> [SecCertificate] {
         let query: [String: Any] = [
             kSecClass as String: kSecClassCertificate,
             kSecAttrLabel as String: Self.peerCertLabel,

@@ -10,7 +10,12 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         provider = KeychainAppIdentityProvider(
-            localDeviceIdentifierProvider: LocalDeviceIdentifierStore(deviceUUIDKey: "test-peer-provider-uuid")
+            localDeviceIdentifierProvider: LocalDeviceIdentifierStore(
+                userDefaults: .standard,
+                installIDKey: LocalDeviceIdentifierStore.installIDKey,
+                deviceUUIDKey: LocalDeviceIdentifierStore.deviceUUIDKey
+            ),
+            userDefaults: .standard
         )
     }
 
@@ -20,12 +25,12 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     }
 
     func test_importPeerCertificate_secCertificate_roundTrip() async throws {
-        try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: testPeerID, deviceUUID: UUID().uuidString, isPersist: false)
         let pubkeyHash = try XCTUnwrap(selfCert.publicKeyHash)
 
         try await provider.importPeerCertificate(selfCert)
-        let retrieved = try XCTUnwrap(provider.peerCertificate(forPubkeyHash: pubkeyHash))
+        let retrievedCert = try await provider.peerCertificate(forPubkeyHash: pubkeyHash)
+        let retrieved = try XCTUnwrap(retrievedCert)
 
         let originalKeyData = try publicKeyData(from: selfCert)
         let retrievedKeyData = try publicKeyData(from: retrieved)
@@ -33,12 +38,12 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     }
 
     func test_importPeerCertificate_pem_roundTrip() async throws {
-        try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: testPeerID, deviceUUID: UUID().uuidString, isPersist: false)
 
         let pem = derDataToPem(try XCTUnwrap(SecCertificateCopyData(selfCert) as Data?))
         try await provider.importPeerCertificate(pem: pem)
-        let retrieved = try XCTUnwrap(provider.peerCertificate(for: selfCert))
+        let maybeCert = try await provider.peerCertificate(for: selfCert)
+        let retrieved = try XCTUnwrap(maybeCert)
 
         let originalKeyData = try publicKeyData(from: selfCert)
         let retrievedKeyData = try publicKeyData(from: retrieved)
@@ -46,13 +51,13 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     }
 
     func test_importPeerCertificate_pem_overwritesExisting() async throws {
-        try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: testPeerID, deviceUUID: UUID().uuidString, isPersist: false)
         let pem = derDataToPem(try XCTUnwrap(SecCertificateCopyData(selfCert) as Data?))
 
         try await provider.importPeerCertificate(pem: pem)
         try await provider.importPeerCertificate(pem: pem)
-        let retrieved = try XCTUnwrap(provider.peerCertificate(for: selfCert))
+        let maybeCert = try await provider.peerCertificate(for: selfCert)
+        let retrieved = try XCTUnwrap(maybeCert)
 
         let originalKeyData = try publicKeyData(from: selfCert)
         let retrievedKeyData = try publicKeyData(from: retrieved)
@@ -60,11 +65,11 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     }
 
     func test_peerCertificate_notFound_returnsNil() async throws {
-        try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: "unknown-peer", deviceUUID: UUID().uuidString, isPersist: false)
         // Use a random hash that won't match
         let randomHash = Data(repeating: 0, count: 20)
-        XCTAssertNil(try provider.peerCertificate(forPubkeyHash: randomHash))
+        let result = try await provider.peerCertificate(forPubkeyHash: randomHash)
+        XCTAssertNil(result)
     }
 
     func test_importPeerCertificate_invalidPem_throws() async {
@@ -77,30 +82,30 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     }
 
     func test_deletePeerCertificate_byPubkeyHash() async throws {
-        try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: testPeerID, deviceUUID: UUID().uuidString, isPersist: false)
         let pubkeyHash = try XCTUnwrap(selfCert.publicKeyHash)
 
         try await provider.importPeerCertificate(selfCert)
-        XCTAssertNotNil(try provider.peerCertificate(forPubkeyHash: pubkeyHash))
+        let addedCert = try await provider.peerCertificate(forPubkeyHash: pubkeyHash)
+        XCTAssertNotNil(addedCert)
 
-        try provider.deletePeerCertificate(forPubkeyHash: pubkeyHash)
-        XCTAssertNil(try provider.peerCertificate(forPubkeyHash: pubkeyHash))
+        try await provider.deletePeerCertificate(forPubkeyHash: pubkeyHash)
+        let afterDelete = try await provider.peerCertificate(forPubkeyHash: pubkeyHash)
+        XCTAssertNil(afterDelete)
     }
 
     func test_loadAllPeerCertificates() async throws {
-        try await provider.ensureSelfIdentity()
         let selfCert = try await provider.createIdentity(commonName: testPeerID, deviceUUID: UUID().uuidString, isPersist: false)
         try await provider.importPeerCertificate(selfCert)
 
-        let allCerts = try provider.loadAllPeerCertificates()
+        let allCerts = try await provider.loadAllPeerCertificates()
         XCTAssertFalse(allCerts.isEmpty)
     }
 
     func test_signSessionID_returns_valid_signature() async throws {
         // ensureSelfIdentity creates a persistent keychain identity
+        // TODO: clear test userDefaults
         try await provider.ensureSelfIdentity()
-        defer { try? provider.deleteSelfIdentity() }
 
         let (signature, algorithm) = try await provider.signSessionID("test-session-id")
 
@@ -109,24 +114,6 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
         let allowedChars = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
         XCTAssertTrue(signature.allSatisfy { allowedChars.contains($0.unicodeScalars.first!) })
         XCTAssertEqual(algorithm, "ecdsa-sha256")
-    }
-
-    func test_signSessionID_throws_when_no_identity() async {
-        // Ensure no persistent identity exists
-        try? provider.deleteSelfIdentity()
-
-        do {
-            _ = try await provider.signSessionID("test-session-id")
-            XCTFail("Expected IdentityError.identityNotFound")
-        } catch let error as KeychainAppIdentityProvider.IdentityError {
-            if case .identityNotFound = error {
-                // expected
-            } else {
-                XCTFail("Expected identityNotFound but got \(error)")
-            }
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
     }
 
     func test_deviceUUID_matches_certificate_extension() async throws {

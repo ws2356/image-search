@@ -44,10 +44,8 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     public init(
         mdnsBrowser: InstantShareMDNSBrowser,
         service: InstantShareService,
-        appIdentityProvider: AppIdentityProviding = KeychainAppIdentityProvider(
-            localDeviceIdentifierProvider: LocalDeviceIdentifierStore()
-        ),
-        deviceIdentifierProvider: LocalDeviceIdentifierProviding = LocalDeviceIdentifierStore()
+        appIdentityProvider: AppIdentityProviding,
+        deviceIdentifierProvider: LocalDeviceIdentifierProviding
     ) {
         self.mdnsBrowser = mdnsBrowser
         self.service = service
@@ -274,7 +272,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
                 let handshakeHost = pc.host
 
-                let myCert = try? appIdentityProvider.selfCertificatePEM()
+                let myCert = try? await appIdentityProvider.selfCertificatePEM()
                 let peerCert = try await trustClient.confirm(
                     host: handshakeHost,
                     port: pc.port,

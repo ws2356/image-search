@@ -14,16 +14,6 @@ extension Container {
             .singleton
     }
 
-    var localDeviceIdentityProvider: Factory<LocalDeviceIdentifierProviding> {
-        self { LocalDeviceIdentifierStore() }
-            .singleton
-    }
-
-    var appIdentityProvider: Factory<AppIdentityProviding> {
-        self { KeychainAppIdentityProvider(localDeviceIdentifierProvider: self.localDeviceIdentityProvider()) }
-            .singleton
-    }
-
     var trustedDesktopStore: Factory<TrustedDesktopStore> {
         self { UserDefaultsTrustedDesktopStore() }
             .singleton
@@ -159,9 +149,4 @@ extension Container {
         .singleton
     }
 
-    @MainActor
-    var instantShareService: Factory<InstantShareService> {
-        self { @MainActor in InstantShareService() }
-            .singleton
-    }
 }

@@ -1,15 +1,13 @@
 import Social
 import UIKit
 import SwiftUI
+import Factory
 import AlbumTransporterKit
 import Common
 import ISFromMobile
 
 class ShareViewController: UIViewController {
-    private let viewModel = InstantShareExtensionViewModel(
-        mdnsBrowser: InstantShareMDNSBrowser(),
-        service: InstantShareService()
-    )
+    private let viewModel = Container.shared.shareExtensionViewModel()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -43,8 +41,7 @@ class ShareViewController: UIViewController {
             LocalLog.info("[Share VC] payload loaded, starting mDNS discovery")
             viewModel.startDiscovery()
             
-            let identityProvider = KeychainAppIdentityProvider(
-                localDeviceIdentifierProvider: LocalDeviceIdentifierStore())
+            let identityProvider = Container.shared.appIdentityProvider()
             do {
                 try await identityProvider.ensureSelfIdentity()
             } catch (let error) {

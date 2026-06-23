@@ -308,7 +308,9 @@ final class InstantShareExtensionViewModelBatchTests: XCTestCase {
         super.setUp()
         service = InstantShareService()
         let browser = InstantShareMDNSBrowser()
-        viewModel = InstantShareExtensionViewModel(mdnsBrowser: browser, service: service)
+        let localDeviceIdProvider = LocalDeviceIdentifierStore(userDefaults: .standard, installIDKey: LocalDeviceIdentifierStore.installIDKey, deviceUUIDKey: LocalDeviceIdentifierStore.deviceUUIDKey)
+        let identityProvider = KeychainAppIdentityProvider(localDeviceIdentifierProvider: localDeviceIdProvider, userDefaults: .standard)
+        viewModel = InstantShareExtensionViewModel(mdnsBrowser: browser, service: service, appIdentityProvider: identityProvider, deviceIdentifierProvider: localDeviceIdProvider)
     }
     
     override func tearDown() {

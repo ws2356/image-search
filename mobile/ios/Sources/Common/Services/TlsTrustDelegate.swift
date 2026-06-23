@@ -18,22 +18,24 @@ public final class TlsTrustDelegate: NSObject, URLSessionTaskDelegate {
         _ session: URLSession,
         task: URLSessionTask,
         didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+        completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        switch challenge.protectionSpace.authenticationMethod {
-        case NSURLAuthenticationMethodServerTrust:
-            handleServerTrustChallenge(challenge, completionHandler: completionHandler)
-        case NSURLAuthenticationMethodClientCertificate:
-            handleClientCertificateChallenge(completionHandler: completionHandler)
-        default:
-            completionHandler(.performDefaultHandling, nil)
+        Task {
+            switch challenge.protectionSpace.authenticationMethod {
+            case NSURLAuthenticationMethodServerTrust:
+                await handleServerTrustChallenge(challenge, completionHandler: completionHandler)
+            case NSURLAuthenticationMethodClientCertificate:
+                handleClientCertificateChallenge(completionHandler: completionHandler)
+            default:
+                completionHandler(.performDefaultHandling, nil)
+            }
         }
     }
 
     private func handleServerTrustChallenge(
         _ challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
+        completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) async {
         guard let serverTrust = challenge.protectionSpace.serverTrust else {
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
@@ -55,7 +57,7 @@ public final class TlsTrustDelegate: NSObject, URLSessionTaskDelegate {
         }
         LocalLog.debug("[TLS] server cert pubkeyHash=\(pubkeyHash.base64EncodedString())")
 
-        guard let storedCert = try? appIdentityProvider.peerCertificate(forPubkeyHash: pubkeyHash) else {
+        guard let storedCert = try? await appIdentityProvider.peerCertificate(forPubkeyHash: pubkeyHash) else {
             LocalLog.error("[TLS] no stored peer certificate for pubkeyHash")
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
