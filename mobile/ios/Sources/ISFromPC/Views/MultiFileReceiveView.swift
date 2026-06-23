@@ -34,12 +34,13 @@ public class MultiFileReceiveViewModel: ObservableObject {
         public var errorMessage: String? = nil
 
         public var id: Int { index }
-        public var isInline: Bool { entryType == "text" || entryType == "html" }
+        public var isInline: Bool { entryType == "text" || entryType == "html" || entryType == "link" }
         /// Whether the file has been downloaded and contains renderable text content.
         public var downloadedTextContent: String? {
             switch result {
             case .text(let content): return content
             case .html(let html): return html
+            case .link(let urlString): return urlString
             default: return nil
             }
         }
@@ -151,6 +152,12 @@ public class MultiFileReceiveViewModel: ObservableObject {
                     .appendingPathComponent("\(UUID().uuidString).html")
                 try? html.data(using: .utf8)?.write(to: tempURL)
                 items.append(tempURL)
+            case .link(let urlString):
+                if let url = URL(string: urlString) {
+                    items.append(url)
+                } else {
+                    items.append(urlString)
+                }
             case .image(let fileURL, _, _), .file(let fileURL, _, _):
                 items.append(fileURL)
             case .multiFile:
@@ -352,6 +359,7 @@ public struct MultiFileReceiveView: View {
         if lowercased.hasPrefix("image/") { return "photo" }
         if lowercased.hasPrefix("video/") { return "video" }
         if lowercased.hasPrefix("audio/") { return "music.note" }
+        if lowercased.hasPrefix("text/uri-list") { return "link" }
         if lowercased.hasPrefix("text/") { return "doc.text" }
         if lowercased == "application/pdf" { return "doc.text" }
         return "doc"

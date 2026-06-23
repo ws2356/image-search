@@ -63,6 +63,8 @@ struct QRTransferResultView: View {
             textContentView(text: text)
         case .html(let html):
             htmlContentView(html: html)
+        case .link(let urlString):
+            linkContentView(urlString: urlString)
         case .image(let fileURL, let contentType, let filename):
             imageContentView(fileURL: fileURL, contentType: contentType, filename: filename)
         case .file(let fileURL, let contentType, let filename):
@@ -83,6 +85,42 @@ struct QRTransferResultView: View {
             shareButton
                 .padding(.horizontal)
                 .padding(.bottom)
+        }
+    }
+
+    private func linkContentView(urlString: String) -> some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 8) {
+                Image(systemName: "link")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.blue)
+                Text("Web Link")
+                    .font(.headline)
+                Text(urlString)
+                    .font(.subheadline)
+                    .foregroundStyle(.blue)
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(.center)
+            }
+            .padding()
+
+            HStack(spacing: 12) {
+                Button(action: copyToClipboard(urlString)) {
+                    Label("Copy Link", systemImage: "doc.on.doc")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                if let url = URL(string: urlString) {
+                    Link(destination: url) {
+                        Label("Open", systemImage: "safari")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom)
         }
     }
 
@@ -286,6 +324,12 @@ extension QRClaimResult {
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).html")
             try? html.data(using: .utf8)?.write(to: tempURL)
             items = [tempURL]
+        case .link(let urlString):
+            if let url = URL(string: urlString) {
+                items = [url]
+            } else {
+                items = [urlString]
+            }
         case .image(let fileURL, _, _):
             items = [Self.sanitizedFileURL(fileURL)]
         case .file(let fileURL, _, _):

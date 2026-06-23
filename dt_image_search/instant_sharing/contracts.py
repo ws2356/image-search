@@ -85,10 +85,12 @@ class FileEntry:
 
     @property
     def entry_type(self) -> str:
-        """High-level type for manifest consumers: 'text', 'html', or 'file'."""
+        """High-level type for manifest consumers: 'text', 'html', 'link', or 'file'."""
         if self.content is not None:
             if self.content_type == "text/html":
                 return "html"
+            if self.content_type == "text/uri-list":
+                return "link"
             return "text"
         return "file"
 

@@ -217,15 +217,15 @@ public struct MultiFileManifest: Sendable {
 
     public struct FileEntry: Sendable, Identifiable {
         public let index: Int
-        public let type: String  // "text", "html", or "file"
+        public let type: String  // "text", "html", "link", or "file"
         public let filename: String
         public let contentType: String
         public let sizeBytes: Int
-        public let content: String?  // inline content for text/html entries
+        public let content: String?  // inline content for text/html/link entries
 
         public var id: Int { index }
 
-        public var isInline: Bool { type == "text" || type == "html" }
+        public var isInline: Bool { type == "text" || type == "html" || type == "link" }
         public var isFileDownload: Bool { type == "file" }
     }
 }
@@ -233,6 +233,7 @@ public struct MultiFileManifest: Sendable {
 public enum QRClaimResult: Sendable {
     case text(String)
     case html(String)
+    case link(String)
     case image(fileURL: URL, contentType: String, filename: String?)
     case file(fileURL: URL, contentType: String, filename: String?)
     case multiFile(manifest: MultiFileManifest, host: String, tlsPort: Int, sessionId: String, correlationID: String)
@@ -660,6 +661,15 @@ public final class QRTriggerDownloadClient: Sendable {
                 throw QRTriggerDownloadClientError.invalidResponse
             }
             return .html(html)
+        }
+
+        if lowercasedContentType.hasPrefix("text/uri-list") {
+            let data = try Data(contentsOf: tempFileURL)
+            cleanupTempFile(tempFileURL)
+            guard let urlString = String(data: data, encoding: .utf8) else {
+                throw QRTriggerDownloadClientError.invalidResponse
+            }
+            return .link(urlString.trimmingCharacters(in: .whitespacesAndNewlines))
         }
 
         if lowercasedContentType.hasPrefix("text/") {

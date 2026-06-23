@@ -86,14 +86,20 @@ class QRTriggerHandler:
 
     def handle_trigger(self, body: dict[str, object]) -> dict[str, object]:
         payload_type = body.get("type")
-        if payload_type not in ("text", "file", "html"):
-            return {"_status": 400, "status": "error", "error": "Invalid type, must be 'text', 'file', or 'html'"}
+        if payload_type not in ("text", "file", "html", "link"):
+            return {"_status": 400, "status": "error", "error": "Invalid type, must be 'text', 'file', 'html', or 'link'"}
 
         if payload_type == "text":
             content = body.get("content")
             if not content or not isinstance(content, str):
                 return {"_status": 400, "status": "error", "error": "Missing or invalid 'content' for text type"}
             stash = self._create_text_stash(content_type="text/plain", content=content)
+
+        elif payload_type == "link":
+            content = body.get("content")
+            if not content or not isinstance(content, str):
+                return {"_status": 400, "status": "error", "error": "Missing or invalid 'content' for link type"}
+            stash = self._create_text_stash(content_type="text/uri-list", content=content)
 
         elif payload_type == "html":
             content = body.get("content")

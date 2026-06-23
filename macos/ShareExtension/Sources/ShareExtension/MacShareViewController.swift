@@ -6,7 +6,6 @@ import os.log
 private let socketRelativePath = "is.sock"
 private let log = OSLog(subsystem: "net.boldman.ausearch.share-extension", category: "ShareExtension")
 
-// 1. 改为继承自 NSViewController
 class MacShareViewController: NSViewController {
     private var extensionContextRef: NSExtensionContext?
 
@@ -28,13 +27,11 @@ class MacShareViewController: NSViewController {
         self.view = NSView()
     }
 
-    // 2. beginRequest 只负责存下 context，绝不在这里调用 loadItem
     override func beginRequest(with context: NSExtensionContext) {
         super.beginRequest(with: context)
         self.extensionContextRef = context
     }
 
-// 3. 此时 Finder 的 UI 握手已彻底结束，主线程恢复响应！开始安全地拉取数据
     override func viewDidAppear() {
         super.viewDidAppear()
         
@@ -61,219 +58,301 @@ class MacShareViewController: NSViewController {
             return
         }
         
-        processExtensionItems(items, with: context)
+        Task {
+            await processExtensionItems(items, with: context)
+        }
     }
 
-    private func processExtensionItems(_ items: [NSExtensionItem], with context: NSExtensionContext) {
-        // Phase 1: Scan for rich text or plain text (takes priority over files)
-        for item in items {
-            let hasTitle = item.attributedTitle?.length ?? 0 > 0
-            let hasContent = item.attributedContentText?.length ?? 0 > 0
-            
-            if hasTitle || hasContent {
-                let combined = NSMutableAttributedString()
-                if let title = item.attributedTitle, title.length > 0 {
-                    os_log("Found attributedTitle on extension item (%d chars)", log: log, type: .info, title.length)
-                    combined.append(title)
-                }
-                if let content = item.attributedContentText, content.length > 0 {
-                    if combined.length > 0 {
-                        combined.append(NSAttributedString(string: "\n\n"))
-                    }
-                    os_log("Found attributedContentText on extension item (%d chars)", log: log, type: .info, content.length)
-                    combined.append(content)
-                }
-                convertAndStashRichText(combined, with: context)
-                return
-            }
-            
-            guard let attachments = item.attachments else { continue }
-            for provider in attachments {
-                let richTextTypes = [UTType.rtf.identifier, UTType.html.identifier, "com.apple.flat-rtfd"]
-                for richType in richTextTypes {
-                    if provider.hasItemConformingToTypeIdentifier(richType) {
-                        os_log("Matched rich text type: %{public}@", log: log, type: .info, richType)
-                        provider.loadItem(forTypeIdentifier: richType, options: nil) { [weak self] data, error in
-                            if let error = error {
-                                os_log("Failed to load rich text: %{public}@", log: log, type: .error, error.localizedDescription)
-                                self?.cancel(with: context)
-                                return
-                            }
-                            self?.processRichTextData(data, type: richType, with: context)
-                        }
-                        return
-                    }
-                }
-                
-                if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-                    // If this plain-text item is backed by an actual file (e.g. .sh, .txt,
-                    // .csv, .py), prefer sharing the file path so the LaunchAgent can read
-                    // the original file.  Fall through to Phase 2 for file collection.
-                    if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
-                        os_log("[SHARE_EXT] Plain-text file detected — delegating to Phase 2 for file-path sharing",
-                               log: log, type: .info)
-                        continue
-                    }
-                    os_log("Matched text attachment", log: log, type: .info)
-                    provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] data, error in
-                        if let error = error {
-                            os_log("Failed to load text: %{public}@", log: log, type: .error, error.localizedDescription)
-                            self?.cancel(with: context)
-                            return
-                        }
-                        os_log("Type of data: %{public}@", log: log, type: .info, String(describing: type(of: data)))
-                        guard let text = data as? String ?? (data as? Data).flatMap({ String(data: $0, encoding: .utf8) }) else {
-                            os_log("Failed to load text: data is neither String nor UTF-8 Data", log: log, type: .error)
-                            self?.cancel(with: context)
-                            return
-                        }
-                        self?.stashTextPayload(text, with: context)
-                    }
-                    return
-                }
-            }
-        }
-        
-        // Phase 2: No text found — collect all file URLs from all items
-        let containerURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
-        os_log("[SHARE_EXT] Starting file collection: containerLibrary=%{public}@",
-               log: log, type: .info, containerURL?.path ?? "?")
-        var fileURLs: [(url: URL, isInPlace: Bool)] = []
-        var fileLoadCount = 0
-        var totalProviders = 0
-        let loadGroup = DispatchGroup()
-        let loadLock = NSLock()
-        
-        // Count total file providers across all items
-        for item in items {
-            guard let attachments = item.attachments else { continue }
-            for provider in attachments {
-                if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
-                    totalProviders += 1
-                }
-            }
-        }
-        
-        if totalProviders == 0 {
-            os_log("No supported attachments found — cancelling", log: log, type: .error)
-            cancel(with: context)
+    private func processExtensionItems(_ items: [NSExtensionItem], with context: NSExtensionContext) async {
+        if await tryProcessFileExtensionItems(items, with: context) {
+            return
+        } else if await tryProcessImageExtensionItems(items, with: context) {
+            return
+        } else if await tryProcessURLExtensionItems(items, with: context) {
+            return
+        } else if await tryProcessRichTextExtensionItems(items, with: context) {
+            return
+        } else if await tryProcessPlainTextExtensionItems(items, with: context) {
             return
         }
-        
-        os_log("Collecting %d file URLs from extension items", log: log, type: .info, totalProviders)
-        
+    }
+
+    private func tryProcessFileExtensionItems(
+        _ items: [NSExtensionItem], with context: NSExtensionContext
+    ) async -> Bool {
+        var fileProviders: [NSItemProvider] = []
         for item in items {
             guard let attachments = item.attachments else { continue }
             for provider in attachments {
-                guard provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) else { continue }
-                
-                loadGroup.enter()
-                provider.loadInPlaceFileRepresentation(forTypeIdentifier: UTType.data.identifier) { (originalURL, isInPlace, error) in
-                    defer { loadGroup.leave() }
-                    
-                    if let error = error {
-                        os_log("Failed to get in-place URL: %{public}@", log: log, type: .error, error.localizedDescription)
-                        return
-                    }
-                    
-                    guard let safeURL = originalURL else {
-                        os_log("Original URL is nil", log: log, type: .error)
-                        return
-                    }
-                    
-                    loadLock.lock()
-                    fileURLs.append((url: safeURL, isInPlace: isInPlace))
-                    fileLoadCount += 1
-                    
-                    let fm = FileManager.default
-                    let attrs = try? fm.attributesOfItem(atPath: safeURL.path)
-                    let isReadable = fm.isReadableFile(atPath: safeURL.path)
-                    let isWritable = fm.isWritableFile(atPath: safeURL.path)
-                    let fileExists = fm.fileExists(atPath: safeURL.path)
-                    let isDirectory: Bool = {
-                        var isDir: ObjCBool = false
-                        return fm.fileExists(atPath: safeURL.path, isDirectory: &isDir) && isDir.boolValue
-                    }()
-                    let posixPermissions = (attrs?[.posixPermissions] as? NSNumber).map { String(format: "0o%o", $0.uint16Value) } ?? "?"
-                    let ownerAccountID = attrs?[.ownerAccountID] as? NSNumber
-                    let fileSize = attrs?[.size] as? NSNumber
-                    os_log("[SHARE_EXT] File %d/%d: url=%{public}@ size=%{public}@ isInPlace=%{bool}d exists=%{bool}d isDir=%{bool}d readable=%{bool}d writable=%{bool}d mode=%{public}@ owner=%{public}@",
-                           log: log, type: .info, fileLoadCount, totalProviders,
-                           safeURL.path, String(describing: fileSize), isInPlace,
-                           fileExists, isDirectory, isReadable, isWritable,
-                           posixPermissions, String(describing: ownerAccountID))
-                    loadLock.unlock()
+                if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                    fileProviders.append(provider)
                 }
             }
         }
-        
-        // Wait for all file loads to complete, then stash
-        loadGroup.notify(queue: .main) { [weak self] in
-            guard let self = self else { return }
-            
-            if fileURLs.isEmpty {
-                os_log("No file URLs resolved — cancelling", log: log, type: .error)
-                self.cancel(with: context)
-                return
-            }
-            
-            if !fileURLs.allSatisfy({ $0.isInPlace }) {
-                os_log("Non-in-place files detected — using hard links for batch", log: log, type: .info)
-            }
-            
-            // Resolve URLs: in-place ones use original; non-in-place get hard links
-            let resolvedURLs: [URL] = fileURLs.map { entry in
-                if entry.isInPlace {
-                    return entry.url
+        let fileURLs = await withTaskGroup(of: Optional<URL>.self, returning: [URL].self) { group in
+            for provider in fileProviders {
+                group.addTask {
+                    do {
+                        let (url, isInPlace) = try await provider.loadInPlaceFileRepresentation(
+                            forTypeIdentifier: UTType.data.identifier)
+                        // Debug log
+                        let fm = FileManager.default
+                        let attrs = try? fm.attributesOfItem(atPath: url.path)
+                        let isReadable = fm.isReadableFile(atPath: url.path)
+                        let isWritable = fm.isWritableFile(atPath: url.path)
+                        let fileExists = fm.fileExists(atPath: url.path)
+                        let isDirectory: Bool = {
+                            var isDir: ObjCBool = false
+                            return fm.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
+                        }()
+                        let posixPermissions = (attrs?[.posixPermissions] as? NSNumber).map {
+                            String(format: "0o%o", $0.uint16Value) } ?? "?"
+                        let ownerAccountID = attrs?[.ownerAccountID] as? NSNumber
+                        let fileSize = attrs?[.size] as? NSNumber
+                        os_log("[SHARE_EXT] url=%{public}@ size=%{public}@ isInPlace=%{bool}d exists=%{bool}d isDir=%{bool}d readable=%{bool}d writable=%{bool}d mode=%{public}@ owner=%{public}@",
+                            log: log, type: .debug,
+                            url.path, String(describing: fileSize), isInPlace,
+                            fileExists, isDirectory, isReadable, isWritable,
+                            posixPermissions, String(describing: ownerAccountID))
+                        if !isInPlace {
+                            do {
+                                let containerURL =
+                                    FileManager.default.urls(
+                                        for: .documentDirectory, in: .userDomainMask
+                                    ).first
+                                    ?? FileManager.default.temporaryDirectory
+                                let destination = containerURL.appendingPathComponent(
+                                    url.lastPathComponent)
+                                try FileLinker.createHardLinkOrCopy(from: url, to: destination)
+                                return destination
+                            } catch {
+                                os_log("Failed to create hard link or copy for %{public}@",
+                                    log: log, type: .info, url.path)
+                                return url
+                            }
+                        }
+                        return url
+                    } catch {
+                        os_log("Failed to load file URL: %{public}@",
+                        log: log, type: .error, error.localizedDescription)
+                        return nil
+                    }
                 }
-                return self.createHardLink(for: entry.url) ?? entry.url
             }
-            
-            if resolvedURLs.count == 1 {
-                self.stashFilePayload(resolvedURLs[0], with: context)
+            var urls: [URL] = []
+            for await url in group {
+                if let url = url {
+                    urls.append(url)
+                }
+            }
+            return urls
+        }
+        if fileURLs.isEmpty {
+            os_log("No file URLs found in extension items", log: log, type: .info)
+            self.cancel(with: context)
+            return false
+        }
+        self.stashBatchFilePayload(fileURLs, with: context)
+        return true
+    }
+
+    private func tryProcessImageExtensionItems(
+        _ items: [NSExtensionItem], with context: NSExtensionContext
+    ) async -> Bool {
+        var imageProvider: NSItemProvider? = nil
+        for item in items {
+            guard let attachments = item.attachments else { continue }
+            for provider in attachments {
+                if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                    imageProvider = provider
+                    break
+                }
+            }
+            if imageProvider != nil {
+                break
+            }
+        }
+        guard let imageProvider = imageProvider else {
+            return false
+        }
+        do {
+            let url = try await imageProvider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier)
+            self.stashFilePayload(url, with: context)
+        } catch {
+            os_log("Failed to load & stash image: %{public}@", log: log, type: .error, error.localizedDescription)
+        }
+        return true
+    }
+
+    private func tryProcessURLExtensionItems(
+        _ items: [NSExtensionItem], with context: NSExtensionContext
+    ) async -> Bool {
+        var urlProvider: NSItemProvider? = nil
+        for item in items {
+            guard let attachments = item.attachments else { continue }
+            for provider in attachments {
+                if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+                    urlProvider = provider
+                    break
+                }
+            }
+            if urlProvider != nil { break }
+        }
+        guard let provider = urlProvider else { return false }
+
+        do {
+            let raw: NSSecureCoding = try await provider.loadItem(forTypeIdentifier: UTType.url.identifier)
+            let urlString: String
+            if let url = raw as? URL {
+                urlString = url.absoluteString
+            } else if let data = raw as? Data, let str = String(data: data, encoding: .utf8) {
+                urlString = str
             } else {
-                self.stashBatchFilePayload(resolvedURLs, with: context)
+                os_log("[SHARE_EXT] URL item resolved to unexpected type: %{public}@",
+                       log: log, type: .error, String(describing: type(of: raw)))
+                return false
+            }
+            if let scheme = URL(string: urlString)?.scheme, ["http", "https"].contains(scheme) {
+                os_log("[SHARE_EXT] Web URL detected — stashing as link", log: log, type: .info)
+                stashLinkPayload(urlString, with: context)
+            } else {
+                os_log("[SHARE_EXT] Non-web URL — stashing as text", log: log, type: .info)
+                stashTextPayload(urlString, with: context)
+            }
+            return true
+        } catch {
+            os_log("[SHARE_EXT] Failed to load URL item: %{public}@",
+                   log: log, type: .error, error.localizedDescription)
+            return false
+        }
+    }
+
+    private func tryProcessRichTextExtensionItems(
+        _ items: [NSExtensionItem], with context: NSExtensionContext
+    ) async -> Bool {
+        let richTypes = [
+            UTType.rtf.identifier,
+            UTType.html.identifier,
+            "com.apple.flat-rtfd",
+        ]
+        var richTextProvider: NSItemProvider? = nil
+        var matchedType: String = ""
+        for item in items {
+            guard let attachments = item.attachments else { continue }
+            for provider in attachments {
+                for richType in richTypes {
+                    if provider.hasItemConformingToTypeIdentifier(richType) {
+                        richTextProvider = provider
+                        matchedType = richType
+                        break
+                    }
+                }
+                if richTextProvider != nil { break }
+            }
+            if richTextProvider != nil { break }
+        }
+        guard let provider = richTextProvider else { return false }
+
+        do {
+            let raw: NSSecureCoding = try await provider.loadItem(forTypeIdentifier: matchedType)
+            if let attributed = raw as? NSAttributedString {
+                convertAndStashRichText(attributed, with: context)
+            } else if let data = raw as? Data,
+                      let attributed = try? NSAttributedString(data: data, options: [:], documentAttributes: nil) {
+                convertAndStashRichText(attributed, with: context)
+            } else if let string = raw as? String,
+                      let data = string.data(using: .utf8),
+                      let attributed = try? NSAttributedString(data: data, options: [:], documentAttributes: nil) {
+                convertAndStashRichText(attributed, with: context)
+            } else {
+                os_log("[SHARE_EXT] Rich text item resolved to unexpected type: %{public}@",
+                       log: log, type: .error, String(describing: type(of: raw)))
+                return false
+            }
+            return true
+        } catch {
+            os_log("[SHARE_EXT] Failed to load rich text item: %{public}@",
+                   log: log, type: .error, error.localizedDescription)
+            return false
+        }
+    }
+
+    private func tryProcessPlainTextExtensionItems(
+        _ items: [NSExtensionItem], with context: NSExtensionContext
+    ) async -> Bool {
+        // Also check attributedTitle/attributedContentText on items (e.g. Notes.app shares).
+        for item in items {
+            if tryProcessAttributedTitleOrContent(item: item, with: context) {
+                return true
             }
         }
+
+        var plainTextProvider: NSItemProvider? = nil
+        for item in items {
+            guard let attachments = item.attachments else { continue }
+            for provider in attachments {
+                if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+                    // Skip providers that are backed by an actual file — those are
+                    // handled by tryProcessFileExtensionItems.
+                    if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier) {
+                        continue
+                    }
+                    plainTextProvider = provider
+                    break
+                }
+            }
+            if plainTextProvider != nil { break }
+        }
+        guard let provider = plainTextProvider else { return false }
+
+        do {
+            let raw: NSSecureCoding = try await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier)
+            let text: String
+            if let string = raw as? String {
+                text = string
+            } else if let data = raw as? Data, let decoded = String(data: data, encoding: .utf8) {
+                text = decoded
+            } else {
+                os_log("[SHARE_EXT] Plain text item resolved to unexpected type: %{public}@",
+                       log: log, type: .error, String(describing: type(of: raw)))
+                return false
+            }
+            stashTextPayload(text, with: context)
+            return true
+        } catch {
+            os_log("[SHARE_EXT] Failed to load plain text item: %{public}@",
+                   log: log, type: .error, error.localizedDescription)
+            return false
+        }
+    }
+
+    private func tryProcessAttributedTitleOrContent(item: NSExtensionItem, with context: NSExtensionContext) -> Bool {
+        let hasTitle = item.attributedTitle?.length ?? 0 > 0
+        let hasContent = item.attributedContentText?.length ?? 0 > 0
+        
+        if hasTitle || hasContent {
+            let combined = NSMutableAttributedString()
+            if let title = item.attributedTitle, title.length > 0 {
+                os_log("Found attributedTitle on extension item (%d chars)", log: log, type: .info, title.length)
+                combined.append(title)
+            }
+            if let content = item.attributedContentText, content.length > 0 {
+                if combined.length > 0 {
+                    combined.append(NSAttributedString(string: "\n\n"))
+                }
+                os_log("Found attributedContentText on extension item (%d chars)", log: log, type: .info, content.length)
+                combined.append(content)
+            }
+            convertAndStashRichText(combined, with: context)
+            return true
+        }
+        return false
     }
 
     private func convertAndStashRichText(_ attributedString: NSAttributedString, with context: NSExtensionContext) {
         // Convert to HTML
         let htmlData = try? attributedString.data(
             from: NSRange(location: 0, length: attributedString.length),
-            documentAttributes: [.documentType: NSAttributedString.DocumentType.html]
-        )
-        
-        guard let htmlContent = htmlData, let htmlString = String(data: htmlContent, encoding: .utf8) else {
-            os_log("Failed to convert NSAttributedString to HTML", log: log, type: .error)
-            cancel(with: context)
-            return
-        }
-        
-        os_log("Stashing HTML payload (%d chars)", log: log, type: .info, htmlString.count)
-        stashHTMLPayload(htmlString, with: context)
-    }
-    
-    private func processRichTextData(_ data: Any?, type: String, with context: NSExtensionContext) {
-        var attributedString: NSAttributedString?
-        
-        if let attributed = data as? NSAttributedString {
-            attributedString = attributed
-        } else if let data = data as? Data {
-            attributedString = try? NSAttributedString(data: data, options: [:], documentAttributes: nil)
-        } else if let string = data as? String, let data = string.data(using: .utf8) {
-            attributedString = try? NSAttributedString(data: data, options: [:], documentAttributes: nil)
-        }
-        
-        guard let finalAttributedString = attributedString else {
-            os_log("Failed to convert data to NSAttributedString", log: log, type: .error)
-            cancel(with: context)
-            return
-        }
-        
-        // Convert to HTML
-        let htmlData = try? finalAttributedString.data(
-            from: NSRange(location: 0, length: finalAttributedString.length),
             documentAttributes: [.documentType: NSAttributedString.DocumentType.html]
         )
         
@@ -321,47 +400,20 @@ class MacShareViewController: NSViewController {
         }
     }
 
-    private func createHardLinkAndSend(originalURL: URL, with context: NSExtensionContext) {
-        let hardLinkURL = createHardLink(for: originalURL)
-        if let url = hardLinkURL {
-            stashFilePayload(url, with: context)
-        } else {
-            stashFilePayload(originalURL, with: context)
-        }
-    }
-
-    private func createHardLink(for originalURL: URL) -> URL? {
-        let containerURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let hardLinkURL = containerURL.appendingPathComponent(originalURL.lastPathComponent)
-        
-        let fm = FileManager.default
-        let sourceExists = fm.fileExists(atPath: originalURL.path)
-        let sourceReadable = fm.isReadableFile(atPath: originalURL.path)
-        os_log("[SHARE_EXT] createHardLink: source=%{public}@ target=%{public}@ sourceExists=%{bool}d sourceReadable=%{bool}d",
-               log: log, type: .info, originalURL.path, hardLinkURL.path,
-               sourceExists, sourceReadable)
-        
-        do {
-            if fm.fileExists(atPath: hardLinkURL.path) {
-                try fm.removeItem(at: hardLinkURL)
+    private func stashLinkPayload(_ urlString: String, with context: NSExtensionContext) {
+        os_log("Stashing link payload: %{public}@", log: log, type: .info, urlString)
+        let body: [String: String] = [
+            "type": "link",
+            "content": urlString
+        ]
+        sendStashRequest(body) { [weak self] success in
+            if success {
+                os_log("Link stash succeeded — completing extension", log: log, type: .info)
+                self?.completeRequest(with: context)
+            } else {
+                os_log("Link stash failed — cancelling extension", log: log, type: .error)
+                self?.cancel(with: context)
             }
-            try fm.linkItem(at: originalURL, to: hardLinkURL)
-            
-            // Verify the hard link is accessible
-            let targetReadable = fm.isReadableFile(atPath: hardLinkURL.path)
-            let targetAttrs = try? fm.attributesOfItem(atPath: hardLinkURL.path)
-            let targetSize = targetAttrs?[.size] as? NSNumber
-            os_log("[SHARE_EXT] Hard link created: %{public}@ readable=%{bool}d size=%{public}@",
-                   log: log, type: .info, hardLinkURL.path, targetReadable,
-                   String(describing: targetSize))
-            return hardLinkURL
-        } catch {
-            let nsError = error as NSError
-            os_log("[SHARE_EXT] Failed to create hard link: source=%{public}@ target=%{public}@ domain=%{public}@ code=%d description=%{public}@",
-                   log: log, type: .error, originalURL.path, hardLinkURL.path,
-                   nsError.domain, nsError.code, error.localizedDescription)
-            return nil
         }
     }
 
@@ -438,7 +490,6 @@ class MacShareViewController: NSViewController {
         }
     }
 
-    // 4. 显式传入并使用当前生命周期块内的 context
     private func completeRequest(with context: NSExtensionContext) {
         os_log("Completing extension request — success", log: log, type: .info)
         context.completeRequest(returningItems: nil, completionHandler: nil)
