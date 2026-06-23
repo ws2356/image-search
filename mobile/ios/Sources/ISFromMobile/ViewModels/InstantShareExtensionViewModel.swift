@@ -99,6 +99,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         self.selectedDevice = device
         service.selectPC(device)
         LocalLog.info("[Extension VM] selected PC: \(device.name)")
+        preWarmLocalNetworkPermission(hosts: device.hosts, port: device.port)
     }
 
     public var canSend: Bool {
@@ -357,6 +358,25 @@ public final class InstantShareExtensionViewModel: ObservableObject {
     public func dismissCompletion() {
         service.stopSession()
         sessionPhase = .scanning
+    }
+
+    /// Fire lightweight HTTP requests to all IPs concurrently to trigger the iOS
+    /// local network permission prompt before the user taps Send.
+    /// Results are intentionally ignored.
+    private func preWarmLocalNetworkPermission(hosts: [String], port: Int) {
+        LocalLog.debug("[Extension VM] pre-warming local network permission for \(hosts)")
+        Task.detached {
+            await withTaskGroup(of: Void.self) { group in
+                for host in hosts {
+                    guard let url = URL(string: "http://\(host):\(port)/") else { continue }
+                    group.addTask {
+                        var request = URLRequest(url: url)
+                        request.timeoutInterval = 2
+                        _ = try? await URLSession.shared.data(for: request)
+                    }
+                }
+            }
+        }
     }
 
     private func buildConnectionConfig(pc: InstantShareDiscoveredPC, envelopes: [InstantSharePayloadEnvelope]) -> InstantShareConnectionConfig {
