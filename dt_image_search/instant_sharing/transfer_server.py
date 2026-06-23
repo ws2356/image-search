@@ -80,7 +80,7 @@ class TransferHandler:
     ) -> TransferResult:
         session = self._session_registry.require_session(session_id)
         metadata = session.connection_config.metadata
-        if metadata.payload_class is not PayloadClass.TEXT:
+        if metadata.payload_class not in (PayloadClass.TEXT, PayloadClass.LINK):
             raise InstantShareError(
                 ErrorCode.DELIVERY_PATH_INVALID,
                 f"Session {session_id} expects payload_class=image, got text.",

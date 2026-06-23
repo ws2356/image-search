@@ -281,6 +281,7 @@ public struct InstantShareExtensionView: View {
         guard let first = viewModel.payloadEnvelopes.first else { return "file" }
         switch first.payloadType {
         case .text: return "text"
+        case .link: return "link"
         case .image: return "image"
         default: return "file"
         }
@@ -292,6 +293,7 @@ public struct InstantShareExtensionView: View {
         }
         switch first.payloadType {
         case .text: return "text.alignleft"
+        case .link: return "link"
         case .image: return "photo"
         case .video: return "video"
         case .file: return "doc"
@@ -309,6 +311,8 @@ public struct InstantShareExtensionView: View {
         case .text:
             let preview = first.textContent ?? ""
             return preview.count > 50 ? String(preview.prefix(50)) + "..." : preview
+        case .link:
+            return first.textContent ?? "Link"
         case .image: return "Image"
         case .video: return "Video"
         case .file: return first.filename ?? "File"

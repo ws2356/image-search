@@ -120,7 +120,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         var images: [(fileURL: URL, filename: String, contentType: String)] = []
         for envelope in payloadEnvelopes {
             switch envelope.payloadType {
-            case .text:
+            case .text, .link:
                 if let text = envelope.textContent {
                     service.setSharedText(text)
                 }
@@ -381,8 +381,16 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
     private func buildConnectionConfig(pc: InstantShareDiscoveredPC, envelopes: [InstantSharePayloadEnvelope]) -> InstantShareConnectionConfig {
         let hasImage = envelopes.contains(where: { $0.payloadType == .image })
-        let payloadClass: InstantSharePayloadClass = hasImage ? .image : .text
-        let targetIntent: InstantShareTargetIntent = payloadClass == .text ? .clipboardOnly : .clipboardOrFile
+        let hasLink = envelopes.contains(where: { $0.payloadType == .link })
+        let payloadClass: InstantSharePayloadClass
+        if hasImage {
+            payloadClass = .image
+        } else if hasLink {
+            payloadClass = .link
+        } else {
+            payloadClass = .text
+        }
+        let targetIntent: InstantShareTargetIntent = payloadClass == .image ? .clipboardOrFile : .clipboardOnly
         let trustMode: InstantShareTrustMode = .firstShare
 
         let metadata = InstantShareMetadata(

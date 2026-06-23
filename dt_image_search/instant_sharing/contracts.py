@@ -15,6 +15,7 @@ FLOW_ID = "instant_share"
 
 class PayloadClass(str, Enum):
     TEXT = "text"
+    LINK = "link"
     IMAGE = "image"
 
 
@@ -106,6 +107,7 @@ class FileEntry:
 
 _ALLOWED_TARGETS = {
     PayloadClass.TEXT: {TargetIntent.CLIPBOARD_ONLY},
+    PayloadClass.LINK: {TargetIntent.CLIPBOARD_ONLY},
     PayloadClass.IMAGE: {TargetIntent.CLIPBOARD_OR_FILE},
 }
 _TERMINAL_DELIVERY_STATES = {

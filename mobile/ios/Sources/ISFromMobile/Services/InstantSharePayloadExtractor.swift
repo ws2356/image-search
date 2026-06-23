@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 public enum InstantSharePayloadType: String, Codable {
     case text
+    case link
     case image
     case video
     case file
@@ -19,7 +20,7 @@ public struct InstantSharePayloadEnvelope: Codable {
 
     public var targetIntent: String {
         switch payloadType {
-        case .text: return "clipboard_only"
+        case .text, .link: return "clipboard_only"
         case .image: return "clipboard_or_file"
         case .video, .file: return "file_only"
         }
@@ -52,6 +53,9 @@ struct InstantSharePayloadExtractor {
     static let supportedTextTypes: Set<String> = [
         UTType.plainText.identifier,
         UTType.utf8PlainText.identifier,
+    ]
+
+    static let supportedLinkTypes: Set<String> = [
         UTType.url.identifier,
     ]
 
@@ -72,6 +76,7 @@ struct InstantSharePayloadExtractor {
 
     static func classify(typeIdentifier: String) -> InstantSharePayloadType? {
         if supportedTextTypes.contains(typeIdentifier) { return .text }
+        if supportedLinkTypes.contains(typeIdentifier) { return .link }
         if supportedImageTypes.contains(typeIdentifier) { return .image }
         if supportedVideoTypes.contains(typeIdentifier) { return .video }
         if UTType(typeIdentifier)?.conforms(to: .data) == true { return .file }
@@ -85,6 +90,10 @@ struct InstantSharePayloadExtractor {
             for provider in attachments {
                 if let textEnvelope = try await extractText(from: provider) {
                     envelopes.append(textEnvelope)
+                    continue
+                }
+                if let linkEnvelope = try await extractLink(from: provider) {
+                    envelopes.append(linkEnvelope)
                     continue
                 }
                 if let imageEnvelope = try await extractMedia(from: provider, preferredType: .image) {
@@ -172,6 +181,29 @@ struct InstantSharePayloadExtractor {
             filename: nil,
             contentType: "text/plain",
             fileSizeBytes: Int64(text.utf8.count)
+        )
+    }
+
+    private static func extractLink(from provider: NSItemProvider) async throws -> InstantSharePayloadEnvelope? {
+        let matchingType = supportedLinkTypes.first { provider.hasItemConformingToTypeIdentifier($0) }
+        guard let typeIdentifier = matchingType else { return nil }
+
+        let result = try await loadItem(provider: provider, typeIdentifier: typeIdentifier)
+        let urlString: String
+        if let url = result as? URL {
+            urlString = url.absoluteString
+        } else if let string = result as? String {
+            urlString = string
+        } else {
+            throw InstantSharePayloadExtractorError.unreadableContent("link provider returned unexpected type")
+        }
+        return InstantSharePayloadEnvelope(
+            payloadType: .link,
+            textContent: urlString,
+            fileURL: nil,
+            filename: nil,
+            contentType: "text/uri-list",
+            fileSizeBytes: Int64(urlString.utf8.count)
         )
     }
 

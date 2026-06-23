@@ -207,7 +207,10 @@ final class InstantSharePayloadExtractorTests: XCTestCase {
     func test_classify_text_types() {
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.plain-text"), .text)
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.utf8-plain-text"), .text)
-        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.url"), .text)
+    }
+
+    func test_classify_link_types() {
+        XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.url"), .link)
     }
 
     func test_classify_image_types() {

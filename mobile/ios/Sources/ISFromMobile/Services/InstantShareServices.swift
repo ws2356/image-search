@@ -22,6 +22,7 @@ enum InstantShareProtocol {
 
 enum InstantSharePayloadClass: String, Codable, Sendable, CaseIterable {
     case text
+    case link
     case image
 }
 
@@ -111,6 +112,8 @@ struct InstantShareMetadata: Codable, Sendable, Equatable {
 
         switch payloadClass {
         case .text where targetIntent != .clipboardOnly:
+            throw InstantShareServiceError.invalidTargetIntent(payloadClass: payloadClass, targetIntent: targetIntent)
+        case .link where targetIntent != .clipboardOnly:
             throw InstantShareServiceError.invalidTargetIntent(payloadClass: payloadClass, targetIntent: targetIntent)
         case .image where targetIntent != .clipboardOrFile:
             throw InstantShareServiceError.invalidTargetIntent(payloadClass: payloadClass, targetIntent: targetIntent)
