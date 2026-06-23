@@ -93,8 +93,11 @@ class MacShareViewController: NSViewController {
             for provider in fileProviders {
                 group.addTask {
                     do {
+                        let dataType = provider.registeredTypeIdentifiers
+                            .filter({ $0 != UTType.fileURL.identifier && $0 != UTType.url.identifier })
+                            .first ?? UTType.data.identifier
                         let (url, isInPlace) = try await provider.loadInPlaceFileRepresentation(
-                            forTypeIdentifier: UTType.data.identifier)
+                            forTypeIdentifier: dataType)
                         // Debug log
                         let fm = FileManager.default
                         let attrs = try? fm.attributesOfItem(atPath: url.path)
@@ -109,11 +112,11 @@ class MacShareViewController: NSViewController {
                             String(format: "0o%o", $0.uint16Value) } ?? "?"
                         let ownerAccountID = attrs?[.ownerAccountID] as? NSNumber
                         let fileSize = attrs?[.size] as? NSNumber
-                        os_log("[SHARE_EXT] url=%{public}@ size=%{public}@ isInPlace=%{bool}d exists=%{bool}d isDir=%{bool}d readable=%{bool}d writable=%{bool}d mode=%{public}@ owner=%{public}@",
+                        os_log("[SHARE_EXT] url=%{public}@ size=%{public}@ isInPlace=%{bool}d exists=%{bool}d isDir=%{bool}d readable=%{bool}d writable=%{bool}d mode=%{public}@ owner=%{public}@ registeredTypes=%{public}@",
                             log: log, type: .debug,
                             url.path, String(describing: fileSize), isInPlace,
                             fileExists, isDirectory, isReadable, isWritable,
-                            posixPermissions, String(describing: ownerAccountID))
+                            posixPermissions, String(describing: ownerAccountID), String(describing: provider.registeredTypeIdentifiers))
                         if !isInPlace {
                             do {
                                 let containerURL =
@@ -149,7 +152,6 @@ class MacShareViewController: NSViewController {
         }
         if fileURLs.isEmpty {
             os_log("No file URLs found in extension items", log: log, type: .info)
-            self.cancel(with: context)
             return false
         }
         self.stashBatchFilePayload(fileURLs, with: context)
@@ -280,13 +282,6 @@ class MacShareViewController: NSViewController {
     private func tryProcessPlainTextExtensionItems(
         _ items: [NSExtensionItem], with context: NSExtensionContext
     ) async -> Bool {
-        // Also check attributedTitle/attributedContentText on items (e.g. Notes.app shares).
-        for item in items {
-            if tryProcessAttributedTitleOrContent(item: item, with: context) {
-                return true
-            }
-        }
-
         var plainTextProvider: NSItemProvider? = nil
         for item in items {
             guard let attachments = item.attachments else { continue }
@@ -303,7 +298,16 @@ class MacShareViewController: NSViewController {
             }
             if plainTextProvider != nil { break }
         }
-        guard let provider = plainTextProvider else { return false }
+        guard let provider = plainTextProvider else {
+            // Also check attributedTitle/attributedContentText on items (e.g. Notes.app shares).
+            for item in items {
+                if tryProcessAttributedTitleOrContent(item: item, with: context) {
+                    return true
+                }
+            }
+            return false
+        }
+
 
         do {
             let raw: NSSecureCoding = try await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier)
