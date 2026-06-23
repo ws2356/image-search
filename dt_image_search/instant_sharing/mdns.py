@@ -272,28 +272,6 @@ class InstantShareMDNSAdvertiser:
         if thread is not None:
             thread.join(timeout=timeout_seconds + 1.0)
 
-    def _refresh_txt(self) -> None:
-        with self._lock:
-            zc = self._zeroconf
-            info = self._service_info
-        if zc is None or info is None:
-            return
-        try:
-            properties = self._build_txt_properties()
-            from zeroconf import ServiceInfo
-            new_info = ServiceInfo(
-                type_=INSTANT_SHARE_MDNS_SERVICE_TYPE,
-                name=info.name,
-                addresses=info.addresses,
-                port=self._port,
-                properties=properties,
-            )
-            zc.update_service(new_info)
-            with self._lock:
-                self._service_info = new_info
-        except Exception:
-            _logger.exception("[InstantShareMDNSAdvertiser] _refresh_txt failed")
-
     def _build_txt_properties(self) -> dict[str, str]:
         props: dict[str, str] = {
             "ver": self._protocol_version,
@@ -318,12 +296,14 @@ class InstantShareMDNSAdvertiser:
             with self._lock:
                 self._zeroconf = zeroconf
             _logger.info("[InstantShareMDNSAdvertiser] created Zeroconf instance")
+            addresses = [socket.inet_aton(addr) for addr in _local_ip_addresses()]
             properties = self._build_txt_properties()
+            properties["ip"] = ",".join(addr for addr in _local_ip_addresses())
+            properties["port"] = str(self._port)
             _logger.info(
                 "[InstantShareMDNSAdvertiser] built TXT properties: %s",
                 properties,
             )
-            addresses = [socket.inet_aton(addr) for addr in _local_ip_addresses()]
             _logger.info(
                 "[InstantShareMDNSAdvertiser] local addresses: %s",
                 [socket.inet_ntoa(addr) if isinstance(addr, bytes) else addr for addr in addresses],

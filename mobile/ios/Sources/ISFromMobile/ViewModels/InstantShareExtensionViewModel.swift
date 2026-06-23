@@ -146,7 +146,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
 
         let deviceName = await deviceIdentifierProvider.currentIdentifier().deviceName
 
-        LocalLog.info("[Extension VM] attempting blind mTLS transfer to \(pc.host):\(pc.tlsPort)")
+        LocalLog.info("[Extension VM] attempting blind mTLS transfer to \(pc.hosts):\(pc.tlsPort)")
         do {
             try await attemptRevisitTransfer(pc: pc, config: config, deviceName: deviceName)
             return
@@ -155,7 +155,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         }
 
         do {
-            LocalLog.info("[Extension VM] storing connection config for PC \(pc.host):\(pc.port)")
+            LocalLog.info("[Extension VM] storing connection config for PC \(pc.hosts):\(pc.port)")
             await service.startSession(connectionConfig: config)
 
             LocalLog.info("[Extension VM] starting trust handshake...")
@@ -164,10 +164,10 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             )
 
             let handshakePort = pc.port
-            let handshakeHost = pc.host
+            let handshakeHosts = pc.hosts
 
             try await trustClient.handshake(
-                host: handshakeHost,
+                hosts: handshakeHosts,
                 port: handshakePort,
                 sessionID: config.sessionID,
                 correlationID: config.correlationID,
@@ -180,7 +180,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             LocalLog.info("[Extension VM] handshake completed")
 
             try await trustClient.apply(
-                host: handshakeHost,
+                hosts: handshakeHosts,
                 port: handshakePort,
                 sessionID: config.sessionID,
                 correlationID: config.correlationID
@@ -211,7 +211,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
         switch service.sharedText.isEmpty {
         case false:
             try await uploadClient.uploadText(
-                host: pc.host,
+                hosts: pc.hosts,
                 port: pc.tlsPort,
                 sessionID: revisitSessionID,
                 correlationID: revisitCorrelationID,
@@ -223,7 +223,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
             let images = service.sharedImages
             if images.count == 1, let img = images.first {
                 try await uploadClient.uploadImage(
-                    host: pc.host,
+                    hosts: pc.hosts,
                     port: pc.tlsPort,
                     sessionID: revisitSessionID,
                     correlationID: revisitCorrelationID,
@@ -235,7 +235,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 LocalLog.info("[Extension VM] revisit image transfer succeeded via TLS port \(pc.tlsPort)")
             } else if !images.isEmpty {
                 try await uploadClient.uploadImages(
-                    host: pc.host,
+                    hosts: pc.hosts,
                     port: pc.tlsPort,
                     sessionID: revisitSessionID,
                     correlationID: revisitCorrelationID,
@@ -270,11 +270,11 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     appIdentityProvider: appIdentityProvider
                 )
 
-                let handshakeHost = pc.host
+                let handshakeHosts = pc.hosts
 
                 let myCert = try? await appIdentityProvider.selfCertificatePEM()
                 let peerCert = try await trustClient.confirm(
-                    host: handshakeHost,
+                    hosts: handshakeHosts,
                     port: pc.port,
                     sessionID: config.sessionID,
                     correlationID: config.correlationID,
@@ -294,7 +294,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                 switch service.sharedText.isEmpty {
                 case false:
                     try await uploadClient.uploadText(
-                        host: handshakeHost,
+                        hosts: handshakeHosts,
                         port: pc.tlsPort,
                         sessionID: config.sessionID,
                         correlationID: config.correlationID,
@@ -306,7 +306,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                     let images = service.sharedImages
                     if images.count == 1, let img = images.first {
                         try await uploadClient.uploadImage(
-                            host: handshakeHost,
+                            hosts: handshakeHosts,
                             port: pc.tlsPort,
                             sessionID: config.sessionID,
                             correlationID: config.correlationID,
@@ -318,7 +318,7 @@ public final class InstantShareExtensionViewModel: ObservableObject {
                         LocalLog.info("[Extension VM] image uploaded via TLS port \(pc.tlsPort)")
                     } else if !images.isEmpty {
                         try await uploadClient.uploadImages(
-                            host: handshakeHost,
+                            hosts: handshakeHosts,
                             port: pc.tlsPort,
                             sessionID: config.sessionID,
                             correlationID: config.correlationID,

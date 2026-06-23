@@ -52,7 +52,7 @@ public final class InstantShareService: ObservableObject {
     /// Select a discovered PC and prepare the session.
     func selectPC(_ pc: InstantShareDiscoveredPC) {
         selectedPC = pc
-        log("Selected PC: \(pc.name) at \(pc.host):\(pc.port)")
+        log("Selected PC: \(pc.name) at \(pc.hosts):\(pc.port)")
     }
 
     /// Configure the shared text payload.

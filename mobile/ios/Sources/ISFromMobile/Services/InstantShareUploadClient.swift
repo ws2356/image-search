@@ -39,7 +39,7 @@ final class InstantShareUploadClient: Sendable {
 
     init(
         urlSession: URLSession = .shared,
-        timeoutInterval: TimeInterval = 30.0,
+        timeoutInterval: TimeInterval = 2.0,
         appIdentityProvider: AppIdentityProviding
     ) {
         self.urlSession = urlSession
@@ -48,12 +48,28 @@ final class InstantShareUploadClient: Sendable {
     }
 
     func uploadText(
-        host: String,
+        hosts: [String],
         port: Int,
         sessionID: String,
         correlationID: String,
         text: String,
         peerDeviceName: String? = nil
+    ) async throws {
+        try await withHostFallback(hosts: hosts) { host in
+            try await self.uploadTextSingleHost(
+                host: host, port: port, sessionID: sessionID, correlationID: correlationID,
+                text: text, peerDeviceName: peerDeviceName
+            )
+        }
+    }
+
+    private func uploadTextSingleHost(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String,
+        text: String,
+        peerDeviceName: String?
     ) async throws {
         let requestBody: [String: Any] = ["text_utf8": text]
 
@@ -115,7 +131,7 @@ final class InstantShareUploadClient: Sendable {
     }
 
     func uploadImage(
-        host: String,
+        hosts: [String],
         port: Int,
         sessionID: String,
         correlationID: String,
@@ -123,6 +139,24 @@ final class InstantShareUploadClient: Sendable {
         contentType: String,
         filename: String?,
         peerDeviceName: String? = nil
+    ) async throws {
+        try await withHostFallback(hosts: hosts) { host in
+            try await self.uploadImageSingleHost(
+                host: host, port: port, sessionID: sessionID, correlationID: correlationID,
+                fileURL: fileURL, contentType: contentType, filename: filename, peerDeviceName: peerDeviceName
+            )
+        }
+    }
+
+    private func uploadImageSingleHost(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String,
+        fileURL: URL,
+        contentType: String,
+        filename: String?,
+        peerDeviceName: String?
     ) async throws {
         let urlString = "https://\(host):\(port)\(InstantShareProtocol.apiPrefix)/transfer/image"
         guard let url = URL(string: urlString) else {
@@ -189,12 +223,28 @@ final class InstantShareUploadClient: Sendable {
     /// Each request includes an `X-Image-Count` header set to the total batch size.
     /// Stops on the first error — already-uploaded images remain on the PC.
     func uploadImages(
-        host: String,
+        hosts: [String],
         port: Int,
         sessionID: String,
         correlationID: String,
         urls: [(fileURL: URL, filename: String, contentType: String)],
         peerDeviceName: String? = nil
+    ) async throws {
+        try await withHostFallback(hosts: hosts) { host in
+            try await self.uploadImagesSingleHost(
+                host: host, port: port, sessionID: sessionID, correlationID: correlationID,
+                urls: urls, peerDeviceName: peerDeviceName
+            )
+        }
+    }
+
+    private func uploadImagesSingleHost(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String,
+        urls: [(fileURL: URL, filename: String, contentType: String)],
+        peerDeviceName: String?
     ) async throws {
         let urlString = "https://\(host):\(port)\(InstantShareProtocol.apiPrefix)/transfer/image"
         guard let url = URL(string: urlString) else {
@@ -230,6 +280,35 @@ final class InstantShareUploadClient: Sendable {
         let deviceID = try await appIdentityProvider.deviceUUID()
         LocalLog.debug("[UploadClient] signature headers session_id=\(sessionID) device_uuid=\(deviceID)")
         return (signature, algorithm, deviceID)
+    }
+
+    /// Try `operation` with the first host; on network error, fall back to subsequent hosts.
+    /// Non-network errors (HTTP errors, protocol errors) are thrown immediately.
+    private func withHostFallback<T>(
+        hosts: [String],
+        operation: @escaping (String) async throws -> T
+    ) async throws -> T {
+        guard hosts.first != nil else {
+            throw InstantShareUploadClientError.networkError(
+                URLError(.cannotFindHost)
+            )
+        }
+        var lastError: Error?
+        for host in hosts {
+            do {
+                return try await operation(host)
+            } catch let error as InstantShareUploadClientError {
+                switch error {
+                case .networkError:
+                    lastError = error
+                    LocalLog.debug("[UploadClient] host \(host) failed with network error, trying next")
+                    continue
+                default:
+                    throw error
+                }
+            }
+        }
+        throw lastError ?? InstantShareUploadClientError.networkError(URLError(.cannotFindHost))
     }
 
     private func tryParseErrorBody(_ data: Data) -> (errorCode: String, message: String) {

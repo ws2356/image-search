@@ -255,7 +255,7 @@ public struct InstantShareExtensionView: View {
                 VStack(alignment: .leading) {
                     Text(device.name)
                         .font(.body)
-                    Text("\(device.host):\(device.port)")
+                    Text("\(device.primaryHost):\(device.port)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

@@ -6,22 +6,31 @@ import Common
 public struct InstantShareDiscoveredPC: Identifiable, Equatable, @unchecked Sendable {
     public let id: String
     public let name: String
-    public let host: String
+    public let hosts: [String]
     public let port: Int
     public let tlsPort: Int
     public let protocolVersion: String?
 
+    /// Primary (first) IP address for display and default connection attempts.
+    public var primaryHost: String { hosts.first ?? "unknown" }
+
+    /// Deterministic dedup key: sorted IP list + port.
+    /// e.g. hosts=["10.0.0.1","192.168.1.5"], port=8080 → "10.0.0.1,192.168.1.5:8080"
+    public static func pcKey(hosts: [String], port: Int) -> String {
+        hosts.sorted().joined(separator: ",") + ":\(port)"
+    }
+
     public init(
         id: String,
         name: String,
-        host: String,
+        hosts: [String],
         port: Int,
         tlsPort: Int,
         protocolVersion: String? = nil
     ) {
         self.id = id
         self.name = name
-        self.host = host
+        self.hosts = hosts
         self.port = port
         self.tlsPort = tlsPort
         self.protocolVersion = protocolVersion
@@ -47,7 +56,8 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
     private var browser: NWBrowser?
     private var browseResults: Set<NWBrowser.Result> = []
-    private var resolvedPCs: [String: InstantShareDiscoveredPC] = [:]
+    /// Single source of truth for discovered PCs, keyed by `sorted_ip_list:port`.
+    private var discoveredMap: [String: InstantShareDiscoveredPC] = [:]
     private let queue = DispatchQueue(label: "com.aubackup.instant-share.mdns-browser")
 
     public init() {}
@@ -74,7 +84,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                     case .added(let result):
                         self.browseResults.insert(result)
                         LocalLog.debug("[MDNS Browser] result added: \(self.nameFromResult(result))")
-                        self.resolveResult(result)
+                        self.resolveFromTXTRecord(result)
                     case .removed(let result):
                         self.browseResults.remove(result)
                         LocalLog.debug("[MDNS Browser] result removed: \(self.nameFromResult(result))")
@@ -83,7 +93,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
                         self.browseResults.remove(old)
                         self.browseResults.insert(new)
                         LocalLog.debug("[MDNS Browser] result changed: \(self.nameFromResult(new))")
-                        self.resolveResult(new)
+                        self.resolveFromTXTRecord(new)
                     @unknown default:
                         break
                     }
@@ -124,7 +134,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             self.browser = nil
         }
         browseResults.removeAll()
-        resolvedPCs.removeAll()
+        discoveredMap.removeAll()
         discovered = []
         state = .stopped
         LocalLog.debug("[MDNS Browser] stopped")
@@ -138,80 +148,34 @@ public final class InstantShareMDNSBrowser: ObservableObject {
     }
 
     private func removeResult(_ result: NWBrowser.Result) {
-        let serviceName = nameFromResult(result)
-        resolvedPCs.removeValue(forKey: serviceName)
+        guard let key = pcKeyFromResult(result) else {
+            LocalLog.debug("[MDNS Browser] could not compute key for removed result, skipping")
+            return
+        }
+        if discoveredMap.removeValue(forKey: key) != nil {
+            LocalLog.debug("[MDNS Browser] removed PC with key: \(key)")
+        }
         refreshDiscovered()
     }
 
-    private func resolveResult(_ result: NWBrowser.Result) {
-        let connection = NWConnection(to: result.endpoint, using: .tcp)
-        
-        LocalLog.debug("[debug] NWBrowser result: \(result)")
-
-        connection.stateUpdateHandler = { [weak self] state in
-            guard let self else { return }
-            LocalLog.debug("[MDNS Browser] state connection state: \(state)")
-            switch state {
-            case .ready:
-                Task { @MainActor in
-                    self.extractPCInfo(from: connection, result: result)
-                    connection.cancel()
-                }
-            case .failed:
-                connection.cancel()
-            case .cancelled:
-                break
-            default:
-                break
-            }
-        }
-        connection.start(queue: queue)
-    }
-
-    private func extractPCInfo(from connection: NWConnection, result: NWBrowser.Result) {
-        let endpoint = connection.currentPath?.remoteEndpoint
-        
-        switch endpoint {
-        case .hostPort(let host, let port):
-            LocalLog.debug("[MDNS Debug] state: \(connection.state) .hostPort host: \(host), port: \(port)")
-        case .service(let name, let type, let domain, let interface):
-            LocalLog.debug("[MDNS Debug] state: \(connection.state) service name: \(name), type: \(type), domain: \(domain), interface: \(interface)")
-        case .url(let url):
-            LocalLog.debug("[MDNS Debug] state: \(connection.state) .url: \(url)")
-        case .unix(let path):
-            LocalLog.debug("[MDNS Debug] state: \(connection.state) .unix: \(path)")
-        case .opaque(let endpoint_t):
-            LocalLog.debug("[MDNS Debug] state: \(connection.state) .opaque: \(endpoint_t)")
-        @unknown default:
-            fatalError()
-        }
-        
-        guard case .hostPort(let host, let port) = endpoint,
-              case .ipv4 = host,
-                let hostString = host.cleanString else {
-            if let endpoint = connection.currentPath?.remoteEndpoint,
-               case .hostPort(let host, let port) = endpoint,
-               case .ipv6 = host {
-                resolveWithEndpoint(host: "\(host)", port: Int(port.rawValue), result: result)
-                return
-            }
-            LocalLog.debug("[MDNS Browser] currentPath: \(connection.currentPath)")
-            LocalLog.debug("[MDNS Browser] point: \(endpoint)")
-            LocalLog.debug("[MDNS Browser] remoteEndpoint: \(connection.currentPath?.remoteEndpoint)")
-            
-            return
-        }
-
-        resolveWithEndpoint(host: "\(hostString)", port: Int(port.rawValue), result: result)
-    }
-
-    private func resolveWithEndpoint(host: String, port: Int, result: NWBrowser.Result) {
+    /// Parse PC info directly from the mDNS TXT record (ip, port, device_name, tls_port, ver).
+    /// The PC advertises `ip="<ip1>,<ip2>,<ip3>"` and `port=<int>` in its TXT record,
+    /// so no NWConnection resolve step is needed.
+    private func resolveFromTXTRecord(_ result: NWBrowser.Result) {
         let txtRecord = extractTXTRecord(from: result)
         LocalLog.debug("[MDNS Browser] TXT record: \(txtRecord?.description ?? "nil")")
         LocalLog.debug("[MDNS Browser] TXT keys: \(txtRecord?.keys.sorted().joined(separator: ", ") ?? "none")")
-        
-        guard let deviceName =  txtRecord?["device_name"] else {
+
+        guard let deviceName = txtRecord?["device_name"] else {
             LocalLog.error("[MDNS Browser] No device_name from TXT")
+            return
+        }
+        guard let ipListRaw = txtRecord?["ip"], !ipListRaw.isEmpty else {
+            LocalLog.error("[MDNS Browser] missing or empty ip in TXT record, skipping PC")
+            return
+        }
+        guard let portRaw = txtRecord?["port"], let port = Int(portRaw), port > 0, port <= 65535 else {
+            LocalLog.error("[MDNS Browser] missing or invalid port in TXT record, skipping PC")
             return
         }
         let protocolVersion = txtRecord?["ver"]
@@ -224,19 +188,25 @@ public final class InstantShareMDNSBrowser: ObservableObject {
             return
         }
 
-        let pcId = "\(host):\(port)"
+        let hosts = ipListRaw.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard !hosts.isEmpty else {
+            LocalLog.error("[MDNS Browser] ip TXT record contained no valid addresses: '\(ipListRaw)'")
+            return
+        }
+
+        let key = InstantShareDiscoveredPC.pcKey(hosts: hosts, port: port)
         let pc = InstantShareDiscoveredPC(
-            id: pcId,
+            id: key,
             name: String(deviceName),
-            host: host,
+            hosts: hosts,
             port: port,
             tlsPort: tlsPort,
             protocolVersion: protocolVersion
         )
 
-        resolvedPCs[pcId] = pc
+        discoveredMap[key] = pc
         refreshDiscovered()
-        LocalLog.debug("[MDNS Browser] resolved \(pc.name) (\(pc.id)) at \(host):\(port) tlsPort=\(tlsPort)")
+        LocalLog.debug("[MDNS Browser] resolved \(pc.name) (\(pc.id)) hosts=\(hosts) port=\(port) tlsPort=\(tlsPort)")
     }
 
     private func extractTXTRecord(from result: NWBrowser.Result) -> [String: String]? {
@@ -262,8 +232,21 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         return resultDict
     }
 
+    /// Extract TXT record from a browse result and compute the `sorted_ip_list:port` key.
+    /// Returns nil if the result has no valid TXT record with ip and port.
+    private func pcKeyFromResult(_ result: NWBrowser.Result) -> String? {
+        guard let txt = extractTXTRecord(from: result),
+              let ipRaw = txt["ip"], !ipRaw.isEmpty,
+              let portStr = txt["port"], let port = Int(portStr), port > 0, port <= 65535 else {
+            return nil
+        }
+        let hosts = ipRaw.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard !hosts.isEmpty else { return nil }
+        return InstantShareDiscoveredPC.pcKey(hosts: hosts, port: port)
+    }
+
     private func refreshDiscovered() {
-        discovered = Array(resolvedPCs.values).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        discovered = Array(discoveredMap.values).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         LocalLog.debug("[MDNS Browser] refreshDiscovered: \(discovered.count) PCs")
     }
 }

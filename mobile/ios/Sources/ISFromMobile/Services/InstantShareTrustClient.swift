@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import UIKit
+import Common
 
 enum InstantShareTrustClientError: Error, Sendable {
     case handshakeFailed(String)
@@ -41,7 +42,7 @@ final class InstantShareTrustClient: @unchecked Sendable {
     init(
         trustSessionManager: InstantShareTrustSessionManager,
         urlSession: URLSession = .shared,
-        timeoutInterval: TimeInterval = 15.0
+        timeoutInterval: TimeInterval = 2.0
     ) {
         self.trustSessionManager = trustSessionManager
         self.urlSession = urlSession
@@ -49,7 +50,7 @@ final class InstantShareTrustClient: @unchecked Sendable {
     }
 
     func handshake(
-        host: String,
+        hosts: [String],
         port: Int,
         sessionID: String,
         correlationID: String,
@@ -58,6 +59,26 @@ final class InstantShareTrustClient: @unchecked Sendable {
         payloadClass: String = "text",
         targetIntent: String = "clipboard_only",
         trustMode: String = "first_share"
+    ) async throws -> InstantShareTrustHandshakeResponse {
+        return try await withHostFallback(hosts: hosts) { host in
+            try await self.handshakeSingleHost(
+                host: host, port: port, sessionID: sessionID, correlationID: correlationID,
+                mobilePort: mobilePort, mobileIPList: mobileIPList, payloadClass: payloadClass,
+                targetIntent: targetIntent, trustMode: trustMode
+            )
+        }
+    }
+
+    private func handshakeSingleHost(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String,
+        mobilePort: Int,
+        mobileIPList: [String],
+        payloadClass: String,
+        targetIntent: String,
+        trustMode: String
     ) async throws -> InstantShareTrustHandshakeResponse {
         let mobileDHPublicKey = trustSessionManager.publicKeyBase64URL
         let mobileNonce = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
@@ -140,6 +161,17 @@ final class InstantShareTrustClient: @unchecked Sendable {
     }
 
     func apply(
+        hosts: [String],
+        port: Int,
+        sessionID: String,
+        correlationID: String
+    ) async throws {
+        try await withHostFallback(hosts: hosts) { host in
+            try await self.applySingleHost(host: host, port: port, sessionID: sessionID, correlationID: correlationID)
+        }
+    }
+
+    private func applySingleHost(
         host: String,
         port: Int,
         sessionID: String,
@@ -202,12 +234,28 @@ final class InstantShareTrustClient: @unchecked Sendable {
     }
 
     func confirm(
-        host: String,
+        hosts: [String],
         port: Int,
         sessionID: String,
         correlationID: String,
         pinCode: String,
         deviceCertificatePEM: String? = nil
+    ) async throws -> String? {
+        return try await withHostFallback(hosts: hosts) { host in
+            try await self.confirmSingleHost(
+                host: host, port: port, sessionID: sessionID, correlationID: correlationID,
+                pinCode: pinCode, deviceCertificatePEM: deviceCertificatePEM
+            )
+        }
+    }
+
+    private func confirmSingleHost(
+        host: String,
+        port: Int,
+        sessionID: String,
+        correlationID: String,
+        pinCode: String,
+        deviceCertificatePEM: String?
     ) async throws -> String? {
         guard trustSessionManager.isEstablished else {
             throw InstantShareTrustClientError.sessionKeyNotEstablished
@@ -288,6 +336,35 @@ final class InstantShareTrustClient: @unchecked Sendable {
         }
         let pcCertificatePEM = decryptedPayload["device_certificate_pem"] as? String
         return pcCertificatePEM
+    }
+
+    /// Try `operation` with the first host; on network error, fall back to subsequent hosts.
+    /// Non-network errors (HTTP errors, protocol errors) are thrown immediately.
+    private func withHostFallback<T>(
+        hosts: [String],
+        operation: @escaping (String) async throws -> T
+    ) async throws -> T {
+        guard let firstHost = hosts.first else {
+            throw InstantShareTrustClientError.networkError(
+                URLError(.cannotFindHost)
+            )
+        }
+        var lastError: Error?
+        for host in hosts {
+            do {
+                return try await operation(host)
+            } catch let error as InstantShareTrustClientError {
+                switch error {
+                case .networkError:
+                    lastError = error
+                    LocalLog.debug("[TrustClient] host \(host) failed with network error, trying next")
+                    continue
+                default:
+                    throw error
+                }
+            }
+        }
+        throw lastError ?? InstantShareTrustClientError.networkError(URLError(.cannotFindHost))
     }
 
     private func tryParseErrorBody(_ data: Data) -> (errorCode: String, message: String) {
