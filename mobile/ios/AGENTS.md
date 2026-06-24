@@ -35,9 +35,9 @@ flowchart TD
 
     %% 关系连线
     RV -->|1. 绑定 $state| PV
-    PV -->|2. UI事件| PVM
+    PV -->|2. UI Events | PVM
     
-    PVM -->|3. 数据驱动 UI| PV
+    PVM -->|3. Local State | PV
     PVM -->|4. onPairingCompleted delegate| RVM
     RVM -->|5. 修改 state 改变状态| RV
 
