@@ -6,7 +6,7 @@ For specs on sharing feature, see [AuShare Specs](../../openspec/).
 
 ## **1\. Architecture and State Management**
 
-Taking pairing page as a example, this is the recommended architecture and state management pattern for the iOS app, which emphasizes clear separation of concerns, centralized state machine implementation, and testability. This architecture is already implemented in the mobile/ios project (separate state machines for backup feature and instant sharing feature), and should be followed for all new features and pages.
+Only pairing page is depicted in this diagram for simplicity. The root view is `RootView`, which contains a `RootViewModel` that manages the state machine. The state machine in `RootViewModel` controls the navigation and state transitions between different pages. Each page uses its own ViewModel to manage its local state and business logic and telemetry. The ViewModels communicate with the RootViewModel to trigger state transitions.
 ```mermaid
 flowchart TD
     %% 样式定义
