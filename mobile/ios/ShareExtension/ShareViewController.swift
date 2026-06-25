@@ -1,30 +1,39 @@
 import Social
 import UIKit
 import SwiftUI
-import Factory
-import AlbumTransporterKit
+import ComposableArchitecture
 import Common
 import ISFromMobile
 
 class ShareViewController: UIViewController {
-    private let viewModel = Container.shared.shareExtensionViewModel()
-
     override func viewDidLoad() {
         super.viewDidLoad()
         LocalLog.info("[Share VC] viewDidLoad")
 
-        beginRequestExtensionTime()
-
-        let extensionItems = extensionContext?.inputItems as? [NSExtensionItem] ?? []
-        LocalLog.info("[Share VC] \(extensionItems.count) extension items")
-
-        let hosting = UIHostingController(
-            rootView: InstantShareExtensionView(
-                viewModel: viewModel,
-                onCancel: { [weak self] in self?.cancelAction() },
-                onDone: { [weak self] in self?.doneAction() }
-            )
+        // 1. Set up extension context for TCA dependency injection
+        InstantShareExtensionContextClient.current = InstantShareExtensionContextClient(
+            inputItems: extensionContext?.inputItems as? [NSExtensionItem] ?? [],
+            completeRequest: { [weak extensionContext] in
+                extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
+            },
+            cancelRequest: { [weak extensionContext] (error: Error?) in
+                let nsError = error ?? NSError(
+                    domain: "InstantShareExtension", code: 0,
+                    userInfo: [NSLocalizedDescriptionKey: "User canceled"]
+                )
+                extensionContext?.cancelRequest(withError: nsError)
+            }
         )
+
+        // 2. Create store — liveValue handles all service instantiation
+        let store = Store(initialState: FlowFeature.State(
+            route: .discover(DiscoverFeature.State())
+        )) {
+            FlowFeature()
+        }
+
+        // 3. Embed FlowView — no callbacks, features use DI for exit
+        let hosting = UIHostingController(rootView: FlowView(store: store))
         addChild(hosting)
         view.addSubview(hosting.view)
         hosting.view.translatesAutoresizingMaskIntoConstraints = false
@@ -35,42 +44,5 @@ class ShareViewController: UIViewController {
             hosting.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
         hosting.didMove(toParent: self)
-
-        Task {
-            await viewModel.loadPayload(from: extensionItems)
-            LocalLog.info("[Share VC] payload loaded, starting mDNS discovery")
-            viewModel.startDiscovery()
-            
-            let identityProvider = Container.shared.appIdentityProvider()
-            do {
-                try await identityProvider.ensureSelfIdentity()
-            } catch (let error) {
-                LocalLog.error("[Share VC] ensureSelfIdentity failed: \(error)")
-            }
-        }
-    }
-
-    private func beginRequestExtensionTime() {
-        let processInfo = ProcessInfo.processInfo
-        processInfo.performExpiringActivity(withReason: "Trust handshake and data transfer") { [weak self] expired in
-            if expired {
-                LocalLog.info("[Share VC] extension time expired")
-                self?.viewModel.stopDiscovery()
-            }
-        }
-    }
-
-    private func cancelAction() {
-        viewModel.stopDiscovery()
-        extensionContext?.cancelRequest(withError: NSError(
-            domain: "InstantShareExtension",
-            code: 0,
-            userInfo: [NSLocalizedDescriptionKey: "User canceled"]
-        ))
-    }
-
-    private func doneAction() {
-        viewModel.dismissCompletion()
-        extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
 }

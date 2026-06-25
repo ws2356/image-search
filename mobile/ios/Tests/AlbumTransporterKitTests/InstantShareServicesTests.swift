@@ -7,47 +7,11 @@ import XCTest
 @testable import AlbumTransporterKit
 
 final class InstantShareServicesTests: XCTestCase {
-    func test_metadata_rejects_invalid_text_target() {
-        let metadata = InstantShareMetadata(
-            payloadClass: .text,
-            targetIntent: .clipboardOrFile,
-            trustMode: .firstShare
-        )
-
-        XCTAssertThrowsError(try metadata.validated())
-    }
-
-    func test_connection_config_builds_https_endpoints_for_ipv4_and_ipv6() throws {
-        let connectionConfig = InstantShareConnectionConfig(
-            sessionID: UUID().uuidString.lowercased(),
-            mobilePort: 8443,
-            mobileIPList: ["192.168.1.20", "10.0.0.1"],
-            correlationID: UUID().uuidString.lowercased(),
-            metadata: InstantShareMetadata(
-                payloadClass: .text,
-                targetIntent: .clipboardOnly,
-                trustMode: .firstShare
-            )
-        )
-
-        let endpointURLs = try connectionConfig.endpointURLs(path: InstantShareProtocol.trustHandshakePath)
-
-        XCTAssertEqual(
-            endpointURLs.map(\.absoluteString),
-            [
-                "https://192.168.1.20:8443/api/instant-share/v1/trust/handshake",
-                "https://10.0.0.1:8443/api/instant-share/v1/trust/handshake",
-            ]
-        )
-    }
-
     func test_trust_handshake_request_encodes_metadata_and_dh_material() throws {
         let request = InstantShareTrustHandshakeRequest(
-            metadata: InstantShareMetadata(
-                payloadClass: .text,
-                targetIntent: .clipboardOnly,
-                trustMode: .firstShare
-            ),
+            payloadClass: InstantSharePayloadClass.text.rawValue,
+            targetIntent: "clipboard_only",
+            trustMode: "first_share",
             pcDHPublicKey: "desktop-dh-pub",
             pcNonce: "desktop-nonce"
         )
@@ -299,94 +263,5 @@ final class InstantShareHandoffContextTests: XCTestCase {
             from: envelope, selectedDeviceID: nil, selectedDeviceName: nil, isTrustedDevice: false
         )
         XCTAssertEqual(context.fileURL, url)
-    }
-}
-
-@MainActor
-final class InstantShareExtensionViewModelBatchTests: XCTestCase {
-    var viewModel: InstantShareExtensionViewModel!
-    var service: InstantShareService!
-    
-    override func setUp() {
-        super.setUp()
-        service = InstantShareService()
-        let browser = InstantShareMDNSBrowser()
-        let localDeviceIdProvider = LocalDeviceIdentifierStore(userDefaults: .standard, installIDKey: LocalDeviceIdentifierStore.installIDKey, deviceUUIDKey: LocalDeviceIdentifierStore.deviceUUIDKey)
-        let identityProvider = KeychainAppIdentityProvider(localDeviceIdentifierProvider: localDeviceIdProvider, userDefaults: .standard)
-        viewModel = InstantShareExtensionViewModel(mdnsBrowser: browser, service: service, appIdentityProvider: identityProvider, deviceIdentifierProvider: localDeviceIdProvider)
-    }
-    
-    override func tearDown() {
-        viewModel = nil
-        service = nil
-        super.tearDown()
-    }
-    
-    func test_viewModel_starts_with_empty_payload_envelopes() {
-        XCTAssertTrue(viewModel.payloadEnvelopes.isEmpty)
-        XCTAssertEqual(viewModel.totalImageCount, 0)
-        XCTAssertEqual(viewModel.sentImageCount, 0)
-    }
-    
-    func test_canSend_returns_false_when_no_payloads() {
-        XCTAssertFalse(viewModel.canSend)
-    }
-    
-    func test_canSend_returns_false_when_no_device_selected() {
-        viewModel.payloadEnvelopes = [
-            InstantSharePayloadEnvelope(
-                payloadType: .image, textContent: nil,
-                fileURL: URL(string: "file:///test.jpg"),
-                filename: "test.jpg", contentType: "image/jpeg", fileSizeBytes: 1024
-            )
-        ]
-        XCTAssertFalse(viewModel.canSend)
-    }
-    
-    func test_batch_progress_computed_property() {
-        viewModel.totalImageCount = 5
-        viewModel.sentImageCount = 3
-        let progress = viewModel.batchProgress
-        XCTAssertEqual(progress, 0.6, accuracy: 0.01)
-    }
-    
-    func test_batch_progress_zero_when_no_images() {
-        viewModel.totalImageCount = 0
-        viewModel.sentImageCount = 0
-        XCTAssertEqual(viewModel.batchProgress, 0.0)
-    }
-    
-    func test_batch_progress_handles_division_by_zero() {
-        viewModel.totalImageCount = 0
-        viewModel.sentImageCount = 5
-        XCTAssertEqual(viewModel.batchProgress, 0.0)
-    }
-    
-    func test_service_shared_images_defaults_to_empty() {
-        XCTAssertTrue(service.sharedImages.isEmpty)
-    }
-    
-    func test_service_set_shared_images_batch() {
-        let images: [(fileURL: URL, filename: String, contentType: String)] = [
-            (URL(string: "file:///a.jpg")!, "a.jpg", "image/jpeg"),
-            (URL(string: "file:///b.jpg")!, "b.jpg", "image/png"),
-        ]
-        service.setSharedImages(images)
-        XCTAssertEqual(service.sharedImages.count, 2)
-        XCTAssertEqual(service.sharedImages[0].filename, "a.jpg")
-        XCTAssertEqual(service.sharedImages[1].filename, "b.jpg")
-    }
-    
-    func test_service_set_shared_image_append() {
-        service.setSharedImage(fileURL: URL(string: "file:///a.jpg")!, filename: "a.jpg", contentType: "image/jpeg")
-        service.setSharedImage(fileURL: URL(string: "file:///b.jpg")!, filename: "b.jpg", contentType: "image/png")
-        XCTAssertEqual(service.sharedImages.count, 2)
-    }
-    
-    func test_service_stop_session_clears_shared_images() {
-        service.setSharedImage(fileURL: URL(string: "file:///a.jpg")!, filename: "a.jpg", contentType: "image/jpeg")
-        XCTAssertEqual(service.sharedImages.count, 1)
-        service.stopSession()
-        XCTAssertTrue(service.sharedImages.isEmpty)
     }
 }
