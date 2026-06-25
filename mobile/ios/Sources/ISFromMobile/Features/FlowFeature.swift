@@ -12,24 +12,52 @@ import Common
 import Foundation
 
 @Reducer
-struct FlowFeature {
-    @ObservableState
-    struct State: Equatable {
-        var route: Route
+public struct FlowFeature {
+    public init() {}
 
-        @CasePathable
-        enum Route: Equatable {
-            case discover(DiscoverFeature.State)
-            case pendingRevisit(PendingRevisitFeature.State)
-            case auth(AuthFeature.State)
-            case transfer(TransferFeature.State)
-            case completion(CompletionFeature.State)
-            case error(ErrorFeature.State)
+    @ObservableState
+    public struct State: Equatable {
+        public var discover: DiscoverFeature.State?
+        public var pendingRevisit: PendingRevisitFeature.State?
+        public var auth: AuthFeature.State?
+        public var transfer: TransferFeature.State?
+        public var completion: CompletionFeature.State?
+        public var error: ErrorFeature.State?
+
+        /// The currently active route — exactly one optional is set at a time.
+        public enum Route: Sendable {
+            case discover, pendingRevisit, auth, transfer, completion, error
+        }
+
+        public var route: Route? {
+            if discover != nil { return .discover }
+            if pendingRevisit != nil { return .pendingRevisit }
+            if auth != nil { return .auth }
+            if transfer != nil { return .transfer }
+            if completion != nil { return .completion }
+            if error != nil { return .error }
+            return nil
+        }
+
+        public init(
+            discover: DiscoverFeature.State? = nil,
+            pendingRevisit: PendingRevisitFeature.State? = nil,
+            auth: AuthFeature.State? = nil,
+            transfer: TransferFeature.State? = nil,
+            completion: CompletionFeature.State? = nil,
+            error: ErrorFeature.State? = nil
+        ) {
+            self.discover = discover
+            self.pendingRevisit = pendingRevisit
+            self.auth = auth
+            self.transfer = transfer
+            self.completion = completion
+            self.error = error
         }
     }
 
     @CasePathable
-    enum Action {
+    public enum Action {
         case onAppear
         case discover(DiscoverFeature.Action)
         case pendingRevisit(PendingRevisitFeature.Action)
@@ -39,25 +67,25 @@ struct FlowFeature {
         case error(ErrorFeature.Action)
     }
 
-    @Shared(.instantShareContext) var context
-    @Dependency(\.payloadExtractor) var payloadExtractor
-    @Dependency(\.identityClient) var identityClient
     @Dependency(\.trustSessionManager) var trustSessionManager
     @Dependency(\.instantShareExtensionContext) var extensionContext
+    @Dependency(\.payloadExtractor) var payloadExtractor
+    @Dependency(\.identityClient) var identityClient
+    @Shared(.instantShareContext) var context
 
-    var body: some ReducerOf<Self> {
+    public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .onAppear:
-                return .run { [context = context] send in
+                return .run { [context = $context, extensionContext, identityClient, payloadExtractor] _ in
                     try? await identityClient.ensureSelfIdentity()
 
                     let envelopes = try? await payloadExtractor.extract(extensionContext.inputItems)
                     if let envelopes {
-                        await context.$sharedItems.withLock { sharedItems in
+                        context.withLock { value in
                             if let textEnvelope = envelopes.first(where: { $0.payloadType == .text }),
                                let text = textEnvelope.textContent {
-                                sharedItems = .text(text)
+                                value.sharedItems = .text(text)
                             } else {
                                 let images = envelopes
                                     .filter { $0.payloadType == .image }
@@ -70,159 +98,101 @@ struct FlowFeature {
                                         )
                                     }
                                 if !images.isEmpty {
-                                    sharedItems = .images(images)
+                                    value.sharedItems = .images(images)
                                 }
                             }
                         }
                     }
                 }
 
-            // MARK: - Discover delegate → PendingRevisit
+            // MARK: - Discover delegate
             case .discover(.delegate(.didStartPendingRevisit)):
-                state.route = .pendingRevisit(PendingRevisitFeature.State(
-                    payloadDescription: payloadDescription(from: context.sharedItems)
-                ))
+                state.discover = nil
+                state.pendingRevisit = PendingRevisitFeature.State()
                 return .none
 
             case .discover(.delegate(.didEncounterError(let message))):
-                state.route = .error(ErrorFeature.State(message: message))
+                state.discover = nil
+                state.error = ErrorFeature.State(message: message)
                 return .none
 
             // MARK: - PendingRevisit delegate
-            case .pendingRevisit(.delegate(.revisitSucceeded(let desc))):
-                state.route = .completion(CompletionFeature.State(payloadDescription: desc))
+            case .pendingRevisit(.delegate(.revisitSucceeded)):
+                state.pendingRevisit = nil
+                state.completion = CompletionFeature.State()
                 return .none
 
             case .pendingRevisit(.delegate(.revisitFailed)):
-                state.route = .auth(AuthFeature.State())
+                state.pendingRevisit = nil
+                state.auth = AuthFeature.State()
                 return .none
 
             // MARK: - Auth delegate
             case .auth(.delegate(.authCompleted)):
-                state.route = .transfer(TransferFeature.State())
+                state.auth = nil
+                state.transfer = TransferFeature.State()
                 return .none
 
             case .auth(.delegate(.authFailed(let message))):
-                state.route = .error(ErrorFeature.State(message: message))
+                state.auth = nil
+                state.error = ErrorFeature.State(message: message)
                 return .none
 
             case .auth(.delegate(.authCancelled)):
+                state.auth = nil
                 trustSessionManager.reset()
                 extensionContext.cancelRequest(nil)
                 return .none
 
             // MARK: - Transfer delegate
             case .transfer(.delegate(.transferSucceeded)):
-                state.route = .completion(CompletionFeature.State(
-                    payloadDescription: payloadDescription(from: context.sharedItems)
-                ))
+                state.transfer = nil
+                state.completion = CompletionFeature.State()
                 return .none
 
             case .transfer(.delegate(.transferFailed(let message))):
-                state.route = .error(ErrorFeature.State(message: message))
+                state.transfer = nil
+                state.error = ErrorFeature.State(message: message)
                 return .none
 
             // MARK: - Completion delegate
             case .completion(.delegate(.done)):
+                state.completion = nil
                 extensionContext.completeRequest()
                 return .none
 
             // MARK: - Error delegate
             case .error(.delegate(.retry)):
-                context = InstantShareContext()
-                state.route = .discover(DiscoverFeature.State())
+                state.error = nil
+                state.discover = DiscoverFeature.State()
                 return .none
 
             case .error(.delegate(.cancel)):
+                state.error = nil
                 extensionContext.cancelRequest(nil)
                 return .none
 
-            // MARK: - Forward non-delegate actions to child reducers
-            case .discover(let childAction):
-                return forwardChildReduce(
-                    into: &state,
-                    childAction: childAction,
-                    extract: (/State.Route.discover).extract,
-                    embed: State.Route.discover,
-                    embedAction: Action.discover,
-                    childReducer: DiscoverFeature()
-                )
-
-            case .pendingRevisit(let childAction):
-                return forwardChildReduce(
-                    into: &state,
-                    childAction: childAction,
-                    extract: (/State.Route.pendingRevisit).extract,
-                    embed: State.Route.pendingRevisit,
-                    embedAction: Action.pendingRevisit,
-                    childReducer: PendingRevisitFeature()
-                )
-
-            case .auth(let childAction):
-                return forwardChildReduce(
-                    into: &state,
-                    childAction: childAction,
-                    extract: (/State.Route.auth).extract,
-                    embed: State.Route.auth,
-                    embedAction: Action.auth,
-                    childReducer: AuthFeature()
-                )
-
-            case .transfer(let childAction):
-                return forwardChildReduce(
-                    into: &state,
-                    childAction: childAction,
-                    extract: (/State.Route.transfer).extract,
-                    embed: State.Route.transfer,
-                    embedAction: Action.transfer,
-                    childReducer: TransferFeature()
-                )
-
-            case .completion(let childAction):
-                return forwardChildReduce(
-                    into: &state,
-                    childAction: childAction,
-                    extract: (/State.Route.completion).extract,
-                    embed: State.Route.completion,
-                    embedAction: Action.completion,
-                    childReducer: CompletionFeature()
-                )
-
-            case .error(let childAction):
-                return forwardChildReduce(
-                    into: &state,
-                    childAction: childAction,
-                    extract: (/State.Route.error).extract,
-                    embed: State.Route.error,
-                    embedAction: Action.error,
-                    childReducer: ErrorFeature()
-                )
+            default:
+                return .none
             }
         }
-    }
-
-    // MARK: - Helpers
-
-    /// Forward a child action to the child reducer when the current route matches.
-    private func forwardChildReduce<ChildState: Equatable, ChildAction, ChildReducer: Reducer>(
-        into state: inout State,
-        childAction: ChildAction,
-        extract: (State.Route) -> ChildState?,
-        embed: @escaping (ChildState) -> State.Route,
-        embedAction: @escaping (ChildAction) -> Action,
-        childReducer: ChildReducer
-    ) -> Effect<Action> where ChildReducer.State == ChildState, ChildReducer.Action == ChildAction {
-        guard var childState = extract(state.route) else { return .none }
-        let effect = childReducer.reduce(into: &childState, action: childAction)
-        state.route = embed(childState)
-        return effect.map(embedAction)
-    }
-
-    private func payloadDescription(from sharedItems: SharedItems) -> String {
-        switch sharedItems {
-        case .text: return "text"
-        case .images(let images): return images.count > 1 ? "\(images.count) images" : "image"
-        case .files: return "file"
+        .ifLet(\.discover, action: \.discover) {
+            DiscoverFeature()
+        }
+        .ifLet(\.pendingRevisit, action: \.pendingRevisit) {
+            PendingRevisitFeature()
+        }
+        .ifLet(\.auth, action: \.auth) {
+            AuthFeature()
+        }
+        .ifLet(\.transfer, action: \.transfer) {
+            TransferFeature()
+        }
+        .ifLet(\.completion, action: \.completion) {
+            CompletionFeature()
+        }
+        .ifLet(\.error, action: \.error) {
+            ErrorFeature()
         }
     }
 }

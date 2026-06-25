@@ -10,19 +10,23 @@ import Common
 import Foundation
 
 @Reducer
-struct PendingRevisitFeature {
+public struct PendingRevisitFeature {
     @ObservableState
-    struct State: Equatable {
-        let payloadDescription: String
+    public struct State: Equatable {
+        public let payloadDescription: String
+
+        public init(payloadDescription: String = "") {
+            self.payloadDescription = payloadDescription
+        }
     }
 
     @CasePathable
-    enum Action {
+    public enum Action {
         case attemptRevisit
         case delegate(Delegate)
 
         @CasePathable
-        enum Delegate: Equatable {
+        public enum Delegate: Equatable {
             case revisitSucceeded(payloadDescription: String)
             case revisitFailed
         }
@@ -32,11 +36,12 @@ struct PendingRevisitFeature {
     @Dependency(\.uploadClient) var uploadClient
     @Dependency(\.identityClient) var identityClient
 
-    var body: some ReducerOf<Self> {
+    public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .attemptRevisit:
-                return .run { [context = context] send in
+                let payloadDescription = state.payloadDescription
+                return .run { [context = context, uploadClient = uploadClient, identityClient = identityClient] send in
                     let sessionId = context.sessionId
                     let deviceName = await identityClient.currentDeviceName()
 
@@ -85,7 +90,7 @@ struct PendingRevisitFeature {
                             await send(.delegate(.revisitFailed))
                             return
                         }
-                        await send(.delegate(.revisitSucceeded(payloadDescription: state.payloadDescription)))
+                        await send(.delegate(.revisitSucceeded(payloadDescription: payloadDescription)))
                     } catch {
                         await send(.delegate(.revisitFailed))
                     }

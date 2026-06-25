@@ -10,16 +10,22 @@ import Common
 import Foundation
 
 @Reducer
-struct AuthFeature {
+public struct AuthFeature {
     @ObservableState
-    struct State: Equatable {
+    public struct State: Equatable {
         var pinCode: String = ""
         var errorMessage: String? = nil
         var isProcessing: Bool = false
+
+        public init(pinCode: String = "", errorMessage: String? = nil, isProcessing: Bool = false) {
+            self.pinCode = pinCode
+            self.errorMessage = errorMessage
+            self.isProcessing = isProcessing
+        }
     }
 
     @CasePathable
-    enum Action {
+    public enum Action {
         case pinCodeChanged(String)
         case confirmPIN
         case rejectPIN
@@ -27,7 +33,7 @@ struct AuthFeature {
         case delegate(Delegate)
 
         @CasePathable
-        enum Delegate: Equatable {
+        public enum Delegate: Equatable {
             case authCompleted
             case authFailed(String)
             case authCancelled
@@ -40,7 +46,7 @@ struct AuthFeature {
     @Dependency(\.trustSessionManager) var trustSessionManager
     @Dependency(\.identityClient) var identityClient
 
-    var body: some ReducerOf<Self> {
+    public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .pinCodeChanged(let code):
@@ -62,7 +68,7 @@ struct AuthFeature {
                 let port = targetDevice.port
                 let tlsPort = targetDevice.tlsPort
 
-                return .run { [pinCode = state.pinCode] send in
+                return .run { [pinCode = state.pinCode, identityClient, trustClient, uploadClient, trustSessionManager, context] send in
                     let deviceName = await identityClient.currentDeviceName()
                     let myCert = try? await identityClient.selfCertificatePEM()
 

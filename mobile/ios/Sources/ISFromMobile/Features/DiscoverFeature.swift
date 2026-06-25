@@ -10,17 +10,31 @@ import Common
 import Foundation
 
 @Reducer
-struct DiscoverFeature {
+public struct DiscoverFeature {
+    public init() {}
+
     @ObservableState
-    struct State: Equatable {
-        var discoveredDevices: [InstantShareDiscoveredPC] = []
-        var selectedDevice: InstantShareDiscoveredPC? = nil
-        var errorMessage: String? = nil
-        var isProcessing: Bool = false
+    public struct State: Equatable {
+        public var discoveredDevices: [InstantShareDiscoveredPC] = []
+        public var selectedDevice: InstantShareDiscoveredPC? = nil
+        public var errorMessage: String? = nil
+        public var isProcessing: Bool = false
+
+        public init(
+            discoveredDevices: [InstantShareDiscoveredPC] = [],
+            selectedDevice: InstantShareDiscoveredPC? = nil,
+            errorMessage: String? = nil,
+            isProcessing: Bool = false
+        ) {
+            self.discoveredDevices = discoveredDevices
+            self.selectedDevice = selectedDevice
+            self.errorMessage = errorMessage
+            self.isProcessing = isProcessing
+        }
     }
 
     @CasePathable
-    enum Action {
+    public enum Action {
         case onAppear
         case stopDiscovery
         case devicesUpdated([InstantShareDiscoveredPC])
@@ -30,7 +44,7 @@ struct DiscoverFeature {
         case delegate(Delegate)
 
         @CasePathable
-        enum Delegate: Equatable {
+        public enum Delegate: Equatable {
             case didStartPendingRevisit
             case didEncounterError(String)
         }
@@ -40,24 +54,26 @@ struct DiscoverFeature {
     @Dependency(\.mdnsBrowser) var mdnsBrowser
     @Dependency(\.identityClient) var identityClient
 
-    var body: some ReducerOf<Self> {
+    public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .onAppear:
                 // Re-init session ID for a fresh session
                 $context.withLock { $0.sessionId = UUID().uuidString.lowercased() }
                 state.isProcessing = false
+                let browser = mdnsBrowser
 
                 return .run { send in
                     // Start mDNS discovery and stream devices
-                    for await devices in mdnsBrowser.discoveredDevices() {
+                    for await devices in browser.discoveredDevices() {
                         await send(.devicesUpdated(devices))
                     }
                 }
 
             case .stopDiscovery:
+                let browser = mdnsBrowser
                 return .run { _ in
-                    await mdnsBrowser.stopBrowsing()
+                    await browser.stopBrowsing()
                 }
 
             case .devicesUpdated(let devices):

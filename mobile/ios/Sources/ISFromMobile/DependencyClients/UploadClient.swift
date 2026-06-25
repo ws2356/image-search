@@ -9,6 +9,7 @@
 //
 import ComposableArchitecture
 import Common
+import Factory
 import Foundation
 
 @DependencyClient

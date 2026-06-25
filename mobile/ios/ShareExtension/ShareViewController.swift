@@ -27,7 +27,7 @@ class ShareViewController: UIViewController {
 
         // 2. Create store — liveValue handles all service instantiation
         let store = Store(initialState: FlowFeature.State(
-            route: .discover(DiscoverFeature.State())
+            discover: DiscoverFeature.State()
         )) {
             FlowFeature()
         }

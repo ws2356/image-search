@@ -8,26 +8,30 @@ import ComposableArchitecture
 import Foundation
 
 @Reducer
-struct ErrorFeature {
+public struct ErrorFeature {
     @ObservableState
-    struct State: Equatable {
-        let message: String
+    public struct State: Equatable {
+        public let message: String
+
+        public init(message: String = "") {
+            self.message = message
+        }
     }
 
     @CasePathable
-    enum Action {
+    public enum Action {
         case retry
         case cancel
         case delegate(Delegate)
 
         @CasePathable
-        enum Delegate: Equatable {
+        public enum Delegate: Equatable {
             case retry
             case cancel
         }
     }
 
-    var body: some ReducerOf<Self> {
+    public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .retry:

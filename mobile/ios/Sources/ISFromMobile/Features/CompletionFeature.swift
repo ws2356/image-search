@@ -8,24 +8,28 @@ import ComposableArchitecture
 import Foundation
 
 @Reducer
-struct CompletionFeature {
+public struct CompletionFeature {
     @ObservableState
-    struct State: Equatable {
-        let payloadDescription: String
+    public struct State: Equatable {
+        public let payloadDescription: String
+
+        public init(payloadDescription: String = "") {
+            self.payloadDescription = payloadDescription
+        }
     }
 
     @CasePathable
-    enum Action {
+    public enum Action {
         case done
         case delegate(Delegate)
 
         @CasePathable
-        enum Delegate: Equatable {
+        public enum Delegate: Equatable {
             case done
         }
     }
 
-    var body: some ReducerOf<Self> {
+    public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .done:

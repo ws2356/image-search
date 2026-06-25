@@ -10,21 +10,25 @@ import Common
 import Foundation
 
 @Reducer
-struct TransferFeature {
+public struct TransferFeature {
     @ObservableState
-    struct State: Equatable {
+    public struct State: Equatable {
         var progress: Float = 0
+
+        public init(progress: Float = 0) {
+            self.progress = progress
+        }
     }
 
     @CasePathable
-    enum Action {
+    public enum Action {
         case startTransfer
         case transferCompleted
         case transferFailed(String)
         case delegate(Delegate)
 
         @CasePathable
-        enum Delegate: Equatable {
+        public enum Delegate: Equatable {
             case transferSucceeded
             case transferFailed(String)
         }
@@ -34,7 +38,7 @@ struct TransferFeature {
     @Dependency(\.uploadClient) var uploadClient
     @Dependency(\.identityClient) var identityClient
 
-    var body: some ReducerOf<Self> {
+    public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .startTransfer:
@@ -46,7 +50,7 @@ struct TransferFeature {
                 let hosts = targetDevice.hosts
                 let tlsPort = targetDevice.tlsPort
 
-                return .run { send in
+                return .run { [identityClient, uploadClient, context] send in
                     let deviceName = await identityClient.currentDeviceName()
 
                     let sharedItems = context.sharedItems

@@ -3,42 +3,48 @@
 //  ISFromMobile
 //
 //  Switches on the route enum and renders the appropriate child view.
-//  No NavigationStack, no presentation modifiers — pure content switch.
+//  Manages child store scoping via IfLetStore over @Presents optionals.
 //
 import SwiftUI
 import ComposableArchitecture
 
-struct FlowView: View {
+public struct FlowView: View {
     @Shared(.instantShareContext) var context
-    let store: StoreOf<FlowFeature>
+    public let store: StoreOf<FlowFeature>
 
-    var body: some View {
+    public init(store: StoreOf<FlowFeature>) {
+        self.store = store
+    }
+
+    public var body: some View {
         Group {
             switch store.state.route {
             case .discover:
-                if let store = store.scope(state: \.route.discover, action: \.discover) {
-                    DiscoverView(store: store)
+                IfLetStore(store.scope(state: \.discover, action: \.discover)) { childStore in
+                    DiscoverView(store: childStore)
                 }
             case .pendingRevisit:
-                if let store = store.scope(state: \.route.pendingRevisit, action: \.pendingRevisit) {
-                    PendingRevisitView(store: store)
+                IfLetStore(store.scope(state: \.pendingRevisit, action: \.pendingRevisit)) { childStore in
+                    PendingRevisitView(store: childStore)
                 }
             case .auth:
-                if let store = store.scope(state: \.route.auth, action: \.auth) {
-                    AuthView(store: store)
+                IfLetStore(store.scope(state: \.auth, action: \.auth)) { childStore in
+                    AuthView(store: childStore)
                 }
             case .transfer:
-                if let store = store.scope(state: \.route.transfer, action: \.transfer) {
-                    TransferView(store: store)
+                IfLetStore(store.scope(state: \.transfer, action: \.transfer)) { childStore in
+                    TransferView(store: childStore)
                 }
             case .completion:
-                if let store = store.scope(state: \.route.completion, action: \.completion) {
-                    CompletionView(store: store)
+                IfLetStore(store.scope(state: \.completion, action: \.completion)) { childStore in
+                    CompletionView(store: childStore)
                 }
             case .error:
-                if let store = store.scope(state: \.route.error, action: \.error) {
-                    ErrorView(store: store)
+                IfLetStore(store.scope(state: \.error, action: \.error)) { childStore in
+                    ErrorView(store: childStore)
                 }
+            case nil:
+                EmptyView()
             }
         }
         .task { store.send(.onAppear) }

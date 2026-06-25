@@ -10,7 +10,7 @@
 import ComposableArchitecture
 import Foundation
 
-public struct InstantShareExtensionContextClient {
+public struct InstantShareExtensionContextClient: @unchecked Sendable {
     public var inputItems: [NSExtensionItem]
     public var completeRequest: @Sendable () -> Void
     public var cancelRequest: @Sendable (Error?) -> Void

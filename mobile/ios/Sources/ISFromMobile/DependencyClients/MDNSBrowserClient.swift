@@ -13,23 +13,33 @@ import Foundation
 struct MDNSBrowserClient {
     var startBrowsing: @Sendable () async -> Void
     var stopBrowsing: @Sendable () async -> Void
-    var discoveredDevices: @Sendable () -> AsyncStream<[InstantShareDiscoveredPC>] = {
+    var discoveredDevices: @Sendable () -> AsyncStream<[InstantShareDiscoveredPC]> = {
         AsyncStream { _ in }
     }
 }
 
 extension MDNSBrowserClient: DependencyKey {
     static let liveValue = {
-        nonisolated(unsafe) let browser = InstantShareMDNSBrowser()
+        let browser = InstantShareMDNSBrowser()
         return MDNSBrowserClient(
-            startBrowsing: { browser.startBrowsing() },
-            stopBrowsing: { browser.stopBrowsing() },
+            startBrowsing: { await browser.startBrowsing() },
+            stopBrowsing: { await browser.stopBrowsing() },
             discoveredDevices: {
                 AsyncStream { continuation in
-                    let cancellable = browser.objectWillChange
-                        .sink { _ in continuation.yield(browser.discovered) }
-                    continuation.onTermination = { _ in cancellable.cancel() }
-                    browser.startBrowsing()
+                    Task { @MainActor in
+                        nonisolated(unsafe) let cancellable = browser.objectWillChange
+                            .sink { _ in
+                                Task { @MainActor in
+                                    continuation.yield(browser.discovered)
+                                }
+                            }
+                        continuation.onTermination = { @Sendable _ in
+                            Task { @MainActor in
+                                cancellable.cancel()
+                            }
+                        }
+                        await browser.startBrowsing()
+                    }
                 }
             }
         )
