@@ -1,7 +1,7 @@
 ## 1. Setup — Add TCA Package Dependency
 
-- [ ] 1.1 Add `swift-composable-architecture` SPM package to the Xcode project (or Package.swift if using SPM-based project structure)
-- [ ] 1.2 Verify the package resolves and builds with the ISFromMobile target
+- [x] 1.1 Add `swift-composable-architecture` SPM package to the Xcode project (or Package.swift if using SPM-based project structure)
+- [x] 1.2 Verify the package resolves and builds with the ISFromMobile target
 
 ## 2. Create Dependency Clients (TCA @Dependency wrappers)
 
