@@ -75,7 +75,8 @@ EOF
     -destination "platform=iOS Simulator,name=$simulator_name" \
     -only-testing:"$TEST_TARGET/AlbumTransporterAppSnapshotTests" \
     -testLanguage "$language_code" \
-    -testRegion "$region_code"
+    -testRegion "$region_code" \
+    -skipMacroValidation
 }
 
 cleanup() {
