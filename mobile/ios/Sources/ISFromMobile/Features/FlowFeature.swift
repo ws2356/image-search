@@ -13,70 +13,60 @@ import Foundation
 
 @Reducer
 public struct FlowFeature {
-    public init() {}
-
+    // State 保持不变
     @ObservableState
     public struct State: Equatable {
-        public var discover: DiscoverFeature.State?
-        public var pendingRevisit: PendingRevisitFeature.State?
-        public var auth: AuthFeature.State?
-        public var transfer: TransferFeature.State?
-        public var completion: CompletionFeature.State?
-        public var error: ErrorFeature.State?
-
-        /// The currently active route — exactly one optional is set at a time.
-        public enum Route: Sendable {
-            case discover, pendingRevisit, auth, transfer, completion, error
-        }
-
-        public var route: Route? {
-            if discover != nil { return .discover }
-            if pendingRevisit != nil { return .pendingRevisit }
-            if auth != nil { return .auth }
-            if transfer != nil { return .transfer }
-            if completion != nil { return .completion }
-            if error != nil { return .error }
-            return nil
-        }
-
-        public init(
-            discover: DiscoverFeature.State? = nil,
-            pendingRevisit: PendingRevisitFeature.State? = nil,
-            auth: AuthFeature.State? = nil,
-            transfer: TransferFeature.State? = nil,
-            completion: CompletionFeature.State? = nil,
-            error: ErrorFeature.State? = nil
-        ) {
-            self.discover = discover
-            self.pendingRevisit = pendingRevisit
-            self.auth = auth
-            self.transfer = transfer
-            self.completion = completion
-            self.error = error
+        public var destination: Destination?
+        
+        public init(destination: Destination? = nil) {
+            self.destination = destination
         }
     }
 
+    @ObservableState
+    @CasePathable
+    public enum Destination: Equatable {
+        case discover(DiscoverFeature.State)
+        case pendingRevisit(PendingRevisitFeature.State)
+        case auth(AuthFeature.State)
+        case transfer(TransferFeature.State)
+        case completion(CompletionFeature.State)
+        case error(ErrorFeature.State)
+    }
+
+    // Action 直接嵌套，去掉了 PresentationAction 的外壳
     @CasePathable
     public enum Action {
         case onAppear
-        case discover(DiscoverFeature.Action)
-        case pendingRevisit(PendingRevisitFeature.Action)
-        case auth(AuthFeature.Action)
-        case transfer(TransferFeature.Action)
-        case completion(CompletionFeature.Action)
-        case error(ErrorFeature.Action)
+        case destination(DestinationAction) // 🌟 变直接了
+        
+        @CasePathable
+        public enum DestinationAction {
+            case discover(DiscoverFeature.Action)
+            case pendingRevisit(PendingRevisitFeature.Action)
+            case auth(AuthFeature.Action)
+            case transfer(TransferFeature.Action)
+            case completion(CompletionFeature.Action)
+            case error(ErrorFeature.Action)
+        }
     }
-
+    
     @Dependency(\.trustSessionManager) var trustSessionManager
     @Dependency(\.instantShareExtensionContext) var extensionContext
     @Dependency(\.payloadExtractor) var payloadExtractor
     @Dependency(\.identityClient) var identityClient
     @Shared(.instantShareContext) var context
+    
+    public init() {}
 
     public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .onAppear:
+                if state.destination == nil {
+                    state.destination = .discover(DiscoverFeature.State())
+                }
+                
                 return .run { [context = $context, extensionContext, identityClient, payloadExtractor] _ in
                     try? await identityClient.ensureSelfIdentity()
 
@@ -105,94 +95,75 @@ public struct FlowFeature {
                     }
                 }
 
-            // MARK: - Discover delegate
-            case .discover(.delegate(.didStartPendingRevisit)):
-                state.discover = nil
-                state.pendingRevisit = PendingRevisitFeature.State()
+
+            // 🌟 匹配路径变短了，没有了 .presented
+            case .destination(.discover(.delegate(.didStartPendingRevisit))):
+                state.destination = .pendingRevisit(PendingRevisitFeature.State())
                 return .none
 
-            case .discover(.delegate(.didEncounterError(let message))):
-                state.discover = nil
-                state.error = ErrorFeature.State(message: message)
+            case let .destination(.discover(.delegate(.didEncounterError(message)))):
+                state.destination = .error(ErrorFeature.State(message: message))
                 return .none
 
-            // MARK: - PendingRevisit delegate
-            case .pendingRevisit(.delegate(.revisitSucceeded)):
-                state.pendingRevisit = nil
-                state.completion = CompletionFeature.State()
+            // 自定义取消按钮事件
+            case .destination(.auth(.delegate(.authCancelled))):
+                state.destination = nil
+                return .none
+            
+            case .destination(.pendingRevisit(.delegate(.revisitSucceeded(let message)))):
+                state.destination = .completion(CompletionFeature.State())
                 return .none
 
-            case .pendingRevisit(.delegate(.revisitFailed)):
-                state.pendingRevisit = nil
-                state.auth = AuthFeature.State()
+            case .destination(.pendingRevisit(.delegate(.revisitFailed))):
+                state.destination = .auth(AuthFeature.State())
                 return .none
 
-            // MARK: - Auth delegate
-            case .auth(.delegate(.authCompleted)):
-                state.auth = nil
-                state.transfer = TransferFeature.State()
+            case .destination(.auth(.delegate(.authCompleted))):
+                state.destination = .transfer(TransferFeature.State())
                 return .none
 
-            case .auth(.delegate(.authFailed(let message))):
-                state.auth = nil
-                state.error = ErrorFeature.State(message: message)
+            case .destination(.auth(.delegate(.authFailed(let message)))):
+                state.destination = .error(ErrorFeature.State(message: message))
                 return .none
-
-            case .auth(.delegate(.authCancelled)):
-                state.auth = nil
-                trustSessionManager.reset()
-                extensionContext.cancelRequest(nil)
+                
+            case .destination(.auth(.delegate(.authCancelled))):
+                return .run { [extensionContext] _ in
+                    extensionContext.cancelRequest(nil)
+                }
+                
+            case .destination(.transfer(.delegate(.transferSucceeded))):
+                state.destination = .completion(CompletionFeature.State())
                 return .none
-
-            // MARK: - Transfer delegate
-            case .transfer(.delegate(.transferSucceeded)):
-                state.transfer = nil
-                state.completion = CompletionFeature.State()
+                
+            case .destination(.transfer(.delegate(.transferFailed(let message)))):
+                state.destination = .error(ErrorFeature.State(message: message))
                 return .none
-
-            case .transfer(.delegate(.transferFailed(let message))):
-                state.transfer = nil
-                state.error = ErrorFeature.State(message: message)
+                
+            case .destination(.completion(.delegate(.done))):
+                return .run { [extensionContext] send in
+                    extensionContext.completeRequest()
+                }
+                
+            case .destination(.error(.delegate(.retry))):
+                state.destination = .discover(DiscoverFeature.State())
                 return .none
-
-            // MARK: - Completion delegate
-            case .completion(.delegate(.done)):
-                state.completion = nil
-                extensionContext.completeRequest()
-                return .none
-
-            // MARK: - Error delegate
-            case .error(.delegate(.retry)):
-                state.error = nil
-                state.discover = DiscoverFeature.State()
-                return .none
-
-            case .error(.delegate(.cancel)):
-                state.error = nil
-                extensionContext.cancelRequest(nil)
-                return .none
-
+                
+            case .destination(.error(.delegate(.cancel))):
+                return .run { [extensionContext] send in
+                    extensionContext.cancelRequest(nil)
+                }
             default:
                 return .none
             }
         }
-        .ifLet(\.discover, action: \.discover) {
-            DiscoverFeature()
-        }
-        .ifLet(\.pendingRevisit, action: \.pendingRevisit) {
-            PendingRevisitFeature()
-        }
-        .ifLet(\.auth, action: \.auth) {
-            AuthFeature()
-        }
-        .ifLet(\.transfer, action: \.transfer) {
-            TransferFeature()
-        }
-        .ifLet(\.completion, action: \.completion) {
-            CompletionFeature()
-        }
-        .ifLet(\.error, action: \.error) {
-            ErrorFeature()
+        // 🌟 关键点：这里依然用 .ifLet 绑定，自动取消机制完好无损！
+        .ifLet(\.destination, action: \.destination) {
+            Scope(state: \.discover, action: \.discover) { DiscoverFeature() }
+            Scope(state: \.pendingRevisit, action: \.pendingRevisit) { PendingRevisitFeature() }
+            Scope(state: \.auth, action: \.auth) { AuthFeature() }
+            Scope(state: \.transfer, action: \.transfer) { TransferFeature() }
+            Scope(state: \.completion, action: \.completion) { CompletionFeature() }
+            Scope(state: \.error, action: \.error) { ErrorFeature() }
         }
     }
 }
