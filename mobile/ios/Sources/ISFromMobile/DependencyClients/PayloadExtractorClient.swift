@@ -10,7 +10,7 @@ import Foundation
 
 @DependencyClient
 struct PayloadExtractorClient {
-    var extract: @Sendable (_ extensionItems: [NSExtensionItem]) async throws -> [InstantSharePayloadEnvelope]
+    var extract: @Sendable @MainActor (_ extensionItems: [NSExtensionItem]) async throws -> [InstantSharePayloadEnvelope]
 }
 
 extension PayloadExtractorClient: DependencyKey {

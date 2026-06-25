@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 import UniformTypeIdentifiers
 
-public enum InstantSharePayloadType: String, Codable {
+public enum InstantSharePayloadType: String, Codable, Sendable {
     case text
     case link
     case image
@@ -10,7 +10,7 @@ public enum InstantSharePayloadType: String, Codable {
     case file
 }
 
-public struct InstantSharePayloadEnvelope: Codable {
+public struct InstantSharePayloadEnvelope: Codable, Sendable {
     public let payloadType: InstantSharePayloadType
     public let textContent: String?
     public let fileURL: URL?
@@ -47,6 +47,7 @@ enum InstantSharePayloadExtractorError: Error, LocalizedError {
     }
 }
 
+@MainActor
 struct InstantSharePayloadExtractor {
     static let maxBatchSize = 10
 

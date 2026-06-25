@@ -9,21 +9,9 @@ class ShareViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         LocalLog.info("[Share VC] viewDidLoad")
-
+        
         // 1. Set up extension context for TCA dependency injection
-        InstantShareExtensionContextClient.current = InstantShareExtensionContextClient(
-            inputItems: extensionContext?.inputItems as? [NSExtensionItem] ?? [],
-            completeRequest: { [weak extensionContext] in
-                extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
-            },
-            cancelRequest: { [weak extensionContext] (error: Error?) in
-                let nsError = error ?? NSError(
-                    domain: "InstantShareExtension", code: 0,
-                    userInfo: [NSLocalizedDescriptionKey: "User canceled"]
-                )
-                extensionContext?.cancelRequest(withError: nsError)
-            }
-        )
+        InstantShareExtensionContextClient.current = InstantShareExtensionContextClient(extensionContext)
 
         // 2. Create store — liveValue handles all service instantiation
         let store = Store(initialState: FlowFeature.State()) {

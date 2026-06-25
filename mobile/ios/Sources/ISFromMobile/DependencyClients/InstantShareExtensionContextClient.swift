@@ -10,19 +10,37 @@
 import ComposableArchitecture
 import Foundation
 
-public struct InstantShareExtensionContextClient: @unchecked Sendable {
-    public var inputItems: [NSExtensionItem]
-    public var completeRequest: @Sendable () -> Void
-    public var cancelRequest: @Sendable (Error?) -> Void
+public final class InstantShareExtensionContextClient: @unchecked Sendable {
+    private weak var context: NSExtensionContext?
 
-    public init(
-        inputItems: [NSExtensionItem],
-        completeRequest: @escaping @Sendable () -> Void,
-        cancelRequest: @escaping @Sendable (Error?) -> Void
-    ) {
-        self.inputItems = inputItems
-        self.completeRequest = completeRequest
-        self.cancelRequest = cancelRequest
+    public init(_ context: NSExtensionContext?) {
+        self.context = context
+    }
+    
+    @MainActor
+    func getInputItems() async -> [NSExtensionItem] {
+        if let ret = context?.inputItems as? [NSExtensionItem] {
+            return ret
+        }
+        return []
+    }
+
+    @MainActor
+    func completeRequest() {
+        context?.completeRequest(
+            returningItems: nil,
+            completionHandler: nil
+        )
+    }
+
+    @MainActor
+    func cancelRequest(error: Error?) {
+        let nsError = error ?? NSError(
+            domain: "InstantShareExtension",
+            code: 0
+        )
+
+        context?.cancelRequest(withError: nsError)
     }
 }
 

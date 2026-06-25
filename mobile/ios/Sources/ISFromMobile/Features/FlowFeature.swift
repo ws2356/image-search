@@ -70,8 +70,13 @@ public struct FlowFeature {
                 return .run { [context = $context, extensionContext, identityClient, payloadExtractor] _ in
                     try? await identityClient.ensureSelfIdentity()
 
-                    let envelopes = try? await payloadExtractor.extract(extensionContext.inputItems)
-                    if let envelopes {
+                    let extractTask = await MainActor.run {
+                        Task {
+                            let inputItems = await extensionContext.getInputItems()
+                            return try? await payloadExtractor.extract(inputItems)
+                        }
+                    }
+                    if let envelopes = try? await extractTask.value {
                         context.withLock { value in
                             if let textEnvelope = envelopes.first(where: { $0.payloadType == .text }),
                                let text = textEnvelope.textContent {
@@ -128,7 +133,7 @@ public struct FlowFeature {
                 
             case .destination(.auth(.delegate(.authCancelled))):
                 return .run { [extensionContext] _ in
-                    extensionContext.cancelRequest(nil)
+                    await extensionContext.cancelRequest(error: nil)
                 }
                 
             case .destination(.transfer(.delegate(.transferSucceeded))):
@@ -141,7 +146,7 @@ public struct FlowFeature {
                 
             case .destination(.completion(.delegate(.done))):
                 return .run { [extensionContext] send in
-                    extensionContext.completeRequest()
+                    await extensionContext.completeRequest()
                 }
                 
             case .destination(.error(.delegate(.retry))):
@@ -150,7 +155,7 @@ public struct FlowFeature {
                 
             case .destination(.error(.delegate(.cancel))):
                 return .run { [extensionContext] send in
-                    extensionContext.cancelRequest(nil)
+                    await extensionContext.cancelRequest(error: nil)
                 }
             default:
                 return .none
