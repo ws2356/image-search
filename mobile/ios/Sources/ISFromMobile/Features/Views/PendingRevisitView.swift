@@ -12,18 +12,21 @@ struct PendingRevisitView: View {
     let store: StoreOf<PendingRevisitFeature>
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            ProgressView()
-                .controlSize(.large)
-            Text("Checking existing trust...")
-                .font(.headline)
-            Text(store.payloadDescription)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
+        WithPerceptionTracking {
+            
+            VStack(spacing: 24) {
+                Spacer()
+                ProgressView()
+                    .controlSize(.large)
+                Text("Checking existing trust...")
+                    .font(.headline)
+                Text(store.payloadDescription)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding()
+            .task { store.send(.attemptRevisit) }
         }
-        .padding()
-        .task { store.send(.attemptRevisit) }
     }
 }

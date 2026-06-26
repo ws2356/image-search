@@ -2,8 +2,9 @@
 //  AuthFeature.swift
 //  ISFromMobile
 //
-//  PIN input + trust handshake (handshake → apply → confirm) + upload after PIN confirm.
-//  Replaces the awaitingPinInput phase.
+//  PIN input + trust handshake sequence.
+//  On appear: handshake → apply (automatic, shows loading).
+//  On PIN submit: confirm → authCompleted (upload delegated to TransferFeature).
 //
 import ComposableArchitecture
 import Common
@@ -16,16 +17,31 @@ public struct AuthFeature {
         var pinCode: String = ""
         var errorMessage: String? = nil
         var isProcessing: Bool = false
+        /// True while handshake+apply are in progress (auto-starts on appear).
+        var isHandshaking: Bool = true
 
-        public init(pinCode: String = "", errorMessage: String? = nil, isProcessing: Bool = false) {
+        public init(
+            pinCode: String = "",
+            errorMessage: String? = nil,
+            isProcessing: Bool = false,
+            isHandshaking: Bool = true
+        ) {
             self.pinCode = pinCode
             self.errorMessage = errorMessage
             self.isProcessing = isProcessing
+            self.isHandshaking = isHandshaking
         }
     }
 
     @CasePathable
     public enum Action {
+        /// Auto-triggered from view .task — runs handshake + apply.
+        case handshakeAndApply
+        /// handshake + apply completed successfully, show PIN entry.
+        case handshakeReady
+        /// handshake + apply failed (non-recoverable).
+        case handshakeFailed(String)
+
         case pinCodeChanged(String)
         case confirmPIN
         case rejectPIN
@@ -42,16 +58,62 @@ public struct AuthFeature {
 
     @SharedReader(.instantShareContext) var context
     @Dependency(\.trustClient) var trustClient
-    @Dependency(\.uploadClient) var uploadClient
     @Dependency(\.trustSessionManager) var trustSessionManager
     @Dependency(\.identityClient) var identityClient
 
     public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
+            // MARK: - Handshake + Apply (automatic on appear)
+
+            case .handshakeAndApply:
+                guard let targetDevice = context.targetDevice else {
+                    state.errorMessage = "Missing device information."
+                    state.isHandshaking = false
+                    return .none
+                }
+                state.isHandshaking = true
+                state.errorMessage = nil
+
+                let sessionId = context.sessionId
+                let hosts = targetDevice.hosts
+                let port = targetDevice.port
+
+                return .run { [sessionId, hosts, port, trustClient, context] send in
+                    let _ = try await trustClient.handshake(
+                        hosts: hosts, port: port,
+                        sessionID: sessionId, correlationID: sessionId,
+                        mobilePort: 1, mobileIPList: ["127.0.0.1"],
+                        payloadClass: context.sharedItems.payloadClass,
+                        targetIntent: context.sharedItems.targetIntent,
+                        trustMode: "first_share"
+                    )
+
+                    try await trustClient.apply(
+                        hosts: hosts, port: port,
+                        sessionID: sessionId, correlationID: sessionId
+                    )
+
+                    await send(.handshakeReady)
+                } catch: { error, send in
+                    let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+                    await send(.handshakeFailed(msg))
+                }
+
+            case .handshakeReady:
+                state.isHandshaking = false
+                return .none
+
+            case .handshakeFailed(let message):
+                state.isHandshaking = false
+                return .send(.delegate(.authFailed(message)))
+
+            // MARK: - PIN Entry
+
             case .pinCodeChanged(let code):
                 state.pinCode = code
                 state.errorMessage = nil
+                state.isProcessing = false
                 return .none
 
             case .confirmPIN:
@@ -66,26 +128,9 @@ public struct AuthFeature {
                 let sessionId = context.sessionId
                 let hosts = targetDevice.hosts
                 let port = targetDevice.port
-                let tlsPort = targetDevice.tlsPort
 
-                return .run { [pinCode = state.pinCode, identityClient, trustClient, uploadClient, trustSessionManager, context] send in
-                    let deviceName = await identityClient.currentDeviceName()
+                return .run { [pinCode = state.pinCode, sessionId, hosts, port, identityClient, trustClient] send in
                     let myCert = try? await identityClient.selfCertificatePEM()
-
-                    // Trust handshake: handshake → apply → confirm
-                    let handshakeResponse = try await trustClient.handshake(
-                        hosts: hosts, port: port,
-                        sessionID: sessionId, correlationID: sessionId,
-                        mobilePort: 1, mobileIPList: ["127.0.0.1"],
-                        payloadClass: context.sharedItems.payloadClass,
-                        targetIntent: context.sharedItems.targetIntent,
-                        trustMode: "first_share"
-                    )
-
-                    try await trustClient.apply(
-                        hosts: hosts, port: port,
-                        sessionID: sessionId, correlationID: sessionId
-                    )
 
                     let peerCert = try await trustClient.confirm(
                         hosts: hosts, port: port,
@@ -99,47 +144,13 @@ public struct AuthFeature {
                         try? await identityClient.importPeerCertificate(pem: peerCert)
                     }
 
-                    // Upload the content
-                    let sharedItems = context.sharedItems
-                    switch sharedItems {
-                    case .text(let text):
-                        try await uploadClient.uploadText(
-                            hosts: hosts, port: tlsPort,
-                            sessionID: sessionId, correlationID: sessionId,
-                            text: text,
-                            peerDeviceName: deviceName
-                        )
-                    case .images(let images):
-                        if images.count == 1, let img = images.first {
-                            try await uploadClient.uploadImage(
-                                hosts: hosts, port: tlsPort,
-                                sessionID: sessionId, correlationID: sessionId,
-                                fileURL: img.fileURL,
-                                contentType: img.contentType,
-                                filename: img.filename,
-                                peerDeviceName: deviceName
-                            )
-                        } else {
-                            try await uploadClient.uploadImages(
-                                hosts: hosts, port: tlsPort,
-                                sessionID: sessionId, correlationID: sessionId,
-                                urls: images.map { ($0.fileURL, $0.filename, $0.contentType) },
-                                peerDeviceName: deviceName
-                            )
-                        }
-                    case .files:
-                        // Files not yet supported
-                        break
-                    }
-
                     await send(.confirmResponse)
                 } catch: { error, send in
                     // PIN mismatch is recoverable
                     if let trustError = error as? InstantShareTrustClientError,
                        case .httpError(let statusCode, let errorCode, _) = trustError,
                        statusCode == 403 && errorCode == "PIN_MISMATCH_OR_REJECTED" {
-                        await send(.pinCodeChanged(""))  // Clear PIN
-                        await send(.pinCodeChanged(""))  // Dummy to trigger state update
+                        await send(.pinCodeChanged(""))
                     } else {
                         let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
                         await send(.delegate(.authFailed(msg)))
@@ -149,6 +160,8 @@ public struct AuthFeature {
             case .confirmResponse:
                 state.isProcessing = false
                 return .send(.delegate(.authCompleted))
+
+            // MARK: - Cancel
 
             case .rejectPIN:
                 trustSessionManager.reset()

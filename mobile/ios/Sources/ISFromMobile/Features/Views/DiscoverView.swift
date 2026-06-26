@@ -12,33 +12,36 @@ struct DiscoverView: View {
     @Shared(.instantShareContext) var context
 
     var body: some View {
-        VStack(spacing: 16) {
-            payloadCard
-            deviceSelectorCard
-            Spacer()
-            if let error = store.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-            Button {
-                store.send(.send)
-            } label: {
-                HStack {
-                    if store.isProcessing {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Text(store.isProcessing ? "Connecting..." : "Send to \(store.selectedDevice?.name ?? "...")")
-                        .fontWeight(.semibold)
+        WithPerceptionTracking {
+            
+            VStack(spacing: 16) {
+                payloadCard
+                deviceSelectorCard
+                Spacer()
+                if let error = store.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
-                .frame(maxWidth: .infinity)
+                Button {
+                    store.send(.send)
+                } label: {
+                    HStack {
+                        if store.isProcessing {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(store.isProcessing ? "Connecting..." : "Send to \(store.selectedDevice?.name ?? "...")")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSend)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canSend)
+            .padding()
+            .task { store.send(.onAppear) }
         }
-        .padding()
-        .task { store.send(.onAppear) }
     }
 
     private var canSend: Bool {
