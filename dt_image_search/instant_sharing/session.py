@@ -13,7 +13,7 @@ from dt_image_search.instant_sharing.errors import InstantShareError
 _logger = logging.getLogger(__name__)
 
 
-DEFAULT_MAX_SESSIONS = 8
+DEFAULT_MAX_SESSIONS = 100
 _TERMINAL_SESSION_CLEANUP_SECONDS = 60
 
 _ACTIVE_STATES = {

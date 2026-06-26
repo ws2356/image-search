@@ -4,6 +4,7 @@ import asyncio
 import logging
 import socket
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -342,6 +343,28 @@ def _build_app(deps: _Deps) -> FastAPI:
             {"error_code": "NOT_FOUND", "message": "Unknown endpoint"},
             status_code=404,
         )
+
+    # 注册请求日志中间件
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        start_time = time.time()
+        
+        # 接收并处理请求
+        response = await call_next(request)
+        
+        # 计算耗时
+        process_time = (time.time() - start_time) * 1000
+        formatted_process_time = f"{process_time:.2f}ms"
+        
+        # 打印日志
+        _logger.info(
+            f"Method: {request.method} | "
+            f"Path: {request.url.path} | "
+            f"Status: {response.status_code} | "
+            f"Duration: {formatted_process_time}"
+        )
+        
+        return response
 
     return app
 

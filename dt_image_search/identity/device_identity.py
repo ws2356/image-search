@@ -216,19 +216,27 @@ def store_peer_certificate(peer_device_id: str, certificate_pem: str) -> None:
     Uses label "AuSearch Trusted Device" for future bulk queries.
     """
     _ensure_keychain()
-    service = f"net.boldman.ausearch.trusted-device"
-    subprocess.run(
-        [
-            "security", "add-generic-password",
-            "-s", service,
-            "-a", peer_device_id,
-            "-l", _PEER_CERT_LABEL,
-            "-U",
-            "-w", certificate_pem.encode("utf-8").hex(),
-            *_keychain_arg(),
-        ],
-        check=True,
-    )
+    service = "net.boldman.ausearch.trusted-device"
+    delete_cmd = [
+        "security",
+        "delete-generic-password",
+        "-s", service,
+        "-a", peer_device_id,
+        *_keychain_arg(),
+    ]
+
+    add_cmd = [
+        "security",
+        "add-generic-password",
+        "-s", service,
+        "-a", peer_device_id,
+        "-l", _PEER_CERT_LABEL,
+        "-w", certificate_pem.encode("utf-8").hex(),
+        *_keychain_arg(),
+    ]
+
+    subprocess.run(delete_cmd, check=False)
+    subprocess.run(add_cmd, check=True)
 
 
 def load_peer_certificate(peer_device_id: str) -> str | None:
