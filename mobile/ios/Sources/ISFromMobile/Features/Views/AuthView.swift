@@ -31,10 +31,13 @@ struct AuthView: View {
                     Text("Enter the 4-digit code shown on your Mac:")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    PinCodeInputView(onSubmit: { pinCode in
-                        store.send(.pinCodeChanged(pinCode))
-                        store.send(.confirmPIN)
-                    })
+                    
+                    @Perception.Bindable var model = store
+                    
+                    PinCodeInputView(pinCode: Binding(
+                        get: { model.pinCode },
+                        set: { store.send(.pinCodeChanged($0)) }
+                    ))
                     .disabled(store.isProcessing)
                     if let error = store.errorMessage {
                         Text(error)

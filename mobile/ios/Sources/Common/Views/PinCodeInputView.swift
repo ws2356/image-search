@@ -18,28 +18,55 @@ private struct PinCodeInputRepresentable: UIViewRepresentable {
 
     func makeUIView(context: Context) -> HiddenPinTextField {
         let textField = HiddenPinTextField()
+        textField.isHidden = true
         textField.keyboardType = .numberPad
         textField.textContentType = .oneTimeCode
         textField.delegate = context.coordinator
-        textField.isHidden = true
         return textField
     }
 
     func updateUIView(_ uiView: HiddenPinTextField, context: Context) {
         uiView.onDigit = onDigit
         uiView.onDeleteBackward = onDeleteBackward
+        // 关键改动：先判断当前实际焦点状态，避免陷入无限死循环
         if isFocused && !uiView.isFirstResponder {
-            uiView.becomeFirstResponder()
+            // 只有当 SwiftUI 想要它聚焦，且 UIKit 还没聚焦时，才调用 become
+            DispatchQueue.main.async {
+                uiView.becomeFirstResponder()
+            }
         } else if !isFocused && uiView.isFirstResponder {
-            uiView.resignFirstResponder()
+            // 只有当 SwiftUI 想要它失焦，且 UIKit 还聚焦时，才调用 resign
+            DispatchQueue.main.async {
+                uiView.resignFirstResponder()
+            }
         }
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(isFocused: $isFocused)
     }
 
     final class Coordinator: NSObject, UITextFieldDelegate {
+        var isFocused: Binding<Bool>
+        
+        init(isFocused: Binding<Bool>) {
+            self.isFocused = isFocused
+        }
+        
+        // --- 新增：监听 UIKit 文本框开始编辑 ---
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            if !isFocused.wrappedValue {
+                isFocused.wrappedValue = true
+            }
+        }
+        
+        // --- 新增：监听 UIKit 文本框结束编辑（比如键盘收起） ---
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            if isFocused.wrappedValue {
+                isFocused.wrappedValue = false
+            }
+        }
+        
         func textField(
             _ textField: UITextField,
             shouldChangeCharactersIn range: NSRange,
@@ -60,13 +87,20 @@ private struct PinCodeInputRepresentable: UIViewRepresentable {
 }
 
 public struct PinCodeInputView: View {
-    public let onSubmit: (String) -> Void
-
-    @State private var pinCharacters: [String] = Array(repeating: "", count: 4)
+    @Binding private var pinCode: String
     @State private var isInputFocused = true
 
-    public init(onSubmit: @escaping (String) -> Void) {
-        self.onSubmit = onSubmit
+    public init(pinCode: Binding<String>) {
+        self._pinCode = pinCode
+    }
+    
+    private var pinCharacters: [String] {
+        var chars = Array(repeating: "", count: 4)
+        let pinArray = Array(pinCode.map { String($0) })
+        for i in 0..<min(pinArray.count, 4) {
+            chars[i] = pinArray[i]
+        }
+        return chars
     }
 
     public var body: some View {
@@ -77,13 +111,17 @@ public struct PinCodeInputView: View {
                     guard let firstEmpty = pinCharacters.firstIndex(where: { $0.isEmpty }) else {
                         return
                     }
-                    pinCharacters[firstEmpty] = String(digit)
+                    if pinCode.count < 4 {
+                        pinCode.append(digit)
+                    }
                 },
                 onDeleteBackward: {
                     guard let lastFilled = pinCharacters.lastIndex(where: { !$0.isEmpty }) else {
                         return
                     }
-                    pinCharacters[lastFilled] = ""
+                    if !pinCode.isEmpty {
+                        pinCode.removeLast()
+                    }
                 }
             )
             .frame(width: 0, height: 0)
@@ -91,18 +129,18 @@ public struct PinCodeInputView: View {
             HStack(spacing: 12) {
                 ForEach(0..<4, id: \.self) { index in
                     boxView(at: index)
+                        .onTapGesture {
+                            isInputFocused = true
+                        }
                 }
-            }
-            .onTapGesture {
-                isInputFocused = true
             }
         }
         .onAppear {
             isInputFocused = true
         }
-        .compatibleOnChange(of: pinCharacters) { _ in
-            if pinCharacters.joined().count == 4 {
-                onSubmit(pinCharacters.joined())
+        .compatibleOnChange(of: pinCode) { _ in
+            if pinCode.isEmpty {
+                isInputFocused = true
             }
         }
     }

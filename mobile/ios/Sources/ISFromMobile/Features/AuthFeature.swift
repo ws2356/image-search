@@ -43,7 +43,6 @@ public struct AuthFeature {
         case handshakeFailed(String)
 
         case pinCodeChanged(String)
-        case confirmPIN
         case rejectPIN
         case confirmResponse
         case delegate(Delegate)
@@ -111,12 +110,17 @@ public struct AuthFeature {
             // MARK: - PIN Entry
 
             case .pinCodeChanged(let code):
+                if code == state.pinCode {
+                    return .none
+                }
                 state.pinCode = code
                 state.errorMessage = nil
                 state.isProcessing = false
-                return .none
+                
+                if code.count < 4 {
+                    return .none
+                }
 
-            case .confirmPIN:
                 guard !state.pinCode.isEmpty,
                       let targetDevice = context.targetDevice else {
                     state.errorMessage = "Missing PIN or device information."
