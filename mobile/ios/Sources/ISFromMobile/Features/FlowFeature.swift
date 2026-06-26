@@ -99,6 +99,8 @@ public struct FlowFeature {
                                 }
                             }
                         }
+                    } else {
+                        LocalLog.error("[FlowFeature] failed to load envelopes")
                     }
                 }
 
@@ -147,7 +149,6 @@ public struct FlowFeature {
                 return .none
                 
             case .destination(.completion(.delegate(.done))):
-                LocalLog.debug("Flow delegate done action received")
                 return .run { [extensionContext] send in
                     await extensionContext.completeRequest()
                 }
@@ -173,6 +174,5 @@ public struct FlowFeature {
             Scope(state: \.completion, action: \.completion) { CompletionFeature() }
             Scope(state: \.error, action: \.error) { ErrorFeature() }
         }
-        ._printChanges()
     }
 }

@@ -11,19 +11,16 @@ class ShareViewController: UIViewController {
         LocalLog.info("[Share VC] viewDidLoad")
         
         // 1. Set up extension context for TCA dependency injection
-        InstantShareExtensionContextClient.current = InstantShareExtensionContextClient(extensionContext)
-        
-        LocalLog.info("[Share VC] fuck")
-        for item in extensionContext?.inputItems ?? [] {
-            if let shareItem = item as? NSExtensionItem {
-                LocalLog.info("[Share VC] share item \(shareItem.attributedTitle)")
-                LocalLog.info("[Share VC] share item \(shareItem.userInfo)")
-            }
+        guard let extensionContext = self.extensionContext else {
+            LocalLog.error("[Share VC] No extension context available")
+            return
         }
-
+        
         // 2. Create store — liveValue handles all service instantiation
         let store = Store(initialState: FlowFeature.State()) {
-            FlowFeature()
+            return FlowFeature()
+        } withDependencies: {
+            $0.instantShareExtensionContext = InstantShareExtensionContextClient(extensionContext)
         }
 
         // 3. Embed FlowView — no callbacks, features use DI for exit

@@ -40,6 +40,5 @@ public struct CompletionFeature {
                 return .none
             }
         }
-        ._printChanges()
     }
 }

@@ -9,6 +9,7 @@
 //
 import ComposableArchitecture
 import Foundation
+import Common
 
 public final class InstantShareExtensionContextClient: @unchecked Sendable {
     private weak var context: NSExtensionContext?
@@ -42,17 +43,19 @@ public final class InstantShareExtensionContextClient: @unchecked Sendable {
 
         context?.cancelRequest(withError: nsError)
     }
+    
+    @MainActor
+    func debugPrint(_ tag: String) async {
+        if let ctx = context {
+            LocalLog.debug("[\(tag)] InstantShareExtensionContextClient \(self), wrapped: \(ctx)")
+        }
+    }
 }
 
 extension InstantShareExtensionContextClient: DependencyKey {
     public static var liveValue: InstantShareExtensionContextClient {
-        guard let current else {
-            fatalError("InstantShareExtensionContextClient not set — call setup before creating store")
-        }
-        return current
+        fatalError("InstantShareExtensionContextClient must be configured as dependency when creating the store")
     }
-
-    nonisolated(unsafe) public static var current: InstantShareExtensionContextClient?
 }
 
 extension DependencyValues {

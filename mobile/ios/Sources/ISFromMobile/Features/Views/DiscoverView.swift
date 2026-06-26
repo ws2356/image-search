@@ -37,100 +37,105 @@ struct DiscoverView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!canSend)
+                .disabled(!(store.selectedDevice != nil && !context.isLoadingSharedItems && !store.isProcessing))
             }
             .padding()
             .task { store.send(.onAppear) }
         }
     }
 
-    private var canSend: Bool {
-        store.selectedDevice != nil && !context.isLoadingSharedItems && !store.isProcessing
-    }
-
     // MARK: - Payload Card
 
     private var payloadCard: some View {
-        HStack {
-            Image(systemName: payloadIcon)
-                .font(.title2)
-                .foregroundStyle(.blue)
-            VStack(alignment: .leading) {
-                Text(payloadTitle)
-                    .font(.headline)
-                Text(payloadSubtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        WithPerceptionTracking {
+            HStack {
+                Image(systemName: payloadIcon)
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading) {
+                    Text(payloadTitle)
+                        .font(.headline)
+                    Text(payloadSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
             }
-            Spacer()
+            .padding()
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            
         }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Device Selector
 
     private var deviceSelectorCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Send to")
-                    .font(.subheadline.bold())
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if !store.discoveredDevices.isEmpty {
-                    Text("\(store.discoveredDevices.count) found")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if store.discoveredDevices.isEmpty {
+        WithPerceptionTracking {
+            
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Looking for desktops...")
-                        .font(.subheadline)
+                    Text("Send to")
+                        .font(.subheadline.bold())
                         .foregroundStyle(.secondary)
+                    Spacer()
+                    if !store.discoveredDevices.isEmpty {
+                        Text("\(store.discoveredDevices.count) found")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-            } else {
-                ForEach(store.discoveredDevices) { pc in
-                    deviceRow(pc)
+                if store.discoveredDevices.isEmpty {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Looking for desktops...")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                } else {
+                    ForEach(store.discoveredDevices) { pc in
+                        deviceRow(pc)
+                    }
                 }
             }
+            .padding()
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func deviceRow(_ device: InstantShareDiscoveredPC) -> some View {
-        Button {
-            store.send(.selectDevice(device))
-        } label: {
-            HStack {
-                Image(systemName: "laptopcomputer")
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading) {
-                    Text(device.name)
-                        .font(.body)
-                    Text("\(device.primaryHost):\(device.port)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+        WithPerceptionTracking {
+            
+            Button {
+                store.send(.selectDevice(device))
+            } label: {
+                HStack {
+                    Image(systemName: "laptopcomputer")
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading) {
+                        Text(device.name)
+                            .font(.body)
+                        Text("\(device.primaryHost):\(device.port)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: store.selectedDevice?.id == device.id ? "checkmark.square.fill" : "square")
+                        .foregroundStyle(store.selectedDevice?.id == device.id ? .green : .gray.opacity(0.4))
                 }
-                Spacer()
-                Image(systemName: store.selectedDevice?.id == device.id ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(store.selectedDevice?.id == device.id ? .green : .gray.opacity(0.4))
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(
-                store.selectedDevice?.id == device.id
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(
+                    store.selectedDevice?.id == device.id
                     ? Color.blue.opacity(0.1)
                     : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Payload Helpers

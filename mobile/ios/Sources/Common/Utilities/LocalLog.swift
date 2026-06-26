@@ -15,16 +15,13 @@ public enum LocalLog {
 
     public static func info(_ message: String) {
         os_log("%{public}@", log: logger, type: .info, message)
-        print("[InstantShare] " + message)
     }
 
     public static func error(_ message: String) {
         os_log("%{public}@", log: logger, type: .error, message)
-        print("[InstantShare][ERROR] " + message)
     }
 
     public static func debug(_ message: String) {
         os_log("%{public}@", log: logger, type: .debug, message)
-        print("[InstantShare][DEBUG] " + message)
     }
 }
