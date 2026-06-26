@@ -6,6 +6,7 @@
 //
 import ComposableArchitecture
 import Foundation
+import Common
 
 @Reducer
 public struct CompletionFeature {
@@ -33,10 +34,12 @@ public struct CompletionFeature {
         Reduce { state, action in
             switch action {
             case .done:
+                LocalLog.debug("CompletionFeature done action received")
                 return .send(.delegate(.done))
             case .delegate:
                 return .none
             }
         }
+        ._printChanges()
     }
 }

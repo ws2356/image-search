@@ -61,6 +61,8 @@ public struct FlowFeature {
 
     public var body: some ReducerOf<Self> {
         Reduce { state, action in
+            LocalLog.debug("Flow reducer running state.destination: \(state.destination), action: \(action)")
+
             switch action {
             case .onAppear:
                 if state.destination == nil {
@@ -145,6 +147,7 @@ public struct FlowFeature {
                 return .none
                 
             case .destination(.completion(.delegate(.done))):
+                LocalLog.debug("Flow delegate done action received")
                 return .run { [extensionContext] send in
                     await extensionContext.completeRequest()
                 }
@@ -170,5 +173,6 @@ public struct FlowFeature {
             Scope(state: \.completion, action: \.completion) { CompletionFeature() }
             Scope(state: \.error, action: \.error) { ErrorFeature() }
         }
+        ._printChanges()
     }
 }
