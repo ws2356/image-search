@@ -44,6 +44,7 @@ public struct AuthFeature {
 
         case pinCodeChanged(String)
         case rejectPIN
+        case pinMismatch
         case confirmResponse
         case delegate(Delegate)
 
@@ -154,7 +155,7 @@ public struct AuthFeature {
                     if let trustError = error as? InstantShareTrustClientError,
                        case .httpError(let statusCode, let errorCode, _) = trustError,
                        statusCode == 403 && errorCode == "PIN_MISMATCH_OR_REJECTED" {
-                        await send(.pinCodeChanged(""))
+                        await send(.pinMismatch)
                     } else {
                         let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
                         await send(.delegate(.authFailed(msg)))
@@ -166,6 +167,12 @@ public struct AuthFeature {
                 return .send(.delegate(.authCompleted))
 
             // MARK: - Cancel
+
+            case .pinMismatch:
+                state.pinCode = ""
+                state.errorMessage = "PIN code is incorrect. Please try again."
+                state.isProcessing = false
+                return .none
 
             case .rejectPIN:
                 trustSessionManager.reset()
