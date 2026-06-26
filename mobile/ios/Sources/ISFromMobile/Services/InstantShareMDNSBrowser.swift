@@ -60,11 +60,11 @@ public final class InstantShareMDNSBrowser: ObservableObject {
     private var discoveredMap: [String: InstantShareDiscoveredPC] = [:]
     private let queue = DispatchQueue(label: "com.aubackup.instant-share.mdns-browser")
 
-    public init() {}
+    nonisolated public init() {}
 
-    public func startBrowsing() {
+    public func startBrowsing() async {
         LocalLog.debug("[MDNS Browser] startBrowsing")
-        stopBrowsing()
+        await stopBrowsing()
 
         let parameters = NWParameters()
         parameters.includePeerToPeer = true
@@ -78,48 +78,15 @@ public final class InstantShareMDNSBrowser: ObservableObject {
 
         browser.browseResultsChangedHandler = { [weak self] results, changes in
             guard let self else { return }
-            Task { @MainActor in
-                for change in changes {
-                    switch change {
-                    case .added(let result):
-                        self.browseResults.insert(result)
-                        LocalLog.debug("[MDNS Browser] result added: \(self.nameFromResult(result))")
-                        self.resolveFromTXTRecord(result)
-                    case .removed(let result):
-                        self.browseResults.remove(result)
-                        LocalLog.debug("[MDNS Browser] result removed: \(self.nameFromResult(result))")
-                        self.removeResult(result)
-                    case .changed(let old, let new, flags: _):
-                        self.browseResults.remove(old)
-                        self.browseResults.insert(new)
-                        LocalLog.debug("[MDNS Browser] result changed: \(self.nameFromResult(new))")
-                        self.resolveFromTXTRecord(new)
-                    @unknown default:
-                        break
-                    }
-                }
+            Task {
+                await self.handleBrowseResultChanges(results, with: changes)
             }
         }
 
         browser.stateUpdateHandler = { [weak self] newState in
             guard let self else { return }
-            Task { @MainActor in
-                switch newState {
-                case .ready:
-                    self.state = .browsing
-                    LocalLog.debug("[MDNS Browser] state: ready (browsing)")
-                case .failed(let error):
-                    self.state = .stopped
-                    LocalLog.error("[MDNS Browser] state: failed \(error.localizedDescription)")
-                case .cancelled:
-                    self.state = .stopped
-                    LocalLog.debug("[MDNS Browser] state: cancelled")
-                case .waiting(let error):
-                    self.state = .idle
-                    LocalLog.debug("[MDNS Browser] state: waiting \(error.localizedDescription)")
-                @unknown default:
-                    break
-                }
+            Task {
+                await self.handleBrowseStateUpdate(newState)
             }
         }
 
@@ -128,7 +95,7 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         LocalLog.debug("[MDNS Browser] browse started for _instantshare._tcp")
     }
 
-    public func stopBrowsing() {
+    public func stopBrowsing() async {
         if let browser {
             browser.cancel()
             self.browser = nil
@@ -138,6 +105,48 @@ public final class InstantShareMDNSBrowser: ObservableObject {
         discovered = []
         state = .stopped
         LocalLog.debug("[MDNS Browser] stopped")
+    }
+    
+    private func handleBrowseResultChanges(_ results: Set<NWBrowser.Result>, with changes: Set<NWBrowser.Result.Change>) async {
+        for change in changes {
+            switch change {
+            case .added(let result):
+                self.browseResults.insert(result)
+                LocalLog.debug("[MDNS Browser] result added: \(self.nameFromResult(result))")
+                self.resolveFromTXTRecord(result)
+            case .removed(let result):
+                self.browseResults.remove(result)
+                LocalLog.debug("[MDNS Browser] result removed: \(self.nameFromResult(result))")
+                self.removeResult(result)
+            case .changed(let old, let new, flags: _):
+                self.browseResults.remove(old)
+                self.browseResults.insert(new)
+                LocalLog.debug("[MDNS Browser] result changed: \(self.nameFromResult(new))")
+                self.resolveFromTXTRecord(new)
+            @unknown default:
+                break
+            }
+        }
+    }
+    
+    private func handleBrowseStateUpdate(_ newState: NWBrowser.State) async {
+        switch newState {
+        case .ready:
+            self.state = .browsing
+            LocalLog.debug("[MDNS Browser] state: ready (browsing)")
+        case .failed(let error):
+            self.state = .stopped
+            LocalLog.error("[MDNS Browser] state: failed \(error.localizedDescription)")
+        case .cancelled:
+            self.state = .stopped
+            LocalLog.debug("[MDNS Browser] state: cancelled")
+        case .waiting(let error):
+            self.state = .idle
+            LocalLog.debug("[MDNS Browser] state: waiting \(error.localizedDescription)")
+        @unknown default:
+            break
+        }
+
     }
 
     private func nameFromResult(_ result: NWBrowser.Result) -> String {

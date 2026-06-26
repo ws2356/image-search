@@ -35,6 +35,7 @@ extension MDNSBrowserClient: DependencyKey {
                             }
                         continuation.onTermination = { @Sendable _ in
                             Task { @MainActor in
+                                await browser.stopBrowsing()
                                 cancellable.cancel()
                             }
                         }
