@@ -24,7 +24,6 @@ public struct LiveQRCodeScannerView<Instructions: View>: View {
     public init(viewModel: ScanningBaseViewModel, @ViewBuilder instructions: () -> Instructions) {
         self.viewModel = viewModel
         self.instructions = instructions()
-        self.accessState = accessState
         self.lastSubmittedValue = lastSubmittedValue
     }
 
