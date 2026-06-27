@@ -21,10 +21,7 @@ public struct FlowView: View {
         WithPerceptionTracking {
             
             Group {
-                // 1. 先安全解开可选值 destination?，拿到非空的 destinationStore
                 if let destinationStore = store.scope(state: \.destination, action: \.destination) {
-                    
-                    // 2. 🌟 使用 SwitchStore 专门处理 Enum 分支
                     SwitchStore(destinationStore) { state in
                         switch state {
                         case .discover:

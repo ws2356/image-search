@@ -13,7 +13,6 @@ import Foundation
 
 @Reducer
 public struct FlowFeature {
-    // State 保持不变
     @ObservableState
     public struct State: Equatable {
         public var destination: Destination?
@@ -38,7 +37,7 @@ public struct FlowFeature {
     @CasePathable
     public enum Action {
         case onAppear
-        case destination(DestinationAction) // 🌟 变直接了
+        case destination(DestinationAction)
         
         @CasePathable
         public enum DestinationAction {
