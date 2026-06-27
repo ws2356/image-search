@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 
+// TODO: This is a hacky solution. Consider adding an UI automation test.
 private final class HiddenPinTextField: UITextField {
     var onDigit: ((Character) -> Void)?
     var onDeleteBackward: (() -> Void)?
@@ -87,11 +88,14 @@ private struct PinCodeInputRepresentable: UIViewRepresentable {
 }
 
 public struct PinCodeInputView: View {
-    @Binding private var pinCode: String
+    private let pinCode: String
     @State private var isInputFocused = true
+    
+    private let onPinCodeChange: (String) -> Void
 
-    public init(pinCode: Binding<String>) {
-        self._pinCode = pinCode
+    public init(pinCode: String, onPinCodeChange: @escaping (String) -> Void) {
+        self.pinCode = pinCode
+        self.onPinCodeChange = onPinCodeChange
     }
     
     private var pinCharacters: [String] {
@@ -112,7 +116,9 @@ public struct PinCodeInputView: View {
                         return
                     }
                     if pinCode.count < 4 {
-                        pinCode.append(digit)
+                        var newPinCode = pinCode
+                        newPinCode.append(digit)
+                        onPinCodeChange(newPinCode)
                     }
                 },
                 onDeleteBackward: {
@@ -120,7 +126,9 @@ public struct PinCodeInputView: View {
                         return
                     }
                     if !pinCode.isEmpty {
-                        pinCode.removeLast()
+                        var newPinCode = pinCode
+                        newPinCode.removeLast()
+                        onPinCodeChange(newPinCode)
                     }
                 }
             )

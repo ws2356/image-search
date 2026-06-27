@@ -32,12 +32,9 @@ struct AuthView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     
-                    @Perception.Bindable var model = store
-                    
-                    PinCodeInputView(pinCode: Binding(
-                        get: { model.pinCode },
-                        set: { store.send(.pinCodeChanged($0)) }
-                    ))
+                    PinCodeInputView(pinCode: store.pinCode) { newPinCode in
+                        store.send(.pinCodeChanged(newPinCode))
+                    }
                     .disabled(store.isProcessing)
                     if let error = store.errorMessage {
                         Text(error)
