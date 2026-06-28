@@ -15,8 +15,8 @@ class Colors:
     SURFACE_HOVER = "#EDF0F5"
 
     # Primary buttons
-    PRIMARY_DARK = "#1B2A4A"  # Navy buttons (Show in Finder, Retry, Done)
-    PRIMARY_BLUE = "#3478F6"  # Blue action buttons (Copy Text, Send)
+    PRIMARY_DARK = "#2563EB"  # Navy buttons (Show in Finder, Retry, Done)
+    PRIMARY_BLUE = "#2563EB"  # Blue action buttons (Copy Text, Send)
 
     # Secondary / ghost buttons
     GHOST_BG = "transparent"
@@ -44,11 +44,11 @@ class Colors:
 
     # Badges
     BADGE_GREEN = "#34C759"
-    BADGE_BLUE = "#3478F6"
+    BADGE_BLUE = "#2563EB"
 
     # Progress bar
     PROGRESS_TRACK = "#E5E7EB"
-    PROGRESS_FILL = "#3478F6"
+    PROGRESS_FILL = "#2563EB"
 
 
 class Typography:
