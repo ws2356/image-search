@@ -1,88 +1,31 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
-
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QHBoxLayout,
-    QLabel,
-    QProgressBar,
-    QPushButton,
-    QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
+
+from dt_image_search.instant_sharing.mobile_to_pc.state import (
+    MiniWindowPhase,
+    MiniWindowState,
+    _TERMINAL_PHASES,
+    _payload_label,
+)
+from dt_image_search.instant_sharing.mobile_to_pc.pin_code_widget import PinCodeWidget
+from dt_image_search.instant_sharing.mobile_to_pc.loading_widget import LoadingWidget
+from dt_image_search.instant_sharing.mobile_to_pc.upload_completion_widget import UploadCompletionWidget
 
 
 WINDOW_WIDTH = 360
 WINDOW_HEIGHT = 520
 
-
-class MiniWindowPhase(str, Enum):
-    CONNECTING = "connecting"
-    NEGOTIATING = "negotiating"
-    DISPLAYING_PIN = "displaying_pin"
-    TRANSFERRING = "transferring"
-    DELIVERING = "delivering"
-    SUCCESS = "success"
-    FAILED = "failed"
-    TIMED_OUT = "timed_out"
-    ABORTED = "aborted"
-    BUSY = "busy"
-
-
-_TERMINAL_PHASES = frozenset({
-    MiniWindowPhase.SUCCESS,
-    MiniWindowPhase.FAILED,
-    MiniWindowPhase.TIMED_OUT,
-    MiniWindowPhase.ABORTED,
-    MiniWindowPhase.BUSY,
-})
-
-
-@dataclass
-class MiniWindowState:
-    phase: MiniWindowPhase = MiniWindowPhase.CONNECTING
-    device_name: str = ""
-    payload_label: str = "shared item"
-    error_message: str = ""
-    download_progress: float = 0.0
-    pin_code: str = ""
-    text_content: str = ""
-    file_path: str = ""
-    image_count: int = 0
-    received_count: int = 0
-
-
-def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str, pin_code: str = "", image_count: int = 0, received_count: int = 0) -> str:
-    name = device_name or "your phone"
-    if phase == MiniWindowPhase.CONNECTING:
-        return f"Connecting to {name}..."
-    if phase == MiniWindowPhase.NEGOTIATING:
-        return f"Verifying trust with {name}..."
-    if phase == MiniWindowPhase.DISPLAYING_PIN:
-        return f"Verify this PIN matches the one on your iPhone:\n{pin_code}"
-    if phase == MiniWindowPhase.TRANSFERRING:
-        if image_count > 1:
-            return f"Receiving image {received_count} of {image_count}..."
-        return f"Receiving {payload_label} from iPhone..."
-    if phase == MiniWindowPhase.DELIVERING:
-        return f"Saving {payload_label}..."
-    if phase == MiniWindowPhase.SUCCESS:
-        return f"{payload_label.capitalize()} received successfully."
-    if phase == MiniWindowPhase.FAILED:
-        return "Transfer failed."
-    if phase == MiniWindowPhase.TIMED_OUT:
-        return "Transfer timed out."
-    if phase == MiniWindowPhase.ABORTED:
-        return "Transfer was canceled."
-    if phase == MiniWindowPhase.BUSY:
-        return "Another share is already in progress.\nPlease wait or cancel the current session on iPhone."
-    return ""
+_PIN_PAGE = 0
+_LOADING_PAGE = 1
+_COMPLETION_PAGE = 2
 
 
 class InstantShareMiniWindow(QDialog):
@@ -191,80 +134,26 @@ class InstantShareMiniWindow(QDialog):
         if not app_icon.isNull():
             self.setWindowIcon(app_icon)
 
-        self._main_layout = QVBoxLayout(self)
-        self._main_layout.setContentsMargins(24, 24, 24, 24)
-        self._main_layout.setSpacing(16)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
 
-        self._icon_label = QLabel()
-        self._icon_label.setAlignment(Qt.AlignCenter)
-        self._icon_label.setFixedHeight(48)
-        self._main_layout.addWidget(self._icon_label)
+        self._pin_widget = PinCodeWidget()
+        self._loading_widget = LoadingWidget()
+        self._completion_widget = UploadCompletionWidget()
 
-        self._title_label = QLabel("Instant Share")
-        self._title_label.setAlignment(Qt.AlignCenter)
-        font = self._title_label.font()
-        font.setPointSize(18)
-        font.setBold(True)
-        self._title_label.setFont(font)
-        self._main_layout.addWidget(self._title_label)
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._pin_widget)
+        self._stack.addWidget(self._loading_widget)
+        self._stack.addWidget(self._completion_widget)
+        layout.addWidget(self._stack)
 
-        self._message_label = QLabel()
-        self._message_label.setAlignment(Qt.AlignCenter)
-        self._message_label.setWordWrap(True)
-        self._message_label.setMinimumHeight(48)
-        self._main_layout.addWidget(self._message_label)
-
-        self._pin_label = QLabel()
-        self._pin_label.setAlignment(Qt.AlignCenter)
-        self._pin_label.setWordWrap(False)
-        pin_font = self._pin_label.font()
-        pin_font.setPointSize(36)
-        pin_font.setBold(True)
-        self._pin_label.setFont(pin_font)
-        self._pin_label.setStyleSheet("letter-spacing: 8px;")
-        self._pin_label.hide()
-        self._main_layout.addWidget(self._pin_label)
-
-        self._progress_bar = QProgressBar()
-        self._progress_bar.setRange(0, 100)
-        self._progress_bar.setValue(0)
-        self._progress_bar.setTextVisible(False)
-        self._progress_bar.setFixedHeight(6)
-        self._main_layout.addWidget(self._progress_bar)
-
-        self._error_label = QLabel()
-        self._error_label.setAlignment(Qt.AlignCenter)
-        self._error_label.setWordWrap(True)
-        self._error_label.setStyleSheet("color: #D70015;")
-        self._error_label.hide()
-        self._main_layout.addWidget(self._error_label)
-
-        self._main_layout.addStretch()
-
-        self._button_layout = QHBoxLayout()
-        self._button_layout.setSpacing(12)
-
-        self._abort_button = QPushButton("Cancel")
-        self._abort_button.clicked.connect(self._on_abort)
-        self._abort_button.setVisible(False)
-        self._button_layout.addWidget(self._abort_button)
-
-        self._dismiss_button = QPushButton("Close")
-        self._dismiss_button.clicked.connect(self.close)
-        self._dismiss_button.setVisible(False)
-        self._button_layout.addWidget(self._dismiss_button)
-
-        self._copy_button = QPushButton("Copy to Clipboard")
-        self._copy_button.clicked.connect(self._on_copy)
-        self._copy_button.setVisible(False)
-        self._button_layout.addWidget(self._copy_button)
-
-        self._open_button = QPushButton("Show in Finder")
-        self._open_button.clicked.connect(self._on_open)
-        self._open_button.setVisible(False)
-        self._button_layout.addWidget(self._open_button)
-
-        self._main_layout.addLayout(self._button_layout)
+        # Connect widget signals to parent handlers
+        self._pin_widget.cancelled.connect(self._on_abort)
+        self._loading_widget.cancelled.connect(self._on_abort)
+        self._completion_widget.dismissed.connect(self.close)
+        self._completion_widget.copy_requested.connect(self._on_copy)
+        self._completion_widget.open_requested.connect(self._on_open)
 
         self._refresh_ui()
 
@@ -277,7 +166,6 @@ class InstantShareMiniWindow(QDialog):
     def _on_copy(self) -> None:
         text = self._state.text_content
         if text:
-            from PySide6.QtWidgets import QApplication
             QApplication.clipboard().setText(text)
 
     def _on_open(self) -> None:
@@ -287,97 +175,20 @@ class InstantShareMiniWindow(QDialog):
             subprocess.Popen(["open", "-R", path])
 
     def _refresh_ui(self) -> None:
-        phase = self._state.phase
-        self._icon_label.setText(_phase_icon(phase))
+        page_index = self._page_for_phase(self._state.phase)
+        self._stack.setCurrentIndex(page_index)
+        self._stack.currentWidget().set_state(self._state)
 
-        message = self._state.error_message or _phase_message(
-            phase,
-            self._state.device_name,
-            self._state.payload_label,
-            self._state.pin_code,
-            self._state.image_count,
-            self._state.received_count,
-        )
-        self._message_label.setText(message)
-
+    @staticmethod
+    def _page_for_phase(phase: MiniWindowPhase) -> int:
         if phase == MiniWindowPhase.DISPLAYING_PIN:
-            self._pin_label.setText(self._state.pin_code)
-            self._pin_label.show()
-        else:
-            self._pin_label.hide()
-
-        if phase in (MiniWindowPhase.TRANSFERRING, MiniWindowPhase.DELIVERING):
-            self._progress_bar.setVisible(True)
-            if self._state.download_progress > 0:
-                self._progress_bar.setValue(int(self._state.download_progress * 100))
-            else:
-                self._progress_bar.setRange(0, 0)
-        elif phase == MiniWindowPhase.SUCCESS:
-            self._progress_bar.setVisible(True)
-            self._progress_bar.setRange(0, 100)
-            self._progress_bar.setValue(100)
-        elif phase in (MiniWindowPhase.FAILED, MiniWindowPhase.TIMED_OUT, MiniWindowPhase.ABORTED, MiniWindowPhase.BUSY):
-            self._progress_bar.setVisible(False)
-        else:
-            self._progress_bar.setVisible(True)
-            self._progress_bar.setRange(0, 0)
-
-        is_terminal = phase in _TERMINAL_PHASES
-        self._abort_button.setVisible(
-            phase in (MiniWindowPhase.CONNECTING, MiniWindowPhase.NEGOTIATING, MiniWindowPhase.DISPLAYING_PIN, MiniWindowPhase.TRANSFERRING)
-            and not is_terminal
-        )
-        self._dismiss_button.setVisible(is_terminal)
-
-        if phase == MiniWindowPhase.SUCCESS:
-            has_text = bool(self._state.text_content)
-            has_file = bool(self._state.file_path)
-            self._copy_button.setVisible(has_text)
-            self._open_button.setVisible(has_file)
-        else:
-            self._copy_button.setVisible(False)
-            self._open_button.setVisible(False)
-
-        if phase in (MiniWindowPhase.FAILED, MiniWindowPhase.TIMED_OUT, MiniWindowPhase.ABORTED):
-            self._error_label.setText(message)
-            self._error_label.show()
-        else:
-            self._error_label.hide()
+            return _PIN_PAGE
+        if phase in _TERMINAL_PHASES:
+            return _COMPLETION_PAGE
+        return _LOADING_PAGE
 
     def closeEvent(self, event) -> None:
         if self._auto_close_timer is not None:
             self._auto_close_timer.stop()
             self._auto_close_timer = None
         super().closeEvent(event)
-
-
-def _phase_icon(phase: MiniWindowPhase) -> str:
-    if phase == MiniWindowPhase.CONNECTING:
-        return "📡"
-    if phase == MiniWindowPhase.NEGOTIATING:
-        return "🔐"
-    if phase == MiniWindowPhase.DISPLAYING_PIN:
-        return "🔑"
-    if phase == MiniWindowPhase.TRANSFERRING:
-        return "⬇️"
-    if phase == MiniWindowPhase.DELIVERING:
-        return "💾"
-    if phase == MiniWindowPhase.SUCCESS:
-        return "✅"
-    if phase == MiniWindowPhase.FAILED:
-        return "❌"
-    if phase == MiniWindowPhase.TIMED_OUT:
-        return "⏰"
-    if phase == MiniWindowPhase.ABORTED:
-        return "🛑"
-    if phase == MiniWindowPhase.BUSY:
-        return "⏳"
-    return "📡"
-
-
-def _payload_label(payload_class: str) -> str:
-    if payload_class == "text":
-        return "shared text"
-    if payload_class == "image":
-        return "shared image"
-    return "shared item"
