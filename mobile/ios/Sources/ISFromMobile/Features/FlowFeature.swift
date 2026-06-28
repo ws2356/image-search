@@ -115,9 +115,10 @@ public struct FlowFeature {
 
             // 自定义取消按钮事件
             case .destination(.auth(.delegate(.authCancelled))):
-                state.destination = nil
-                return .none
-            
+                return .run { [extensionContext] _ in
+                    await extensionContext.cancelRequest(error: nil)
+                }
+
             case .destination(.pendingRevisit(.delegate(.revisitSucceeded(let message)))):
                 state.destination = .completion(CompletionFeature.State())
                 return .none
