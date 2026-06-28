@@ -13,19 +13,21 @@ struct PendingRevisitView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            
-            VStack(spacing: 24) {
+            VStack(spacing: DesignSystem.Spacing.xl) {
                 Spacer()
                 ProgressView()
                     .controlSize(.large)
-                Text("Checking existing trust...")
-                    .font(.headline)
-                Text(store.payloadDescription)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .tint(DesignSystem.Colors.primary)
+                DSText(text: "Checking existing trust...", style: .h3)
+                DSText(
+                    text: store.payloadDescription,
+                    style: .body,
+                    color: DesignSystem.Colors.secondaryText
+                )
                 Spacer()
             }
-            .padding()
+            .padding(DesignSystem.Spacing.xl)
+            .background(Color(.systemBackground))
             .task { store.send(.attemptRevisit) }
         }
     }

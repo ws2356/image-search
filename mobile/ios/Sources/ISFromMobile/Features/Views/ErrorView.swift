@@ -12,40 +12,30 @@ struct ErrorView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            
-            VStack(spacing: 24) {
+            VStack(spacing: DesignSystem.Spacing.xl) {
                 Spacer()
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 56))
-                    .foregroundStyle(.orange)
-                Text("Transfer Failed")
-                    .font(.title2.bold())
-                Text(store.message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    .foregroundStyle(DesignSystem.Colors.warning)
+                DSText(text: "Transfer Failed", style: .h2)
+                DSText(
+                    text: store.message,
+                    style: .body,
+                    color: DesignSystem.Colors.secondaryText
+                )
+                .multilineTextAlignment(.center)
                 Spacer()
-                HStack(spacing: 16) {
-                    Button {
+                HStack(spacing: DesignSystem.Spacing.lg) {
+                    PrimaryButton(title: "Cancel", style: .secondary) {
                         store.send(.cancel)
-                    } label: {
-                        Text("Cancel")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    
-                    Button {
+                    PrimaryButton(title: "Try Again", style: .primary) {
                         store.send(.retry)
-                    } label: {
-                        Text("Try Again")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
             }
-            .padding()
+            .padding(DesignSystem.Spacing.xl)
+            .background(Color(.systemBackground))
         }
     }
 }

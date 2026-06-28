@@ -2,7 +2,8 @@
 //  DiscoverView.swift
 //  ISFromMobile
 //
-//  mDNS device discovery, payload card, device selector, Send button.
+//  mDNS device discovery: empty, scanning, and found states.
+//  Uses DesignSystem tokens and shared Components for consistent styling.
 //
 import SwiftUI
 import ComposableArchitecture
@@ -13,33 +14,23 @@ struct DiscoverView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            
-            VStack(spacing: 16) {
+            VStack(spacing: DesignSystem.Spacing.xl) {
                 payloadCard
                 deviceSelectorCard
                 Spacer()
                 if let error = store.errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    DSText(text: error, style: .caption, color: DesignSystem.Colors.error)
                 }
-                Button {
-                    store.send(.send)
-                } label: {
-                    HStack {
-                        if store.isProcessing {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(store.isProcessing ? "Connecting..." : "Send to \(store.selectedDevice?.name ?? "...")")
-                            .fontWeight(.semibold)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
+                PrimaryButton(
+                    title: store.isProcessing ? "Connecting..." : "Send to \(store.selectedDevice?.name ?? "...")",
+                    style: .primary,
+                    isLoading: store.isProcessing,
+                    action: { store.send(.send) }
+                )
                 .disabled(!(store.selectedDevice != nil && !context.isLoadingSharedItems && !store.isProcessing))
             }
-            .padding()
+            .padding(DesignSystem.Spacing.xl)
+            .background(Color(.systemBackground))
             .task { store.send(.onAppear) }
         }
     }
@@ -48,22 +39,18 @@ struct DiscoverView: View {
 
     private var payloadCard: some View {
         WithPerceptionTracking {
-            HStack {
-                Image(systemName: payloadIcon)
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading) {
-                    Text(payloadTitle)
-                        .font(.headline)
-                    Text(payloadSubtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            CardView {
+                HStack(spacing: DesignSystem.Spacing.md) {
+                    Image(systemName: payloadIcon)
+                        .font(.title2)
+                        .foregroundStyle(DesignSystem.Colors.primary)
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                        DSText(text: payloadTitle, style: .h4)
+                        DSText(text: payloadSubtitle, style: .caption)
+                    }
+                    Spacer()
                 }
-                Spacer()
             }
-            .padding()
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-            
         }
     }
 
@@ -71,67 +58,67 @@ struct DiscoverView: View {
 
     private var deviceSelectorCard: some View {
         WithPerceptionTracking {
-            
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Send to")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if !store.discoveredDevices.isEmpty {
-                        Text("\(store.discoveredDevices.count) found")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if store.discoveredDevices.isEmpty {
+            CardView {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
                     HStack {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Looking for desktops...")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        DSText(text: "Send to", style: .h4)
+                        Spacer()
+                        if !store.discoveredDevices.isEmpty {
+                            DSText(
+                                text: "\(store.discoveredDevices.count) found",
+                                style: .caption,
+                                color: DesignSystem.Colors.success
+                            )
+                        }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                } else {
-                    ForEach(store.discoveredDevices) { pc in
-                        deviceRow(pc)
+
+                    if store.discoveredDevices.isEmpty {
+                        // Empty / scanning state
+                        VStack(spacing: DesignSystem.Spacing.md) {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(DesignSystem.Colors.primary)
+                            ScanningBadge()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DesignSystem.Spacing.lg)
+                    } else {
+                        // Found state: device list
+                        ForEach(store.discoveredDevices) { pc in
+                            deviceRow(pc)
+                        }
                     }
                 }
             }
-            .padding()
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
     private func deviceRow(_ device: InstantShareDiscoveredPC) -> some View {
         WithPerceptionTracking {
-            
             Button {
                 store.send(.selectDevice(device))
             } label: {
-                HStack {
+                HStack(spacing: DesignSystem.Spacing.md) {
                     Image(systemName: "laptopcomputer")
-                        .foregroundStyle(.blue)
-                    VStack(alignment: .leading) {
-                        Text(device.name)
-                            .font(.body)
-                        Text("\(device.primaryHost):\(device.port)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                        .foregroundStyle(DesignSystem.Colors.primary)
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                        DSText(text: device.name, style: .body)
+                        DSText(text: "\(device.primaryHost):\(device.port)", style: .caption2)
                     }
                     Spacer()
-                    Image(systemName: store.selectedDevice?.id == device.id ? "checkmark.square.fill" : "square")
-                        .foregroundStyle(store.selectedDevice?.id == device.id ? .green : .gray.opacity(0.4))
+                    Image(systemName: store.selectedDevice?.id == device.id ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(
+                            store.selectedDevice?.id == device.id
+                            ? DesignSystem.Colors.primary
+                            : DesignSystem.Colors.secondaryText.opacity(0.4)
+                        )
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
+                .padding(DesignSystem.Spacing.md)
                 .background(
                     store.selectedDevice?.id == device.id
-                    ? Color.blue.opacity(0.1)
+                    ? DesignSystem.Colors.selectedHighlight
                     : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 8)
+                    in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.chip)
                 )
             }
             .buttonStyle(.plain)

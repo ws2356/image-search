@@ -12,20 +12,20 @@ struct TransferView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            
-            VStack(spacing: 24) {
+            VStack(spacing: DesignSystem.Spacing.xl) {
                 Spacer()
                 ProgressView()
                     .controlSize(.large)
-                Text("Sending...")
-                    .font(.headline)
+                    .tint(DesignSystem.Colors.primary)
+                DSText(text: "Sending...", style: .h3)
                 if store.progress > 0 {
-                    ProgressView(value: store.progress)
-                        .padding(.horizontal)
+                    TransferProgress(progress: Double(store.progress))
+                        .padding(.horizontal, DesignSystem.Spacing.xl)
                 }
                 Spacer()
             }
-            .padding()
+            .padding(DesignSystem.Spacing.xl)
+            .background(Color(.systemBackground))
             .task { store.send(.startTransfer) }
         }
     }

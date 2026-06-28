@@ -14,46 +14,38 @@ struct AuthView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            VStack(spacing: 24) {
+            VStack(spacing: DesignSystem.Spacing.xl) {
                 if store.isHandshaking {
                     // Loading state: handshake + apply in progress
-                    Spacer()
-                    ProgressView()
-                        .controlSize(.large)
-                    Text("Connecting...")
-                        .font(.headline)
-                    Spacer()
+                    LoadingSpinner(message: "Connecting...")
                 } else {
                     // PIN entry state
                     Spacer()
-                    Text("Enter PIN")
-                        .font(.title2.bold())
-                    Text("Enter the 4-digit code shown on your Mac:")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
+                    DSText(text: "Enter PIN", style: .h2)
+                    DSText(
+                        text: "Enter the 4-digit code shown on your Mac:",
+                        style: .body,
+                        color: DesignSystem.Colors.secondaryText
+                    )
+
                     PinCodeInputView(pinCode: store.pinCode) { newPinCode in
                         store.send(.pinCodeChanged(newPinCode))
                     }
                     .disabled(store.isProcessing)
+
                     if let error = store.errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                        DSText(text: error, style: .caption, color: DesignSystem.Colors.error)
                             .multilineTextAlignment(.center)
                     }
-                    Button(role: .cancel) {
+
+                    PrimaryButton(title: "Cancel", style: .secondary) {
                         store.send(.rejectPIN)
-                    } label: {
-                        Text("Cancel")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
                     Spacer()
                 }
             }
-            .padding()
+            .padding(DesignSystem.Spacing.xl)
+            .background(Color(.systemBackground))
             .task { store.send(.handshakeAndApply) }
         }
     }

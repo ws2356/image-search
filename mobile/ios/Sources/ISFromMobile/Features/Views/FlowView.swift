@@ -19,7 +19,6 @@ public struct FlowView: View {
     
     public var body: some View {
         WithPerceptionTracking {
-            
             Group {
                 if let destinationStore = store.scope(state: \.destination, action: \.destination) {
                     SwitchStore(destinationStore) { state in
