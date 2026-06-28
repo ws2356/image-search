@@ -19,6 +19,7 @@ public struct DiscoverFeature {
         public var selectedDevice: InstantShareDiscoveredPC? = nil
         public var errorMessage: String? = nil
         public var isProcessing: Bool = false
+        var preWarmStates: [String: Bool] = [:]
 
         public init(
             discoveredDevices: [InstantShareDiscoveredPC] = [],
@@ -40,7 +41,6 @@ public struct DiscoverFeature {
         case devicesUpdated([InstantShareDiscoveredPC])
         case selectDevice(InstantShareDiscoveredPC)
         case send
-        case preWarmLocalNetwork
         case delegate(Delegate)
 
         @CasePathable
@@ -78,28 +78,30 @@ public struct DiscoverFeature {
 
             case .devicesUpdated(let devices):
                 state.discoveredDevices = devices
-                return .none
-
-            case .selectDevice(let device):
-                state.selectedDevice = device
-                $context.withLock { $0.targetDevice = device }
-                return .send(.preWarmLocalNetwork)
-
-            case .preWarmLocalNetwork:
-                guard let device = state.selectedDevice else { return .none }
+                let needPreWarm = devices.filter({ state.preWarmStates[$0.id] != true })
+                for device in devices {
+                    state.preWarmStates[device.id] = true
+                }
                 return .run { _ in
                     // Fire lightweight requests to all IPs to trigger iOS local network permission
                     await withTaskGroup(of: Void.self) { group in
-                        for host in device.hosts {
-                            guard let url = URL(string: "http://\(host):\(device.port)/") else { continue }
-                            group.addTask {
-                                var request = URLRequest(url: url)
-                                request.timeoutInterval = 2
-                                _ = try? await URLSession.shared.data(for: request)
+                        for device in needPreWarm {
+                            for host in device.hosts {
+                                guard let url = URL(string: "http://\(host):\(device.port)/") else { continue }
+                                group.addTask {
+                                    var request = URLRequest(url: url)
+                                    request.timeoutInterval = 2
+                                    _ = try? await URLSession.shared.data(for: request)
+                                }
                             }
                         }
                     }
                 }
+
+            case .selectDevice(let device):
+                state.selectedDevice = device
+                $context.withLock { $0.targetDevice = device }
+                return .none
 
             case .send:
                 // targetDevice set from selectDevice; sessionId reinit from onAppear
