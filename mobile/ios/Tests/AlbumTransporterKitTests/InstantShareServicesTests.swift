@@ -168,29 +168,35 @@ final class InstantShareTrustSessionManagerTests: XCTestCase {
 }
 
 final class InstantSharePayloadExtractorTests: XCTestCase {
+    @MainActor
     func test_classify_text_types() {
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.plain-text"), .text)
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.utf8-plain-text"), .text)
     }
 
+    @MainActor
     func test_classify_link_types() {
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.url"), .link)
     }
 
+    @MainActor
     func test_classify_image_types() {
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.jpeg"), .image)
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.png"), .image)
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.heic"), .image)
     }
 
+    @MainActor
     func test_classify_video_types() {
         XCTAssertEqual(InstantSharePayloadExtractor.classify(typeIdentifier: "public.mpeg-4"), .video)
     }
 
+    @MainActor
     func test_classify_unknown_returns_nil() {
         XCTAssertNil(InstantSharePayloadExtractor.classify(typeIdentifier: "com.apple.application-bundle"))
     }
 
+    @MainActor
     func test_payload_envelope_text_target_intent() {
         let envelope = InstantSharePayloadEnvelope(
             payloadType: .text, textContent: "hello", fileURL: nil,
@@ -199,6 +205,7 @@ final class InstantSharePayloadExtractorTests: XCTestCase {
         XCTAssertEqual(envelope.targetIntent, "clipboard_only")
     }
 
+    @MainActor
     func test_payload_envelope_image_target_intent() {
         let envelope = InstantSharePayloadEnvelope(
             payloadType: .image, textContent: nil, fileURL: URL(string: "file:///tmp/test.jpg"),
@@ -207,6 +214,7 @@ final class InstantSharePayloadExtractorTests: XCTestCase {
         XCTAssertEqual(envelope.targetIntent, "clipboard_or_file")
     }
 
+    @MainActor
     func test_batch_size_exceeded_error_description() {
         let error = InstantSharePayloadExtractorError.batchSizeExceeded(limit: 10)
         XCTAssertNotNil(error.errorDescription)
@@ -214,6 +222,7 @@ final class InstantSharePayloadExtractorTests: XCTestCase {
         XCTAssertTrue(error.errorDescription!.contains("items"))
     }
 
+    @MainActor
     func test_max_batch_size_constant() {
         XCTAssertEqual(InstantSharePayloadExtractor.maxBatchSize, 10)
     }

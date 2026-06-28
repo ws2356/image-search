@@ -27,7 +27,7 @@ public final class InstantShareExtensionContextClient: @unchecked Sendable {
     }
 
     @MainActor
-    func completeRequest() {
+    func completeRequest() async {
         context?.completeRequest(
             returningItems: nil,
             completionHandler: nil
@@ -35,7 +35,7 @@ public final class InstantShareExtensionContextClient: @unchecked Sendable {
     }
 
     @MainActor
-    func cancelRequest(error: Error?) {
+    func cancelRequest(error: Error?) async {
         let nsError = error ?? NSError(
             domain: "InstantShareExtension",
             code: 0
