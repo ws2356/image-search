@@ -18,10 +18,11 @@ from dt_image_search.instant_sharing.mobile_to_pc.state import (
 from dt_image_search.instant_sharing.mobile_to_pc.pin_code_widget import PinCodeWidget
 from dt_image_search.instant_sharing.mobile_to_pc.loading_widget import LoadingWidget
 from dt_image_search.instant_sharing.mobile_to_pc.upload_completion_widget import UploadCompletionWidget
+from dt_image_search.instant_sharing.mobile_to_pc.design_system import Colors, Spacing
 
 
 WINDOW_WIDTH = 360
-WINDOW_HEIGHT = 520
+WINDOW_HEIGHT = 450
 
 _PIN_PAGE = 0
 _LOADING_PAGE = 1
@@ -129,14 +130,20 @@ class InstantShareMiniWindow(QDialog):
         self.setWindowTitle("Instant Share")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
 
         app_icon = QApplication.windowIcon()
         if not app_icon.isNull():
             self.setWindowIcon(app_icon)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(
+            Spacing.WINDOW_PADDING,
+            Spacing.WINDOW_PADDING,
+            Spacing.WINDOW_PADDING,
+            Spacing.WINDOW_PADDING,
+        )
+        layout.setSpacing(Spacing.SECTION_GAP)
 
         self._pin_widget = PinCodeWidget()
         self._loading_widget = LoadingWidget()

@@ -5,14 +5,13 @@ import socket
 from typing import Callable
 
 from PIL import Image
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QImage, QPainter, QPixmap
+from PySide6.QtCore import Qt, QTimer, QRect
+from PySide6.QtGui import QImage, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
@@ -20,6 +19,18 @@ from PySide6.QtWidgets import (
 )
 
 from dt_image_search.instant_sharing.lan_discovery import get_lan_ip_addresses
+from dt_image_search.instant_sharing.mobile_to_pc.components.buttons import GhostButton
+from dt_image_search.instant_sharing.mobile_to_pc.design_system import (
+    Colors,
+    Typography,
+    Spacing,
+)
+from dt_image_search.instant_sharing.mobile_to_pc.styles import (
+    _make_font,
+    apply_heading_label,
+    apply_subtitle_label,
+    apply_caption_label,
+)
 from dt_image_search.instant_sharing.qr_trigger_handler import StashEntry
 
 try:
@@ -32,6 +43,11 @@ _logger = logging.getLogger(__name__)
 WINDOW_WIDTH = 400
 WINDOW_HEIGHT = 580
 QR_SIZE = 240
+
+# Corner bracket visual parameters
+_BRACKET_LENGTH = 30
+_BRACKET_WIDTH = 3
+_BRACKET_GAP = 4
 
 
 def build_qr_url(
@@ -70,6 +86,53 @@ def render_qr_pixmap(payload: str, size: int) -> QPixmap:
         painter.drawText(pixmap.rect(), Qt.AlignCenter, "QR Unavailable")
         painter.end()
     return pixmap
+
+
+class QRCodeContainer(QWidget):
+    """Custom widget that wraps a QR QLabel and paints 4 blue corner brackets."""
+
+    def __init__(self, qr_label: QLabel, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._qr_label = qr_label
+        self.setFixedSize(QR_SIZE + 2 * (_BRACKET_LENGTH + _BRACKET_GAP),
+                          QR_SIZE + 2 * (_BRACKET_LENGTH + _BRACKET_GAP))
+
+        inner_layout = QVBoxLayout(self)
+        inner_layout.setContentsMargins(
+            _BRACKET_LENGTH + _BRACKET_GAP,
+            _BRACKET_LENGTH + _BRACKET_GAP,
+            _BRACKET_LENGTH + _BRACKET_GAP,
+            _BRACKET_LENGTH + _BRACKET_GAP,
+        )
+        inner_layout.setSpacing(0)
+        inner_layout.addWidget(self._qr_label)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(Colors.PRIMARY_BLUE))
+        pen.setWidth(_BRACKET_WIDTH)
+        painter.setPen(pen)
+
+        w = self.width()
+        h = self.height()
+        gap = _BRACKET_GAP
+        length = _BRACKET_LENGTH
+
+        # Top-left
+        painter.drawLine(gap, gap + length, gap, gap)
+        painter.drawLine(gap, gap, gap + length, gap)
+        # Top-right
+        painter.drawLine(w - gap - length, gap, w - gap, gap)
+        painter.drawLine(w - gap, gap, w - gap, gap + length)
+        # Bottom-left
+        painter.drawLine(gap, h - gap - length, gap, h - gap)
+        painter.drawLine(gap, h - gap, gap + length, h - gap)
+        # Bottom-right
+        painter.drawLine(w - gap - length, h - gap, w - gap, h - gap)
+        painter.drawLine(w - gap, h - gap - length, w - gap, h - gap)
+
+        painter.end()
 
 
 class QRTriggerMiniWindow(QDialog):
@@ -114,7 +177,7 @@ class QRTriggerMiniWindow(QDialog):
             self._message_label.setText(f"Delivered to {peer_device_name}")
         else:
             self._message_label.setText("Delivered")
-        self._qr_label.hide()
+        self._qr_container.hide()
         self._cancel_button.hide()
         self._dismiss_button.show()
         QTimer.singleShot(4000, self.close)
@@ -122,7 +185,7 @@ class QRTriggerMiniWindow(QDialog):
     def on_expired(self) -> None:
         self._expired = True
         self._message_label.setText("Expired")
-        self._qr_label.hide()
+        self._qr_container.hide()
         self._cancel_button.hide()
         self._dismiss_button.show()
         QTimer.singleShot(10000, self.close)
@@ -137,19 +200,22 @@ class QRTriggerMiniWindow(QDialog):
             self.setWindowIcon(app_icon)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(12)
+        layout.setContentsMargins(
+            Spacing.WINDOW_PADDING, Spacing.WINDOW_PADDING,
+            Spacing.WINDOW_PADDING, Spacing.WINDOW_PADDING,
+        )
+        layout.setSpacing(Spacing.ITEM_GAP)
 
+        # Heading: 18pt bold, TEXT_PRIMARY
         title_label = QLabel("Scan to Receive")
         title_label.setAlignment(Qt.AlignCenter)
-        font = title_label.font()
-        font.setPointSize(20)
-        font.setBold(True)
-        title_label.setFont(font)
+        apply_heading_label(title_label)
         layout.addWidget(title_label)
 
-        subtitle_label = QLabel(f"from <b>{self._pc_name}</b>")
+        # Subtitle: 14pt, TEXT_SECONDARY
+        subtitle_label = QLabel(f"from {self._pc_name}")
         subtitle_label.setAlignment(Qt.AlignCenter)
+        apply_subtitle_label(subtitle_label)
         layout.addWidget(subtitle_label)
 
         # Batch file count and filename list (shown when file_count > 1)
@@ -157,9 +223,10 @@ class QRTriggerMiniWindow(QDialog):
             layout.addSpacing(4)
             count_label = QLabel(f"Sharing {self._file_count} files")
             count_label.setAlignment(Qt.AlignCenter)
-            count_font = count_label.font()
-            count_font.setPointSize(13)
-            count_label.setFont(count_font)
+            count_label.setFont(_make_font(13, bold=True))
+            count_label.setStyleSheet(
+                f"color: {Colors.TEXT_PRIMARY}; background: transparent;"
+            )
             layout.addWidget(count_label)
 
             # Scrollable filename list, truncated to 10 shown items
@@ -171,57 +238,85 @@ class QRTriggerMiniWindow(QDialog):
 
             for i, filename in enumerate(self._filenames[:visible_count]):
                 file_label = QLabel(filename)
-                file_label.setStyleSheet("color: #6B7280; font-size: 12px;")
+                file_label.setStyleSheet(
+                    f"color: {Colors.TEXT_SECONDARY}; font-size: 12px; background: transparent;"
+                )
                 file_list_layout.addWidget(file_label)
 
             if self._file_count > 10:
                 more_label = QLabel(f"+{self._file_count - 10} more files...")
-                more_label.setStyleSheet("color: #9CA3AF; font-size: 11px; font-style: italic;")
+                more_label.setStyleSheet(
+                    f"color: {Colors.TEXT_MUTED}; font-size: 11px; font-style: italic; background: transparent;"
+                )
                 file_list_layout.addWidget(more_label)
 
             scroll = QScrollArea()
             scroll.setWidget(file_list_widget)
             scroll.setWidgetResizable(True)
             scroll.setMaximumHeight(140)
-            scroll.setStyleSheet("QScrollArea { border: 1px solid #E5E7EB; border-radius: 6px; }")
+            scroll.setStyleSheet(
+                f"QScrollArea {{ border: 1px solid {Colors.BORDER}; border-radius: {Spacing.CARD_RADIUS}px; background: transparent; }}"
+            )
             layout.addWidget(scroll)
 
         layout.addSpacing(8)
 
+        # QR code inside bracket container
         self._qr_label = QLabel()
         self._qr_label.setAlignment(Qt.AlignCenter)
         self._qr_label.setFixedSize(QR_SIZE, QR_SIZE)
         self._qr_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self._qr_label.setStyleSheet(
-            "background-color: white; border: 1px solid #d1d5db; border-radius: 8px;"
+            f"background-color: {Colors.BACKGROUND}; border: 1px solid {Colors.BORDER_LIGHT}; border-radius: {Spacing.CARD_RADIUS}px;"
         )
         self._qr_label.setText("Generating QR...")
-        layout.addWidget(self._qr_label, alignment=Qt.AlignCenter)
+
+        self._qr_container = QRCodeContainer(self._qr_label)
+        layout.addWidget(self._qr_container, alignment=Qt.AlignCenter)
 
         layout.addSpacing(8)
 
-        self._message_label = QLabel('Scan this QR code with your iPhone or the <b>AuBackup</b> app to receive the shared content.')
+        # Instruction message — caption styling
+        self._message_label = QLabel(
+            'Scan this QR code with your iPhone or the <b>AuBackup</b> app to receive the shared content.'
+        )
         self._message_label.setAlignment(Qt.AlignCenter)
         self._message_label.setWordWrap(True)
         self._message_label.setTextFormat(Qt.RichText)
+        apply_caption_label(self._message_label)
         layout.addWidget(self._message_label)
 
-        # layout.addStretch()
+        # IP:port pill badge
+        first_ip = self._lan_ips[0] if self._lan_ips else "0.0.0.0"
+        pill_label = QLabel(f"{first_ip}:{self._pc_port}")
+        pill_label.setAlignment(Qt.AlignCenter)
+        pill_label.setFont(_make_font(Typography.BADGE_SIZE))
+        pill_label.setStyleSheet(
+            f"""
+            QLabel {{
+                background-color: {Colors.SURFACE};
+                border: 1px solid {Colors.BORDER};
+                border-radius: 12px;
+                padding: 3px 6px;
+                color: {Colors.TEXT_SECONDARY};
+            }}
+            """
+        )
+        # Wrap in a container so the pill centers properly
+        pill_container = QHBoxLayout()
+        pill_container.setAlignment(Qt.AlignCenter)
+        pill_container.addWidget(pill_label)
+        layout.addLayout(pill_container)
 
-        ips_str = ", ".join(self._lan_ips)
-        port_label = QLabel(f"PC Address: {ips_str}:{self._pc_port}")
-        port_label.setAlignment(Qt.AlignCenter)
-        port_label.setStyleSheet("color: #9CA3AF; font-size: 11px;")
-        layout.addWidget(port_label)
-
+        # Buttons — GhostButton for Cancel and Close
         button_layout = QHBoxLayout()
         button_layout.setSpacing(12)
 
-        self._cancel_button = QPushButton("Cancel")
+        self._cancel_button = GhostButton("Cancel")
         self._cancel_button.clicked.connect(self._on_cancel_clicked)
         button_layout.addWidget(self._cancel_button)
 
-        self._dismiss_button = QPushButton("Close")
+        self._dismiss_button = GhostButton("Close")
         self._dismiss_button.clicked.connect(self.close)
         self._dismiss_button.setVisible(False)
         button_layout.addWidget(self._dismiss_button)
@@ -248,7 +343,7 @@ class QRTriggerMiniWindow(QDialog):
         self._qr_label.setPixmap(pixmap)
         self._qr_label.setText("")
 
-    def closeEvent(self, event) -> None:
+    def closeEvent(self, event) -> None:  # noqa: N802
         if self._auto_close_timer is not None:
             self._auto_close_timer.stop()
             self._auto_close_timer = None
