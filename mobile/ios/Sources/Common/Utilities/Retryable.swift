@@ -5,6 +5,18 @@
 //  Created by Song Wan on 2026/6/27.
 //
 
+public protocol RetryableError: Error {
+    var isRetryable: Bool { get }
+}
+
+// 通过扩展 Error，让所有未显式实现该协议的错误默认返回 false
+extension Error {
+    public var isRetryable: Bool {
+        // 如果错误本身实现了 RetryableError，就用它的逻辑，否则默认不重试
+        (self as? RetryableError)?.isRetryable ?? false
+    }
+}
+
 public struct Retryable {
     /// 支持 iOS 15+ 的指数退避重试函数
     /// - Parameters:
@@ -27,6 +39,10 @@ public struct Retryable {
             } catch {
                 // 2. 核心改进：如果是由于取消导致的错误，或者 Task 已经被取消，立刻抛出，拒绝盲目重试
                 if error is CancellationError || Task.isCancelled {
+                    throw error
+                }
+                
+                if !error.isRetryable {
                     throw error
                 }
                 

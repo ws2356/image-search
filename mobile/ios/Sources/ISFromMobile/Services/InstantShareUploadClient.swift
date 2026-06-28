@@ -1,7 +1,7 @@
 import Foundation
 import Common
 
-enum InstantShareUploadClientError: Error, Sendable {
+enum InstantShareUploadClientError: RetryableError, Sendable {
     case uploadFailed(String)
     case invalidResponse(String)
     case httpError(statusCode: Int, errorCode: String, message: String)

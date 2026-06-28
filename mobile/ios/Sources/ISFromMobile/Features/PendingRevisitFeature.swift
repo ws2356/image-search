@@ -55,41 +55,35 @@ public struct PendingRevisitFeature {
                     do {
                         switch sharedItems {
                         case .text(let text):
-                            try await Retryable.withRetry(maxTimes: 3) {
-                                try await uploadClient.uploadText(
+                            try await uploadClient.uploadText(
+                                hosts: targetDevice.hosts,
+                                port: targetDevice.tlsPort,
+                                sessionID: sessionId,
+                                correlationID: sessionId,
+                                text: text,
+                                peerDeviceName: deviceName
+                            )
+                        case .images(let images):
+                            if images.count == 1, let img = images.first {
+                                try await uploadClient.uploadImage(
                                     hosts: targetDevice.hosts,
                                     port: targetDevice.tlsPort,
                                     sessionID: sessionId,
                                     correlationID: sessionId,
-                                    text: text,
+                                    fileURL: img.fileURL,
+                                    contentType: img.contentType,
+                                    filename: img.filename,
                                     peerDeviceName: deviceName
                                 )
-                            }
-                        case .images(let images):
-                            if images.count == 1, let img = images.first {
-                                try await Retryable.withRetry(maxTimes: 3) {
-                                    try await uploadClient.uploadImage(
-                                        hosts: targetDevice.hosts,
-                                        port: targetDevice.tlsPort,
-                                        sessionID: sessionId,
-                                        correlationID: sessionId,
-                                        fileURL: img.fileURL,
-                                        contentType: img.contentType,
-                                        filename: img.filename,
-                                        peerDeviceName: deviceName
-                                    )
-                                }
                             } else {
-                                try await Retryable.withRetry(maxTimes: 3) {
-                                    try await uploadClient.uploadImages(
-                                        hosts: targetDevice.hosts,
-                                        port: targetDevice.tlsPort,
-                                        sessionID: sessionId,
-                                        correlationID: sessionId,
-                                        urls: images.map { ($0.fileURL, $0.filename, $0.contentType) },
-                                        peerDeviceName: deviceName
-                                    )
-                                }
+                                try await uploadClient.uploadImages(
+                                    hosts: targetDevice.hosts,
+                                    port: targetDevice.tlsPort,
+                                    sessionID: sessionId,
+                                    correlationID: sessionId,
+                                    urls: images.map { ($0.fileURL, $0.filename, $0.contentType) },
+                                    peerDeviceName: deviceName
+                                )
                             }
                         case .files:
                             // Files not yet supported in revisit
