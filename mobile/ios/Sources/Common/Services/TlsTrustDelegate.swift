@@ -37,7 +37,7 @@ public final class TlsTrustDelegate: NSObject, URLSessionTaskDelegate {
         completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) async {
         guard let serverTrust = challenge.protectionSpace.serverTrust else {
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
 
@@ -46,42 +46,42 @@ public final class TlsTrustDelegate: NSObject, URLSessionTaskDelegate {
         let count = SecTrustGetCertificateCount(serverTrust)
         guard count > 0, let serverCert = SecTrustGetCertificateAtIndex(serverTrust, 0) else {
             LocalLog.error("[TLS] no certificate in server trust chain")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
 
         guard let pubkeyHash = serverCert.publicKeyHash else {
             LocalLog.error("[TLS] failed to extract publicKeyHash from server cert")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
         LocalLog.debug("[TLS] server cert pubkeyHash=\(pubkeyHash.base64EncodedString())")
 
         guard let storedCert = try? await appIdentityProvider.peerCertificate(forPubkeyHash: pubkeyHash) else {
             LocalLog.error("[TLS] no stored peer certificate for pubkeyHash")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
 
         guard let serverPubKey = SecCertificateCopyKey(serverCert) else {
             LocalLog.error("[TLS] failed to copy public key from server cert")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
         guard let serverPubKeyData = serverPubKey.externalRepresentation else {
             LocalLog.error("[TLS] failed to export server public key bytes")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
 
         guard let storedPubKey = SecCertificateCopyKey(storedCert) else {
             LocalLog.error("[TLS] failed to copy public key from stored cert")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
         guard let storedPubKeyData = storedPubKey.externalRepresentation else {
             LocalLog.error("[TLS] failed to export stored public key bytes")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
 
@@ -89,7 +89,7 @@ public final class TlsTrustDelegate: NSObject, URLSessionTaskDelegate {
             LocalLog.error("[TLS] public key mismatch")
             LocalLog.debug("[TLS] server pubKey=\(serverPubKeyData.base64EncodedString())")
             LocalLog.debug("[TLS] stored pubKey=\(storedPubKeyData.base64EncodedString())")
-            completionHandler(.cancelAuthenticationChallenge, nil)
+            completionHandler(.performDefaultHandling, nil)
             return
         }
 
