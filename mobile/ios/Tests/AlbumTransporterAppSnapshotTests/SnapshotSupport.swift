@@ -1,6 +1,7 @@
 import CoreGraphics
 import SwiftUI
 import UIKit
+import WebKit
 import XCTest
 
 @MainActor
@@ -132,14 +133,79 @@ enum SnapshotSupport {
         window.layoutIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
 
+        // Wait for any WKWebView to finish loading + a DOM rendering buffer.
+        waitForWebViewsToLoad(in: window)
+
         let format = UIGraphicsImageRendererFormat(for: window.traitCollection)
         format.scale = window.screen.scale
         let renderer = UIGraphicsImageRenderer(bounds: window.bounds, format: format)
-        let image = renderer.image { _ in
+
+        // 1. Capture the main-process hierarchy (misses WKWebView content).
+        let baseImage = renderer.image { _ in
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
+
+        // 2. Composite each WKWebView's rendered content via takeSnapshot.
+        let webViews = findWebViews(in: window)
+        guard !webViews.isEmpty else {
+            hostedWindow = window
+            return baseImage
+        }
+
+        let finalImage = renderer.image { context in
+            baseImage.draw(at: .zero)
+            for webView in webViews {
+                guard let snapshot = takeSnapshotSync(webView) else { continue }
+                let frameInWindow = webView.convert(webView.bounds, to: window)
+                snapshot.draw(in: frameInWindow)
+            }
+        }
+
         hostedWindow = window
-        return image
+        return finalImage
+    }
+
+    // MARK: - WKWebView Snapshot Helpers
+
+    /// Waits for all `WKWebView` instances in the window to finish navigation,
+    /// then gives the DOM a short buffer to finish rendering.
+    private static func waitForWebViewsToLoad(in window: UIWindow, timeout: TimeInterval = 15.0) {
+        let webViews = findWebViews(in: window)
+        guard !webViews.isEmpty else { return }
+
+        let observer = WebViewLoadObserver(webViews: webViews)
+        observer.start()
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while !observer.isComplete, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        }
+
+        // DOM rendering buffer after didFinish fires.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+    }
+
+    private static func findWebViews(in view: UIView) -> [WKWebView] {
+        var result: [WKWebView] = []
+        if let webView = view as? WKWebView {
+            result.append(webView)
+        }
+        for subview in view.subviews {
+            result.append(contentsOf: findWebViews(in: subview))
+        }
+        return result
+    }
+
+    /// Synchronously captures a `WKWebView`'s rendered content via its own API.
+    private static func takeSnapshotSync(_ webView: WKWebView) -> UIImage? {
+        var result: UIImage?
+        let done = XCTestExpectation(description: "takeSnapshot")
+        webView.takeSnapshot(with: nil) { image, _ in
+            result = image
+            done.fulfill()
+        }
+        _ = XCTWaiter.wait(for: [done], timeout: 10.0)
+        return result
     }
 
     private static func referenceImageURL(pageName: String, file: StaticString) -> URL {
@@ -279,6 +345,43 @@ enum SnapshotSupport {
             return matchingBundle
         }
         throw SnapshotError.missingLaunchScreenBundle
+    }
+}
+
+/// Observes `WKNavigationDelegate` callbacks on a set of `WKWebView` instances and
+/// signals when every web view has finished (or failed) loading its initial content.
+@MainActor
+private final class WebViewLoadObserver: NSObject, WKNavigationDelegate {
+    private let webViews: [WKWebView]
+    private var remaining: Int
+
+    var isComplete: Bool { remaining == 0 }
+
+    init(webViews: [WKWebView]) {
+        self.webViews = webViews
+        self.remaining = webViews.count
+        super.init()
+    }
+
+    func start() {
+        for webView in webViews {
+            if !webView.isLoading {
+                remaining -= 1
+                continue
+            }
+            webView.navigationDelegate = self
+        }
+    }
+
+    // MARK: - WKNavigationDelegate
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finish(webView) }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError _: Error) { finish(webView) }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError _: Error) { finish(webView) }
+
+    private func finish(_ webView: WKWebView) {
+        webView.navigationDelegate = nil
+        remaining -= 1
     }
 }
 

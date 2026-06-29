@@ -16,6 +16,7 @@
 		725C8176EFBE4C0FB2D0ACA4 /* InstantShareServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */; };
 		78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
 		975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */; };
+		9E336B184E5B4929B277145B /* InstantShareSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */; };
 		A5C56128C12EEED37FC3210A /* AlbumTransporterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */; };
 		AB000001AB000001AB000001 /* PageViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013AB000013AB000013 /* PageViewModelTests.swift */; };
 		AB000002AB000002AB000002 /* MobileAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014AB000014AB000014 /* MobileAppModelTests.swift */; };
@@ -85,6 +86,7 @@
 		35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareServicesTests.swift; path = Tests/AlbumTransporterKitTests/InstantShareServicesTests.swift; sourceTree = "<group>"; };
 		3D9BBC222F9A6934002FE667 /* PhotosUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PhotosUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/PhotosUI.framework; sourceTree = DEVELOPER_DIR; };
 		4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterAppSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests.swift; sourceTree = "<group>"; };
+		DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/InstantShareSnapshotTests.swift; sourceTree = "<group>"; };
 		5AC8CE28919C9157AC9030D9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		79D12E02C504AEC5A27313AF /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
 		963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterApp.swift; path = App/AlbumTransporterApp.swift; sourceTree = "<group>"; };
@@ -146,6 +148,7 @@
 			children = (
 				32A33B28DE705EAD09C21466 /* SnapshotSupport.swift */,
 				4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */,
+				DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */,
 			);
 			name = AlbumTransporterAppSnapshotTests;
 			sourceTree = "<group>";
@@ -390,6 +393,7 @@
 				AB000029AB000029AB000029 /* KeychainAppIdentityProviderTests.swift in Sources */,
 				159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */,
 				975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */,
+				9E336B184E5B4929B277145B /* InstantShareSnapshotTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
