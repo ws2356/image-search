@@ -21,8 +21,8 @@ from dt_image_search.instant_sharing.mobile_to_pc.upload_completion_widget impor
 from dt_image_search.instant_sharing.mobile_to_pc.design_system import Colors, Spacing
 
 
-WINDOW_WIDTH = 360
-WINDOW_HEIGHT = 450
+WINDOW_WIDTH = 400
+WINDOW_HEIGHT = 480
 
 _PIN_PAGE = 0
 _LOADING_PAGE = 1

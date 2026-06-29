@@ -27,13 +27,17 @@ from dt_image_search.instant_sharing.mobile_to_pc.state import (
     _TERMINAL_PHASES,
     _phase_message,
 )
+from dt_image_search.instant_sharing.mobile_to_pc.styles import (
+    _make_font,
+    apply_button_style,
+)
 
 
 class LoadingWidget(QWidget):
     """Widget that shows connection/negotiation/transfer progress.
 
     Displays a blue ring spinner, "Connecting..." heading, and
-    descriptive subtitle text.
+    descriptive subtitle text. Cancel button is ghost style (no border).
     """
     cancelled = Signal()
 
@@ -47,7 +51,7 @@ class LoadingWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(Spacing.SECTION_GAP)
 
-        # Blue ring spinner
+        # Blue ring spinner (56x56)
         self._spinner = SpinnerWidget(size=56)
         spinner_layout = QHBoxLayout()
         spinner_layout.addStretch()
@@ -58,9 +62,7 @@ class LoadingWidget(QWidget):
         # Heading
         self._heading_label = QLabel("Connecting...")
         self._heading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        heading_font = QFont()
-        heading_font.setPointSize(Typography.HEADING_SIZE)
-        heading_font.setBold(True)
+        heading_font = _make_font(Typography.HEADING_SIZE, weight=QFont.Weight.Bold)
         self._heading_label.setFont(heading_font)
         self._heading_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; background: transparent;")
         layout.addWidget(self._heading_label)
@@ -69,32 +71,17 @@ class LoadingWidget(QWidget):
         self._subtitle_label = QLabel()
         self._subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._subtitle_label.setWordWrap(True)
-        subtitle_font = QFont()
-        subtitle_font.setPointSize(Typography.SUBTITLE_SIZE)
+        subtitle_font = _make_font(Typography.SUBTITLE_SIZE, weight=QFont.Weight.Normal)
         self._subtitle_label.setFont(subtitle_font)
         self._subtitle_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent;")
         layout.addWidget(self._subtitle_label)
 
         layout.addStretch()
 
-        # Cancel button (ghost style)
+        # Cancel button (ghost style — no border)
         self._cancel_button = QPushButton("Cancel")
         self._cancel_button.clicked.connect(self.cancelled.emit)
-        self._cancel_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Colors.GHOST_BG};
-                color: {Colors.GHOST_TEXT};
-                border: 1px solid {Colors.GHOST_BORDER};
-                border-radius: {Spacing.BUTTON_RADIUS}px;
-                padding: {Spacing.BUTTON_PADDING_V}px {Spacing.BUTTON_PADDING_H}px;
-                font-size: {Typography.BUTTON_SIZE}pt;
-                font-weight: bold;
-                min-height: {Spacing.BUTTON_HEIGHT - 24}px;
-            }}
-            QPushButton:hover {{
-                background-color: {Colors.DISABLED_BG};
-            }}
-        """)
+        apply_button_style(self._cancel_button, "ghost")
         layout.addWidget(self._cancel_button)
 
     def set_state(self, state: MiniWindowState) -> None:

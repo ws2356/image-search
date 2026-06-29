@@ -43,7 +43,7 @@ class MiniWindowState:
 def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str, pin_code: str = "", image_count: int = 0, received_count: int = 0) -> str:
     name = device_name or "your phone"
     if phase == MiniWindowPhase.CONNECTING:
-        return f"Connecting to {name}..."
+        return f"Establishing secure connection to {name}"
     if phase == MiniWindowPhase.NEGOTIATING:
         return f"Verifying trust with {name}..."
     if phase == MiniWindowPhase.DISPLAYING_PIN:
@@ -57,7 +57,7 @@ def _phase_message(phase: MiniWindowPhase, device_name: str, payload_label: str,
     if phase == MiniWindowPhase.SUCCESS:
         return f"{payload_label.capitalize()} received successfully."
     if phase == MiniWindowPhase.FAILED:
-        return "Transfer failed."
+        return "Handshake failed. Ensure both devices are on the same Wi-Fi network."
     if phase == MiniWindowPhase.TIMED_OUT:
         return "Transfer timed out."
     if phase == MiniWindowPhase.ABORTED:

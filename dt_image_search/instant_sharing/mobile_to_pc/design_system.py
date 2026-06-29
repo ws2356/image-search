@@ -2,73 +2,71 @@
 Design system tokens for the instant-share PC mini-window.
 
 All colors, typography, and spacing constants live here.
-Light mode palette — dark mode support deferred.
+Light mode palette matching the React figma design reference.
 """
 
 
 class Colors:
-    """Color tokens matching the new design specification."""
+    """Color tokens matching the React figma design specification."""
 
     # Backgrounds
     BACKGROUND = "#FFFFFF"
-    SURFACE = "#F5F7FA"
-    SURFACE_HOVER = "#EDF0F5"
+    SURFACE = "#f8fafc"  # slate-50
 
     # Primary buttons
-    PRIMARY_DARK = "#2563EB"  # Navy buttons (Show in Finder, Retry, Done)
-    PRIMARY_BLUE = "#2563EB"  # Blue action buttons (Copy Text, Send)
+    PRIMARY_DARK = "#0f172a"  # slate-900 (Show in Finder, Retry, Done)
+    PRIMARY_BLUE = "#2563eb"  # blue-600 (Copy Text, Send)
 
-    # Secondary / ghost buttons
-    GHOST_BG = "transparent"
-    GHOST_TEXT = "#1B2A4A"
-    GHOST_BORDER = "#E5E7EB"
+    # Secondary / ghost buttons — no border, light gray bg
+    GHOST_BG = "#f1f5f9"
+    GHOST_TEXT = "#475569"  # slate-600
 
     # Text colors
-    TEXT_PRIMARY = "#1B2A4A"
-    TEXT_SECONDARY = "#6B7280"
-    TEXT_MUTED = "#9CA3AF"
+    TEXT_PRIMARY = "#0f172a"    # slate-900
+    TEXT_SECONDARY = "#94a3b8"  # slate-400
+    TEXT_MUTED = "#94a3b8"      # slate-400
 
     # Status colors
-    SUCCESS = "#34C759"
-    SUCCESS_BG = "#D4F5DD"
-    ERROR = "#FF3B30"
-    ERROR_BG = "#FDE8E8"
-    WARNING_BG = "#FFF3E0"  # Lock icon background
+    SUCCESS = "#059669"    # emerald-600
+    SUCCESS_BG = "#d1fae5"
+    ERROR = "#ef4444"       # red-500
+    ERROR_BG = "#fef2f2"       # red-50
+    WARNING = "#d97706"     # amber-600 (lock icon color)
+    WARNING_BG = "#fffbeb"  # amber-50 (lock icon background)
+    WARNING_LIGHT = "#fbbf24" # amber-400 (pulse dot)
 
     # UI elements
-    BORDER = "#E5E7EB"
-    BORDER_LIGHT = "#D1D5DB"
-    DISABLED_BG = "#E8ECF0"
-    DISABLED_TEXT = "#A0AEC0"
-    QUEUED = "#C7C7CC"
+    BORDER = "#e2e8f0"       # slate-200
+    BORDER_LIGHT = "#cbd5e1"  # slate-300
+    DISABLED_BG = "#f1f5f9"
+    DISABLED_TEXT = "#94a3b8"
+    QUEUED = "#cbd5e1"
 
     # Badges
-    BADGE_GREEN = "#34C759"
-    BADGE_BLUE = "#2563EB"
+    BADGE_GREEN = "#059669"
+    BADGE_BLUE = "#2563eb"
 
     # Progress bar
-    PROGRESS_TRACK = "#E5E7EB"
-    PROGRESS_FILL = "#2563EB"
+    PROGRESS_TRACK = "#f1f5f9"   # slate-100
+    PROGRESS_FILL = "#3b82f6"    # blue-500
+
+    # Hover
+    HOVER_LIGHT = "#f1f5f9"       # slate-100 for ghost hover
+    PRIMARY_DARK_HOVER = "#1e293b"  # slightly lighter dark
+    PRIMARY_BLUE_HOVER = "#1d4ed8"  # blue-700
 
 
 class Typography:
-    """Font size and weight tokens."""
+    """Font size and weight tokens (all values in pixels to match React design)."""
 
-    # Sizes (in points)
-    HEADING_SIZE = 18
-    SUBTITLE_SIZE = 14
-    BODY_SIZE = 14
-    CAPTION_SIZE = 12
+    HEADING_SIZE = 20       # text-xl
+    SUBTITLE_SIZE = 12      # text-xs
+    BODY_SIZE = 14          # text-sm
+    CAPTION_SIZE = 12       # text-xs
     LABEL_SIZE = 10
-    PIN_DIGIT_SIZE = 28
-    BUTTON_SIZE = 14
+    PIN_DIGIT_SIZE = 48     # text-5xl
+    BUTTON_SIZE = 14        # text-sm
     BADGE_SIZE = 11
-
-    # Weights
-    BOLD = True
-    SEMIBOLD = True
-    MEDIUM = True
-    REGULAR = False
 
 
 class Spacing:
@@ -78,11 +76,10 @@ class Spacing:
     SECTION_GAP = 20
     ITEM_GAP = 12
     CARD_PADDING = 14
-    BUTTON_PADDING_V = 12
-    BUTTON_PADDING_H = 20
-    BUTTON_HEIGHT = 44
-    BUTTON_RADIUS = 22  # pill shape
-    CARD_RADIUS = 10
+    BUTTON_PADDING_V = 10   # py-2.5
+    BUTTON_PADDING_H = 16   # px-4
+    BUTTON_RADIUS = 12      # rounded-xl
+    CARD_RADIUS = 16        # rounded-2xl
     ICON_SIZE_LARGE = 56
     ICON_SIZE_SMALL = 14
 

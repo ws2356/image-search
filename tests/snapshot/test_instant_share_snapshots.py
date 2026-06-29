@@ -154,7 +154,7 @@ class TestMobileToPCFlows:
             state="done",
             device_name="iPhone",
             payload_class="file",
-            file_path="/Users/Desktop/SharedDocument.pdf",
+            file_path="/Users/ws2356/Downloads/vacation_photo.jpg",
         )
 
         # Capture snapshot
@@ -207,7 +207,7 @@ class TestPCToMobileFlows:
         window = QRTriggerMiniWindow(
             stash=stash,
             session_id="test-session-123",
-            pc_name="MacBook Pro",
+            pc_name="MacBook-Pro.local",
             pc_port=8080,
             pc_tls_port=8443,
             device_id="test-device",
@@ -241,7 +241,7 @@ class TestPCToMobileFlows:
         window = QRTriggerMiniWindow(
             stash=stash,
             session_id="test-session-456",
-            pc_name="MacBook Pro",
+            pc_name="MacBook-Pro.local",
             pc_port=8080,
             pc_tls_port=8443,
             device_id="test-device",
