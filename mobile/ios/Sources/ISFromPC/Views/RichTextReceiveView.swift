@@ -13,7 +13,7 @@ public struct RichTextReceiveView: View {
         VStack(spacing: DesignSystem.Spacing.lg) {
             RichTextWebView(html: html)
 
-            PrimaryButton(title: "Copy to Clipboard", icon: "doc.on.doc", style: .secondary) {
+            PrimaryButton(title: showCopiedToast ? "Copied!" : "Copy to Clipboard", icon: "doc.on.doc", style: .secondary) {
                 copyToClipboard()
             }
         }

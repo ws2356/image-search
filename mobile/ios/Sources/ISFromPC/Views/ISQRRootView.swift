@@ -12,9 +12,24 @@ public struct ISQRRootView: View {
 
     public var body: some View {
         navigationContainer
+            .onAppear {
+                configureNavigationBar()
+            }
             .onDisappear {
                 viewModel.onDisappear()
             }
+    }
+    
+    private func configureNavigationBar() {
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = .white
+        appearance.shadowColor = .clear
+        appearance.titleTextAttributes = [.foregroundColor: UIColor.black]
+        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.black]
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+        UINavigationBar.appearance().compactAppearance = appearance
     }
 
     @ViewBuilder

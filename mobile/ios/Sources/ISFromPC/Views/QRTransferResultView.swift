@@ -16,13 +16,6 @@ struct QRTransferResultView: View {
         content
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { viewModel.onComplete() }
-                        .font(DesignSystem.Typography.h4)
-                        .foregroundStyle(DesignSystem.Colors.primary)
-                }
-            }
             .sheet(isPresented: $showShareSheet) {
                 ShareSheet(items: result.asShareItems)
             }
@@ -32,9 +25,9 @@ struct QRTransferResultView: View {
     private var content: some View {
         switch result {
         case .text(let text):
-            htmlContentView(html: Self.htmlWrapping(text))
+            textReceiveView(text: text)
         case .html(let html):
-            htmlContentView(html: html)
+            textReceiveView(text: html)
         case .link(let urlString):
             LinkReceiveView(urlString: urlString)
         default:
@@ -42,18 +35,123 @@ struct QRTransferResultView: View {
         }
     }
 
-    private func htmlContentView(html: String) -> some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            CardView {
-                RichTextReceiveView(html: html)
+    private func textReceiveView(text: String) -> some View {
+        VStack(spacing: 0) {
+            // Header bar matching design spec
+            headerBar
+            
+            Divider()
+            
+            // Scrollable content
+            ScrollView {
+                Text(text)
+                    .font(DesignSystem.Typography.monoBody)
+                    .foregroundStyle(DesignSystem.Colors.foreground)
+                    .padding(DesignSystem.Spacing.lg)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(DesignSystem.Colors.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
+                    .padding(DesignSystem.Spacing.lg)
             }
-            .padding(.horizontal)
-
-            PrimaryButton(title: "Share", icon: "square.and.arrow.up", style: .secondary) {
-                shareCurrentContent()
-            }
-            .padding(.horizontal)
+            
+            // Bottom action bar
+            bottomActionBar(text: text)
         }
+        .background(DesignSystem.Colors.background)
+        .overlay(alignment: .bottom) {
+            if viewModel.showCopiedToast {
+                toast("Copied!")
+            }
+        }
+    }
+    
+    private var headerBar: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                Text("Received")
+                    .font(DesignSystem.Typography.body)
+                    .fontWeight(.bold)
+                    .foregroundStyle(DesignSystem.Colors.foreground)
+                
+                Text("from MacBook Pro · just now")
+                    .font(DesignSystem.Typography.caption2)
+                    .foregroundStyle(DesignSystem.Colors.secondaryText)
+            }
+            
+            Spacer()
+            
+            Text("Plain Text")
+                .font(DesignSystem.Typography.caption2)
+                .fontWeight(.semibold)
+                .foregroundStyle(DesignSystem.Colors.primary)
+                .padding(.horizontal, DesignSystem.Spacing.sm)
+                .padding(.vertical, DesignSystem.Spacing.xs)
+                .background(DesignSystem.Colors.primary.opacity(0.1))
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.vertical, DesignSystem.Spacing.md)
+    }
+    
+    private func bottomActionBar(text: String) -> some View {
+        VStack(spacing: DesignSystem.Spacing.sm) {
+            // Copy button (primary)
+            Button(action: {
+                UIPasteboard.general.string = text
+                withAnimation {
+                    viewModel.showCopiedToast = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    withAnimation {
+                        viewModel.showCopiedToast = false
+                    }
+                }
+            }) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 15))
+                    Text(viewModel.showCopiedToast ? "Copied!" : "Copy to Clipboard")
+                        .font(DesignSystem.Typography.h4)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DesignSystem.Spacing.md)
+                .background(viewModel.showCopiedToast ? DesignSystem.Colors.success : DesignSystem.Colors.primary)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.button))
+            }
+            
+            // Share button (secondary) - using standard iOS share icon to match design
+            Button(action: { shareCurrentContent() }) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15))
+                    Text("Share Content")
+                        .font(DesignSystem.Typography.h4)
+                }
+                .foregroundStyle(DesignSystem.Colors.foreground)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, DesignSystem.Spacing.md)
+                .background(DesignSystem.Colors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.button))
+            }
+        }
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.vertical, DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.background)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+    
+    private func toast(_ message: String) -> some View {
+        Text(message)
+            .font(DesignSystem.Typography.body)
+            .foregroundStyle(.white)
+            .padding(.horizontal, DesignSystem.Spacing.xl)
+            .padding(.vertical, DesignSystem.Spacing.sm)
+            .background(Capsule().fill(DesignSystem.Colors.foreground.opacity(0.8)))
+            .padding(.bottom, DesignSystem.Spacing.xl)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private static func htmlWrapping(_ text: String) -> String {

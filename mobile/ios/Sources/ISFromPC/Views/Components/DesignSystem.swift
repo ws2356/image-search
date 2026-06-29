@@ -18,14 +18,14 @@ enum DesignSystem {
     enum Colors {
         static let background = Color.white
         static let foreground = Color.black
-        static let primary = Color(hex: 0x3B7DFA)
+        static let primary = Color(hex: 0x2563EB)
         static let cardBackground = Color(hex: 0xF2F2F7)
         static let secondaryText = Color(hex: 0x8E8E93)
         static let success = Color(hex: 0x34C759)
         static let error = Color(hex: 0xFF453A)
         static let warning = Color(hex: 0xFF9F0A)
         static let border = Color.black.opacity(0.1)
-        static let selectedHighlight = Color(hex: 0x3B7DFA).opacity(0.1)
+        static let selectedHighlight = Color(hex: 0x2563EB).opacity(0.1)
 
         static let slate900 = Color(hex: 0x0F172A)
         static let slate700 = Color(hex: 0x334155)

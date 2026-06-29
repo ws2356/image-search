@@ -15,6 +15,8 @@ public protocol ISQRDeliverDelegate {
 @MainActor
 class ISQRResultViewModel: ObservableObject {
     let delegate: ISQRDeliverDelegate
+    @Published var showCopiedToast = false
+    
     init(delegate: ISQRDeliverDelegate) {
         self.delegate = delegate
     }

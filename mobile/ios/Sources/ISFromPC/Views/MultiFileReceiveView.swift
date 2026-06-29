@@ -236,15 +236,8 @@ public struct MultiFileReceiveView: View {
 
     public var body: some View {
         content
-            .navigationTitle("Received Files")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { viewModel.delegate.onDeliverComplete() }
-                        .font(DesignSystem.Typography.h4)
-                        .foregroundStyle(DesignSystem.Colors.primary)
-                }
-            }
             .sheet(isPresented: $viewModel.showShareSheet) {
                 ShareSheet(items: viewModel.shareItems)
             }
@@ -257,10 +250,18 @@ public struct MultiFileReceiveView: View {
     }
 
     private var content: some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            headerBanner
-                .padding(.horizontal)
-
+        VStack(spacing: 0) {
+            // Header bar matching design spec
+            headerBar
+            
+            Divider()
+            
+            // Progress banner (if downloading)
+            if viewModel.isDownloading {
+                progressBanner
+            }
+            
+            // File list
             ScrollView {
                 LazyVStack(spacing: DesignSystem.Spacing.sm) {
                     ForEach(viewModel.fileStates) { state in
@@ -274,30 +275,80 @@ public struct MultiFileReceiveView: View {
                             }
                     }
                 }
-                .padding(.horizontal)
+                .padding(DesignSystem.Spacing.lg)
             }
-
-            VStack(spacing: DesignSystem.Spacing.md) {
-                if viewModel.isDownloading {
-                    ProgressView("Downloading \(viewModel.downloadedCount) of \(viewModel.totalCount)...")
-                        .font(DesignSystem.Typography.body)
-                        .tint(DesignSystem.Colors.primary)
-                } else {
-                    PrimaryButton(
-                        title: viewModel.selectedIndices.isEmpty
-                            ? "Select Files to Share"
-                            : "Share (\(viewModel.selectedIndices.count) selected)",
-                        icon: "square.and.arrow.up",
-                        style: .primary
-                    ) {
-                        viewModel.shareSelected()
-                    }
-                    .disabled(viewModel.selectedIndices.isEmpty)
-                }
+            
+            // Bottom progress bar (if downloading)
+            if viewModel.isDownloading {
+                bottomProgressBar
             }
-            .padding(.horizontal)
-            .padding(.bottom)
         }
+        .background(DesignSystem.Colors.background)
+    }
+    
+    private var headerBar: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                Text("Received")
+                    .font(DesignSystem.Typography.body)
+                    .fontWeight(.bold)
+                    .foregroundStyle(DesignSystem.Colors.foreground)
+                
+                Text("\(viewModel.totalCount) \(viewModel.totalCount == 1 ? "file" : "files") from MacBook Pro")
+                    .font(DesignSystem.Typography.caption2)
+                    .foregroundStyle(DesignSystem.Colors.secondaryText)
+            }
+            
+            Spacer()
+            
+            Button("Done") {
+                viewModel.delegate.onDeliverComplete()
+            }
+            .font(DesignSystem.Typography.h4)
+            .foregroundStyle(DesignSystem.Colors.secondaryText)
+        }
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.vertical, DesignSystem.Spacing.md)
+    }
+    
+    private var progressBanner: some View {
+        HStack(spacing: DesignSystem.Spacing.sm) {
+            ProgressView()
+                .scaleEffect(0.8)
+                .tint(DesignSystem.Colors.primary)
+            
+            Text("Receiving file \(viewModel.downloadedCount + 1) of \(viewModel.totalCount)…")
+                .font(DesignSystem.Typography.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(DesignSystem.Colors.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.primary.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.button))
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.vertical, DesignSystem.Spacing.sm)
+    }
+    
+    private var bottomProgressBar: some View {
+        HStack {
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .tint(DesignSystem.Colors.secondaryText)
+                
+                Text("Receiving \(viewModel.downloadedCount) of \(viewModel.totalCount)")
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(DesignSystem.Colors.secondaryText)
+            }
+            
+            Spacer()
+        }
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.button))
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.bottom, DesignSystem.Spacing.md)
     }
 
     private var headerBanner: some View {
@@ -330,60 +381,151 @@ public struct MultiFileReceiveView: View {
     @ViewBuilder
     private func fileRow(_ state: MultiFileReceiveViewModel.FileDownloadState) -> some View {
         let isSelected = viewModel.selectedIndices.contains(state.index)
-        CardView {
-            HStack(spacing: DesignSystem.Spacing.md) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundColor(isSelected ? DesignSystem.Colors.primary : DesignSystem.Colors.secondaryText)
-                    .frame(width: 28)
-
-                Image(systemName: iconName(for: state.contentType))
-                    .font(.title2)
-                    .foregroundStyle(DesignSystem.Colors.secondaryText)
-                    .frame(width: 32)
-
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-                    if state.isInline {
-                        Text(state.inlineContent ?? "")
-                            .font(DesignSystem.Typography.body)
-                            .lineLimit(2)
-                    } else if let textContent = state.downloadedTextContent {
-                        Text(textContent)
-                            .font(DesignSystem.Typography.body)
-                            .lineLimit(5)
-                        Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
-                            .font(DesignSystem.Typography.caption2)
-                            .foregroundStyle(DesignSystem.Colors.secondaryText)
-                    } else {
-                        Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
-                            .font(DesignSystem.Typography.body)
-                            .lineLimit(1)
-                        Text(formatBytes(state.sizeBytes))
-                            .font(DesignSystem.Typography.caption2)
-                            .foregroundStyle(DesignSystem.Colors.secondaryText)
-                    }
-                }
-
-                Spacer()
-
-                switch state.status {
-                case .pending:
-                    Image(systemName: "clock")
+        HStack(spacing: DesignSystem.Spacing.md) {
+            // Extension badge
+            ZStack {
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.chip)
+                    .fill(badgeColor(for: state))
+                    .frame(width: 40, height: 40)
+                
+                Text(fileExtension(for: state))
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(0.5)
+                    .foregroundStyle(badgeTextColor(for: state))
+            }
+            
+            // File info
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
+                    .font(DesignSystem.Typography.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(DesignSystem.Colors.foreground)
+                    .lineLimit(1)
+                
+                HStack(spacing: DesignSystem.Spacing.xs) {
+                    Text(formatBytes(state.sizeBytes))
+                        .font(DesignSystem.Typography.caption2)
                         .foregroundStyle(DesignSystem.Colors.secondaryText)
-                case .downloading:
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .tint(DesignSystem.Colors.primary)
-                case .downloaded:
-                    Image(systemName: "arrow.down.circle.fill")
-                        .foregroundStyle(DesignSystem.Colors.success)
-                case .failed:
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(DesignSystem.Colors.error)
+                    
+                    Text("·")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundStyle(DesignSystem.Colors.secondaryText)
+                    
+                    Text(statusText(for: state.status))
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundStyle(statusColor(for: state.status))
                 }
             }
+            
+            Spacer()
+            
+            // Status indicator
+            statusIndicator(for: state.status)
         }
-        .background(isSelected ? DesignSystem.Colors.selectedHighlight : Color.clear)
+        .padding(DesignSystem.Spacing.md)
+        .background(DesignSystem.Colors.background)
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.button))
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.button)
+                .stroke(borderColor(for: state.status), lineWidth: 1)
+        )
+        .shadow(color: shadowColor(for: state.status), radius: 3, x: 0, y: 0)
+    }
+    
+    private func badgeColor(for state: MultiFileReceiveViewModel.FileDownloadState) -> Color {
+        let filename = state.filename.lowercased()
+        if filename.hasSuffix(".png") || filename.hasSuffix(".jpg") || filename.hasSuffix(".jpeg") {
+            return DesignSystem.Colors.success.opacity(0.2)
+        }
+        if filename.hasSuffix(".pdf") {
+            return DesignSystem.Colors.primary.opacity(0.2)
+        }
+        return DesignSystem.Colors.secondaryText.opacity(0.2)
+    }
+    
+    private func badgeTextColor(for state: MultiFileReceiveViewModel.FileDownloadState) -> Color {
+        let filename = state.filename.lowercased()
+        if filename.hasSuffix(".png") || filename.hasSuffix(".jpg") || filename.hasSuffix(".jpeg") {
+            return DesignSystem.Colors.success
+        }
+        if filename.hasSuffix(".pdf") {
+            return DesignSystem.Colors.primary
+        }
+        return DesignSystem.Colors.secondaryText
+    }
+    
+    private func statusColor(for status: MultiFileReceiveViewModel.FileDownloadState.DownloadStatus) -> Color {
+        switch status {
+        case .pending: return DesignSystem.Colors.secondaryText
+        case .downloading: return DesignSystem.Colors.primary
+        case .downloaded: return DesignSystem.Colors.success
+        case .failed: return DesignSystem.Colors.error
+        }
+    }
+    
+    private func statusText(for status: MultiFileReceiveViewModel.FileDownloadState.DownloadStatus) -> String {
+        switch status {
+        case .pending: return "Queued"
+        case .downloading: return "Receiving…"
+        case .downloaded: return "Received"
+        case .failed: return "Failed"
+        }
+    }
+    
+    private func fileExtension(for state: MultiFileReceiveViewModel.FileDownloadState) -> String {
+        let filename = state.filename.lowercased()
+        if filename.hasSuffix(".png") { return "PNG" }
+        if filename.hasSuffix(".jpg") || filename.hasSuffix(".jpeg") { return "JPG" }
+        if filename.hasSuffix(".pdf") { return "PDF" }
+        if filename.hasSuffix(".zip") { return "ZIP" }
+        if filename.hasSuffix(".txt") { return "TXT" }
+        if filename.hasSuffix(".doc") || filename.hasSuffix(".docx") { return "DOC" }
+        if filename.hasSuffix(".xls") || filename.hasSuffix(".xlsx") { return "XLS" }
+        return "FILE"
+    }
+    
+    private func statusIndicator(for status: MultiFileReceiveViewModel.FileDownloadState.DownloadStatus) -> some View {
+        Group {
+            switch status {
+            case .pending:
+                Image(systemName: "clock")
+                    .font(.system(size: 16))
+                    .foregroundStyle(DesignSystem.Colors.secondaryText)
+            case .downloading:
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .tint(DesignSystem.Colors.primary)
+            case .downloaded:
+                ZStack {
+                    Circle()
+                        .fill(DesignSystem.Colors.success.opacity(0.1))
+                        .frame(width: 24, height: 24)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(DesignSystem.Colors.success)
+                }
+            case .failed:
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(DesignSystem.Colors.error)
+            }
+        }
+    }
+    
+    private func borderColor(for status: MultiFileReceiveViewModel.FileDownloadState.DownloadStatus) -> Color {
+        switch status {
+        case .pending: return DesignSystem.Colors.border
+        case .downloading: return DesignSystem.Colors.primary.opacity(0.2)
+        case .downloaded: return DesignSystem.Colors.border
+        case .failed: return DesignSystem.Colors.error.opacity(0.2)
+        }
+    }
+    
+    private func shadowColor(for status: MultiFileReceiveViewModel.FileDownloadState.DownloadStatus) -> Color {
+        switch status {
+        case .downloading: return DesignSystem.Colors.primary.opacity(0.1)
+        default: return .clear
+        }
     }
 
     private func iconName(for contentType: String) -> String {
