@@ -4,51 +4,50 @@ import WebKit
 public struct RichTextReceiveView: View {
     let html: String
     @State private var showCopiedToast = false
-    
+
     public init(html: String) {
         self.html = html
     }
-    
+
     public var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DesignSystem.Spacing.lg) {
             RichTextWebView(html: html)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
-            
-            Button(action: copyToClipboard) {
-                Label("Copy to Clipboard", systemImage: "doc.on.doc")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
+
+            PrimaryButton(title: "Copy to Clipboard", icon: "doc.on.doc", style: .secondary) {
+                copyToClipboard()
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
         }
-        .padding(.top, 16)
         .overlay(alignment: .bottom) {
             if showCopiedToast {
-                ToastView(message: "Copied to clipboard")
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .padding(.bottom, 100)
+                toast("Copied to clipboard")
             }
         }
     }
-    
+
     private func copyToClipboard() {
         guard let data = html.data(using: .utf8) else { return }
         UIPasteboard.general.setData(data, forPasteboardType: "public.html")
-        
+
         withAnimation {
             showCopiedToast = true
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation {
                 showCopiedToast = false
             }
         }
+    }
+
+    private func toast(_ message: String) -> some View {
+        Text(message)
+            .font(DesignSystem.Typography.body)
+            .foregroundStyle(.white)
+            .padding(.horizontal, DesignSystem.Spacing.xl)
+            .padding(.vertical, DesignSystem.Spacing.sm)
+            .background(Capsule().fill(Color.black.opacity(0.8)))
+            .padding(.bottom, DesignSystem.Spacing.xl)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 
@@ -62,7 +61,7 @@ struct RichTextWebView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
-    
+
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.preferences.javaScriptEnabled = false
@@ -72,26 +71,12 @@ struct RichTextWebView: UIViewRepresentable {
         context.coordinator.lastHTML = html
         return webView
     }
-    
+
     func updateUIView(_ uiView: WKWebView, context: Context) {
         guard html != context.coordinator.lastHTML else {
             return
         }
         context.coordinator.lastHTML = html
         uiView.loadHTMLString(html, baseURL: nil)
-    }
-}
-
-struct ToastView: View {
-    let message: String
-    
-    var body: some View {
-        Text(message)
-            .font(.subheadline)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color.black.opacity(0.8))
-            .foregroundColor(.white)
-            .cornerRadius(8)
     }
 }

@@ -2,8 +2,6 @@ import SwiftUI
 import Factory
 import Common
 
-// MARK: - ViewModel
-
 @MainActor
 public class MultiFileReceiveViewModel: ObservableObject {
     public let manifest: MultiFileManifest
@@ -24,18 +22,17 @@ public class MultiFileReceiveViewModel: ObservableObject {
 
     public struct FileDownloadState: Identifiable {
         public let index: Int
-        public let entryType: String  // "text", "html", or "file"
+        public let entryType: String
         public let filename: String
         public let contentType: String
         public let sizeBytes: Int
-        public let inlineContent: String?  // pre-delivered content for text/html entries
+        public let inlineContent: String?
         public var status: DownloadStatus = .pending
         public var result: QRClaimResult? = nil
         public var errorMessage: String? = nil
 
         public var id: Int { index }
         public var isInline: Bool { entryType == "text" || entryType == "html" || entryType == "link" }
-        /// Whether the file has been downloaded and contains renderable text content.
         public var downloadedTextContent: String? {
             switch result {
             case .text(let content): return content
@@ -44,7 +41,6 @@ public class MultiFileReceiveViewModel: ObservableObject {
             default: return nil
             }
         }
-        /// Only selectable once fully downloaded (or inline).
         public var isSelectable: Bool { isInline || status == .downloaded }
 
         public enum DownloadStatus {
@@ -87,6 +83,41 @@ public class MultiFileReceiveViewModel: ObservableObject {
         }
     }
 
+    /// Creates a view model for a single pre-downloaded image or file result.
+    /// Downloads are skipped because the result is already available on disk.
+    public init(
+        singleResult: QRClaimResult,
+        delegate: ISQRDeliverDelegate
+    ) {
+        self.manifest = MultiFileManifest(fileCount: 1, files: [])
+        self.host = ""
+        self.tlsPort = 0
+        self.sessionId = ""
+        self.correlationID = ""
+        self.delegate = delegate
+
+        switch singleResult {
+        case .image(let fileURL, let contentType, let filename):
+            let displayName = filename ?? fileURL.lastPathComponent
+            let sizeBytes = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int ?? 0
+            self.fileStates = [FileDownloadState(
+                index: 0, entryType: "file", filename: displayName,
+                contentType: contentType, sizeBytes: sizeBytes,
+                inlineContent: nil, status: .downloaded, result: singleResult
+            )]
+        case .file(let fileURL, let contentType, let filename):
+            let displayName = filename ?? fileURL.lastPathComponent
+            let sizeBytes = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int ?? 0
+            self.fileStates = [FileDownloadState(
+                index: 0, entryType: "file", filename: displayName,
+                contentType: contentType, sizeBytes: sizeBytes,
+                inlineContent: nil, status: .downloaded, result: singleResult
+            )]
+        default:
+            self.fileStates = []
+        }
+    }
+
     public func toggleSelection(at index: Int) {
         guard index < fileStates.count, fileStates[index].isSelectable else { return }
         if selectedIndices.contains(index) {
@@ -96,8 +127,10 @@ public class MultiFileReceiveViewModel: ObservableObject {
         }
     }
 
-    /// Auto-download all file-type items sequentially. Called on view appear.
     public func startDownloadingAll() async {
+        let pendingCount = fileStates.filter { $0.status == .pending }.count
+        guard pendingCount > 0 else { return }
+
         isDownloading = true
         defer { isDownloading = false }
 
@@ -126,7 +159,6 @@ public class MultiFileReceiveViewModel: ObservableObject {
         }
     }
 
-    /// Share already-downloaded selected items via the system share sheet.
     public func shareSelected() {
         presentShareSheetForSelected()
     }
@@ -195,8 +227,6 @@ public class MultiFileReceiveViewModel: ObservableObject {
     }
 }
 
-// MARK: - View
-
 public struct MultiFileReceiveView: View {
     @StateObject public var viewModel: MultiFileReceiveViewModel
 
@@ -211,6 +241,8 @@ public struct MultiFileReceiveView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { viewModel.delegate.onDeliverComplete() }
+                        .font(DesignSystem.Typography.h4)
+                        .foregroundStyle(DesignSystem.Colors.primary)
                 }
             }
             .sheet(isPresented: $viewModel.showShareSheet) {
@@ -225,12 +257,12 @@ public struct MultiFileReceiveView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DesignSystem.Spacing.lg) {
             headerBanner
                 .padding(.horizontal)
 
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: DesignSystem.Spacing.sm) {
                     ForEach(viewModel.fileStates) { state in
                         fileRow(state)
                             .contentShape(Rectangle())
@@ -245,20 +277,21 @@ public struct MultiFileReceiveView: View {
                 .padding(.horizontal)
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: DesignSystem.Spacing.md) {
                 if viewModel.isDownloading {
                     ProgressView("Downloading \(viewModel.downloadedCount) of \(viewModel.totalCount)...")
+                        .font(DesignSystem.Typography.body)
+                        .tint(DesignSystem.Colors.primary)
                 } else {
-                    Button(action: { viewModel.shareSelected() }) {
-                        Label(
-                            viewModel.selectedIndices.isEmpty
-                                ? "Select Files to Share"
-                                : "Share (\(viewModel.selectedIndices.count) selected)",
-                            systemImage: "square.and.arrow.up"
-                        )
-                        .frame(maxWidth: .infinity)
+                    PrimaryButton(
+                        title: viewModel.selectedIndices.isEmpty
+                            ? "Select Files to Share"
+                            : "Share (\(viewModel.selectedIndices.count) selected)",
+                        icon: "square.and.arrow.up",
+                        style: .primary
+                    ) {
+                        viewModel.shareSelected()
                     }
-                    .buttonStyle(.borderedProminent)
                     .disabled(viewModel.selectedIndices.isEmpty)
                 }
             }
@@ -268,90 +301,89 @@ public struct MultiFileReceiveView: View {
     }
 
     private var headerBanner: some View {
-        HStack {
-            if viewModel.isDownloading {
-                Label("Downloading \(viewModel.downloadedCount) of \(viewModel.totalCount)...", systemImage: "arrow.down.circle")
-                    .foregroundStyle(.blue)
-            } else if viewModel.failedCount > 0 {
-                Label("\(viewModel.downloadedCount) of \(viewModel.totalCount) available", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-            } else if viewModel.downloadedCount == viewModel.totalCount {
-                Label("\(viewModel.totalCount) files — select to share", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            } else {
-                Label("\(viewModel.totalCount) files — select to share", systemImage: "square.and.arrow.up")
-                    .foregroundStyle(.blue)
+        CardView {
+            HStack {
+                if viewModel.isDownloading {
+                    Label("Downloading \(viewModel.downloadedCount) of \(viewModel.totalCount)...", systemImage: "arrow.down.circle")
+                        .foregroundStyle(DesignSystem.Colors.primary)
+                } else if viewModel.failedCount > 0 {
+                    Label("\(viewModel.downloadedCount) of \(viewModel.totalCount) available", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(DesignSystem.Colors.warning)
+                } else if viewModel.downloadedCount == viewModel.totalCount {
+                    Label("\(viewModel.totalCount) files — select to share", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(DesignSystem.Colors.success)
+                } else {
+                    Label("\(viewModel.totalCount) files — select to share", systemImage: "square.and.arrow.up")
+                        .foregroundStyle(DesignSystem.Colors.primary)
+                }
+                Spacer()
+                if viewModel.selectedIndices.count > 0 {
+                    Text("\(viewModel.selectedIndices.count) selected")
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundStyle(DesignSystem.Colors.secondaryText)
+                }
             }
-            Spacer()
-            if viewModel.selectedIndices.count > 0 {
-                Text("\(viewModel.selectedIndices.count) selected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .font(DesignSystem.Typography.body)
         }
-        .font(.subheadline)
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     @ViewBuilder
     private func fileRow(_ state: MultiFileReceiveViewModel.FileDownloadState) -> some View {
         let isSelected = viewModel.selectedIndices.contains(state.index)
-        HStack(spacing: 12) {
-            // Selection indicator
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundColor(isSelected ? .accentColor : Color(UIColor.tertiaryLabel))
-                .frame(width: 28)
+        CardView {
+            HStack(spacing: DesignSystem.Spacing.md) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(isSelected ? DesignSystem.Colors.primary : DesignSystem.Colors.secondaryText)
+                    .frame(width: 28)
 
-            Image(systemName: iconName(for: state.contentType))
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .frame(width: 32)
+                Image(systemName: iconName(for: state.contentType))
+                    .font(.title2)
+                    .foregroundStyle(DesignSystem.Colors.secondaryText)
+                    .frame(width: 32)
 
-            VStack(alignment: .leading, spacing: 2) {
-                if state.isInline {
-                    Text(state.inlineContent ?? "")
-                        .font(.subheadline)
-                        .lineLimit(2)
-                } else if let textContent = state.downloadedTextContent {
-                    Text(textContent)
-                        .font(.subheadline)
-                        .lineLimit(5)
-                    Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                    Text(formatBytes(state.sizeBytes))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                    if state.isInline {
+                        Text(state.inlineContent ?? "")
+                            .font(DesignSystem.Typography.body)
+                            .lineLimit(2)
+                    } else if let textContent = state.downloadedTextContent {
+                        Text(textContent)
+                            .font(DesignSystem.Typography.body)
+                            .lineLimit(5)
+                        Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundStyle(DesignSystem.Colors.secondaryText)
+                    } else {
+                        Text(state.filename.isEmpty ? "File \(state.index + 1)" : state.filename)
+                            .font(DesignSystem.Typography.body)
+                            .lineLimit(1)
+                        Text(formatBytes(state.sizeBytes))
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundStyle(DesignSystem.Colors.secondaryText)
+                    }
+                }
+
+                Spacer()
+
+                switch state.status {
+                case .pending:
+                    Image(systemName: "clock")
+                        .foregroundStyle(DesignSystem.Colors.secondaryText)
+                case .downloading:
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .tint(DesignSystem.Colors.primary)
+                case .downloaded:
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(DesignSystem.Colors.success)
+                case .failed:
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(DesignSystem.Colors.error)
                 }
             }
-
-            Spacer()
-
-            switch state.status {
-            case .pending:
-                Image(systemName: "clock")
-                    .foregroundStyle(.tertiary)
-            case .downloading:
-                ProgressView()
-                    .scaleEffect(0.7)
-            case .downloaded:
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(.green)
-            case .failed:
-                Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundStyle(.red)
-            }
         }
-        .padding(10)
-        .background(isSelected ? Color.accentColor.opacity(0.08) : Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(isSelected ? DesignSystem.Colors.selectedHighlight : Color.clear)
     }
 
     private func iconName(for contentType: String) -> String {

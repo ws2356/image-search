@@ -6,7 +6,7 @@ from typing import Callable
 
 from PIL import Image
 from PySide6.QtCore import Qt, QTimer, QRect
-from PySide6.QtGui import QImage, QPainter, QPen, QColor
+from PySide6.QtGui import QImage, QPainter, QPen, QColor, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,

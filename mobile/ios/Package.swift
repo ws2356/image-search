@@ -57,7 +57,9 @@ let package = Package(
                 .product(name: "SwiftASN1", package: "swift-asn1"),
                 .product(name: "X509", package: "swift-certificates"),
                ],
-               resources: []),
+               resources: [
+                .process("Resources")
+               ]),
         .target(name: "ISFromPC",
                dependencies: ["Common"],
                resources: []),

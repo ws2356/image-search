@@ -50,6 +50,12 @@ public struct ISQRRootView: View {
                     delegate: viewModel
                 )
                 MultiFileReceiveView(viewModel: vm)
+            case .image, .file:
+                let vm = MultiFileReceiveViewModel(
+                    singleResult: result,
+                    delegate: viewModel
+                )
+                MultiFileReceiveView(viewModel: vm)
             default:
                 QRTransferResultView(result: result, delegate: viewModel)
             }
