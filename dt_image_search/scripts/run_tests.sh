@@ -115,3 +115,16 @@ if [ "$has_failed" = true ]; then
 else
   echo "All tests passed successfully."
 fi
+
+# Run snapshot tests (if pytest-qt is available)
+echo ""
+echo "Running snapshot tests..."
+if $python_bin -c "import pytest_qt" 2>/dev/null; then
+  if ! $python_bin -m pytest tests/snapshot/ -v; then
+    echo "Some snapshot tests failed."
+    exit 1
+  fi
+  echo "All snapshot tests passed."
+else
+  echo "Skipping snapshot tests (pytest-qt not installed)."
+fi
