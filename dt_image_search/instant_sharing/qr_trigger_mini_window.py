@@ -297,7 +297,7 @@ class QRTriggerMiniWindow(QDialog):
         self._qr_label.setFixedSize(QR_SIZE, QR_SIZE)
         self._qr_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self._qr_label.setStyleSheet(
-            f"background-color: {Colors.BACKGROUND}; border-radius: 24px; border: 1px solid rgba(226, 232, 240, 0.8); padding: 20px;"
+            f"background-color: {Colors.BACKGROUND}; border-radius: 24px; border: 1px solid rgba(226, 232, 240, 0.8);"
         )
         self._qr_label.setText("Generating QR...")
 
