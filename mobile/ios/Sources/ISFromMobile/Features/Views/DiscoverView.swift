@@ -130,6 +130,7 @@ struct DiscoverView: View {
     private var payloadIcon: String {
         switch context.sharedItems {
         case .text: return "text.alignleft"
+        case .link: return "link"
         case .images: return "photo"
         case .files: return "doc"
         }
@@ -139,6 +140,8 @@ struct DiscoverView: View {
         switch context.sharedItems {
         case .text(let text):
             return text.count > 50 ? String(text.prefix(50)) + "..." : text
+        case .link(let url):
+            return url.count > 60 ? String(url.prefix(60)) + "..." : url
         case .images(let images):
             return images.count > 1 ? "\(images.count) Images" : "Image"
         case .files:
@@ -150,6 +153,8 @@ struct DiscoverView: View {
         switch context.sharedItems {
         case .text(let text):
             return "\(text.count) characters"
+        case .link(let url):
+            return url
         case .images(let images):
             return images.count > 1 ? "\(images.count) images" : "1 image"
         case .files:

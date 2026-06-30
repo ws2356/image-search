@@ -63,6 +63,15 @@ public struct PendingRevisitFeature {
                                 text: text,
                                 peerDeviceName: deviceName
                             )
+                        case .link(let url):
+                            try await uploadClient.uploadText(
+                                hosts: targetDevice.hosts,
+                                port: targetDevice.tlsPort,
+                                sessionID: sessionId,
+                                correlationID: sessionId,
+                                text: url,
+                                peerDeviceName: deviceName
+                            )
                         case .images(let images):
                             if images.count == 1, let img = images.first {
                                 try await uploadClient.uploadImage(

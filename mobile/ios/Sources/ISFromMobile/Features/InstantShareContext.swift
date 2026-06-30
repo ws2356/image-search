@@ -18,12 +18,14 @@ struct InstantShareContext: Equatable {
 
 enum SharedItems: Equatable {
     case text(String)
+    case link(String)
     case images([SharedImage])
     case files([SharedFile])
 
     var payloadClass: String {
         switch self {
         case .text: return InstantSharePayloadClass.text.rawValue
+        case .link: return InstantSharePayloadClass.link.rawValue
         case .images: return InstantSharePayloadClass.image.rawValue
         case .files: return InstantSharePayloadClass.text.rawValue
         }
@@ -31,7 +33,7 @@ enum SharedItems: Equatable {
 
     var targetIntent: String {
         switch self {
-        case .text, .files: return "clipboard_only"
+        case .text, .link, .files: return "clipboard_only"
         case .images: return "clipboard_or_file"
         }
     }

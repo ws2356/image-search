@@ -82,6 +82,9 @@ public struct FlowFeature {
                             if let textEnvelope = envelopes.first(where: { $0.payloadType == .text }),
                                let text = textEnvelope.textContent {
                                 value.sharedItems = .text(text)
+                            } else if let linkEnvelope = envelopes.first(where: { $0.payloadType == .link }),
+                                      let urlString = linkEnvelope.textContent {
+                                value.sharedItems = .link(urlString)
                             } else {
                                 let images = envelopes
                                     .filter { $0.payloadType == .image }
