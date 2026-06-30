@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.net.boldman.ausearch</string>
+		<string>ZU6V838VRQ.net.boldman.ausearch</string>
 	</array>
     <!--
       Required: Allows the app to be debugged and inspected by development tools.

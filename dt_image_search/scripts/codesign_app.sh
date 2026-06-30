@@ -116,14 +116,20 @@ fi
 echo "  ShareExtension.appex signed."
 
 echo ""
-echo "Step 3b: Signing inner .app bundle"
-codesign --sign "$IDENTITY" \
-         --timestamp \
-         --options runtime \
-        --entitlements "$ENTITLEMENTS" \
-         --force \
-         "$AGENT_BUNDLE_PATH"
-echo "  Inner bundle signed."
+echo "Step 3b: Signing inner .app bundle (InstantShareAgent)"
+AGENT_ENTITLEMENTS="${SCRIPT_DIR}/AuSearchInstantShareAgent.entitlements"
+if [[ -f "$AGENT_ENTITLEMENTS" ]]; then
+    codesign --sign "$IDENTITY" \
+             --timestamp \
+             --options runtime \
+             --entitlements "$AGENT_ENTITLEMENTS" \
+             --force \
+             "$AGENT_BUNDLE_PATH"
+else
+    echo "Agent entitlements file not found at $AGENT_ENTITLEMENTS; signing without entitlements"
+    exit 1
+fi
+echo "  Inner bundle (InstantShareAgent) signed."
 
 
 echo ""

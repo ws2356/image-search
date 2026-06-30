@@ -3,6 +3,7 @@ import Foundation
 import UniformTypeIdentifiers
 import os.log
 
+private let appGroupIdentifier = "ZU6V838VRQ.net.boldman.ausearch"
 private let socketRelativePath = "is.sock"
 private let log = OSLog(subsystem: "net.boldman.ausearch.share-extension", category: "ShareExtension")
 
@@ -10,15 +11,15 @@ class MacShareViewController: NSViewController {
     private var extensionContextRef: NSExtensionContext?
 
     private lazy var httpClient: UDSHTTPClient = {
-        guard let containerURL = FileManager.default.urls(
-            for: .libraryDirectory,
-            in: .userDomainMask
-        ).first else {
-            os_log("Failed to resolve container URL", log: log, type: .error)
+        guard let containerURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: appGroupIdentifier
+        ) else {
+            os_log("Failed to resolve App Group container URL for %{public}@",
+                   log: log, type: .error, appGroupIdentifier)
             return UDSHTTPClient(socketPath: "")
         }
         let fullPath = containerURL.appendingPathComponent(socketRelativePath).path
-        os_log("UDS endpoint: %{public}@", log: log, type: .info, fullPath)
+        os_log("UDS endpoint (App Group): %{public}@", log: log, type: .info, fullPath)
         return UDSHTTPClient(socketPath: fullPath)
     }()
 

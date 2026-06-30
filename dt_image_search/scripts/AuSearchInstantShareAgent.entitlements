@@ -25,26 +25,24 @@
 
     <!--
       Required: Bonjour/mDNS service advertising for instant share discovery.
-      The service type matches what the mobile app browses for.
     -->
     <key>com.apple.security.network.multicast</key>
     <true/>
 
     <!--
       Required when Hardened Runtime app code triggers Apple Events checks.
-      Without this entitlement, macOS logs a TCC warning and denies prompts.
     -->
     <key>com.apple.security.automation.apple-events</key>
     <true/>
 
     <!--
       Shared App Group container for Unix domain socket IPC with the
-      sandboxed Share Extension.
+      sandboxed Share Extension. The Team ID prefix avoids needing a
+      provisioning profile for the non-sandboxed launch agent.
     -->
     <key>com.apple.security.application-groups</key>
     <array>
         <string>ZU6V838VRQ.net.boldman.ausearch</string>
     </array>
-
 </dict>
 </plist>

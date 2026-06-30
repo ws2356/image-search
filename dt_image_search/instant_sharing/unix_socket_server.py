@@ -14,14 +14,19 @@ from dt_image_search.instant_sharing.qr_trigger_handler import TRIGGER_PATH
 
 _logger = logging.getLogger(__name__)
 
-EXTENSION_BUNDLE_ID = "vip.wansong.dtimagesearch.share-extension"
+APP_GROUP_ID = "ZU6V838VRQ.net.boldman.ausearch"
 SOCKET_RELATIVE_PATH = "is.sock"
 _MACOS_SUN_PATH_MAX = 104
 
 
-def _extension_socket_path(container_dir: Path | None = None) -> Path:
-    home = container_dir or Path.home()
-    return home / "Library" / "Containers" / EXTENSION_BUNDLE_ID / "Data" / "Library" / SOCKET_RELATIVE_PATH
+def _group_container_socket_path(group_container_dir: Path | None = None) -> Path:
+    """Resolve the Unix domain socket path inside the shared App Group container.
+
+    Both the launch agent (non-sandboxed) and the Share Extension (sandboxed) use
+    this path, bridged by the ``com.apple.security.application-groups`` entitlement.
+    """
+    container_root = group_container_dir or Path.home() / "Library" / "Group Containers" / APP_GROUP_ID
+    return container_root / SOCKET_RELATIVE_PATH
 
 
 def _build_app(
@@ -71,7 +76,7 @@ class UnixSocketHttpServer:
         socket_path: Path | None = None,
     ) -> None:
         self._request_handler = request_handler
-        self._socket_path = socket_path or _extension_socket_path()
+        self._socket_path = socket_path or _group_container_socket_path()
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
 
