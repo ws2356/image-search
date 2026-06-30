@@ -78,7 +78,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     mkdir -p "${agent_bundle_path}/Contents/MacOS"
     mv "$daemon_bin" "${agent_bundle_path}/Contents/MacOS/InstantShareAgent"
     # soft link all Contents/* to the agent bundle so it can find the resources and plist
-    (cd "$agent_bundle_path/Contents" && ln -s "../../../Resources" . && ln -s "../../../Frameworks" .)
+    # (cd "$agent_bundle_path/Contents" && ln -s "../../../Resources" . && ln -s "../../../Frameworks" .)
     # copy Info.plist
     cp "${project_root}/dt_image_search/resources/AppInfoInstantShare.plist" "${agent_bundle_path}/Contents/Info.plist"
 
