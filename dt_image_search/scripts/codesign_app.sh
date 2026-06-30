@@ -115,8 +115,17 @@ else
 fi
 echo "  ShareExtension.appex signed."
 
+
 echo ""
-echo "Step 3b: Signing inner .app bundle (InstantShareAgent)"
+echo "Step 3b:  Signing inner Python framework binary..."
+    PYTHON_FRAMEWORK_PATH="${AGENT_BUNDLE_PATH}/Contents/Frameworks/Python.framework"
+    codesign --sign "$IDENTITY" \
+             --timestamp \
+             --force \
+             "$PYTHON_FRAMEWORK_PATH"
+
+echo ""
+echo "Step 3c: Signing inner .app bundle (InstantShareAgent)"
 AGENT_ENTITLEMENTS="${SCRIPT_DIR}/AuSearchInstantShareAgent.entitlements"
 if [[ -f "$AGENT_ENTITLEMENTS" ]]; then
     codesign --sign "$IDENTITY" \

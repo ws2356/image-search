@@ -79,6 +79,16 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     mv "$daemon_bin" "${agent_bundle_path}/Contents/MacOS/InstantShareAgent"
     # soft link all Contents/* to the agent bundle so it can find the resources and plist
     # (cd "$agent_bundle_path/Contents" && ln -s "../../../Resources" . && ln -s "../../../Frameworks" .)
+    # (cd "$agent_bundle_path/Contents" && ln -s "../../../Resources" . && ln -s "../../../Frameworks" .)
+    # ln -s "../../../../Frameworks/Python" "${agent_bundle_path}/Contents/Frameworks/Python"
+
+    # 在子 Bundle 内部建立完全相同的内部映射
+    target_of_main_link=$(readlink "${app_path}/Contents/Frameworks/Python")
+    (set -x ; \
+      cd "$agent_bundle_path/Contents" && \
+      mkdir Frameworks && cp -r "../../../Frameworks/Python.framework" "$_" && \
+      ln -s "$target_of_main_link" "${agent_bundle_path}/Contents/Frameworks/Python" ; set +x)
+    
     # copy Info.plist
     cp "${project_root}/dt_image_search/resources/AppInfoInstantShare.plist" "${agent_bundle_path}/Contents/Info.plist"
 
