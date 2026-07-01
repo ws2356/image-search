@@ -110,7 +110,10 @@ codesign_bundle() {
         $skip && continue
 
         echo "    framework: $fw"
-        codesign --sign "$IDENTITY" --timestamp --options runtime --force "$fw"
+        if ! codesign --sign "$IDENTITY" --timestamp --options runtime --force "$fw"; then
+            echo "Error: failed to sign framework: $fw" >&2
+            return 1
+        fi
         fw_count=$((fw_count + 1))
     done < <(find "${bundle_path}/Contents" -name "*.framework" -type d -print0 \
                  | sort -rz)
@@ -132,12 +135,14 @@ codesign_bundle() {
         $skip && continue
 
         if file "$bin" 2>/dev/null | grep -qE "Mach-O"; then
-            codesign --sign "$IDENTITY" \
+            if ! codesign --sign "$IDENTITY" \
                      --timestamp \
                      --options runtime \
                      --force \
-                     "$bin" 2>/dev/null \
-                || echo "    WARNING: could not sign '$bin' (skipping)"
+                     "$bin" 2>/dev/null ; then
+                echo "Error: failed to sign binary: $bin" >&2
+                return 1
+            fi
             bin_count=$((bin_count + 1))
         fi
     done < <(find "${bundle_path}/Contents" -type f \
@@ -154,23 +159,43 @@ codesign_bundle() {
         --force
     )
     [[ -n "$entitlements_path" ]] && sign_args+=(--entitlements "$entitlements_path")
-    codesign "${sign_args[@]}" "$bundle_path"
+    if ! codesign "${sign_args[@]}" "$bundle_path" ; then
+        echo "Error: failed to sign bundle: $bundle_path" >&2
+        return 1
+    fi
     echo "    Bundle signed."
 }
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
 
 # ── Step 1: Sign launch agent bundle ──────────────────────────────────────────
 echo ""
 echo "================================================================================"
 echo "Step 1: codesign_bundle launch_agent_bundle"
 echo "================================================================================"
-codesign_bundle "$AGENT_BUNDLE_PATH" --entitlements "$AGENT_ENTITLEMENTS"
+tmp_agent_bundle_path="${tmp_dir}/InstantShareAgent.app"
+mv "$AGENT_BUNDLE_PATH" "$tmp_agent_bundle_path"
+if codesign_bundle "$tmp_agent_bundle_path" --entitlements "$AGENT_ENTITLEMENTS" ; then
+    mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
+else
+    mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
+    exit 1
+fi
 
 # ── Step 2: Sign share extension ──────────────────────────────────────────────
 echo ""
 echo "================================================================================"
 echo "Step 2: codesign_bundle share_extension"
 echo "================================================================================"
-codesign_bundle "$SHARE_EXTENSION_PATH" --entitlements "$SHARE_EXT_ENTITLEMENTS"
+tmp_share_extension_path="${tmp_dir}/InstantShareExtension.appex"
+mv "$SHARE_EXTENSION_PATH" "$tmp_share_extension_path"
+if codesign_bundle "$tmp_share_extension_path" --entitlements "$SHARE_EXT_ENTITLEMENTS" ; then
+    mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
+else
+    mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
+    exit 1
+fi
 
 # ── Step 3: Sign main app bundle (excluding already-signed sub-bundles) ───────
 echo ""

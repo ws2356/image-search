@@ -24,22 +24,6 @@ import sys
 import time
 from pathlib import Path
 
-# 获取当前 Agent 二进制所在的绝对路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 向上追溯 5 层，到达主 App 的 Contents 目录
-# 1层: Contents/MacOS
-# 2层: InstantShareAgent.app
-# 3层: Helpers
-# 4层: Contents (主App的)
-main_contents_dir = os.path.abspath(os.path.join(current_dir, "../../../../"))
-# 此时你可以精准定位主 App 的 Frameworks 或 Resources
-main_frameworks = os.path.join(main_contents_dir, "Frameworks")
-main_resources = os.path.join(main_contents_dir, "Resources")
-# 将主 App 的 site-packages 或源码目录注入 Python 搜索路径
-sys.path.insert(0, main_resources)
-sys.path.insert(0, os.path.join(main_frameworks, "python-packages")) # 视你的主App结构而定
-
-
 import faulthandler
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
