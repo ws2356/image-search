@@ -102,7 +102,7 @@ if [ "$skip_build" = false ] ;  then
 
     # -- Step 4: Forget and remove old bundle (helpful for local testing)
     sudo pkgutil --forget "$pkg_identifier" || true
-    (cd "$distpath" && rm -rf "./${app_bundle_name}.app")
+    # (cd "$distpath" && sudo rm -rf "./${app_bundle_name}.app")
 fi
 
 if [ "$skip_release" = false ]; then
