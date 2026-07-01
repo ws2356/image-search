@@ -7,7 +7,7 @@ set -euo pipefail
 # that installs and loads a LaunchAgent for the instant share daemon.
 #
 # Usage:
-#   build_pkg.sh \
+#   package_pkg.sh \
 #       --app-path    ./pyinstaller-dist-prod/AuSearch.app \
 #       [--identity   "Developer ID Installer: NAME (TEAMID)"]
 #
@@ -67,9 +67,11 @@ chmod +x "$PKG_SCRIPTS/postinstall"
 # does NOT wrap the package in a Distribution XML, avoiding the
 # bundle-version/path conflict that caused previous PKGs to silently fail.
 echo "Creating flat component package..."
-SIGN_ARGS=()
-if [[ -n "$INSTALLER_IDENTITY" ]]; then
-    SIGN_ARGS=(--sign "$INSTALLER_IDENTITY")
+
+if [[ -z "$INSTALLER_IDENTITY" ]]; then
+    echo "WARNING: No installer identity provided — PKG is unsigned."
+    echo "         Set \$DEVELOPER_ID_INSTALLER or pass --identity."
+    echo "         Note: This is the *Installer* identity, not the *Application* identity."
 fi
 
 pkgbuild \
@@ -77,14 +79,9 @@ pkgbuild \
     --install-location "/Applications" \
     --scripts "$PKG_SCRIPTS" \
     --ownership recommended \
-    "${SIGN_ARGS[@]}" \
+    --sign "$INSTALLER_IDENTITY" \
     "$OUTPUT_PKG"
 
-if [[ -z "$INSTALLER_IDENTITY" ]]; then
-    echo "WARNING: No installer identity provided — PKG is unsigned."
-    echo "         Set \$DEVELOPER_ID_INSTALLER or pass --identity."
-    echo "         Note: This is the *Installer* identity, not the *Application* identity."
-fi
 
 echo ""
 echo "Done: $OUTPUT_PKG"

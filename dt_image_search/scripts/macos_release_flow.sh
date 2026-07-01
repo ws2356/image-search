@@ -88,12 +88,14 @@ echo "App bundle name: $app_bundle_name"
 cd "$repo_root"
 
 package_file=
+distpath="$repo_root/pyinstaller-dist-${build_type}"
+app_path="${distpath}/${app_bundle_name}.app"
 
 if [ "$skip_build" == false ] ;  then
-    echo "-- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env"
+    echo "──── Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env"
     . "$this_dir/init_envs.sh"
 
-    echo "-- Step 2: Build the .app"
+    echo "──── Step 2: Build the .app"
     "$this_dir/build_pyinstaller.sh" \
         --build-type "$build_type" \
         --product "$product"
@@ -103,10 +105,7 @@ if [ "$skip_build" == false ] ;  then
         exit 1
     fi
 
-    distpath="$repo_root/pyinstaller-dist-${build_type}"
-    app_path="${distpath}/${app_bundle_name}.app"
-
-    echo "-- Step 3: Codesign the .app"
+    echo "──── Step 3: Codesign the .app"
     "$this_dir/codesign_app.sh" \
         --app-path "$app_path" \
         --entitlements "$this_dir/../resources/${app_bundle_name}.entitlements" \
@@ -114,13 +113,13 @@ if [ "$skip_build" == false ] ;  then
 
     if [ "$skip_pkg" == false ] ;  then
         if [ "$product" == "instant-share" ]; then
-            echo "-- Step 4: Build the PKG distribution"
+            echo "──── Step 4: Build the PKG distribution"
             "$this_dir/package_pkg.sh" \
                 --app-path "$app_path" \
                 --identity "$DEVELOPER_ID_INSTALLER"
             package_file="${distpath}/${app_bundle_name}.pkg"
         elif [ "$product" == "main-app" ]; then
-            echo "-- Step 4: Build the DMG distribution"
+            echo "──── Step 4: Build the DMG distribution"
             "$this_dir/package_dmg.sh" \
                 --app-path "$app_path" \
                 --volume-name "$app_bundle_name" \
@@ -141,7 +140,9 @@ if [ "$skip_build" == false ] ;  then
 
         echo "──── Step 7: Forget and remove old bundle (helpful for local testing)"
         sudo pkgutil --forget "$pkg_identifier" || true
-        # (cd "$distpath" && sudo rm -rf "./${app_bundle_name}.app")
+
+        echo "──── Step 8: Remove the app bundle if it exists to ensure a clean install for testing"
+        sudo rm -rf "$app_path"
     fi
 fi
 
