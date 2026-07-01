@@ -89,7 +89,7 @@ cd "$repo_root"
 
 package_file=
 
-if [ "$skip_build" = false ] ;  then
+if [ "$skip_build" == false ] ;  then
     echo "-- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env"
     . "$this_dir/init_envs.sh"
 
@@ -103,25 +103,26 @@ if [ "$skip_build" = false ] ;  then
         exit 1
     fi
 
+    distpath="$repo_root/pyinstaller-dist-${build_type}"
+    app_path="${distpath}/${app_bundle_name}.app"
+
     echo "-- Step 3: Codesign the .app"
     "$this_dir/codesign_app.sh" \
-        --app-path "$APP_PATH" \
+        --app-path "$app_path" \
         --entitlements "$this_dir/../resources/${app_bundle_name}.entitlements" \
         --identity "$DEVELOPER_ID_IDENTITY"
 
-    if [ "$skip_pkg" = false ] ;  then
-        distpath="$repo_root/pyinstaller-dist-${build_type}"
-
+    if [ "$skip_pkg" == false ] ;  then
         if [ "$product" == "instant-share" ]; then
             echo "-- Step 4: Build the PKG distribution"
             "$this_dir/package_pkg.sh" \
-                --app-path "${distpath}/${app_bundle_name}.app" \
+                --app-path "$app_path" \
                 --identity "$DEVELOPER_ID_INSTALLER"
             package_file="${distpath}/${app_bundle_name}.pkg"
         elif [ "$product" == "main-app" ]; then
             echo "-- Step 4: Build the DMG distribution"
             "$this_dir/package_dmg.sh" \
-                --app-path "${distpath}/${app_bundle_name}.app" \
+                --app-path "$app_path" \
                 --volume-name "$app_bundle_name" \
                 --identity "$DEVELOPER_ID_IDENTITY"
             package_file="${distpath}/${app_bundle_name}.dmg"
