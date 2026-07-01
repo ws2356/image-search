@@ -90,41 +90,55 @@ cd "$repo_root"
 package_file=
 
 if [ "$skip_build" = false ] ;  then
-    # -- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env
+    echo "-- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env"
     . "$this_dir/init_envs.sh"
 
-    # -- Step 2: Build the .app
+    echo "-- Step 2: Build the .app"
     "$this_dir/build_pyinstaller.sh" \
         --build-type "$build_type" \
         --product "$product"
+    
+    if [ -z "$DEVELOPER_ID_IDENTITY" ]; then
+        echo "Warning: DEVELOPER_ID_IDENTITY is not set."
+        exit 1
+    fi
+
+    echo "-- Step 3: Codesign the .app"
+    "$this_dir/codesign_app.sh" \
+        --app-path "$APP_PATH" \
+        --entitlements "$this_dir/../resources/${app_bundle_name}.entitlements" \
+        --identity "$DEVELOPER_ID_IDENTITY"
 
     if [ "$skip_pkg" = false ] ;  then
         distpath="$repo_root/pyinstaller-dist-${build_type}"
 
         if [ "$product" == "instant-share" ]; then
-            # -- Step 3: Build and notarize the PKG distribution
-            "$this_dir/create_distributable_pkg.sh" \
-                --app-path "${distpath}/${app_bundle_name}.app"
+            echo "-- Step 4: Build the PKG distribution"
+            "$this_dir/package_pkg.sh" \
+                --app-path "${distpath}/${app_bundle_name}.app" \
+                --identity "$DEVELOPER_ID_INSTALLER"
             package_file="${distpath}/${app_bundle_name}.pkg"
         elif [ "$product" == "main-app" ]; then
-            # -- Step 3: Build and notarize the PKG distribution
-            "$this_dir/create_distributable_dmg.sh" \
-                --app-path "${distpath}/${app_bundle_name}.app"
+            echo "-- Step 4: Build the DMG distribution"
+            "$this_dir/package_dmg.sh" \
+                --app-path "${distpath}/${app_bundle_name}.app" \
+                --volume-name "$app_bundle_name" \
+                --identity "$DEVELOPER_ID_IDENTITY"
             package_file="${distpath}/${app_bundle_name}.dmg"
         else
             echo "Unknown product: $product. Expected 'main-app' or 'instant-share'."
             exit 1
         fi
 
-        echo "──── Step 3: Notarize ────"
+        echo "──── Step 5: Notarize ────"
         "$this_dir/notarize.sh" --asset-path "$package_file"
         echo ""
 
-        echo "──── Step 4: Staple ────"
+        echo "──── Step 6: Staple ────"
         "$this_dir/staple.sh" --asset-path "$package_file"
         echo ""
 
-        # -- Step 4: Forget and remove old bundle (helpful for local testing)
+        echo "──── Step 7: Forget and remove old bundle (helpful for local testing)"
         sudo pkgutil --forget "$pkg_identifier" || true
         # (cd "$distpath" && sudo rm -rf "./${app_bundle_name}.app")
     fi
@@ -136,14 +150,15 @@ if [ "$skip_release" = false ]; then
         echo "Error: Package file not found. Ensure build and packaging steps completed successfully."
         exit 1
     fi
+    echo "-- Step 8: Push to Github Release"
     (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
         --repo "$parent_repo" --tag "$tag" \
         --title "Release $tag ($product)" --notes "Bug free code" \
         --asset-path "$package_file" --target main)
 
-    # -- Step 6: Release to Official Side (only for main-app)
     # TODO: get the release url for the other package (main app or instant share) and set both links as environment variables for the web build
     if [[ "$product" == "main-app" ]]; then
+        echo "-- Step 9: Release to Official Side (only for main-app)"
         (cd "$repo_root/web" && \
             export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/${app_bundle_name}.pkg" && \
             npm run build && \

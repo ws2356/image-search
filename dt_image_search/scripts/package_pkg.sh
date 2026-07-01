@@ -9,7 +9,6 @@ set -euo pipefail
 # Usage:
 #   build_pkg.sh \
 #       --app-path    ./pyinstaller-dist-prod/AuSearch.app \
-#       --output      ./dist/AuSearch-1.2.3.pkg \
 #       [--identity   "Developer ID Installer: NAME (TEAMID)"]
 #
 # The installer signing identity may also be supplied via
@@ -25,13 +24,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 APP_PATH=""
-OUTPUT_PKG=""
 INSTALLER_IDENTITY="${DEVELOPER_ID_INSTALLER:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --app-path)    APP_PATH="$2";    shift 2 ;;
-        --output)      OUTPUT_PKG="$2";  shift 2 ;;
         --identity)    INSTALLER_IDENTITY="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
@@ -45,7 +42,7 @@ if [[ "$APP_PATH" != /* ]]; then
 fi
 
 APP_BUNDLE_NAME="$(basename "$APP_PATH" .app)"
-OUTPUT_PKG="${OUTPUT_PKG:-$(dirname "$APP_PATH")/${APP_BUNDLE_NAME}.pkg}"
+OUTPUT_PKG="$(dirname "$APP_PATH")/${APP_BUNDLE_NAME}.pkg"
 mkdir -p "$(dirname "$OUTPUT_PKG")"
 
 # Check for ShareExtension.appex (present in instant-share builds, absent in main-app)

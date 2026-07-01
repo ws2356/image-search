@@ -89,35 +89,3 @@ if [[ "$SKIP_NOTARIZE" == "true" ]]; then
     echo "╚══════════════════════════════════════════╝"
     exit 0
 fi
-
-# ── Step 3 ────────────────────────────────────────────────────────────────────
-echo "──── Step 3: Notarize ────"
-remaining_attempts=3
-while [ "$remaining_attempts" -gt 0 ] ; do
-    if "$SCRIPT_DIR/notarize.sh" --pkg-path "$OUTPUT_PKG" ; then
-        break
-    fi
-    ((remaining_attempts -= 1))
-    if [ "$remaining_attempts" -gt 0 ] ; then
-        echo "Notarization failed. Wait before retrying ..."
-        sleep 3
-    else
-        echo "Notarization failed. Exit"
-        exit 1
-    fi
-done
-echo ""
-
-# ── Step 4 ────────────────────────────────────────────────────────────────────
-echo "──── Step 4: Staple ────"
-"$SCRIPT_DIR/staple_pkg.sh" --pkg-path "$OUTPUT_PKG" 2>/dev/null || {
-    echo "Note: Stapling may not apply to PKGs; running notarization validation..."
-    xcrun stapler validate "$OUTPUT_PKG" 2>/dev/null || true
-}
-echo ""
-
-echo "╔══════════════════════════════════════════╗"
-echo "║  Distribution complete                   ║"
-echo "╠══════════════════════════════════════════╣"
-echo "  $OUTPUT_PKG"
-echo "╚══════════════════════════════════════════╝"

@@ -55,18 +55,7 @@ echo "║  macOS Distribution Pipeline             ║"
 echo "╠══════════════════════════════════════════╣"
 echo "  App:    $APP_PATH"
 echo "  Output: $OUTPUT_DMG"
-[[ -n "$IDENTITY" ]] && echo "  Identity: $IDENTITY"
-echo ""
 
-# ── Step 1 ────────────────────────────────────────────────────────────────────
-echo "──── Step 1: Codesign ────"
-SIGN_ARGS=(--app-path "$APP_PATH" --entitlements "$SCRIPT_DIR/../resources/${APP_NAME}.entitlements")
-[[ -n "$IDENTITY" ]] && SIGN_ARGS+=(--identity "$IDENTITY")
-"$SCRIPT_DIR/codesign_app.sh" "${SIGN_ARGS[@]}"
-echo ""
-
-# ── Step 2 ────────────────────────────────────────────────────────────────────
-echo "──── Step 2: Package DMG ────"
 VOLNAME="$(basename "$APP_PATH" .app)"
 DMG_ARGS=(--app-path "$APP_PATH" --volume-name "$VOLNAME")
 [[ -n "$IDENTITY" ]] && DMG_ARGS+=(--identity "$IDENTITY")

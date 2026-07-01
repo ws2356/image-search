@@ -25,9 +25,6 @@ if sys.platform == "win32":
         "resources/*.dll",
     ]
 datas += collect_data_files("dt_image_search", includes=platform_resource_includes)
-datas += copy_metadata('hf_xet')
-heif_datas, heif_binaries, heif_hiddenimports = collect_all("pillow_heif")
-datas += heif_datas
 
 build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
 if build_type not in {"prod", "dev"}:
@@ -56,7 +53,6 @@ if sys.platform == "darwin":
 a = Analysis(
     ['scripts/start_instant_share_gui_runtime.py'],
     pathex=[],
-    binaries=heif_binaries,
     datas=datas,
     hiddenimports=[
         'AppKit',
