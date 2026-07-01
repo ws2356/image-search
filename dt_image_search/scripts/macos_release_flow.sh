@@ -31,12 +31,14 @@ build_type=prod
 product="main-app"
 skip_release=false
 skip_build=false
+skip_pkg=false
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --build-type) build_type="$2"; shift 2;;
         --product) product="$2"; shift 2;;
         --skip-release) skip_release=true; shift;;
         --skip-build) skip_build=true; shift;;
+        --skip-pkg) skip_pkg=true; shift;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
 done
@@ -94,15 +96,17 @@ if [ "$skip_build" = false ] ;  then
         --build-type "$build_type" \
         --product "$product"
 
-    distpath="$repo_root/pyinstaller-dist-${build_type}"
+    if [ "$skip_pkg" = false ] ;  then
+        distpath="$repo_root/pyinstaller-dist-${build_type}"
 
-    # -- Step 3: Build and notarize the PKG distribution
-    "$this_dir/create_distributable_pkg.sh" \
-        --app-path "${distpath}/${app_bundle_name}.app"
+        # -- Step 3: Build and notarize the PKG distribution
+        "$this_dir/create_distributable_pkg.sh" \
+            --app-path "${distpath}/${app_bundle_name}.app"
 
-    # -- Step 4: Forget and remove old bundle (helpful for local testing)
-    sudo pkgutil --forget "$pkg_identifier" || true
-    # (cd "$distpath" && sudo rm -rf "./${app_bundle_name}.app")
+        # -- Step 4: Forget and remove old bundle (helpful for local testing)
+        sudo pkgutil --forget "$pkg_identifier" || true
+        # (cd "$distpath" && sudo rm -rf "./${app_bundle_name}.app")
+    fi
 fi
 
 if [ "$skip_release" = false ]; then
