@@ -17,7 +17,7 @@ def get_config() -> dict:
 
 
 def _read_build_vars_from_resource() -> dict:
-    resource_path = files("dt_image_search").joinpath("resources", "build_vars")
+    resource_path = files("dt_image_search.resources").joinpath("build_vars")
     if not resource_path.is_file():
         return {}
     try:

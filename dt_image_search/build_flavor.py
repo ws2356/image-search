@@ -21,7 +21,7 @@ def _normalize_build_type(raw_value: str | None) -> str | None:
 
 
 def _read_build_type_from_resource() -> str | None:
-    resource_path = files("dt_image_search").joinpath("resources", "build_vars")
+    resource_path = files("dt_image_search.resources").joinpath("build_vars")
     if not resource_path.is_file():
         return None
 

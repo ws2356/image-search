@@ -18,18 +18,13 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import signal
 import sys
-import time
 from pathlib import Path
 
 import faulthandler
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
-
-from dt_image_search.app_setting import initialize_app_settings
-initialize_app_settings()
+from PySide6.QtCore import QStandardPaths, QTimer
 
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE
@@ -37,8 +32,7 @@ from dt_image_search.instant_sharing.mini_window_factory import InstantShareMini
 from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
 
 def _get_log_file_path() -> Path:
-    from dt_image_search.model.dts_fs import get_app_data_path
-    _LOG_DIR = get_app_data_path() / "logs"
+    _LOG_DIR = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)) / "logs"
     _LOG_DIR.mkdir(parents=True, exist_ok=True)
     _LOG_FILE = _LOG_DIR / "instantshare.log"
     return _LOG_FILE
@@ -106,11 +100,9 @@ def main() -> int:
     #     return 0
 
     app = QApplication(sys.argv)
+    app.setOrganizationDomain("net.boldman")
     app.setApplicationName("AuSearch Instant Share")
     app.setQuitOnLastWindowClosed(False)
-
-    from dt_image_search.model.dts_fs import get_app_data_path
-    print(f"App data path: {get_app_data_path()}")
 
     logging.basicConfig(
         level=getattr(logging, args.log_level),

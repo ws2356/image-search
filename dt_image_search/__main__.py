@@ -38,7 +38,7 @@ from dt_image_search.build_flavor import get_build_type
 _build_type = get_build_type()
 from dt_image_search.app_setting import initialize_app_settings
 
-initialize_app_settings()
+initialize_app_settings(app_name="imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache

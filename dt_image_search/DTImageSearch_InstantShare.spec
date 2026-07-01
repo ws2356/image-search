@@ -8,23 +8,28 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metadata
 
 sys.path.insert(0, os.path.abspath("."))
-datas = collect_data_files("dt_image_search.model")
-platform_resource_includes = [
-    "resources/icon.png",
-    "resources/appicon.icns",
+
+
+# 2. 放弃 collect_data_files，改用手动、精准的元组配对数据收集
+# 定义好源资源的根路径
+src_resources_dir = Path("resources")
+
+datas = [
+    # 明确复制图标和必备文件，且明确指定在包内的存放路径
+    (str(src_resources_dir / "icon.png"), "dt_image_search/resources"),
+    (str(src_resources_dir / "appicon.icns"), "dt_image_search/resources"),
+    (str(src_resources_dir / "net.boldman.ausearch.instantshare.plist"), ".")
 ]
-# Place the LaunchAgent plist at Resources root so the PKG postinstall script
-# can find it at a well-known path inside the .app bundle.
-datas += [("resources/net.boldman.ausearch.instantshare.plist", ".")]
+
 if sys.platform == "win32":
-    platform_resource_includes += [
-        "resources/*.msi",
-        "resources/*.inf",
-        "resources/*.cat",
-        "resources/*.sys",
-        "resources/*.dll",
+    platform_resource_includes = [
+        "*.msi",
+        "*.inf",
+        "*.cat",
+        "*.sys",
+        "*.dll",
     ]
-datas += collect_data_files("dt_image_search", includes=platform_resource_includes)
+    datas += collect_data_files("dt_image_search.resources", includes=platform_resource_includes)
 
 build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
 if build_type not in {"prod", "dev"}:

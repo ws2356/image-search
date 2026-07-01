@@ -32,6 +32,7 @@ product="main-app"
 skip_release=false
 skip_build=false
 skip_pkg=false
+skip_notarize=false
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --build-type) build_type="$2"; shift 2;;
@@ -39,6 +40,7 @@ while [[ "$#" -gt 0 ]]; do
         --skip-release) skip_release=true; shift;;
         --skip-build) skip_build=true; shift;;
         --skip-pkg) skip_pkg=true; shift;;
+        --skip-notarize) skip_notarize=true; shift;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
 done
@@ -130,13 +132,15 @@ if [ "$skip_build" == false ] ;  then
             exit 1
         fi
 
-        echo "──── Step 5: Notarize ────"
-        "$this_dir/notarize.sh" --asset-path "$package_file"
-        echo ""
+        if [ "$skip_notarize" == false ] ; then
+            echo "──── Step 5: Notarize ────"
+            "$this_dir/notarize.sh" --asset-path "$package_file"
+            echo ""
 
-        echo "──── Step 6: Staple ────"
-        "$this_dir/staple.sh" --asset-path "$package_file"
-        echo ""
+            echo "──── Step 6: Staple ────"
+            "$this_dir/staple.sh" --asset-path "$package_file"
+            echo ""
+        fi
 
         echo "──── Step 7: Forget and remove old bundle (helpful for local testing)"
         sudo pkgutil --forget "$pkg_identifier" || true
@@ -167,3 +171,5 @@ if [ "$skip_release" = false ]; then
             npm run sync)
     fi
 fi
+
+echo "Done!"

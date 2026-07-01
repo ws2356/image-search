@@ -13,11 +13,8 @@ set -euo pipefail
 POSTINSTALL_LOG="/tmp/instantshare-pkg-postinstall.log"
 echo "--- InstantShare PKG postinstall $(date) ---" >> "$POSTINSTALL_LOG"
 
-echo "arg1=$1" >> "$POSTINSTALL_LOG"
-echo "arg2=$2" >> "$POSTINSTALL_LOG"
-echo "arg3=$3" >> "$POSTINSTALL_LOG"
 
-APP_PATH="$3/InstantShare.app"
+APP_PATH="/Applications/InstantShare.app"
 
 if [[ ! -d "$APP_PATH" ]]; then
     echo "Warning: InstantShare.app not found in /Applications." | tee -a "$POSTINSTALL_LOG" >&2
