@@ -87,6 +87,8 @@ echo "App bundle name: $app_bundle_name"
 
 cd "$repo_root"
 
+package_file=
+
 if [ "$skip_build" = false ] ;  then
     # -- Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env
     . "$this_dir/init_envs.sh"
@@ -99,9 +101,28 @@ if [ "$skip_build" = false ] ;  then
     if [ "$skip_pkg" = false ] ;  then
         distpath="$repo_root/pyinstaller-dist-${build_type}"
 
-        # -- Step 3: Build and notarize the PKG distribution
-        "$this_dir/create_distributable_pkg.sh" \
-            --app-path "${distpath}/${app_bundle_name}.app"
+        if [ "$product" == "instant-share" ]; then
+            # -- Step 3: Build and notarize the PKG distribution
+            "$this_dir/create_distributable_pkg.sh" \
+                --app-path "${distpath}/${app_bundle_name}.app"
+            package_file="${distpath}/${app_bundle_name}.pkg"
+        elif [ "$product" == "main-app" ]; then
+            # -- Step 3: Build and notarize the PKG distribution
+            "$this_dir/create_distributable_dmg.sh" \
+                --app-path "${distpath}/${app_bundle_name}.app"
+            package_file="${distpath}/${app_bundle_name}.dmg"
+        else
+            echo "Unknown product: $product. Expected 'main-app' or 'instant-share'."
+            exit 1
+        fi
+
+        echo "──── Step 3: Notarize ────"
+        "$this_dir/notarize.sh" --asset-path "$package_file"
+        echo ""
+
+        echo "──── Step 4: Staple ────"
+        "$this_dir/staple.sh" --asset-path "$package_file"
+        echo ""
 
         # -- Step 4: Forget and remove old bundle (helpful for local testing)
         sudo pkgutil --forget "$pkg_identifier" || true
@@ -111,13 +132,17 @@ fi
 
 if [ "$skip_release" = false ]; then
     # -- Step 5: Push to Github Release
-    pkg_file="${app_bundle_name}.pkg"
+    if [ -z "$package_file" ]; then
+        echo "Error: Package file not found. Ensure build and packaging steps completed successfully."
+        exit 1
+    fi
     (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
         --repo "$parent_repo" --tag "$tag" \
         --title "Release $tag ($product)" --notes "Bug free code" \
-        --pkg-path "$repo_root/pyinstaller-dist-${build_type}/$pkg_file" --target main)
+        --asset-path "$package_file" --target main)
 
     # -- Step 6: Release to Official Side (only for main-app)
+    # TODO: get the release url for the other package (main app or instant share) and set both links as environment variables for the web build
     if [[ "$product" == "main-app" ]]; then
         (cd "$repo_root/web" && \
             export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/${app_bundle_name}.pkg" && \

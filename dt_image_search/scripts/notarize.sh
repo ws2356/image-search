@@ -15,20 +15,19 @@ set -euo pipefail
 #   APPLE_ID=you@example.com \
 #   APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx \
 #   APPLE_TEAM_ID=ABCDE12345 \
-#   notarize.sh --dmg-path ./dist/AuSearch-1.2.3.dmg
-#   notarize.sh --pkg-path ./dist/AuSearch-1.2.3.pkg
+#   notarize.sh --asset-path ./dist/AuSearch-1.2.3.dmg
+#   notarize.sh --asset-path ./dist/AuSearch-1.2.3.pkg
 
 ARTIFACT_PATH=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dmg-path) ARTIFACT_PATH="$2"; shift 2 ;;
-        --pkg-path) ARTIFACT_PATH="$2"; shift 2 ;;
+        --asset-path) ARTIFACT_PATH="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
 
-[[ -z "$ARTIFACT_PATH" ]] && { echo "Error: --dmg-path or --pkg-path is required" >&2; exit 1; }
+[[ -z "$ARTIFACT_PATH" ]] && { echo "Error: --asset-path is required" >&2; exit 1; }
 [[ -f "$ARTIFACT_PATH" ]] || { echo "Error: artifact not found: $ARTIFACT_PATH" >&2; exit 1; }
 
 for var in APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do

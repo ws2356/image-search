@@ -21,7 +21,7 @@ Create or update a GitHub release and upload a PKG or DMG asset.
 Required:
   --tag <tag>               Release tag (for example: v1.2.3)
   --title <title>           Release title
-  --pkg-path <path>         PKG file to upload
+  --asset-path <path>         PKG or DMG file to upload
   --notes <text>            Release notes text
     or
   --notes-file <path>       Release notes file path
@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
         --title) TITLE="$2"; shift 2 ;;
         --notes) NOTES="$2"; shift 2 ;;
         --notes-file) NOTES_FILE="$2"; shift 2 ;;
-        --pkg-path) ASSET_PATH="$2"; shift 2 ;;
+        --asset-path) ASSET_PATH="$2"; shift 2 ;;
         --repo) REPO="$2"; shift 2 ;;
         --target) TARGET="$2"; shift 2 ;;
         --draft) DRAFT=true; shift ;;
@@ -70,7 +70,7 @@ if [[ -z "$TITLE" ]]; then
     exit 1
 fi
 if [[ -z "$ASSET_PATH" ]]; then
-    echo "Error: --pkg-path (or --dmg-path) is required." >&2
+    echo "Error: --asset-path is required." >&2
     exit 1
 fi
 if [[ -n "$NOTES" && -n "$NOTES_FILE" ]]; then
@@ -125,7 +125,7 @@ if [[ -n "$TARGET" ]]; then
 fi
 
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-    echo "Release '$TAG' already exists in $REPO. Updating metadata and replacing DMG..."
+    echo "Release '$TAG' already exists in $REPO. Updating metadata and replacing asset..."
     gh release edit "$TAG" "${EDIT_FLAGS[@]}" --title "$TITLE" "${NOTES_ARGS[@]}"
     gh release upload "$TAG" "$ASSET_PATH" --repo "$REPO" --clobber
 else

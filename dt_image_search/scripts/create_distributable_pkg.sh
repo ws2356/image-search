@@ -47,6 +47,7 @@ done
 if [[ "$APP_PATH" != /* ]]; then
     APP_PATH="$(pwd)/$APP_PATH"
 fi
+APP_NAME="$(basename "$APP_PATH" .app)"
 OUTPUT_PKG="$(dirname "$APP_PATH")/$(basename "$APP_PATH" .app).pkg"
 
 echo "╔══════════════════════════════════════════╗"
@@ -68,7 +69,7 @@ fi
 
 # ── Step 1 ────────────────────────────────────────────────────────────────────
 echo "──── Step 1: Codesign ────"
-SIGN_ARGS=(--app-path "$APP_PATH")
+SIGN_ARGS=(--app-path "$APP_PATH" --entitlements "$SCRIPT_DIR/../resources/${APP_NAME}.entitlements")
 [[ -n "$APP_IDENTITY" ]] && SIGN_ARGS+=(--identity "$APP_IDENTITY")
 "$SCRIPT_DIR/codesign_app.sh" "${SIGN_ARGS[@]}"
 echo ""

@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 APP_PATH=""
 IDENTITY="${DEVELOPER_ID_IDENTITY:-}"
-ENTITLEMENTS="${SCRIPT_DIR}/AuSearch.entitlements"
+ENTITLEMENTS=
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -36,13 +36,9 @@ done
 [[ -f "$ENTITLEMENTS" ]] || { echo "Error: entitlements file not found: $ENTITLEMENTS" >&2; exit 1; }
 [[ -d "$APP_PATH"   ]]  || { echo "Error: .app not found: $APP_PATH" >&2; exit 1; }
 
-AGENT_BUNDLE_PATH="${APP_PATH}/Contents/Helpers/InstantShareAgent.app"
 SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
 
-echo "==> Main App:          $APP_PATH"
-if [[ -d "$AGENT_BUNDLE_PATH" ]]; then
-    echo "==> Agent App:         $AGENT_BUNDLE_PATH"
-fi
+echo "==> App:               $APP_PATH"
 if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
     echo "==> Share Extension:   $SHARE_EXTENSION_PATH"
 fi
@@ -152,33 +148,6 @@ codesign_bundle() {
     echo "    Bundle signed."
 }
 
-tmp_dir="$(mktemp -d)"
-trap 'rm -rf "$tmp_dir"' EXIT
-
-# ── Step 1: Sign launch agent bundle (if present) ──────────────────────────
-if [[ -d "$AGENT_BUNDLE_PATH" ]]; then
-    echo ""
-    echo "================================================================================"
-    echo "Step 1: codesign_bundle launch_agent_bundle"
-    echo "================================================================================"
-    AGENT_ENTITLEMENTS="${SCRIPT_DIR}/AuSearchInstantShareAgent.entitlements"
-    if [[ ! -f "$AGENT_ENTITLEMENTS" ]]; then
-        echo "Error: agent entitlements not found: $AGENT_ENTITLEMENTS" >&2
-        exit 1
-    fi
-    tmp_agent_bundle_path="${tmp_dir}/InstantShareAgent.app"
-    mv "$AGENT_BUNDLE_PATH" "$tmp_agent_bundle_path"
-    if codesign_bundle "$tmp_agent_bundle_path" --entitlements "$AGENT_ENTITLEMENTS" ; then
-        mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
-    else
-        mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
-        exit 1
-    fi
-else
-    echo ""
-    echo "No InstantShareAgent sub-bundle found — skipping."
-fi
-
 # ── Step 2: Sign share extension (if present) ──────────────────────────────
 if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
     echo ""
@@ -191,14 +160,7 @@ if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
         echo "Error: share extension entitlements not found: $SHARE_EXT_ENTITLEMENTS" >&2
         exit 1
     fi
-    tmp_share_extension_path="${tmp_dir}/InstantShareExtension.appex"
-    mv "$SHARE_EXTENSION_PATH" "$tmp_share_extension_path"
-    if codesign_bundle "$tmp_share_extension_path" --entitlements "$SHARE_EXT_ENTITLEMENTS" ; then
-        mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
-    else
-        mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
-        exit 1
-    fi
+    codesign_bundle "$SHARE_EXTENSION_PATH" --entitlements "$SHARE_EXT_ENTITLEMENTS"
 else
     echo ""
     echo "No ShareExtension.appex found — skipping."
@@ -210,7 +172,6 @@ echo "==========================================================================
 echo "Step 3: codesign_bundle main_app_bundle (excluding sub-bundles)"
 echo "================================================================================"
 SIGN_EXCLUDES=()
-[[ -d "$AGENT_BUNDLE_PATH" ]]    && SIGN_EXCLUDES+=(--exclude "$AGENT_BUNDLE_PATH")
 [[ -d "$SHARE_EXTENSION_PATH" ]] && SIGN_EXCLUDES+=(--exclude "$SHARE_EXTENSION_PATH")
 codesign_bundle "$APP_PATH" \
     --entitlements "$ENTITLEMENTS" \

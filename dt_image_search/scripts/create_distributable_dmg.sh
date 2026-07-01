@@ -41,23 +41,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required"  >&2; exit 1; }
+[[ -z "$APP_PATH" ]] && { echo "Error: --app-path is required"  >&2; exit 1; }
 if [[ "$APP_PATH" != /* ]]; then
     APP_PATH="$(pwd)/$APP_PATH"
 fi
 
-# Check for ShareExtension.appex (present in instant-share builds, absent in main-app)
-SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
-if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
-    echo "  ShareExtension.appex found — will be included in DMG."
-else
-    echo "  Note: No ShareExtension.appex — this is expected for main-app builds."
-fi
-
-[[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required"  >&2; exit 1; }
-if [[ "$APP_PATH" != /* ]]; then
-    APP_PATH="$(pwd)/$APP_PATH"
-fi
+APP_NAME="$(basename "$APP_PATH" .app)"
 OUTPUT_DMG="$(dirname "$APP_PATH")/$(basename "$APP_PATH" .app).dmg"
 
 
@@ -71,7 +60,7 @@ echo ""
 
 # ── Step 1 ────────────────────────────────────────────────────────────────────
 echo "──── Step 1: Codesign ────"
-SIGN_ARGS=(--app-path "$APP_PATH")
+SIGN_ARGS=(--app-path "$APP_PATH" --entitlements "$SCRIPT_DIR/../resources/${APP_NAME}.entitlements")
 [[ -n "$IDENTITY" ]] && SIGN_ARGS+=(--identity "$IDENTITY")
 "$SCRIPT_DIR/codesign_app.sh" "${SIGN_ARGS[@]}"
 echo ""
@@ -92,19 +81,3 @@ if [[ "$SKIP_NOTARIZE" == "true" ]]; then
     echo "╚══════════════════════════════════════════╝"
     exit 0
 fi
-
-# ── Step 3 ────────────────────────────────────────────────────────────────────
-echo "──── Step 3: Notarize ────"
-"$SCRIPT_DIR/notarize.sh" --dmg-path "$OUTPUT_DMG"
-echo ""
-
-# ── Step 4 ────────────────────────────────────────────────────────────────────
-echo "──── Step 4: Staple ────"
-"$SCRIPT_DIR/staple_dmg.sh" --dmg-path "$OUTPUT_DMG"
-echo ""
-
-echo "╔══════════════════════════════════════════╗"
-echo "║  Distribution complete                   ║"
-echo "╠══════════════════════════════════════════╣"
-echo "  $OUTPUT_DMG"
-echo "╚══════════════════════════════════════════╝"
