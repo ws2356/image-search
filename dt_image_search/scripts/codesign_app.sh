@@ -5,16 +5,8 @@ set -euo pipefail
 # Hardened Runtime is enabled on every binary (required by Apple notarization).
 #
 # Signing order (inside-out, without the deprecated --deep flag):
-#   1. codesign_bundle launch_agent_bundle      (InstantShareAgent.app)
-#   2. codesign_bundle share_extension           (ShareExtension.appex)
-#   3. codesign_bundle main_app_bundle           (excl. sub-bundles)
-#   4. Verify main app bundle
-#
-# codesign_bundle is a reusable function that:
-#   - Signs .framework bundles (deepest path first)
-#   - Signs all remaining Mach-O binaries
-#   - Signs the bundle itself with entitlements
-#   - Accepts --exclude to skip already-signed sub-bundles
+#   Detects which sub-bundles (InstantShareAgent, ShareExtension) exist
+#   inside the .app and signs them as needed.
 #
 # Usage:
 #   codesign_app.sh \
@@ -47,19 +39,13 @@ done
 AGENT_BUNDLE_PATH="${APP_PATH}/Contents/Helpers/InstantShareAgent.app"
 SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
 
-[[ -d "$AGENT_BUNDLE_PATH"    ]] || { echo "Error: agent bundle not found at $AGENT_BUNDLE_PATH" >&2; exit 1; }
-[[ -d "$SHARE_EXTENSION_PATH" ]] || { echo "Error: share extension not found at $SHARE_EXTENSION_PATH" >&2; exit 1; }
-
-_configuration="$(printf "%s" "${CONFIGURATION:-release}" | tr '[:upper:]' '[:lower:]')"
-SHARE_EXT_ENTITLEMENTS="$(cd "$SCRIPT_DIR/../../macos/ShareExtension" && pwd)/ShareExtension.${_configuration}.entitlements"
-[[ -f "$SHARE_EXT_ENTITLEMENTS" ]] || { echo "Error: share extension entitlements not found: $SHARE_EXT_ENTITLEMENTS" >&2; exit 1; }
-
-AGENT_ENTITLEMENTS="${SCRIPT_DIR}/AuSearchInstantShareAgent.entitlements"
-[[ -f "$AGENT_ENTITLEMENTS" ]] || { echo "Error: agent entitlements not found: $AGENT_ENTITLEMENTS" >&2; exit 1; }
-
 echo "==> Main App:          $APP_PATH"
-echo "==> Agent App:         $AGENT_BUNDLE_PATH"
-echo "==> Share Extension:   $SHARE_EXTENSION_PATH"
+if [[ -d "$AGENT_BUNDLE_PATH" ]]; then
+    echo "==> Agent App:         $AGENT_BUNDLE_PATH"
+fi
+if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
+    echo "==> Share Extension:   $SHARE_EXTENSION_PATH"
+fi
 echo "==> Identity:          $IDENTITY"
 echo "==> Entitlements:      $ENTITLEMENTS"
 
@@ -169,32 +155,53 @@ codesign_bundle() {
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-# ── Step 1: Sign launch agent bundle ──────────────────────────────────────────
-echo ""
-echo "================================================================================"
-echo "Step 1: codesign_bundle launch_agent_bundle"
-echo "================================================================================"
-tmp_agent_bundle_path="${tmp_dir}/InstantShareAgent.app"
-mv "$AGENT_BUNDLE_PATH" "$tmp_agent_bundle_path"
-if codesign_bundle "$tmp_agent_bundle_path" --entitlements "$AGENT_ENTITLEMENTS" ; then
-    mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
+# ── Step 1: Sign launch agent bundle (if present) ──────────────────────────
+if [[ -d "$AGENT_BUNDLE_PATH" ]]; then
+    echo ""
+    echo "================================================================================"
+    echo "Step 1: codesign_bundle launch_agent_bundle"
+    echo "================================================================================"
+    AGENT_ENTITLEMENTS="${SCRIPT_DIR}/AuSearchInstantShareAgent.entitlements"
+    if [[ ! -f "$AGENT_ENTITLEMENTS" ]]; then
+        echo "Error: agent entitlements not found: $AGENT_ENTITLEMENTS" >&2
+        exit 1
+    fi
+    tmp_agent_bundle_path="${tmp_dir}/InstantShareAgent.app"
+    mv "$AGENT_BUNDLE_PATH" "$tmp_agent_bundle_path"
+    if codesign_bundle "$tmp_agent_bundle_path" --entitlements "$AGENT_ENTITLEMENTS" ; then
+        mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
+    else
+        mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
+        exit 1
+    fi
 else
-    mv "$tmp_agent_bundle_path" "$AGENT_BUNDLE_PATH"
-    exit 1
+    echo ""
+    echo "No InstantShareAgent sub-bundle found — skipping."
 fi
 
-# ── Step 2: Sign share extension ──────────────────────────────────────────────
-echo ""
-echo "================================================================================"
-echo "Step 2: codesign_bundle share_extension"
-echo "================================================================================"
-tmp_share_extension_path="${tmp_dir}/InstantShareExtension.appex"
-mv "$SHARE_EXTENSION_PATH" "$tmp_share_extension_path"
-if codesign_bundle "$tmp_share_extension_path" --entitlements "$SHARE_EXT_ENTITLEMENTS" ; then
-    mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
+# ── Step 2: Sign share extension (if present) ──────────────────────────────
+if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
+    echo ""
+    echo "================================================================================"
+    echo "Step 2: codesign_bundle share_extension"
+    echo "================================================================================"
+    _configuration="$(printf "%s" "${CONFIGURATION:-release}" | tr '[:upper:]' '[:lower:]')"
+    SHARE_EXT_ENTITLEMENTS="$(cd "$SCRIPT_DIR/../../macos/ShareExtension" && pwd)/ShareExtension.${_configuration}.entitlements"
+    if [[ ! -f "$SHARE_EXT_ENTITLEMENTS" ]]; then
+        echo "Error: share extension entitlements not found: $SHARE_EXT_ENTITLEMENTS" >&2
+        exit 1
+    fi
+    tmp_share_extension_path="${tmp_dir}/InstantShareExtension.appex"
+    mv "$SHARE_EXTENSION_PATH" "$tmp_share_extension_path"
+    if codesign_bundle "$tmp_share_extension_path" --entitlements "$SHARE_EXT_ENTITLEMENTS" ; then
+        mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
+    else
+        mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
+        exit 1
+    fi
 else
-    mv "$tmp_share_extension_path" "$SHARE_EXTENSION_PATH"
-    exit 1
+    echo ""
+    echo "No ShareExtension.appex found — skipping."
 fi
 
 # ── Step 3: Sign main app bundle (excluding already-signed sub-bundles) ───────
@@ -202,10 +209,12 @@ echo ""
 echo "================================================================================"
 echo "Step 3: codesign_bundle main_app_bundle (excluding sub-bundles)"
 echo "================================================================================"
+SIGN_EXCLUDES=()
+[[ -d "$AGENT_BUNDLE_PATH" ]]    && SIGN_EXCLUDES+=(--exclude "$AGENT_BUNDLE_PATH")
+[[ -d "$SHARE_EXTENSION_PATH" ]] && SIGN_EXCLUDES+=(--exclude "$SHARE_EXTENSION_PATH")
 codesign_bundle "$APP_PATH" \
     --entitlements "$ENTITLEMENTS" \
-    --exclude "$AGENT_BUNDLE_PATH" \
-    --exclude "$SHARE_EXTENSION_PATH"
+    "${SIGN_EXCLUDES[@]}"
 
 # ── Step 4: Verify ────────────────────────────────────────────────────────────
 echo ""
@@ -214,7 +223,6 @@ echo "Step 4: Verify main app bundle"
 echo "================================================================================"
 echo ""
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-# spctl assessment only passes after notarization; print result without failing.
 echo "  spctl pre-notarization check:"
 spctl --assess --verbose=4 --type execute "$APP_PATH" 2>&1 \
     || echo "  (spctl rejection expected before notarization — that is normal)"

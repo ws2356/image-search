@@ -45,6 +45,19 @@ done
 if [[ "$APP_PATH" != /* ]]; then
     APP_PATH="$(pwd)/$APP_PATH"
 fi
+
+# Check for ShareExtension.appex (present in instant-share builds, absent in main-app)
+SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
+if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
+    echo "  ShareExtension.appex found — will be included in DMG."
+else
+    echo "  Note: No ShareExtension.appex — this is expected for main-app builds."
+fi
+
+[[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required"  >&2; exit 1; }
+if [[ "$APP_PATH" != /* ]]; then
+    APP_PATH="$(pwd)/$APP_PATH"
+fi
 OUTPUT_DMG="$(dirname "$APP_PATH")/$(basename "$APP_PATH" .app).dmg"
 
 

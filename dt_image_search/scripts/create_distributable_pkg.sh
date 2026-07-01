@@ -58,14 +58,13 @@ echo "  Output: $OUTPUT_PKG"
 [[ -n "$PKG_IDENTITY" ]] && echo "  PKG identity:   $PKG_IDENTITY"
 echo ""
 
-# Verify ShareExtension.appex is bundled and will be included in the PKG
+# Check for ShareExtension.appex (present in instant-share builds, absent in main-app)
 SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
-if [[ ! -d "$SHARE_EXTENSION_PATH" ]]; then
-    echo "Error: ShareExtension.appex not found at $SHARE_EXTENSION_PATH" >&2
-    echo "       Build the Share Extension first with build_share_extension.sh." >&2
-    exit 1
+if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
+    echo "  ShareExtension.appex found — will be included in PKG."
+else
+    echo "  Note: No ShareExtension.appex — this is expected for main-app builds."
 fi
-echo "  ShareExtension.appex will be included in PKG."
 
 # ── Step 1 ────────────────────────────────────────────────────────────────────
 echo "──── Step 1: Codesign ────"

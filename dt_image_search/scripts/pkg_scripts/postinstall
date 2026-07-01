@@ -1,20 +1,46 @@
 #!/bin/bash
 set -euo pipefail
 
-# Postinstall script for AuSearch PKG installer.
+# Postinstall script for AuSearch/InstantShare PKG installer.
 #
 # Installs the LaunchAgent for the instant share daemon so it starts
 # automatically when the user logs in.
+#
+# Supports both:
+#   /Applications/AuSearch.app        (main-app product)
+#   /Applications/InstantShare.app    (instant-share product)
+#
+# Detects the installed app automatically. If neither is found, the
+# LaunchAgent installation is deferred until the app is placed at one
+# of these paths.
 #
 # This script runs as root during installation.
 # All output is captured in the system installer log (see Console app →
 # Installer logs) and also written to a temp file for easy inspection.
 
 POSTINSTALL_LOG="/tmp/ausearch-pkg-postinstall.log"
-echo "--- AuSearch PKG postinstall $(date) ---" >> "$POSTINSTALL_LOG"
-LAUNCH_AGENT_SRC="/Applications/AuSearch.app/Contents/Resources/net.boldman.ausearch.instantshare.plist"
+echo "--- AuSearch/InstantShare PKG postinstall $(date) ---" >> "$POSTINSTALL_LOG"
+
+# Try InstantShare.app first, then AuSearch.app
+APP_PATH=""
+for candidate in "/Applications/InstantShare.app" "/Applications/AuSearch.app"; do
+    if [[ -d "$candidate" ]]; then
+        APP_PATH="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$APP_PATH" ]]; then
+    echo "Warning: Neither InstantShare.app nor AuSearch.app found in /Applications." | tee -a "$POSTINSTALL_LOG" >&2
+    echo "The LaunchAgent will be installed on next app installation." | tee -a "$POSTINSTALL_LOG" >&2
+    exit 0
+fi
+
+echo "Detected app: $APP_PATH" >> "$POSTINSTALL_LOG"
+
+LAUNCH_AGENT_SRC="${APP_PATH}/Contents/Resources/net.boldman.ausearch.instantshare.plist"
 # Fallback: PyInstaller < v6 sometimes nests the file under the package path.
-ALT_LAUNCH_AGENT_SRC="/Applications/AuSearch.app/Contents/Resources/dt_image_search/resources/net.boldman.ausearch.instantshare.plist"
+ALT_LAUNCH_AGENT_SRC="${APP_PATH}/Contents/Resources/dt_image_search/resources/net.boldman.ausearch.instantshare.plist"
 if [[ ! -f "$LAUNCH_AGENT_SRC" ]] && [[ -f "$ALT_LAUNCH_AGENT_SRC" ]]; then
     LAUNCH_AGENT_SRC="$ALT_LAUNCH_AGENT_SRC"
 fi
@@ -80,7 +106,7 @@ else
         echo "Note: LaunchAgent installation deferred (no console user detected)." | tee -a "$POSTINSTALL_LOG" >&2
     else
         echo "Warning: LaunchAgent source not found at ${LAUNCH_AGENT_SRC}" | tee -a "$POSTINSTALL_LOG" >&2
-        echo "The agent will not be installed until the app is placed at /Applications/AuSearch.app." | tee -a "$POSTINSTALL_LOG" >&2
+        echo "The agent will not be installed until the app is placed at /Applications." | tee -a "$POSTINSTALL_LOG" >&2
     fi
     echo "The agent will be activated on next login if the app is in /Applications." | tee -a "$POSTINSTALL_LOG" >&2
 fi
