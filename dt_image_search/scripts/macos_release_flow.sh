@@ -148,11 +148,17 @@ if [ "$skip_build" == false ] ;  then
         echo "──── Step 8: Remove the app bundle if it exists to ensure a clean install for testing"
         sudo rm -rf "$app_path"
     fi
+else
+    if [ "$product" == "instant-share" ]; then
+        package_file="${distpath}/${app_bundle_name}.pkg"
+    elif [ "$product" == "main-app" ]; then
+        package_file="${distpath}/${app_bundle_name}.dmg"
+    fi
 fi
 
 if [ "$skip_release" = false ]; then
     # -- Step 5: Push to Github Release
-    if [ -z "$package_file" ]; then
+    if [ -z "$package_file" ] || ! [ -f "$package_file" ]; then
         echo "Error: Package file not found. Ensure build and packaging steps completed successfully."
         exit 1
     fi
