@@ -64,22 +64,22 @@ if [[ "$build_type" != "prod" ]]; then
     app_bundle_name="${app_bundle_name}-${build_type}"
 fi
 
-# Check parent repository exists
-parent_repo_url="$(cd "$parent_repo_root" && git config --get remote.origin.url)"
-if [[ "$parent_repo_url" != "https://github.com/$parent_repo.git" ]]; then
-    echo "Error: Parent repository URL does not match expected '$parent_repo'. Found: '$parent_repo_url'"
-    exit 1
-fi
-
-# Get tag from CFBundleVersion in dt_image_search/resources/AppInfo.plist
-app_info_plist="$repo_root/dt_image_search/resources/AppInfo.plist"
+# Get tag from the product-specific plist
+case "$product" in
+    main-app)
+        app_info_plist="$repo_root/dt_image_search/resources/AppInfo.plist"
+        ;;
+    instant-share)
+        app_info_plist="$repo_root/dt_image_search/resources/AppInfoInstantShare.plist"
+        ;;
+esac
 if [[ ! -f "$app_info_plist" ]]; then
-    echo "Error: AppInfo.plist not found at expected path: $app_info_plist"
+    echo "Error: plist not found at expected path: $app_info_plist"
     exit 1
 fi
 tag="$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$app_info_plist")-$product"
 if [[ -z "$tag" ]]; then
-    echo "Error: CFBundleVersion not found or empty in AppInfo.plist"
+    echo "Error: CFBundleVersion not found or empty in $app_info_plist"
     exit 1
 fi
 
@@ -156,16 +156,20 @@ if [ "$skip_release" = false ]; then
         echo "Error: Package file not found. Ensure build and packaging steps completed successfully."
         exit 1
     fi
+
     echo "──── Step 8: Push to Github Release"
-    (cd "$parent_repo_root" && "$this_dir/create_github_release.sh" \
-        --repo "$parent_repo" --tag "$tag" \
-        --title "Release $tag ($product)" --notes "Bug free code" \
-        --asset-path "$package_file" --target main)
+    "$this_dir/create_github_release.sh" \
+            --product "$product" --tag "$tag" \
+            --title "Release $tag ($product)" --notes "Bug free code" \
+            --asset-path "$package_file" --target main
 
     echo "──── Step 9: Release to Official Side (only for main-app)"
-    # TODO: query the downoad URL of both components - main app and instant share - and update the web repo accordingly
+    release_json="$repo_root/releases.json"
+    download_main="$(python3 -c "import json; print(json.load(open('$release_json'))['main-app']['download_url'])")"
+    download_is="$(python3 -c "import json; print(json.load(open('$release_json'))['instant-share']['download_url'])")"
     (cd "$repo_root/web" && \
-        export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/$(basename "$package_file")" && \
+        export AUSEARCH_MACOS_DOWNLOAD_URL="$download_main" && \
+        export INSTANTSHARE_DOWNLOAD_URL="$download_is" && \
         npm run build && \
         npm run sync)
 fi
