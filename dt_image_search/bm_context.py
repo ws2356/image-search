@@ -2,9 +2,8 @@ import hashlib
 import os
 from pathlib import Path
 import threading
-import zipfile
 import dt_image_search.index.bm_model_spec as bm_model_spec
-from dt_image_search.tools.bm_sys import is_cn
+from dt_image_search.tools.bm_sys import is_cn, is_language_en
 
 class BMContext:
     def __init__(self,
@@ -23,7 +22,7 @@ class BMContext:
         self._model_file_info = None
 
     def get_pretrained_model_name_or_path(self) -> str:
-        if self.version == 1 and self.is_local_cache_valid():
+        if self.offline_mode:
             return self.get_model_cache_path()
         else:
             return self._pretrained_model
@@ -72,10 +71,10 @@ class BMContext:
     def _get_model_file_info(self) -> dict:
         if self.version == 1:
             return self._get_model_file_info() or \
-                { "download_url": "https://imagesearch.boldman.net/open_clip_pytorch_model.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v1/open_clip_pytorch_model.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
         elif self.version == 2:
             return self._get_model_file_info() or \
-                { "download_url": "https://imagesearch.boldman.net/models/v2.zip", "md5": "92fb01a4fd9ce5e2fb82644aadc81b34" }
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v2/v2.zip", "md5": "92fb01a4fd9ce5e2fb82644aadc81b34" }
         else:
             raise ValueError("Unknown BMContext")
 
@@ -121,6 +120,14 @@ _v1 = BMContext(
     offline_mode=False,
     model_file_info_url="https://imagesearch2.boldman.net/models/info_v1.json")
 
+_v1_offline_mode = BMContext(
+    version=1,
+    subfolder="",
+    model_name=bm_model_spec.model_name,
+    pretrained_model=bm_model_spec.pretrained_model,
+    offline_mode=True,
+    model_file_info_url="https://imagesearch2.boldman.net/models/info_v1.json")
+
 _v2 = BMContext(
     version=2,
     subfolder="v2",
@@ -134,24 +141,27 @@ def get_context():
     if _bm_context is None:
         with _lock:
             if _bm_context is None:
-                from dt_image_search.model.dts_db import create_db_conn, has_any_folder
                 _existing_model_version = _get_existing_model_version()
+                _existing_offline_mode = _get_model_offline_mode()
                 if _existing_model_version == 1:
-                    _bm_context = _v1
+                    if _existing_offline_mode:
+                        _bm_context = _v1_offline_mode
+                    else:
+                        _bm_context = _v1
                 elif _existing_model_version == 2:
                     _bm_context = _v2
                 elif not is_cn():
                 # For non-cn users, always use v1 context for better model performance, until later we support model switching.
                     _bm_context = _v1
+                elif is_language_en():
+                    _bm_context = _v1_offline_mode
                 else:
-                    with create_db_conn() as conn:
-                        # For quickly shipping v2, we don't migrate from v1 to v2.
-                        if has_any_folder(conn):
-                            _bm_context = _v1
-                        else:
-                            _bm_context = _v2
+                    _bm_context = _v2
                 if _get_existing_model_version() is None:
                     _set_existing_model_version(_bm_context.version)
+                if _get_model_offline_mode() is None:
+                    _set_model_offline_mode(_bm_context.offline_mode)
+                
     return _bm_context
 
 def _get_existing_model_version() -> int | None:
@@ -170,3 +180,17 @@ def _set_existing_model_version(version: int):
     from dt_image_search.model.dts_db import create_db_conn, set_config
     with create_db_conn() as conn:
         set_config(conn, "model_version", str(version))
+
+def _get_model_offline_mode() -> bool | None:
+    from dt_image_search.model.dts_db import create_db_conn, get_config
+    with create_db_conn() as conn:
+        offline_mode_str = get_config(conn, "model_offline_mode")
+        if offline_mode_str is not None:
+            return offline_mode_str.lower() == "true"
+        else:
+            return None
+
+def _set_model_offline_mode(offline_mode: bool):
+    from dt_image_search.model.dts_db import create_db_conn, set_config
+    with create_db_conn() as conn:
+        set_config(conn, "model_offline_mode", str(offline_mode).lower())
