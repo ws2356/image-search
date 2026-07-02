@@ -139,7 +139,7 @@ class MobileTransferService:
             if request.schema != MOBILE_TRANSFER_SCHEMA:
                 return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
 
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 transfer_context = get_mobile_transfer_context(
                     conn,
                     session_id=request.session_id,
@@ -234,7 +234,7 @@ class MobileTransferService:
             if request.schema != MOBILE_TRANSFER_SCHEMA:
                 return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
 
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 transfer_context = get_mobile_transfer_context(
                     conn,
                     session_id=request.session_id,
@@ -347,7 +347,7 @@ class MobileTransferService:
             ),
             carrier=metadata_payload,
         ):
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 transfer_context = get_mobile_transfer_context(
                     conn,
                     session_id=metadata.session_id,
@@ -588,7 +588,7 @@ class MobileTransferService:
             if request.schema != MOBILE_TRANSFER_SCHEMA:
                 return _response(status_code=400, status="rejected", message="The transfer request schema version is unsupported.")
 
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 transfer_context = get_mobile_transfer_context(
                     conn,
                     session_id=request.session_id,
@@ -703,7 +703,7 @@ class MobileTransferService:
                     carrier=metadata_payload,
                 ):
                     current_time = _utc_now(now)
-                    with create_db_conn(ctx=self._ctx) as conn:
+                    with create_db_conn() as conn:
                         transfer_context = get_mobile_transfer_context(
                             conn,
                             session_id=metadata.session_id,

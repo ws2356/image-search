@@ -14,6 +14,9 @@ platform_resource_includes = [
     "resources/icon.png",
     "resources/appicon.icns",
 ]
+# Place the LaunchAgent plist at Resources root so the PKG postinstall script
+# can find it at a well-known path inside the .app bundle.
+datas += [("resources/net.boldman.ausearch.instantshare.plist", ".")]
 # The Apple mobile device installer payload is only used on Windows. Shipping it
 # in macOS bundles adds tens of megabytes of dead weight to the .app/.dmg.
 if sys.platform == "win32":
@@ -59,7 +62,7 @@ if sys.platform == "darwin":
     ]
 
 a = Analysis(
-    ['__main__.py'],
+    ['__main__.py', 'scripts/start_instant_share_gui_runtime.py'],
     pathex=[],
     binaries=heif_binaries,
     datas=datas,
@@ -70,7 +73,10 @@ a = Analysis(
         # own libcrypto/libssl inside the app bundle and break import ssl.
         'pymobiledevice3.exceptions',
         'pymobiledevice3.usbmux',
+        'AppKit',
         *heif_hiddenimports,
+        'SystemConfiguration',
+        'CFNetwork',
     ],
     hookspath=[],
     hooksconfig={},
@@ -79,11 +85,28 @@ a = Analysis(
     noarchive=False,
     optimize=1,
 )
+
+# Split the combined scripts TOC into separate entry points
+_main_script = None
+_daemon_script = None
+for _entry in a.scripts:
+    _src = _entry[1]
+    if _src.endswith('__main__.py'):
+        _main_script = _entry
+    elif _src.endswith('start_instant_share_gui_runtime.py'):
+        _daemon_script = _entry
+
+if _main_script is None or _daemon_script is None:
+    raise ValueError(
+        "Could not identify entry-point scripts in the Analysis TOC. "
+        "Expected '__main__.py' and 'start_instant_share_gui_runtime.py'."
+    )
+
 pyz = PYZ(a.pure)
 
-exe = EXE(
+exe_main = EXE(
     pyz,
-    a.scripts,
+    [_main_script],
     [],
     exclude_binaries=True,
     name=app_name,
@@ -98,8 +121,28 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
+exe_daemon = EXE(
+    pyz,
+    [_daemon_script],
+    [],
+    exclude_binaries=True,
+    name="InstantShareAgent",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=upx_enabled,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 coll = COLLECT(
-    exe,
+    exe_main,
+    exe_daemon,
     a.binaries,
     a.datas,
     strip=False,

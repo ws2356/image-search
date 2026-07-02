@@ -1,1 +1,1 @@
-Album backup,photo backup,video backup,pc transfer,usb transfer,wifi transfer,local backup
+transfer,desktop,pc,local,private,secure,offline,wireless,cable,sync,folder,search,find,direct,copy

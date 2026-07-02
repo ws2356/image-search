@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ShareExtension}",
+            "name": "Debug ShareExtension",
+            "target": "ShareExtension",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ShareExtension"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ShareExtension}",
+            "name": "Release ShareExtension",
+            "target": "ShareExtension",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ShareExtension"
+        }
+    ]
+}

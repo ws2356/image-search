@@ -52,6 +52,60 @@ def _parse_manifest_version(manifest_path: Path) -> str:
 
 
 def resolve_service_version() -> str:
+    if sys.platform == "darwin":
+        return _resolve_service_version_macos()
+    elif sys.platform == "win32":
+        return _resolve_service_version_windows()
+    else:
+        warnings.warn(
+            f"Unsupported platform {sys.platform} for resolving service.version",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return ""
+
+def _resolve_service_version_macos() -> str:
+    info_plist_path = Path(sys.executable).resolve().parent.parent / "Info.plist"
+    if not info_plist_path.exists():
+        warnings.warn(
+            f"Failed to resolve service.version because Info.plist was not found at {info_plist_path}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return ""
+    try:
+        tree = ET.parse(info_plist_path)
+        root = tree.getroot()
+        dict_elem = root.find("dict")
+        if dict_elem is None:
+            warnings.warn(
+                f"Missing dict element in {info_plist_path}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return ""
+        for i in range(len(dict_elem)):
+            key_elem = dict_elem[i]
+            if key_elem.tag == "key" and key_elem.text == "CFBundleShortVersionString":
+                value_elem = dict_elem[i + 1]
+                if value_elem.tag == "string":
+                    version = value_elem.text.strip()
+                    if version:
+                        return version
+        warnings.warn(
+            f"CFBundleShortVersionString not found in {info_plist_path}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    except (ET.ParseError, OSError, ValueError) as exc:
+        warnings.warn(
+            f"Failed to resolve service.version from {info_plist_path}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return ""
+
+def _resolve_service_version_windows() -> str:
     package_type = resolve_package_type()
     if package_type == PACKAGE_TYPE_DEBUG:
         return ""

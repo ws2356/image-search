@@ -35,15 +35,19 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractI
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from dt_image_search.build_flavor import get_build_type
-
-QCoreApplication.setOrganizationName("net.boldman")
 _build_type = get_build_type()
-_app_display_name = "imagesearch-dev" if _build_type == "dev" else "imagesearch"
-QCoreApplication.setApplicationName(_app_display_name)
+from dt_image_search.app_setting import initialize_app_settings
+
+initialize_app_settings(app_name="imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache
-from dt_image_search.model.feature_flags import initialize_feature_flags, is_mobile_folder_enabled
+from dt_image_search.model.feature_flags import (
+    DesktopVersionFlag,
+    get_version_update_requirement,
+    initialize_feature_flags,
+    is_mobile_folder_enabled,
+)
 from dt_image_search.model.dts_fs import get_app_data_path
 ctx = get_context()
 setup_model_cache(ctx=ctx)
@@ -85,7 +89,7 @@ def _crash_support_log(severity: str, error_type: str = "", message: str = "", w
     log(severity, error_type=error_type, message=message, where=where)
 
 
-_crash_recovery = CrashRecoveryManager(get_app_data_path(ctx), _crash_support_log)
+_crash_recovery = CrashRecoveryManager(get_app_data_path(), _crash_support_log)
 
 
 def _load_application_icon() -> QIcon:
@@ -110,6 +114,47 @@ def _load_application_version() -> str:
     return ""
 
 
+def _build_startup_update_prompt_body(version_flag: DesktopVersionFlag) -> str:
+    if version_flag.required:
+        return (
+            f"AuSearch {version_flag.min_version} or later is required to continue. "
+            "Update now to keep using the app."
+        )
+    return (
+        f"AuSearch {version_flag.min_version} or later is available. "
+        "Update now to use the latest features."
+    )
+
+
+def maybe_show_startup_update_prompt(window: "MainWindow", *, current_version: str | None = None) -> None:
+    from dt_image_search.telemetry.telemetry_client import log
+
+    resolved_current_version = (
+        current_version
+        if isinstance(current_version, str)
+        else QCoreApplication.applicationVersion()
+    )
+    normalized_current_version = resolved_current_version.strip() if isinstance(resolved_current_version, str) else ""
+    if not normalized_current_version:
+        return
+    version_flag = get_version_update_requirement(normalized_current_version)
+    if version_flag is None:
+        return
+    log(
+        "info",
+        message=(
+            "MainWindow/startup_update_prompt: showing launch update prompt "
+            f"current_version={normalized_current_version} "
+            f"minimum_version={version_flag.min_version} required={version_flag.required}"
+        ),
+    )
+    window.show_update_prompt_signal.emit(
+        version_flag.required,
+        _build_startup_update_prompt_body(version_flag),
+        "",
+    )
+
+
 def _activation_server_name(ctx: BMContext) -> str:
     suffix = ctx.subfolder or "default"
     return f"net.boldman.imagesearch.{_build_type}.{suffix}"
@@ -118,7 +163,7 @@ def _activation_server_name(ctx: BMContext) -> str:
 def acquire_single_instance_lock(ctx: BMContext) -> bool:
     global _app_lock
 
-    lock_path = str(get_app_data_path(ctx) / "app_instance.lock")
+    lock_path = str(get_app_data_path() / "app_instance.lock")
     _app_lock = QLockFile(lock_path)
     # Keep stale detection tied to process lifetime for this long-running GUI app.
     _app_lock.setStaleLockTime(0)
@@ -774,6 +819,9 @@ def main():
 
     initialize_feature_flags()
 
+    from dt_image_search.identity import initialize_device_identity
+    initialize_device_identity()
+
     app = QApplication(sys.argv)
     app_icon = _load_application_icon()
     if not app_icon.isNull():
@@ -813,6 +861,7 @@ def main():
     qInstallMessageHandler(qt_message_handler)
 
     window.show()
+    QTimer.singleShot(0, lambda: maybe_show_startup_update_prompt(window))
     sys.exit(app.exec())
 
 if __name__ == '__main__':

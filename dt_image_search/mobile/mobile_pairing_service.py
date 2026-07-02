@@ -23,11 +23,20 @@ from dt_image_search.mobile.mobile_backup_state_machine import (
 )
 from dt_image_search.mobile.mobile_pairing_store import (
     derive_pairing_key_b64,
+    get_mobile_transfer_context,
+    get_mobile_transfer_context_by_session_id,
     get_or_create_desktop_device_id,
     get_or_create_mobile_folder,
     insert_mobile_backup_session,
     repair_mobile_folder_device_binding,
     upsert_mobile_device,
+)
+from dt_image_search.mobile.mobile_payload_encryption import (
+    MOBILE_ENCRYPTION_CAPABILITY,
+    MobilePayloadEncryptionError,
+    decrypt_mobile_json_payload,
+    encrypt_mobile_json_payload,
+    is_mobile_encrypted_payload,
 )
 from dt_image_search.mobile.mobile_capability_exchange_service import (
     MOBILE_CAPABILITY_EXCHANGE_PATH,
@@ -74,6 +83,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
 )
 from dt_image_search.build_flavor import get_build_type
 from dt_image_search.model.dts_db import create_db_conn
+from dt_image_search.model.feature_flags import is_encryption_enabled, is_strict_security_enabled
 from dt_image_search.tools.dts_event_bus import default_bus
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
@@ -170,7 +180,10 @@ class MobilePairingService:
         self._pending_mismatch_resolution: _PendingMismatchResolution | None = None
         self._pairing_request_in_progress = False
         self._transfer_service = MobileTransferService(ctx)
-        self._capability_exchange_service = MobileCapabilityExchangeService(ctx)
+        self._capability_exchange_service = MobileCapabilityExchangeService(
+            ctx,
+            desktop_capability_flags={MOBILE_ENCRYPTION_CAPABILITY: 1} if is_encryption_enabled() else {},
+        )
         self._update_prompt_service = MobileUpdatePromptService(ctx)
         self._pairing_result = MobilePairingResult(
             state=PairingResultState.WAITING,
@@ -212,6 +225,7 @@ class MobilePairingService:
             self._active_session = MobilePairingSessionDraft.create(
                 destination_parent=destination_parent,
                 desktop_endpoint_urls=self.endpoint_urls,
+                strict_security_enabled=is_strict_security_enabled(),
                 now=now,
             )
             self._active_backup_again_context = backup_again_context
@@ -605,7 +619,7 @@ class MobilePairingService:
                     pairing_state=MobileBackupState.PAIRING_STOPPED,
                 )
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             desktop_device_id = get_or_create_desktop_device_id(conn)
             trust_key_b64 = derive_pairing_key_b64(
                 session_id=session_id,
@@ -918,8 +932,26 @@ class MobilePairingService:
             return _transfer_object_payload_error(
                 message="Desktop requires JSON object payloads for transfer requests.",
             )
-        self._track_transfer_transport(request=request, payload=request.payload)
-        status_code, response_payload = self._transfer_service.handle_start_request(request.payload)
+        decrypted_payload, decryption_error_response, encryption_trust_key_b64 = (
+            self._decrypt_transfer_payload_if_needed(
+                request.payload,
+                response_schema=MOBILE_TRANSFER_SCHEMA,
+                rejected_message="Desktop rejected the transfer session.",
+            )
+        )
+        if decryption_error_response is not None:
+            return decryption_error_response
+        self._track_transfer_transport(request=request, payload=decrypted_payload)
+        status_code, response_payload = self._transfer_service.handle_start_request(decrypted_payload)
+        response_session_id = self._extract_transfer_required_field(
+            decrypted_payload,
+            "session_id",
+        ) or self._extract_transfer_required_field(request.payload, "session_id")
+        response_payload = self._encrypt_response_payload_if_needed(
+            response_payload=response_payload,
+            trust_key_b64=encryption_trust_key_b64,
+            session_id=response_session_id,
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_capability_exchange_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -927,7 +959,27 @@ class MobilePairingService:
             return _capability_exchange_object_payload_error(
                 message="Desktop requires JSON object payloads for capability exchange requests.",
             )
-        status_code, response_payload = self._capability_exchange_service.handle_exchange_request(request.payload)
+        decrypted_payload, decryption_error_response, encryption_trust_key_b64 = (
+            self._decrypt_transfer_payload_if_needed(
+                request.payload,
+                response_schema=MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
+                rejected_message="Desktop rejected the capability exchange request.",
+            )
+        )
+        if decryption_error_response is not None:
+            return decryption_error_response
+        status_code, response_payload = self._capability_exchange_service.handle_exchange_request(
+            decrypted_payload
+        )
+        response_session_id = self._extract_transfer_required_field(
+            decrypted_payload,
+            "session_id",
+        ) or self._extract_transfer_required_field(request.payload, "session_id")
+        response_payload = self._encrypt_response_payload_if_needed(
+            response_payload=response_payload,
+            trust_key_b64=encryption_trust_key_b64,
+            session_id=response_session_id,
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_update_prompt_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -935,7 +987,27 @@ class MobilePairingService:
             return _update_prompt_object_payload_error(
                 message="Desktop requires JSON object payloads for update prompt requests.",
             )
-        status_code, response_payload = self._update_prompt_service.handle_prompt_request(request.payload)
+        decrypted_payload, decryption_error_response, encryption_trust_key_b64 = (
+            self._decrypt_transfer_payload_if_needed(
+                request.payload,
+                response_schema=MOBILE_UPDATE_PROMPT_SCHEMA,
+                rejected_message="Desktop rejected the update prompt request.",
+            )
+        )
+        if decryption_error_response is not None:
+            return decryption_error_response
+        status_code, response_payload = self._update_prompt_service.handle_prompt_request(
+            decrypted_payload
+        )
+        response_session_id = self._extract_transfer_required_field(
+            decrypted_payload,
+            "session_id",
+        ) or self._extract_transfer_required_field(request.payload, "session_id")
+        response_payload = self._encrypt_response_payload_if_needed(
+            response_payload=response_payload,
+            trust_key_b64=encryption_trust_key_b64,
+            session_id=response_session_id,
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_transfer_existence_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -943,8 +1015,28 @@ class MobilePairingService:
             return _transfer_object_payload_error(
                 message="Desktop requires JSON object payloads for transfer existence requests.",
             )
-        self._track_transfer_transport(request=request, payload=request.payload)
-        status_code, response_payload = self._transfer_service.handle_asset_existence_request(request.payload)
+        decrypted_payload, decryption_error_response, encryption_trust_key_b64 = (
+            self._decrypt_transfer_payload_if_needed(
+                request.payload,
+                response_schema=MOBILE_TRANSFER_SCHEMA,
+                rejected_message="Desktop rejected the transfer session.",
+            )
+        )
+        if decryption_error_response is not None:
+            return decryption_error_response
+        self._track_transfer_transport(request=request, payload=decrypted_payload)
+        status_code, response_payload = self._transfer_service.handle_asset_existence_request(
+            decrypted_payload
+        )
+        response_session_id = self._extract_transfer_required_field(
+            decrypted_payload,
+            "session_id",
+        ) or self._extract_transfer_required_field(request.payload, "session_id")
+        response_payload = self._encrypt_response_payload_if_needed(
+            response_payload=response_payload,
+            trust_key_b64=encryption_trust_key_b64,
+            session_id=response_session_id,
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_transfer_asset_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -966,6 +1058,15 @@ class MobilePairingService:
             temp_file_path=request.payload.temp_file_path,
             content_sha1=request.payload.content_sha1,
         )
+        response_session_id = self._extract_transfer_required_field(
+            request.payload.metadata_payload,
+            "session_id",
+        )
+        response_payload = self._encrypt_response_payload_if_needed(
+            response_payload=response_payload,
+            trust_key_b64=request.payload.encryption_trust_key_b64,
+            session_id=response_session_id,
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_transfer_complete_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -973,10 +1074,30 @@ class MobilePairingService:
             return _transfer_object_payload_error(
                 message="Desktop requires JSON object payloads for transfer completion requests.",
             )
-        session_id = self._extract_transfer_session_id(request.payload)
-        self._track_transfer_transport(request=request, payload=request.payload)
-        status_code, response_payload = self._transfer_service.handle_complete_request(request.payload)
+        decrypted_payload, decryption_error_response, encryption_trust_key_b64 = (
+            self._decrypt_transfer_payload_if_needed(
+                request.payload,
+                response_schema=MOBILE_TRANSFER_SCHEMA,
+                rejected_message="Desktop rejected the transfer session.",
+            )
+        )
+        if decryption_error_response is not None:
+            return decryption_error_response
+        session_id = self._extract_transfer_session_id(decrypted_payload)
+        self._track_transfer_transport(request=request, payload=decrypted_payload)
+        status_code, response_payload = self._transfer_service.handle_complete_request(
+            decrypted_payload
+        )
         self._clear_transfer_transport_tracking(session_id)
+        response_session_id = self._extract_transfer_required_field(
+            decrypted_payload,
+            "session_id",
+        ) or self._extract_transfer_required_field(request.payload, "session_id")
+        response_payload = self._encrypt_response_payload_if_needed(
+            response_payload=response_payload,
+            trust_key_b64=encryption_trust_key_b64,
+            session_id=response_session_id,
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _track_transfer_transport(
@@ -1068,6 +1189,119 @@ class MobilePairingService:
             )
             return state_machine
 
+    def _decrypt_transfer_payload_if_needed(
+        self,
+        request_payload: dict[str, object],
+        *,
+        response_schema: str,
+        rejected_message: str,
+    ) -> tuple[dict[str, object], MobileTransportResponse | None, str | None]:
+        if not is_mobile_encrypted_payload(request_payload):
+            return request_payload, None, None
+        session_id = request_payload.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return (
+                request_payload,
+                _json_rejected_response(
+                    status_code=400,
+                    schema=response_schema,
+                    message="The transfer request is missing the required field 'session_id'.",
+                ),
+                None,
+            )
+        trust_key_b64 = self._resolve_transfer_trust_key(
+            session_id=session_id.strip(),
+        )
+        if trust_key_b64 is None:
+            return (
+                request_payload,
+                _json_rejected_response(
+                    status_code=403,
+                    schema=response_schema,
+                    message=rejected_message,
+                ),
+                None,
+            )
+        try:
+            decrypted_payload = decrypt_mobile_json_payload(
+                encrypted_payload=request_payload,
+                trust_key_b64=trust_key_b64,
+            )
+        except MobilePayloadEncryptionError as exc:
+            return (
+                request_payload,
+                _json_rejected_response(
+                    status_code=400,
+                    schema=response_schema,
+                    message=str(exc),
+                ),
+                None,
+            )
+        return decrypted_payload, None, trust_key_b64
+
+    @staticmethod
+    def _extract_transfer_required_field(
+        payload: dict[str, object],
+        field_name: str,
+    ) -> str | None:
+        field_value = payload.get(field_name)
+        if not isinstance(field_value, str):
+            return None
+        normalized_value = field_value.strip()
+        if not normalized_value:
+            return None
+        return normalized_value
+
+    def _encrypt_response_payload_if_needed(
+        self,
+        *,
+        response_payload: dict[str, object],
+        trust_key_b64: str | None,
+        session_id: str | None = None,
+        device_uuid: str | None = None,
+        platform: str | None = None,
+    ) -> dict[str, object]:
+        if trust_key_b64 is None:
+            return response_payload
+        locator_fields: dict[str, str] = {}
+        if session_id:
+            locator_fields["session_id"] = session_id
+        if device_uuid:
+            locator_fields["device_uuid"] = device_uuid
+        if platform:
+            locator_fields["platform"] = platform
+        if not locator_fields:
+            raise MobilePayloadEncryptionError(
+                "Desktop rejected encrypted response payload because locator fields are missing.",
+            )
+        return encrypt_mobile_json_payload(
+            payload=response_payload,
+            trust_key_b64=trust_key_b64,
+            locator_fields=locator_fields,
+        )
+
+    def _resolve_transfer_trust_key(
+        self,
+        *,
+        session_id: str,
+        device_uuid: str | None = None,
+    ) -> str | None:
+        with create_db_conn() as conn:
+            if device_uuid is None:
+                transfer_context = get_mobile_transfer_context_by_session_id(
+                    conn,
+                    session_id=session_id,
+                )
+            else:
+                transfer_context = get_mobile_transfer_context(
+                    conn,
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                )
+            if transfer_context is None:
+                return None
+            return transfer_context.trust_key_b64
+
     def _ensure_server_started(self) -> None:
         with self._lock:
             endpoint_info = self._transport_manager.start_lan()
@@ -1095,12 +1329,14 @@ class MobilePairingService:
             transfer_asset_path=MOBILE_TRANSFER_ASSET_PATH,
             transfer_complete_path=MOBILE_TRANSFER_COMPLETE_PATH,
             log_handler=_log,
+            resolve_transfer_trust_key=self._resolve_transfer_trust_key,
             handle_transfer_asset_stream_error=self._transfer_service.handle_asset_upload_stream_error,
         )
         usb_transport = UsbWebSocketTransportAdapter(
             router=self._transport_router,
             log_handler=_log,
             is_desktop_foreground_fn=self._is_desktop_foreground,
+            resolve_transfer_trust_key=self._resolve_transfer_trust_key,
         )
         return MobileTransportManager(
             lan_transport=lan_transport,
@@ -1177,38 +1413,48 @@ def _response(
 
 
 def _transfer_object_payload_error(*, message: str) -> MobileTransportResponse:
-    return MobileTransportResponse(
+    return _json_rejected_response(
         status_code=400,
-        payload={
-            "schema": MOBILE_TRANSFER_SCHEMA,
-            "status": "rejected",
-            "message": message,
-        },
+        schema=MOBILE_TRANSFER_SCHEMA,
+        message=message,
     )
 
 
 def _capability_exchange_object_payload_error(*, message: str) -> MobileTransportResponse:
-    return MobileTransportResponse(
+    return _json_rejected_response(
         status_code=400,
-        payload={
-            "schema": MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
-            "status": "rejected",
-            "message": message,
-            "capabilities": {},
-        },
+        schema=MOBILE_CAPABILITY_EXCHANGE_SCHEMA,
+        message=message,
+        capabilities={},
     )
 
 
 def _update_prompt_object_payload_error(*, message: str) -> MobileTransportResponse:
-    return MobileTransportResponse(
+    return _json_rejected_response(
         status_code=400,
-        payload={
-            "schema": MOBILE_UPDATE_PROMPT_SCHEMA,
-            "status": "rejected",
-            "message": message,
-        },
+        schema=MOBILE_UPDATE_PROMPT_SCHEMA,
+        message=message,
     )
 
+
+def _json_rejected_response(
+    *,
+    status_code: int,
+    schema: str,
+    message: str,
+    capabilities: dict[str, object] | None = None,
+) -> MobileTransportResponse:
+    payload: dict[str, object] = {
+        "schema": schema,
+        "status": "rejected",
+        "message": message,
+    }
+    if capabilities is not None:
+        payload["capabilities"] = capabilities
+    return MobileTransportResponse(
+        status_code=status_code,
+        payload=payload,
+    )
 
 def _resolve_advertised_hosts(configured_host: str | None) -> tuple[str, ...]:
     if configured_host:

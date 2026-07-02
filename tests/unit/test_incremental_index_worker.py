@@ -11,6 +11,7 @@ import watchdog.events
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.index.incremental_index_worker import _on_moved
 from dt_image_search.model.dts_db import create_db_conn, get_file_by_path, get_folder_by_path, insert_file, insert_folder
 from dt_image_search.tools.dts_util import normalized_folder_path
@@ -29,7 +30,7 @@ class TestIncrementalIndexWorkerMovedEvents(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -60,7 +61,7 @@ class TestIncrementalIndexWorkerMovedEvents(unittest.TestCase):
         root_path, folder = self._create_root_folder("Mobile Folder")
         source_path = root_path / "IMG_0001.JPG"
         source_path.write_bytes(b"image-001")
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             insert_file(conn, source_path.as_posix(), folder.id)
 
         event = watchdog.events.FileMovedEvent(
@@ -86,7 +87,7 @@ class TestIncrementalIndexWorkerMovedEvents(unittest.TestCase):
         destination_path = root_path / "Renamed" / "IMG_0001.JPG"
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         source_path.write_bytes(b"image-001")
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             insert_file(conn, source_path.as_posix(), folder.id)
 
         event = watchdog.events.FileMovedEvent(
@@ -96,7 +97,7 @@ class TestIncrementalIndexWorkerMovedEvents(unittest.TestCase):
 
         _on_moved(self._ctx, [event])
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             self.assertIsNone(get_file_by_path(conn, source_path.as_posix()))
             renamed_file = get_file_by_path(conn, destination_path.as_posix())
             self.assertIsNotNone(renamed_file)
@@ -105,7 +106,7 @@ class TestIncrementalIndexWorkerMovedEvents(unittest.TestCase):
     def _create_root_folder(self, name: str):
         root_path = (Path(self._temp_dir.name) / name).resolve()
         root_path.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             insert_folder(conn, normalized_folder_path(root_path.as_posix()))
             folder = get_folder_by_path(conn, root_path.as_posix())
         self.assertIsNotNone(folder)

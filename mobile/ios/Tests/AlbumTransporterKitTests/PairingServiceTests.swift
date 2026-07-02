@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 @testable import AlbumTransporterKit
+import Common
 
 final class PairingServiceTests: XCTestCase {
     func test_pairing_decoder_accepts_fractional_second_response_dates() throws {
@@ -36,6 +37,185 @@ final class PairingServiceTests: XCTestCase {
         XCTAssertNil(normalizedDesktopDisplayName(nil))
     }
 
+    func test_url_query_qr_decoder_marks_strict_security_when_sec_is_enabled() {
+        let result = URLQueryQRCodePayloadDecoder().decode(
+            scannedValue: "https://dl.boldman.net?v=2&ept=127.0.0.1:38933&sid=pairing-demo-001&opt=482913&usp=50211&sec=1"
+        )
+
+        guard case .success(let payload) = result else {
+            return XCTFail("Expected QR payload to decode successfully.")
+        }
+
+        XCTAssertTrue(payload.strictSecurityEnabled)
+    }
+
+    func test_desktop_bootstrap_pairing_service_rejects_plaintext_fallback_when_strict_security_is_enabled() async {
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: StaticPairingBootstrapClient(
+                response: PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .accepted,
+                    message: "Pairing accepted for Alice iPhone.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: "desktop-device-001",
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: 1,
+                    folderPath: "/Users/demo/Alice iPhone",
+                    transport: "lan",
+                    pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    serverNonce: "server-nonce-001"
+                )
+            ),
+            capabilityExchangeClient: StaticCapabilityExchangeClient(
+                result: .success(
+                    CapabilityExchangeResponse(
+                        schema: CapabilityExchangeProtocol.schema,
+                        status: .accepted,
+                        message: "Desktop completed capability exchange.",
+                        sessionID: "pairing-demo-001",
+                        deviceUUID: "ios-device-001",
+                        capabilities: [:]
+                    )
+                )
+            ),
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentifier(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: InMemoryTrustedDesktopStore()
+        )
+        let payload = PairingQRCodePayload(
+            schemaVersion: 2,
+            endpointTargets: ["127.0.0.1:38933"],
+            sessionID: "pairing-demo-001",
+            oneTimePasscode: "482913",
+            suggestedUSBPort: 50211,
+            strictSecurityEnabled: true
+        )
+
+        let result = await service.startPairing(using: payload)
+
+        XCTAssertEqual(
+            requirePairingFailure(result),
+            .rejected(
+                message: "The desktop does not support encrypted transport. Update the desktop app and try again."
+            )
+        )
+    }
+
+    func test_desktop_bootstrap_pairing_service_allows_plaintext_fallback_when_strict_security_is_disabled() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: StaticPairingBootstrapClient(
+                response: PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .accepted,
+                    message: "Pairing accepted for Alice iPhone.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: "desktop-device-001",
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: 1,
+                    folderPath: "/Users/demo/Alice iPhone",
+                    transport: "lan",
+                    pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    serverNonce: "server-nonce-001"
+                )
+            ),
+            capabilityExchangeClient: StaticCapabilityExchangeClient(
+                result: .success(
+                    CapabilityExchangeResponse(
+                        schema: CapabilityExchangeProtocol.schema,
+                        status: .accepted,
+                        message: "Desktop completed capability exchange.",
+                        sessionID: "pairing-demo-001",
+                        deviceUUID: "ios-device-001",
+                        capabilities: [:]
+                    )
+                )
+            ),
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentifier(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+        let payload = PairingQRCodePayload(
+            schemaVersion: 2,
+            endpointTargets: ["127.0.0.1:38933"],
+            sessionID: "pairing-demo-001",
+            oneTimePasscode: "482913",
+            suggestedUSBPort: 50211,
+            strictSecurityEnabled: false
+        )
+
+        let result = await service.startPairing(using: payload)
+        let response = requirePairingSuccess(result)
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+
+        XCTAssertEqual(response.sessionID, "pairing-demo-001")
+        XCTAssertFalse(trustedDesktop?.encryptionEnabled ?? true)
+        XCTAssertFalse(trustedDesktop?.strictSecurityEnabled ?? true)
+    }
+
+    func test_desktop_bootstrap_pairing_service_persists_encryption_support_after_pairing() async {
+        let trustedDesktopStore = InMemoryTrustedDesktopStore()
+        let service = DesktopBootstrapPairingService(
+            bootstrapClient: StaticPairingBootstrapClient(
+                response: PairingClaimResponse(
+                    schema: PairingProtocol.schema,
+                    status: .accepted,
+                    message: "Pairing accepted for Alice iPhone.",
+                    sessionID: "pairing-demo-001",
+                    desktopDeviceID: "desktop-device-001",
+                    desktopName: "Studio Mac",
+                    deviceUUID: "ios-device-001",
+                    folderID: 1,
+                    folderPath: "/Users/demo/Alice iPhone",
+                    transport: "lan",
+                    pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    serverNonce: "server-nonce-001"
+                )
+            ),
+            capabilityExchangeClient: StaticCapabilityExchangeClient(
+                result: .success(
+                    CapabilityExchangeResponse(
+                        schema: CapabilityExchangeProtocol.schema,
+                        status: .accepted,
+                        message: "Desktop completed capability exchange.",
+                        sessionID: "pairing-demo-001",
+                        deviceUUID: "ios-device-001",
+                        capabilities: ["encryption": 1]
+                    )
+                )
+            ),
+            identityProvider: StaticLocalDeviceIdentityProvider(
+                identity: LocalDeviceIdentifier(
+                    installID: "install-001",
+                    deviceUUID: "ios-device-001",
+                    deviceName: "Alice iPhone",
+                    platform: "ios"
+                )
+            ),
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let result = await service.startPairing(using: .demo)
+        let trustedDesktop = await trustedDesktopStore.loadTrustedDesktop()
+
+        XCTAssertEqual(requirePairingSuccess(result).sessionID, "pairing-demo-001")
+        XCTAssertTrue(trustedDesktop?.encryptionEnabled ?? false)
+    }
+
     func test_desktop_bootstrap_pairing_service_persists_trusted_desktop_record() async {
         let trustedDesktopStore = InMemoryTrustedDesktopStore()
         let service = DesktopBootstrapPairingService(
@@ -56,7 +236,7 @@ final class PairingServiceTests: XCTestCase {
                 )
             ),
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -102,7 +282,7 @@ final class PairingServiceTests: XCTestCase {
                 )
             ),
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -146,7 +326,7 @@ final class PairingServiceTests: XCTestCase {
         let service = DesktopBootstrapPairingService(
             bootstrapClient: bootstrapClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -206,7 +386,7 @@ final class PairingServiceTests: XCTestCase {
             bootstrapClient: lanClient,
             usbBootstrapClient: usbClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -255,7 +435,7 @@ final class PairingServiceTests: XCTestCase {
             bootstrapClient: lanClient,
             usbBootstrapClient: usbClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -314,7 +494,7 @@ final class PairingServiceTests: XCTestCase {
         let service = DesktopBootstrapPairingService(
             bootstrapClient: bootstrapClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -373,7 +553,7 @@ final class PairingServiceTests: XCTestCase {
         let service = DesktopBootstrapPairingService(
             bootstrapClient: bootstrapClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -423,7 +603,10 @@ private func requirePairingFailure(
 private struct StaticPairingBootstrapClient: PairingBootstrapClient {
     let response: PairingClaimResponse
 
-    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest
+    ) async throws -> PairingClaimResponse {
         XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
         XCTAssertEqual(request.sessionID, PairingQRCodePayload.demo.sessionID)
         XCTAssertEqual(request.oneTimePasscode, PairingQRCodePayload.demo.oneTimePasscode)
@@ -435,7 +618,10 @@ private struct StaticPairingBootstrapClient: PairingBootstrapClient {
 private struct StaticUSBPairingBootstrapClient: PairingUSBBootstrapClient {
     let result: Result<PairingClaimResponse, PairingServiceError>
 
-    func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        using payload: PairingQRCodePayload,
+        request: PairingClaimRequest
+    ) async throws -> PairingClaimResponse {
         XCTAssertEqual(payload.sessionID, request.sessionID)
         switch result {
         case .success(let response):
@@ -454,7 +640,10 @@ private actor RetryingPairingBootstrapClient: PairingBootstrapClient {
         self.scriptedResults = scriptedResults
     }
 
-    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest
+    ) async throws -> PairingClaimResponse {
         endpointLog.append(endpoint.absoluteString)
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
         guard let result = scriptedResults[endpoint.absoluteString] else {
@@ -485,13 +674,19 @@ private actor PollingPairingBootstrapClient: PairingBootstrapClient {
         scriptedStateResponses = stateResponses
     }
 
-    func claimPairing(at endpoint: URL, request: PairingClaimRequest) async throws -> PairingClaimResponse {
+    func claimPairing(
+        at endpoint: URL,
+        request: PairingClaimRequest
+    ) async throws -> PairingClaimResponse {
         XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
         return claimResponse
     }
 
-    func fetchPairingState(at endpoint: URL, request: PairingStateRequest) async throws -> PairingClaimResponse {
+    func fetchPairingState(
+        at endpoint: URL,
+        request: PairingStateRequest
+    ) async throws -> PairingClaimResponse {
         XCTAssertEqual(endpoint.absoluteString, PairingQRCodePayload.demo.bootstrapURL.absoluteString)
         XCTAssertEqual(request.sessionID, "pairing-demo-001")
         XCTAssertEqual(request.deviceUUID, "ios-device-001")
@@ -507,10 +702,28 @@ private actor PollingPairingBootstrapClient: PairingBootstrapClient {
     }
 }
 
-private struct StaticLocalDeviceIdentityProvider: LocalDeviceIdentityProviding {
-    let identity: LocalDeviceIdentity
+private struct StaticCapabilityExchangeClient: MobileCapabilityExchangeClient {
+    let result: Result<CapabilityExchangeResponse, TransferClientError>
 
-    func currentIdentity() async -> LocalDeviceIdentity {
+    func exchangeCapabilities(
+        _ mobileCapabilities: [String: Int],
+        desktop: TrustedDesktopRecord
+    ) async throws -> CapabilityExchangeResponse {
+        XCTAssertEqual(mobileCapabilities["encryption"], 1)
+        XCTAssertEqual(desktop.lastSessionID, "pairing-demo-001")
+        switch result {
+        case .success(let response):
+            return response
+        case .failure(let error):
+            throw error
+        }
+    }
+}
+
+private struct StaticLocalDeviceIdentityProvider: LocalDeviceIdentifierProviding {
+    let identity: LocalDeviceIdentifier
+
+    func currentIdentifier() async -> LocalDeviceIdentifier {
         identity
     }
 }

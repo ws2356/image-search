@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 struct TransferSessionView: View {
     @ObservedObject var viewModel: TransferPageViewModel
@@ -16,6 +17,7 @@ struct TransferSessionView: View {
             )
         }
         .compatibleScrollBounceBasedOnSize()
+        .appNavigationBar(title: "Backup in Progress")
         .task {
             await viewModel.orchestrateTransfer()
         }

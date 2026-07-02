@@ -9,6 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import dt_image_search.build_flavor as build_flavor
+from dt_image_search.model.dts_fs import get_app_private_name
 
 
 class _FakePackageRoot:
@@ -35,7 +36,7 @@ class TestBuildFlavor(unittest.TestCase):
     def test_get_build_type_defaults_to_prod_without_env_or_resource(self) -> None:
         with patch.object(build_flavor, "_read_build_type_from_resource", return_value=None):
             self.assertEqual(build_flavor.get_build_type(), "prod")
-            self.assertEqual(build_flavor.get_app_data_segment(), "DTImageSearch")
+            self.assertEqual(get_app_private_name(), "DTImageSearch")
 
     def test_get_build_type_uses_env_override_before_resource(self) -> None:
         os.environ["DTIS_BUILD_TYPE"] = "dev"

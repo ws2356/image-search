@@ -13,12 +13,17 @@ enum PageTarget: Equatable {
 
 // MARK: - Page-Specific Result Types
 
+enum HomeClickTarget: Equatable, Sendable {
+    case backupScan
+    case genericScan
+}
+
 enum HomePageError: Error, Equatable {
     case unknown
 }
 
 struct HomePageResult {
-    let result: Result<Void, HomePageError>
+    let result: Result<HomeClickTarget, HomePageError>
 }
 
 enum ScanningPageError: Error, Equatable {
@@ -59,6 +64,16 @@ enum TransferPageError: Error, Equatable {
 struct TransferPageResult {
     let result: Result<Void, TransferPageError>
     let target: PageTarget?
+}
+
+enum GenericQRScanPageError: Error, Equatable {
+    case cancel
+    case scannerFailed
+    case unknown
+}
+
+struct GenericQRScanPageResult {
+    let result: Result<String, GenericQRScanPageError>
 }
 
 enum CompletionPageError: Error, Equatable {

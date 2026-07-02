@@ -1,7 +1,8 @@
 import Foundation
+import Common
 
 @MainActor
-struct ScanningPageViewModel {
+struct ScanningPageViewModel: ScanningBaseViewModel {
     private let model: any AppPageModeling
     private let telemetryService: TelemetryService
 
@@ -16,19 +17,19 @@ struct ScanningPageViewModel {
         await model.onScanningCompleted(with: result)
     }
 
-    func backTapped() async {
+    func onBackTapped() async {
         telemetryService.recordInteraction(name: "back_tapped", location: "pairing")
         let result = ScanningPageResult(result: .failure(.cancel))
         await model.onScanningCompleted(with: result)
     }
 
-    func openSettingsTapped() async {
+    func onOpenSettingsTapped() async {
         telemetryService.recordInteraction(name: "open_settings_tapped", location: "pairing_scanner")
         let result = ScanningPageResult(result: .failure(.cancel))
         await model.onScanningCompleted(with: result)
     }
 
-    func scannerFailed() async {
+    func onScannerFailed(error: Error) async {
         telemetryService.recordInteraction(name: "scanner_failed", location: "pairing_scanner")
         let result = ScanningPageResult(result: .failure(.scannerFailed))
         await model.onScanningCompleted(with: result)

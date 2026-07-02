@@ -2,6 +2,7 @@ import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import UIKit
+import Common
 
 actor OpenTelemetryTelemetryClient: TelemetryClient {
     private static let allowedMetricAttributeKeys: Set<String> = [
@@ -26,16 +27,16 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
     private let tracerProvider: TracerProviderSdk
     private let meterProvider: MeterProviderSdk
     private let tracer: any Tracer
-    private let identityProvider: LocalDeviceIdentityProviding
+    private let identityProvider: LocalDeviceIdentifierProviding
     private var activeSpans: [MobileTelemetrySpan: any Span] = [:]
-    private var deviceIdentity: LocalDeviceIdentity?
+    private var deviceIdentity: LocalDeviceIdentifier?
     private var backupAttemptsCounter: any LongCounter
     private var backupSuccessesCounter: any LongCounter
     private var backupFailuresCounter: any LongCounter
     private var backupCompletedItemsCounter: any LongCounter
 
     init(
-        identityProvider: LocalDeviceIdentityProviding = UserDefaultsLocalDeviceIdentityStore(),
+        identityProvider: LocalDeviceIdentifierProviding,
         serviceName: String = "AuBackup.iOS",
         instrumentationName: String = "AlbumTransporterKit.MobileFolder",
         instrumentationVersion: String = "0.1.0",
@@ -288,11 +289,11 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         return mergedAttributes
     }
 
-    private func currentDeviceIdentity() async -> LocalDeviceIdentity {
+    private func currentDeviceIdentity() async -> LocalDeviceIdentifier {
         if let deviceIdentity {
             return deviceIdentity
         }
-        let resolvedIdentity = await identityProvider.currentIdentity()
+        let resolvedIdentity = await identityProvider.currentIdentifier()
         deviceIdentity = resolvedIdentity
         return resolvedIdentity
     }

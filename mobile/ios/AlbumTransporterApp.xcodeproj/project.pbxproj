@@ -7,6 +7,17 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32A33B28DE705EAD09C21466 /* SnapshotSupport.swift */; };
+		35630B3B9D407F91ADAA5627 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5AC8CE28919C9157AC9030D9 /* Foundation.framework */; };
+		3D6AEAC82FE45E7300C3D4E0 /* AlbumTransporterKit in Embed Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D9BBC222F9A6934002FE667 /* PhotosUI.framework */; };
+		3DF7BFC92FCF234B00CD5CF4 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
+		3DF7BFCA2FCF239200CD5CF4 /* Instant Share.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = SE0002010000000000000004 /* Instant Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		725C8176EFBE4C0FB2D0ACA4 /* InstantShareServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */; };
+		78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
+		975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */; };
+		9E336B184E5B4929B277145B /* InstantShareSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */; };
+		A5C56128C12EEED37FC3210A /* AlbumTransporterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */; };
 		AB000001AB000001AB000001 /* PageViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013AB000013AB000013 /* PageViewModelTests.swift */; };
 		AB000002AB000002AB000002 /* MobileAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014AB000014AB000014 /* MobileAppModelTests.swift */; };
 		AB000003AB000003AB000003 /* USBTransportServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000015AB000015AB000015 /* USBTransportServicesTests.swift */; };
@@ -19,15 +30,12 @@
 		AB000010AB000010AB000010 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
 		AB000011AB000011AB000011 /* OpenTelemetryApi in Frameworks */ = {isa = PBXBuildFile; productRef = AB000024AB000024AB000024 /* OpenTelemetryApi */; };
 		AB000012AB000012AB000012 /* OpenTelemetrySdk in Frameworks */ = {isa = PBXBuildFile; productRef = AB000025AB000025AB000025 /* OpenTelemetrySdk */; };
-		159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32A33B28DE705EAD09C21466 /* SnapshotSupport.swift */; };
-		35630B3B9D407F91ADAA5627 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5AC8CE28919C9157AC9030D9 /* Foundation.framework */; };
-		3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D9BBC222F9A6934002FE667 /* PhotosUI.framework */; };
-		78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
-		975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */; };
-		A5C56128C12EEED37FC3210A /* AlbumTransporterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */; };
+		AB000029AB000029AB000029 /* KeychainAppIdentityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000028AB000028AB000028 /* KeychainAppIdentityProviderTests.swift */; };
 		B033F686D41CC0B658E2B4EF /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5AC8CE28919C9157AC9030D9 /* Foundation.framework */; };
 		C7A0E9A13E414B28A8F4A101 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7A0E9A23E414B28A8F4A101 /* Assets.xcassets */; };
 		C7A0E9A33E414B28A8F4A101 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C7A0E9A43E414B28A8F4A101 /* LaunchScreen.storyboard */; };
+		SE0001010000000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE0002010000000000000001 /* ShareViewController.swift */; };
+		SE0001010000000000000002 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,14 +46,50 @@
 			remoteGlobalIDString = DF65746996E798111BB25E06;
 			remoteInfo = AlbumTransporterApp;
 		};
+		SE0003010000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4C77E4A5C48D92A643EEE4A4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = SE0005010000000000000001;
+			remoteInfo = ShareExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		3D6AEAC92FE45E7300C3D4E0 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				3D6AEAC82FE45E7300C3D4E0 /* AlbumTransporterKit in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		SE0009010000000000000001 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3DF7BFCA2FCF239200CD5CF4 /* Instant Share.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		1A5D5D04B6A631A962A9E1F7 /* AuBackup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuBackup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		32A33B28DE705EAD09C21466 /* SnapshotSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SnapshotSupport.swift; path = Tests/AlbumTransporterAppSnapshotTests/SnapshotSupport.swift; sourceTree = "<group>"; };
+		35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareServicesTests.swift; path = Tests/AlbumTransporterKitTests/InstantShareServicesTests.swift; sourceTree = "<group>"; };
 		3D9BBC222F9A6934002FE667 /* PhotosUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PhotosUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/PhotosUI.framework; sourceTree = DEVELOPER_DIR; };
 		4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterAppSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests.swift; sourceTree = "<group>"; };
+		DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/InstantShareSnapshotTests.swift; sourceTree = "<group>"; };
 		5AC8CE28919C9157AC9030D9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		79D12E02C504AEC5A27313AF /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
+		963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterApp.swift; path = App/AlbumTransporterApp.swift; sourceTree = "<group>"; };
 		AB000013AB000013AB000013 /* PageViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PageViewModelTests.swift; path = Tests/AlbumTransporterKitTests/PageViewModelTests.swift; sourceTree = "<group>"; };
 		AB000014AB000014AB000014 /* MobileAppModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MobileAppModelTests.swift; path = Tests/AlbumTransporterKitTests/MobileAppModelTests.swift; sourceTree = "<group>"; };
 		AB000015AB000015AB000015 /* USBTransportServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = USBTransportServicesTests.swift; path = Tests/AlbumTransporterKitTests/USBTransportServicesTests.swift; sourceTree = "<group>"; };
@@ -55,11 +99,14 @@
 		AB000019AB000019AB000019 /* OTLPHTTPMetricExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OTLPHTTPMetricExporterTests.swift; path = Tests/AlbumTransporterKitTests/OTLPHTTPMetricExporterTests.swift; sourceTree = "<group>"; };
 		AB000020AB000020AB000020 /* PairingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PairingServiceTests.swift; path = Tests/AlbumTransporterKitTests/PairingServiceTests.swift; sourceTree = "<group>"; };
 		AB000021AB000021AB000021 /* TransferServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TransferServiceTests.swift; path = Tests/AlbumTransporterKitTests/TransferServiceTests.swift; sourceTree = "<group>"; };
-		79D12E02C504AEC5A27313AF /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
-		963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterApp.swift; path = App/AlbumTransporterApp.swift; sourceTree = "<group>"; };
+		AB000028AB000028AB000028 /* KeychainAppIdentityProviderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KeychainAppIdentityProviderTests.swift; path = Tests/AlbumTransporterKitTests/KeychainAppIdentityProviderTests.swift; sourceTree = "<group>"; };
 		C292EB02D1AB8B391C25D27A /* AlbumTransporterAppSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AlbumTransporterAppSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C7A0E9A23E414B28A8F4A101 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = App/Assets.xcassets; sourceTree = "<group>"; };
 		C7A0E9A43E414B28A8F4A101 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = App/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		SE0002010000000000000001 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = ShareExtension/ShareViewController.swift; sourceTree = "<group>"; };
+		SE0002010000000000000002 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = ShareExtension/Info.plist; sourceTree = "<group>"; };
+		SE0002010000000000000003 /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = ShareExtension.entitlements; path = ShareExtension/ShareExtension.entitlements; sourceTree = "<group>"; };
+		SE0002010000000000000004 /* Instant Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = "Instant Share.appex"; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,30 +131,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		SE0004010000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3DF7BFC92FCF234B00CD5CF4 /* AlbumTransporterKit in Frameworks */,
+				SE0001010000000000000002 /* (null) in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		AB000022AB000022AB000022 /* AlbumTransporterKitTests */ = {
-			isa = PBXGroup;
-			children = (
-				AB000013AB000013AB000013 /* PageViewModelTests.swift */,
-				AB000014AB000014AB000014 /* MobileAppModelTests.swift */,
-				AB000015AB000015AB000015 /* USBTransportServicesTests.swift */,
-				AB000016AB000016AB000016 /* OTLPHTTPSpanExporterTests.swift */,
-				AB000017AB000017AB000017 /* TraceContextPropagationTests.swift */,
-				AB000018AB000018AB000018 /* MobileBackupFlowStateMachineTests.swift */,
-				AB000019AB000019AB000019 /* OTLPHTTPMetricExporterTests.swift */,
-				AB000020AB000020AB000020 /* PairingServiceTests.swift */,
-				AB000021AB000021AB000021 /* TransferServiceTests.swift */,
-			);
-			name = AlbumTransporterKitTests;
-			sourceTree = "<group>";
-		};
 		2087CA0CB9729A2CF131AC4A /* AlbumTransporterAppSnapshotTests */ = {
 			isa = PBXGroup;
 			children = (
 				32A33B28DE705EAD09C21466 /* SnapshotSupport.swift */,
 				4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */,
+				DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */,
 			);
 			name = AlbumTransporterAppSnapshotTests;
 			sourceTree = "<group>";
@@ -125,6 +166,7 @@
 			isa = PBXGroup;
 			children = (
 				1A5D5D04B6A631A962A9E1F7 /* AuBackup.app */,
+				SE0002010000000000000004 /* Instant Share.appex */,
 				C292EB02D1AB8B391C25D27A /* AlbumTransporterAppSnapshotTests.xctest */,
 			);
 			name = Products;
@@ -149,12 +191,31 @@
 			name = iOS;
 			sourceTree = "<group>";
 		};
+		AB000022AB000022AB000022 /* AlbumTransporterKitTests */ = {
+			isa = PBXGroup;
+			children = (
+				AB000013AB000013AB000013 /* PageViewModelTests.swift */,
+				AB000014AB000014AB000014 /* MobileAppModelTests.swift */,
+				AB000015AB000015AB000015 /* USBTransportServicesTests.swift */,
+				AB000016AB000016AB000016 /* OTLPHTTPSpanExporterTests.swift */,
+				AB000017AB000017AB000017 /* TraceContextPropagationTests.swift */,
+				AB000018AB000018AB000018 /* MobileBackupFlowStateMachineTests.swift */,
+				AB000019AB000019AB000019 /* OTLPHTTPMetricExporterTests.swift */,
+				AB000020AB000020AB000020 /* PairingServiceTests.swift */,
+				AB000021AB000021AB000021 /* TransferServiceTests.swift */,
+				35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */,
+				AB000028AB000028AB000028 /* KeychainAppIdentityProviderTests.swift */,
+			);
+			name = AlbumTransporterKitTests;
+			sourceTree = "<group>";
+		};
 		B2F2B86624660D3ED940BFE0 = {
 			isa = PBXGroup;
 			children = (
 				86F9AA3367D98B280C0BE44C /* Products */,
 				B46D19DE7AA467B3DA18E326 /* Frameworks */,
 				9DBA0196972BA2676F5533FD /* App */,
+				SE0007010000000000000001 /* ShareExtension */,
 				632508D53655111E103B7E9A /* Tests */,
 			);
 			sourceTree = "<group>";
@@ -166,6 +227,16 @@
 				A4C0EE31F316DC22D2B1D5DE /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		SE0007010000000000000001 /* ShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				SE0002010000000000000001 /* ShareViewController.swift */,
+				SE0002010000000000000002 /* Info.plist */,
+				SE0002010000000000000003 /* ShareExtension.entitlements */,
+			);
+			name = ShareExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -201,10 +272,13 @@
 				4A0E923222111A001730D323 /* Sources */,
 				0D7F85A06F6DEC6571294B34 /* Frameworks */,
 				447D9B3CA60BFCE4238E4BE1 /* Resources */,
+				SE0009010000000000000001 /* Embed App Extensions */,
+				3D6AEAC92FE45E7300C3D4E0 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				SE0003020000000000000001 /* PBXTargetDependency */,
 			);
 			name = AlbumTransporterApp;
 			packageProductDependencies = (
@@ -213,6 +287,26 @@
 			productName = AlbumTransporterApp;
 			productReference = 1A5D5D04B6A631A962A9E1F7 /* AuBackup.app */;
 			productType = "com.apple.product-type.application";
+		};
+		SE0005010000000000000001 /* ShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = SE0008010000000000000001 /* Build configuration list for PBXNativeTarget "ShareExtension" */;
+			buildPhases = (
+				SE0004020000000000000001 /* Sources */,
+				SE0004010000000000000001 /* Frameworks */,
+				SE0004030000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShareExtension;
+			packageProductDependencies = (
+				CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */,
+			);
+			productName = ShareExtension;
+			productReference = SE0002010000000000000004 /* Instant Share.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -241,6 +335,7 @@
 			projectRoot = "";
 			targets = (
 				DF65746996E798111BB25E06 /* AlbumTransporterApp */,
+				SE0005010000000000000001 /* ShareExtension */,
 				739A2121A64CD8C9B7DB5BA4 /* AlbumTransporterAppSnapshotTests */,
 			);
 		};
@@ -257,6 +352,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E0C767FCA706768E298E8F77 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		SE0004030000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -287,8 +389,19 @@
 				AB000007AB000007AB000007 /* OTLPHTTPMetricExporterTests.swift in Sources */,
 				AB000008AB000008AB000008 /* PairingServiceTests.swift in Sources */,
 				AB000009AB000009AB000009 /* TransferServiceTests.swift in Sources */,
+				725C8176EFBE4C0FB2D0ACA4 /* InstantShareServicesTests.swift in Sources */,
+				AB000029AB000029AB000029 /* KeychainAppIdentityProviderTests.swift in Sources */,
 				159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */,
 				975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */,
+				9E336B184E5B4929B277145B /* InstantShareSnapshotTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		SE0004020000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				SE0001010000000000000001 /* ShareViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +413,12 @@
 			name = AlbumTransporterApp;
 			target = DF65746996E798111BB25E06 /* AlbumTransporterApp */;
 			targetProxy = D5D69A2486BA6195E3B10BE3 /* PBXContainerItemProxy */;
+		};
+		SE0003020000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShareExtension;
+			target = SE0005010000000000000001 /* ShareExtension */;
+			targetProxy = SE0003010000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -358,7 +477,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = App/AlbumTransporterApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = ZU6V838VRQ;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Aurora Mobile";
@@ -367,7 +486,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.albumtransporter;
 				PRODUCT_NAME = AuBackup;
 				SDKROOT = iphoneos;
@@ -500,7 +619,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = App/AlbumTransporterApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = ZU6V838VRQ;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Aurora Mobile";
@@ -509,7 +628,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.albumtransporter;
 				PRODUCT_NAME = AuBackup;
 				SDKROOT = iphoneos;
@@ -517,6 +636,61 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		SE000A010000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = ZU6V838VRQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Instant Share";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.albumtransporter.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		SE000A010000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = ZU6V838VRQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Instant Share";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.albumtransporter.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -544,6 +718,15 @@
 			buildConfigurations = (
 				1015C7C17D7390AAB945E03C /* Release */,
 				5ADDE383976A22E2CC280E43 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		SE0008010000000000000001 /* Build configuration list for PBXNativeTarget "ShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				SE000A010000000000000002 /* Release */,
+				SE000A010000000000000001 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

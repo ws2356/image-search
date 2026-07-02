@@ -184,22 +184,14 @@ final class TransferPageViewModel: ObservableObject {
     }
 
     private func applySnapshotIfNewer(_ newSnapshot: TransferSnapshot) {
-        let currentSnapshot = snapshot
-        guard
-            newSnapshot.totalCount != currentSnapshot.totalCount
-                || newSnapshot.transferredCount >= currentSnapshot.transferredCount
-        else {
-            recordSnapshotDiagnosticIfNeeded(area: "transfer_snapshot_rejected", snapshot: newSnapshot)
-            return
-        }
         snapshot = newSnapshot
         recordSnapshotDiagnosticIfNeeded(area: "transfer_snapshot_applied", snapshot: newSnapshot)
     }
 
     private func refreshIdleTimerPolicy() async {
-        let usbTransportAlive = await transferService.isUSBTransportAlive()
+        let isCharging = await model.permissionService.loadPermissionSummary().isCharging
         let batteryLevel = batteryLevelProvider.currentBatteryLevel() ?? 0
-        idleTimerController.isIdleTimerDisabled = usbTransportAlive || batteryLevel > TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER
+        idleTimerController.isIdleTimerDisabled = isCharging || batteryLevel > TransferPageViewModel.BATTERY_LEVEL_THRESHOLD_DISABLE_IDLE_TIMER
     }
 
     private func recordSnapshotDiagnosticIfNeeded(area: String, snapshot: TransferSnapshot) {
@@ -239,27 +231,8 @@ final class TransferPageViewModel: ObservableObject {
     ) {
         var diagnosticAttributes = attributes
         diagnosticAttributes["diagnostic.area"] = .string(area)
-        diagnosticAttributes["app.route"] = .string(routeName(model.route))
+        diagnosticAttributes["app.route"] = .string(model.route.routeName)
         diagnosticAttributes["backup.flow_state"] = .string(model.backupFlowState.rawValue)
         telemetryService.recordTelemetry(.diagnosticCheckpoint, attributes: diagnosticAttributes)
-    }
-
-    private func routeName(_ route: AppRoute) -> String {
-        switch route {
-        case .home:
-            return "home"
-        case .scan:
-            return "scan"
-        case .pair:
-            return "pair"
-        case .permissions:
-            return "permissions"
-        case .transfer:
-            return "transfer"
-        case .completed:
-            return "completed"
-        case .error:
-            return "error"
-        }
     }
 }

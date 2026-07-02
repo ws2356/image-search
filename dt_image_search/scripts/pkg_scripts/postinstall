@@ -1,0 +1,96 @@
+#!/bin/bash
+set -euo pipefail
+
+# Postinstall script for InstantShare PKG installer.
+#
+# Installs the LaunchAgent for the instant share daemon so it starts
+# automatically when the user logs in.
+#
+# This script runs as root during installation.
+# All output is captured in the system installer log (see Console app →
+# Installer logs) and also written to a temp file for easy inspection.
+
+POSTINSTALL_LOG="/tmp/instantshare-pkg-postinstall.log"
+echo "--- InstantShare PKG postinstall $(date) ---" >> "$POSTINSTALL_LOG"
+
+
+APP_PATH="/Applications/InstantShare.app"
+
+if [[ ! -d "$APP_PATH" ]]; then
+    echo "Warning: InstantShare.app not found in /Applications." | tee -a "$POSTINSTALL_LOG" >&2
+    echo "The LaunchAgent will be installed on next app installation." | tee -a "$POSTINSTALL_LOG" >&2
+    exit 0
+fi
+
+echo "Detected app: $APP_PATH" >> "$POSTINSTALL_LOG"
+
+LAUNCH_AGENT_SRC="${APP_PATH}/Contents/Resources/net.boldman.ausearch.instantshare.plist"
+
+# Discover the current console user (the one actively logged in via GUI).
+CONSOLE_USER=""
+if [[ -f /dev/console ]]; then
+    CONSOLE_USER=$(stat -f "%Su" /dev/console 2>/dev/null || echo "")
+fi
+
+# Fallback: look for the most recently active login window user.
+if [[ -z "$CONSOLE_USER" ]]; then
+    CONSOLE_USER=$(/usr/bin/python3 -c "import systemsetup; print(systemsetup.get_users()[0])" 2>/dev/null || echo "")
+fi
+if [[ -z "$CONSOLE_USER" ]]; then
+    CONSOLE_USER=$(/bin/ls -la /dev/console | /usr/bin/awk '{print $3}' 2>/dev/null || echo "")
+fi
+# Last resort: use the first user with a UID >= 500 that has a LaunchAgents dir.
+if [[ -z "$CONSOLE_USER" ]]; then
+    for u in /Users/*; do
+        uname=$(basename "$u")
+        uid=$(/usr/bin/id -u "$uname" 2>/dev/null || echo 0)
+        if [[ "$uid" -ge 500 ]] && [[ -d "$u/Library/LaunchAgents" ]]; then
+            CONSOLE_USER="$uname"
+            break
+        fi
+    done
+fi
+
+# Also try the /Library/Application Support/CrashReporter/SubmitDiagInfo approach
+if [[ -z "$CONSOLE_USER" ]]; then
+    CONSOLE_USER=$(/usr/sbin/scutil <<< "show State:/Users/ConsoleUser" | /usr/bin/awk '/Name :/ && ! /loginwindow/ {print $3}' 2>/dev/null || echo "")
+fi
+
+if [[ -z "$CONSOLE_USER" ]]; then
+    echo "Warning: Could not determine console user. LaunchAgent not loaded." | tee -a "$POSTINSTALL_LOG" >&2
+    echo "The agent will be installed and activated on next login." | tee -a "$POSTINSTALL_LOG" >&2
+    CONSOLE_USER_HOME=""
+else
+    CONSOLE_USER_HOME=$(/usr/bin/dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | /usr/bin/awk '{print $2}')
+    echo "Console user: $CONSOLE_USER (home: $CONSOLE_USER_HOME)" >> "$POSTINSTALL_LOG"
+fi
+
+# Install the LaunchAgent.
+if [[ -n "$CONSOLE_USER_HOME" ]] && [[ -f "$LAUNCH_AGENT_SRC" ]]; then
+    LAUNCH_AGENTS_DIR="$CONSOLE_USER_HOME/Library/LaunchAgents"
+    /bin/mkdir -p "$LAUNCH_AGENTS_DIR"
+    /bin/cp -f "$LAUNCH_AGENT_SRC" "$LAUNCH_AGENTS_DIR/"
+    /usr/sbin/chown "$CONSOLE_USER:staff" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist"
+    /bin/chmod 644 "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist"
+    echo "Installed LaunchAgent for user '$CONSOLE_USER'" | tee -a "$POSTINSTALL_LOG"
+
+    # Bootstrap the agent for the current user session.
+    CONSOLE_UID=$(/usr/bin/id -u "$CONSOLE_USER" 2>/dev/null || echo 0)
+    if [[ "$CONSOLE_UID" -gt 0 ]]; then
+        /bin/launchctl bootout "gui/$CONSOLE_UID" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist" >> "$POSTINSTALL_LOG" 2>&1 || true
+        /bin/launchctl bootstrap "gui/$CONSOLE_UID" "$LAUNCH_AGENTS_DIR/net.boldman.ausearch.instantshare.plist" >> "$POSTINSTALL_LOG" 2>&1 \
+            && echo "LaunchAgent bootstrapped for user '$CONSOLE_USER' (UID $CONSOLE_UID)" | tee -a "$POSTINSTALL_LOG" \
+            || echo "Note: LaunchAgent bootstrap deferred (will start on next login)" | tee -a "$POSTINSTALL_LOG"
+    fi
+else
+    if [[ -z "$CONSOLE_USER_HOME" ]]; then
+        echo "Note: LaunchAgent installation deferred (no console user detected)." | tee -a "$POSTINSTALL_LOG" >&2
+    else
+        echo "Warning: LaunchAgent source not found at ${LAUNCH_AGENT_SRC}" | tee -a "$POSTINSTALL_LOG" >&2
+        echo "The agent will not be installed until the app is placed at /Applications." | tee -a "$POSTINSTALL_LOG" >&2
+    fi
+    echo "The agent will be activated on next login if the app is in /Applications." | tee -a "$POSTINSTALL_LOG" >&2
+fi
+
+echo "--- postinstall complete ---" >> "$POSTINSTALL_LOG"
+exit 0

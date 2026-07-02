@@ -41,10 +41,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required"  >&2; exit 1; }
+[[ -z "$APP_PATH" ]] && { echo "Error: --app-path is required"  >&2; exit 1; }
 if [[ "$APP_PATH" != /* ]]; then
     APP_PATH="$(pwd)/$APP_PATH"
 fi
+
+APP_NAME="$(basename "$APP_PATH" .app)"
 OUTPUT_DMG="$(dirname "$APP_PATH")/$(basename "$APP_PATH" .app).dmg"
 
 
@@ -53,18 +55,7 @@ echo "║  macOS Distribution Pipeline             ║"
 echo "╠══════════════════════════════════════════╣"
 echo "  App:    $APP_PATH"
 echo "  Output: $OUTPUT_DMG"
-[[ -n "$IDENTITY" ]] && echo "  Identity: $IDENTITY"
-echo ""
 
-# ── Step 1 ────────────────────────────────────────────────────────────────────
-echo "──── Step 1: Codesign ────"
-SIGN_ARGS=(--app-path "$APP_PATH")
-[[ -n "$IDENTITY" ]] && SIGN_ARGS+=(--identity "$IDENTITY")
-"$SCRIPT_DIR/codesign_app.sh" "${SIGN_ARGS[@]}"
-echo ""
-
-# ── Step 2 ────────────────────────────────────────────────────────────────────
-echo "──── Step 2: Package DMG ────"
 VOLNAME="$(basename "$APP_PATH" .app)"
 DMG_ARGS=(--app-path "$APP_PATH" --volume-name "$VOLNAME")
 [[ -n "$IDENTITY" ]] && DMG_ARGS+=(--identity "$IDENTITY")
@@ -79,19 +70,3 @@ if [[ "$SKIP_NOTARIZE" == "true" ]]; then
     echo "╚══════════════════════════════════════════╝"
     exit 0
 fi
-
-# ── Step 3 ────────────────────────────────────────────────────────────────────
-echo "──── Step 3: Notarize ────"
-"$SCRIPT_DIR/notarize.sh" --dmg-path "$OUTPUT_DMG"
-echo ""
-
-# ── Step 4 ────────────────────────────────────────────────────────────────────
-echo "──── Step 4: Staple ────"
-"$SCRIPT_DIR/staple_dmg.sh" --dmg-path "$OUTPUT_DMG"
-echo ""
-
-echo "╔══════════════════════════════════════════╗"
-echo "║  Distribution complete                   ║"
-echo "╠══════════════════════════════════════════╣"
-echo "  $OUTPUT_DMG"
-echo "╚══════════════════════════════════════════╝"

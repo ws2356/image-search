@@ -2,9 +2,19 @@
   "mobile_folder": {
     "enabled": true
   },
+  "encryption": {
+    "enabled": true
+  },
+  "strict_security": {
+    "enabled": false
+  },
   "desktop": {
     "telemetry": {
       "root_trace_sample_rate": 0.1
     }
+  },
+  "version": {
+    "min": "6.6.6",
+    "required": true
   }
 }

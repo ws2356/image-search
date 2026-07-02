@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 struct PairingStatusView: View {
     @ObservedObject var viewModel: PairingPageViewModel
@@ -31,6 +32,7 @@ struct PairingStatusView: View {
             .padding(.vertical, 16)
         }
         .compatibleScrollBounceBasedOnSize()
+        .appNavigationBar(title: "Pairing")
         .task {
             await viewModel.orchestratePairing()
         }

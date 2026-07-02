@@ -168,6 +168,19 @@
       line-height: 1.75;
     }
 
+    .group-label {
+      margin: 24px 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .group-label:first-of-type {
+      margin-top: 0;
+    }
+
     .platform-links {
       display: flex;
       flex-wrap: wrap;
@@ -393,14 +406,19 @@
       <section id="downloads" class="section">
         <div class="section__intro">
           <h2 data-en="Downloads" data-zh="下载">Downloads</h2>
-          
         </div>
 
+        <h3 class="group-label">AuSearch</h3>
         <div class="platform-links">
           <a class="platform-link platform-link--live" href="__AUSEARCH_MACOS_DOWNLOAD_URL__" download="AuSearch.dmg" data-en="macOS" data-zh="macOS" data-title-en="Download AuSearch.dmg" data-title-zh="下载 AuSearch.dmg" title="Download AuSearch.dmg">macOS</a>
           <a class="platform-link platform-link--live" href="https://apps.microsoft.com/detail/9N5N8GVNRZDN" target="_blank" rel="noreferrer" data-en="Windows" data-zh="Windows" data-title-en="Open Microsoft Store listing" data-title-zh="打开 Microsoft Store 页面" title="Open Microsoft Store listing">Windows</a>
           <a class="platform-link platform-link--live" href="https://apps.apple.com/app/6764228721" target="_blank" rel="noreferrer" data-en="iOS" data-zh="iOS" data-title-en="Open the App Store listing" data-title-zh="打开 App Store 页面" title="Open the App Store listing">iOS</a>
           <span class="platform-link platform-link--muted" data-en="Android" data-zh="Android" data-title-en="Coming soon" data-title-zh="即将推出" title="Coming soon">Android</span>
+        </div>
+
+        <h3 class="group-label">InstantShare</h3>
+        <div class="platform-links">
+          <a class="platform-link platform-link--live" href="__INSTANTSHARE_DOWNLOAD_URL__" download="InstantShare.pkg" data-en="macOS" data-zh="macOS" data-title-en="Download InstantShare.pkg" data-title-zh="下载 InstantShare.pkg" title="Download InstantShare.pkg">macOS</a>
         </div>
       </section>
 

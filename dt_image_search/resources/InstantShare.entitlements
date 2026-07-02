@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Required: Python's eval(), exec(), ctypes, and cffi require writable-
+      executable memory, which Hardened Runtime blocks by default.
+    -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!--
+      Required: PyInstaller bundles many third-party dylibs that are not
+      signed by Apple or your Team ID. Hardened Runtime refuses to load
+      them without this entitlement.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!--
+      Required: Bonjour/mDNS service advertising for instant share discovery.
+    -->
+    <key>com.apple.security.network.multicast</key>
+    <true/>
+
+    <!--
+      Required when Hardened Runtime app code triggers Apple Events checks.
+    -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+
+    <!--
+      Shared App Group container for Unix domain socket IPC with the
+      sandboxed Share Extension. The Team ID prefix avoids needing a
+      provisioning profile for the non-sandboxed launch agent.
+    -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>ZU6V838VRQ.net.boldman.ausearch</string>
+    </array>
+</dict>
+</plist>

@@ -311,7 +311,7 @@ actor USBWebSocketTransportRuntime {
         guard activeStreamingRequestIDs.contains(requestID) else {
             throw USBTransportRuntimeError.invalidEnvelope
         }
-        guard chunk.count <= MobileTransportProtocol.transferAssetChunkSizeBytes else {
+        guard chunk.count <= MobileTransportProtocol.transferAssetChunkSizeBytes + MobilePayloadEncryptionProtocol.binaryChunkOverheadBytes else {
             throw USBTransportRuntimeError.sendFailed(
                 message: "Desktop USB transport chunk exceeded the maximum \(MobileTransportProtocol.transferAssetChunkSizeBytes)-byte limit."
             )
@@ -715,7 +715,7 @@ actor USBWebSocketTransportRuntime {
         guard requestID.utf8.count == MobileTransportProtocol.transferAssetBinaryFrameRequestIDLength else {
             throw USBTransportRuntimeError.invalidEnvelope
         }
-        guard chunk.count <= MobileTransportProtocol.transferAssetChunkSizeBytes else {
+        guard chunk.count <= MobileTransportProtocol.transferAssetChunkSizeBytes + MobilePayloadEncryptionProtocol.binaryChunkOverheadBytes else {
             throw USBTransportRuntimeError.sendFailed(
                 message: "Desktop USB transport chunk exceeded the maximum \(MobileTransportProtocol.transferAssetChunkSizeBytes)-byte limit."
             )
@@ -965,19 +965,31 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
         self.responseTimeout = responseTimeout
     }
 
-    func claimPairing(using payload: PairingQRCodePayload, request: PairingClaimRequest) async throws -> PairingClaimResponse {
-        try await sendPairingRequest(
+    func claimPairing(
+        using payload: PairingQRCodePayload,
+        request: PairingClaimRequest
+    ) async throws -> PairingClaimResponse {
+        return try await sendPairingRequest(
             using: payload,
             operation: MobileTransportProtocol.pairingClaimOperation,
-            request: request
+            request: request,
+            bodySchema: PairingProtocol.schema,
+            responseType: PairingClaimResponse.self,
+            expectedSchema: PairingProtocol.schema
         )
     }
 
-    func fetchPairingState(using payload: PairingQRCodePayload, request: PairingStateRequest) async throws -> PairingClaimResponse {
-        try await sendPairingRequest(
+    func fetchPairingState(
+        using payload: PairingQRCodePayload,
+        request: PairingStateRequest
+    ) async throws -> PairingClaimResponse {
+        return try await sendPairingRequest(
             using: payload,
             operation: MobileTransportProtocol.pairingStateOperation,
-            request: request
+            request: request,
+            bodySchema: PairingProtocol.schema,
+            responseType: PairingClaimResponse.self,
+            expectedSchema: PairingProtocol.schema
         )
     }
 
@@ -997,40 +1009,46 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
         )
     }
 
-    private func sendPairingRequest<RequestBody: Encodable & Sendable>(
+    private func sendPairingRequest<RequestBody: Encodable & Sendable, ResponseBody: Decodable & PairingSchemaResponse>(
         using payload: PairingQRCodePayload,
         operation: String,
-        request: RequestBody
-    ) async throws -> PairingClaimResponse {
+        request: RequestBody,
+        bodySchema: String,
+        responseType: ResponseBody.Type,
+        expectedSchema: String
+    ) async throws -> ResponseBody {
         do {
             try await prepareUSBTransportIfNeeded(using: payload)
+            let additionalFields = traceContextPayloadFields(await telemetryClient.currentTraceContext())
             let runtimeResponse = try await runtime.sendRequest(
                 operation: operation,
-                bodySchema: PairingProtocol.schema,
+                bodySchema: bodySchema,
                 request: request,
-                additionalBodyFields: traceContextPayloadFields(await telemetryClient.currentTraceContext()),
+                additionalBodyFields: additionalFields,
                 timeout: responseTimeout
             )
             let decodedResponse = try JSONDecoder.pairingDecoder.decode(
-                PairingClaimResponse.self,
+                responseType,
                 from: runtimeResponse.bodyData
             )
-            guard decodedResponse.schema == PairingProtocol.schema else {
+            guard decodedResponse.schema == expectedSchema else {
                 throw PairingServiceError.unsupportedResponseSchema
             }
 
             if (200 ..< 300).contains(runtimeResponse.statusCode) {
                 return decodedResponse
             }
-
-            switch decodedResponse.backupState {
-            case .pairingExpired:
-                throw PairingServiceError.expired(message: decodedResponse.message)
-            case .pairingCompleted:
-                throw PairingServiceError.invalidAcceptedResponse
-            case .pendingPairing, .pairingMismatched, .pairingStopped:
-                throw PairingServiceError.rejected(message: decodedResponse.message)
+            if let pairingResponse = decodedResponse as? PairingClaimResponse {
+                switch pairingResponse.backupState {
+                case .pairingExpired:
+                    throw PairingServiceError.expired(message: pairingResponse.message)
+                case .pairingCompleted:
+                    throw PairingServiceError.invalidAcceptedResponse
+                case .pendingPairing, .pairingMismatched, .pairingStopped:
+                    throw PairingServiceError.rejected(message: pairingResponse.message)
+                }
             }
+            throw PairingServiceError.rejected(message: decodedResponse.message)
         } catch let error as PairingServiceError {
             throw error
         } catch let error as USBTransportRuntimeError {
@@ -1039,6 +1057,7 @@ struct WebSocketPairingUSBBootstrapClient: PairingUSBBootstrapClient {
             throw PairingServiceError.transport(message: error.localizedDescription)
         }
     }
+
 }
 
 private struct USBTransferAssetUploadRequest: Codable, Sendable {
@@ -1150,10 +1169,11 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
             sessionID: request.sessionID,
             deviceUUID: request.deviceUUID
         )
-            let response = try await sendTransferEnvelope(
-                operation: MobileTransportProtocol.transferStartOperation,
-                request: request,
-                responseType: TransferServerResponse.self
+        let response = try await sendTransferEnvelope(
+            operation: MobileTransportProtocol.transferStartOperation,
+            request: request,
+            responseType: TransferServerResponse.self,
+            desktop: desktop
         )
         switch response.status {
         case .accepted:
@@ -1186,10 +1206,11 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
             sessionID: request.sessionID,
             deviceUUID: request.deviceUUID
         )
-            let response = try await sendTransferEnvelope(
-                operation: MobileTransportProtocol.transferExistenceOperation,
-                request: request,
-                responseType: TransferExistenceResponse.self
+        let response = try await sendTransferEnvelope(
+            operation: MobileTransportProtocol.transferExistenceOperation,
+            request: request,
+            responseType: TransferExistenceResponse.self,
+            desktop: desktop
         )
         switch response.status {
         case .checked:
@@ -1246,23 +1267,54 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
             deviceUUID: request.deviceUUID
         )
         do {
-            let requestID = try await runtime.beginStreamingRequest(
-                operation: MobileTransportProtocol.transferAssetOperation,
-                bodySchema: TransferProtocol.schema,
-                request: request,
-                chunkSizeBytes: MobileTransportProtocol.transferAssetChunkSizeBytes,
-                additionalBodyFields: traceContextPayloadFields(await telemetryClient.currentTraceContext()),
-                timeout: responseTimeout
-            )
+            let plaintextChunkSizeBytes = transferAssetChunkSizeBytes(for: desktop)
+            let traceFields = traceContextPayloadFields(await telemetryClient.currentTraceContext())
+            let requestID: String
+            if desktop.encryptionEnabled {
+                requestID = try await runtime.beginStreamingRequest(
+                    operation: MobileTransportProtocol.transferAssetOperation,
+                    bodySchema: TransferProtocol.schema,
+                    request: try encryptedTransferRequest(
+                        request,
+                        desktop: desktop,
+                        traceFields: traceFields
+                    ),
+                    chunkSizeBytes: plaintextChunkSizeBytes,
+                    additionalBodyFields: [:],
+                    timeout: responseTimeout
+                )
+            } else {
+                requestID = try await runtime.beginStreamingRequest(
+                    operation: MobileTransportProtocol.transferAssetOperation,
+                    bodySchema: TransferProtocol.schema,
+                    request: request,
+                    chunkSizeBytes: plaintextChunkSizeBytes,
+                    additionalBodyFields: traceFields,
+                    timeout: responseTimeout
+                )
+            }
             do {
                 try await TransferAssetChunkStreamer.streamFile(
                     fileURL: asset.fileURL,
                     expectedSizeBytes: asset.fileSize,
-                    chunkSizeBytes: MobileTransportProtocol.transferAssetChunkSizeBytes
+                    chunkSizeBytes: plaintextChunkSizeBytes
                 ) { chunkData in
+                    let payloadChunk: Data
+                    if desktop.encryptionEnabled {
+                        do {
+                            payloadChunk = try MobilePayloadEncryption.encryptBinaryChunk(
+                                chunkData,
+                                trustKeyBase64: desktop.sharedKeyBase64
+                            )
+                        } catch {
+                            throw TransferClientError.transport(message: "Desktop transfer could not encrypt USB chunk payload.")
+                        }
+                    } else {
+                        payloadChunk = chunkData
+                    }
                     try await runtime.sendStreamingBinaryChunk(
                         requestID: requestID,
-                        chunk: chunkData,
+                        chunk: payloadChunk,
                         timeout: responseTimeout
                     )
                     if let onChunkTransferred {
@@ -1274,9 +1326,13 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
                     requestID: requestID,
                     timeout: responseTimeout
                 )
+                let responseData = try decodeTransferResponsePayloadData(
+                    runtimeResponse.bodyData,
+                    desktop: desktop
+                )
                 let decodedResponse = try JSONDecoder.pairingDecoder.decode(
                     TransferServerResponse.self,
-                    from: runtimeResponse.bodyData
+                    from: responseData
                 )
                 guard decodedResponse.schema == TransferProtocol.schema else {
                     throw TransferClientError.unsupportedResponseSchema
@@ -1332,7 +1388,8 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         let response = try await sendTransferEnvelope(
             operation: MobileTransportProtocol.transferCompleteOperation,
             request: request,
-            responseType: TransferServerResponse.self
+            responseType: TransferServerResponse.self,
+            desktop: desktop
         )
         switch response.status {
         case .completed:
@@ -1367,7 +1424,8 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
             request: request,
             responseType: CapabilityExchangeResponse.self,
             bodySchema: CapabilityExchangeProtocol.schema,
-            expectedSchema: CapabilityExchangeProtocol.schema
+            expectedSchema: CapabilityExchangeProtocol.schema,
+            desktop: desktop
         )
         switch response.status {
         case .accepted:
@@ -1404,7 +1462,8 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
             request: request,
             responseType: UpdatePromptResponse.self,
             bodySchema: UpdatePromptProtocol.schema,
-            expectedSchema: UpdatePromptProtocol.schema
+            expectedSchema: UpdatePromptProtocol.schema,
+            desktop: desktop
         )
         switch response.status {
         case .accepted:
@@ -1423,17 +1482,38 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         request: RequestBody,
         responseType: ResponseBody.Type,
         bodySchema: String = TransferProtocol.schema,
-        expectedSchema: String = TransferProtocol.schema
+        expectedSchema: String = TransferProtocol.schema,
+        desktop: TrustedDesktopRecord
     ) async throws -> ResponseBody {
         do {
-            let runtimeResponse = try await runtime.sendRequest(
-                operation: operation,
-                bodySchema: bodySchema,
-                request: request,
-                additionalBodyFields: traceContextPayloadFields(await telemetryClient.currentTraceContext()),
-                timeout: responseTimeout
+            let traceFields = traceContextPayloadFields(await telemetryClient.currentTraceContext())
+            let runtimeResponse: USBTransportRuntimeResponse
+            if desktop.encryptionEnabled {
+                runtimeResponse = try await runtime.sendRequest(
+                    operation: operation,
+                    bodySchema: bodySchema,
+                    request: try encryptedTransferRequest(
+                        request,
+                        desktop: desktop,
+                        traceFields: traceFields
+                    ),
+                    additionalBodyFields: [:],
+                    timeout: responseTimeout
+                )
+            } else {
+                runtimeResponse = try await runtime.sendRequest(
+                    operation: operation,
+                    bodySchema: bodySchema,
+                    request: request,
+                    additionalBodyFields: traceFields,
+                    timeout: responseTimeout
+                )
+            }
+            let responseData = try decodeTransferResponsePayloadData(
+                runtimeResponse.bodyData,
+                desktop: desktop
             )
-            let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: runtimeResponse.bodyData)
+            let decodedResponse = try JSONDecoder.pairingDecoder.decode(responseType, from: responseData)
             guard decodedResponse.schema == expectedSchema else {
                 throw TransferClientError.unsupportedResponseSchema
             }
@@ -1452,6 +1532,59 @@ struct WebSocketMobileTransferClient: MobileTransferClient, ChunkProgressMobileT
         } catch {
             throw TransferClientError.transport(message: error.localizedDescription)
         }
+    }
+
+    private func decodeTransferResponsePayloadData(
+        _ data: Data,
+        desktop: TrustedDesktopRecord
+    ) throws -> Data {
+        guard desktop.encryptionEnabled else {
+            return data
+        }
+        guard let encryptedResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw TransferClientError.decoding(message: "Desktop USB transfer response is not a JSON object.")
+        }
+        guard MobilePayloadEncryption.isEncryptedPayload(encryptedResponse) else {
+            throw TransferClientError.decoding(message: "Desktop USB transfer response must be encrypted.")
+        }
+        let decryptedPayload = try MobilePayloadEncryption.decryptPayloadObject(
+            encryptedResponse,
+            trustKeyBase64: desktop.sharedKeyBase64
+        )
+        guard JSONSerialization.isValidJSONObject(decryptedPayload) else {
+            throw TransferClientError.decoding(message: "Desktop USB transfer response payload is invalid.")
+        }
+        return try JSONSerialization.data(withJSONObject: decryptedPayload, options: [])
+    }
+
+    private func encryptedTransferRequest<RequestBody: Encodable & Sendable>(
+        _ request: RequestBody,
+        desktop: TrustedDesktopRecord,
+        traceFields: [String: Any]
+    ) throws -> MobileEncryptedPayload {
+        let encodedBody = try JSONEncoder.pairingEncoder.encode(request)
+        guard var bodyValue = try JSONSerialization.jsonObject(with: encodedBody) as? [String: Any] else {
+            throw TransferClientError.transport(message: "Desktop transfer request body could not be encoded.")
+        }
+        for (key, value) in traceFields {
+            bodyValue[key] = value
+        }
+        return try MobilePayloadEncryption.encryptPayloadObject(
+            bodyValue,
+            trustKeyBase64: desktop.sharedKeyBase64,
+            sessionID: desktop.lastSessionID
+        )
+    }
+
+    private func transferAssetChunkSizeBytes(for desktop: TrustedDesktopRecord) -> Int {
+        guard desktop.encryptionEnabled else {
+            return MobileTransportProtocol.transferAssetChunkSizeBytes
+        }
+        return max(
+            1,
+            MobileTransportProtocol.transferAssetChunkSizeBytes
+                - MobilePayloadEncryptionProtocol.binaryChunkOverheadBytes
+        )
     }
 }
 

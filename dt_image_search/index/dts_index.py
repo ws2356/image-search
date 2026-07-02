@@ -31,8 +31,8 @@ from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_util import normalized_folder_path
 
 # TODO: refactor multiprocessing code: move all model/preprocess loading to worker processes
-def index_path_for_folder(ctx: BMContext, folder: Folder):
-    return f"{get_app_data_path(ctx)}/{folder.id}.faiss"
+def index_path_for_folder(folder: Folder):
+    return f"{get_app_data_path()}/{folder.id}.faiss"
 
 _supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".heic", ".heif")
 
@@ -46,7 +46,7 @@ def is_image_file(file_path: str) -> bool:
 @with_trace("query_index")
 def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str) -> list:
     # Check if folder exists
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         folder = get_folder_by_id(conn, folder_id)
         if not folder:
             return []
@@ -56,7 +56,7 @@ def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str
     # Dedupe by item[0] which is the file id
     seen_ids = set()
     index_score_pairs = [item for item in index_score_pairs if not (item[0] in seen_ids or seen_ids.add(item[0]))]
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         # Fetch file paths from the database using the indices
         file_paths = get_files_by_clip_indices(conn, folder_id, [item[0] for item in index_score_pairs])
         ret = [(file, pair[1]) for file, pair in zip(file_paths, index_score_pairs) if file is not None]
@@ -153,7 +153,7 @@ def _recover_corrupted_index(ctx: BMContext, index_path: str, folder_id: int):
                 log("warning", "index", message=f"Failed to backup corrupted FAISS index before recovery: {exc}")
         _create_empty_index(index_path)
 
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         conn.execute(
             "UPDATE files SET clip_index = NULL, status = 0 WHERE folder_id = ? AND status != 2",
             (folder_id,),
@@ -286,7 +286,7 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
                     all_features.append(features_np)
                     valid_files.extend(batch_valid_files)
             
-            with create_db_conn(ctx=ctx) as conn:
+            with create_db_conn() as conn:
                 mark_files_deleted(conn, [file.id for file in deleted_files])
                 
         except Exception as e:
@@ -309,7 +309,7 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
         index.add_with_ids(features_np, ids)
         _write_index_atomically(index, index_path)
     
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         for file in valid_files:
             update_file(conn, file.id, clip_index=file.id, status=1)
     return result
@@ -337,7 +337,7 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
     batch_start = 0
     batch_end = 0
     while True:
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             if total_files == -1:
                 total_files = count_files_in_folder(conn, folder_id)
             files = get_pending_files_for_folder(conn, folder_id, offset=0, limit=limit)
@@ -400,7 +400,7 @@ def append_to_index(ctx: BMContext, index_path: str, folder_id: int, file_paths:
         batch_files = file_paths[i_slice:i_slice + step]
         log("debug", message=f"Processing batch {i_slice} to {i_slice + step} for appending.")
         batch_file_objs = []
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             for file_path in batch_files:
                 file_obj = get_file_by_path(conn, file_path)
                 if file_obj and file_obj.status == 0:
@@ -455,7 +455,7 @@ def _load_index(index_path: str):
 
 @with_trace("delete_folder")
 def delete_folder(ctx: BMContext, folder_path: str):
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         if not folder_path:
             log("warning", "delete", message="No folder path provided for deletion.")
             return
@@ -464,7 +464,7 @@ def delete_folder(ctx: BMContext, folder_path: str):
             if not folder:
                 log("warning", "delete", message=f"Folder {folder_path} does not exist in the database.")
                 return
-            index_path = index_path_for_folder(ctx=ctx, folder=folder)
+            index_path = index_path_for_folder(folder=folder)
             if os.path.exists(index_path):
                 os.remove(index_path)
                 log("info", message=f"Removed index file for folder {folder.path} at {index_path}")

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import sys
+import threading
+
 from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
@@ -15,9 +19,32 @@ from PySide6.QtWidgets import (
 from dt_image_search.telemetry.telemetry_client import log
 
 DEFAULT_UPDATE_BODY_TEXT = "Check out the new features by updating to the latest version."
-DEFAULT_UPDATE_DESTINATION = "https://apps.microsoft.com/detail/9n5n8gvnrzdn"
+WINDOWS_UPDATE_DESTINATION = "https://apps.microsoft.com/detail/9n5n8gvnrzdn"
+MACOS_UPDATE_DESTINATION = "https://aurora.boldman.net"
 UPDATE_AVAILABLE_TITLE = "Update Available"
 UPDATE_REQUIRED_TITLE = "Update Required"
+
+
+def default_update_destination(platform: str | None = None) -> str:
+    resolved_platform = (platform or sys.platform).lower()
+    if resolved_platform == "darwin":
+        return MACOS_UPDATE_DESTINATION
+    return WINDOWS_UPDATE_DESTINATION
+
+
+DEFAULT_UPDATE_DESTINATION = default_update_destination()
+
+
+def exit_application_process() -> None:
+    app = QApplication.instance()
+    if app is None:
+        os._exit(0)
+        return
+
+    fallback_timer = threading.Timer(0.25, os._exit, args=(0,))
+    fallback_timer.daemon = True
+    fallback_timer.start()
+    app.quit()
 
 
 class UpdatePromptDialog(QDialog):
@@ -32,7 +59,9 @@ class UpdatePromptDialog(QDialog):
         super().__init__(parent)
         self._is_required = is_required
         self._body_text = (body_text or DEFAULT_UPDATE_BODY_TEXT).strip() or DEFAULT_UPDATE_BODY_TEXT
-        self._update_destination = (update_destination or DEFAULT_UPDATE_DESTINATION).strip() or DEFAULT_UPDATE_DESTINATION
+        self._update_destination = (
+            update_destination or default_update_destination()
+        ).strip() or default_update_destination()
 
         self.setWindowTitle(UPDATE_REQUIRED_TITLE if self._is_required else UPDATE_AVAILABLE_TITLE)
         self.setModal(True)
@@ -92,11 +121,18 @@ class UpdatePromptDialog(QDialog):
             )
             return
 
-        if not self._is_required:
-            self.accept()
+        if self._is_required:
+            exit_application_process()
+            return
+        self.accept()
 
     def _on_cancel_clicked(self) -> None:
         self.reject()
+
+    def reject(self) -> None:
+        if self._is_required:
+            return
+        super().reject()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._is_required:

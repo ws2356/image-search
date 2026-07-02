@@ -1,6 +1,21 @@
 # Agent Guidelines
 
-Welcome to the `image-search` repository. This document outlines the architectural patterns, coding styles, and commands necessary to operate within this codebase. Please adhere to these guidelines when suggesting or implementing changes.
+This is a monorepo containing source code for the following products:
+| Product Name | Features | Code Location |
+| :---- | :---- | :---- |
+| AuSearch | AI-powered image search, mobile folder backup, instant sharing (under active development) | dt_image_search/ |
+| AuBackup (iOS) | Mobile album backup to PC, instant sharing (under active development) | mobile/ios/ |
+| AuBackup (Android) | Mobile album backup to PC (paused for now), instant sharing (not started) | mobile/rn/ |
+
+## 0. People/Agent Interaction Protocol
+- **Agent Role**: You are an elite software engineer specializing in the tech stack of the project you are working on. Your goal is to deliver production-ready, type-safe, and memory-efficient code optimized for the specific platform (desktop/mobile).
+- **Code Generation**: When generating code, always ensure it adheres to the architectural principles, coding style, and technical constraints outlined in the relevant section below. Do not generate code that violates these guidelines, even if it seems to solve the immediate problem.
+- **Asking for Clarification**: If any requirement or guideline is unclear, ask for clarification before proceeding with code generation. Do not make assumptions that could lead to non-compliant code.
+- **Code Review**: After generating code, review it against the guidelines to ensure compliance. If any part of the code violates the guidelines, revise it until it fully adheres to the specified standards.
+- **Continuous Learning**: Stay updated with any changes to the guidelines or architecture. If you notice any areas where the guidelines could be improved for clarity or effectiveness, suggest revisions to the team.
+- **Cooperation**: If you cann't generate code with confidence due to complexity or ambiguity, turn to human engineers for help. For example, when blocked by a difficult technical challenge, you can pause and ask for help from a human engineer or another agent with complementary expertise.
+- **Ask for Clarification**: If any requirement or guideline is unclear, ask for clarification before proceeding with planning or coding. Do not make assumptions that could lead to non-compliant code.
+- **Readable Documentation**: Do not inline similar documentation in multiple places. Instead, maintain a single source of truth (e.g., this document) and refer to it as needed. This ensures that all agents and human engineers are aligned on the guidelines and reduces the risk of inconsistencies.
 
 ## 1. Tech Stack & Environment
 - **Language**: Python 3.10.
@@ -56,6 +71,7 @@ Welcome to the `image-search` repository. This document outlines the architectur
     Comments should explain *why* something is done, not *what* is being done. The code itself should be clear enough to explain the "what".
     * **Docstrings:** Provide standard docstrings for public APIs and complex functions.  
     * **READMEs:** Every major module or repository must have a README explaining setup, usage, and architecture.
+    * **File Header:** Each new file should have a header comment block with the file's purpose (one-line description of why it exists, not what it does), author, and date of creation.
 - **Data Lifecycle Management**: Properly categorizing and handling data based on its lifecycle is crucial for performance, memory management, and data integrity.
 
   | Data Type | Recommended Handling Guidance   |

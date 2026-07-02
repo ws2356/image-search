@@ -1,27 +1,36 @@
 import Foundation
 import UIKit
 import Combine
+import ISFromPC
+import Common
 
 @MainActor
-final class MobileAppModel: ObservableObject {
+final class MobileAppModel: ObservableObject, NavigatorFactory {
     @Published private(set) var route: AppRoute = .home {
         didSet { pushTelemetryContext() }
     }
 
     @Published var isShowingIncomingLinkReplacementConfirmation = false
+    @Published private(set) var activeUpdatePrompt: AppUpdatePrompt?
+    @Published var instantShareQRPayload: QRClaimPayload?
 
     private var hasLoaded = false
     private var hasFinishedLoad = false
+    private var hasScheduledLaunchUpdateCheck = false
     private var pendingIncomingUniversalLinkPayload: String?
     private var isProcessingIncomingUniversalLink = false
     private let universalLinkHost = "dl.boldman.net"
+    private static let appStoreURL = URL(string: "https://apps.apple.com/app/id6764228721")!
     let backupSessionProvider: BackupSessionProviding
     private let qrCodePayloadDecoder: QRCodePayloadDecoding
     let pairingService: PairingService
     let permissionService: PermissionService
     let transferService: TransferService
+    private let appUpdateChecker: AppUpdateChecking
+    private let appVersionProvider: AppVersionProviding
     private let telemetryContextProvider: TelemetryContextProvider
     private let telemetryService: TelemetryService
+    private let appIdentityProvider: AppIdentityProviding
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
     private var memoryWarningObservationTask: Task<Void, Never>?
     private var appLifecycleObservationTask: Task<Void, Never>?
@@ -33,16 +42,22 @@ final class MobileAppModel: ObservableObject {
         pairingService: PairingService,
         permissionService: PermissionService,
         transferService: TransferService,
+        appUpdateChecker: AppUpdateChecking,
+        appVersionProvider: AppVersionProviding,
         telemetryService: TelemetryService,
-        telemetryContextProvider: TelemetryContextProvider
+        telemetryContextProvider: TelemetryContextProvider,
+        appIdentityProvider: AppIdentityProviding
     ) {
         self.backupSessionProvider = backupSessionProvider
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
         self.pairingService = pairingService
         self.permissionService = permissionService
         self.transferService = transferService
+        self.appUpdateChecker = appUpdateChecker
+        self.appVersionProvider = appVersionProvider
         self.telemetryContextProvider = telemetryContextProvider
         self.telemetryService = telemetryService
+        self.appIdentityProvider = appIdentityProvider
         self.backupSessionObserver = backupSessionProvider.currentBackupSessionPublisher
             .sink { [weak self] session in
                 self?.pushTelemetryContext()
@@ -66,18 +81,68 @@ final class MobileAppModel: ObservableObject {
         appLifecycleObservationTask?.cancel()
     }
     
+    /// protocol NavigatorFactory
+    func createNavigator() -> Navigator {
+        return NavigatorImpl(vm: self)
+    }
+    
+    class NavigatorImpl: Navigator {
+        private weak var vm: MobileAppModel?
+        init(vm: MobileAppModel? = nil) {
+            self.vm = vm
+        }
+        func requestExit() {
+            vm?.instantShareQRPayload = nil
+        }
+    }
+    
     func onHomeCompleted(with result: HomePageResult) async {
         switch result.result {
-        case .success:
-            await openScanFlow()
+        case .success(let target):
+            switch target {
+            case .backupScan:
+                await openScanFlow()
+            case .genericScan:
+                route = .genericScan
+            }
         case .failure:
             break
+        }
+    }
+
+    func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async {
+        switch result.result {
+        case .success(let qrString):
+            if let url = URL(string: qrString), let payload = QRClaimPayload(universalLinkURL: url) {
+                self.instantShareQRPayload = payload
+                self.route = .home
+                return
+            }
+            beginBackupSessionTelemetry()
+            await showPairingPage(qrString: qrString)
+        case .failure(.cancel):
+            await returnHome()
+        case .failure(.scannerFailed):
+            presentErrorSummary(
+                title: "Scanner failed",
+                message: "The camera scanner couldn't continue. Try again or return home."
+            )
+        case .failure:
+            presentErrorSummary(
+                title: "Scanner error",
+                message: "An unexpected error occurred. Try again or return home."
+            )
         }
     }
 
     func onScanningCompleted(with result: ScanningPageResult) async {
         switch result.result {
         case .success(let qrString):
+            if let url = URL(string: qrString), let payload = QRClaimPayload(universalLinkURL: url) {
+                self.instantShareQRPayload = payload
+                self.route = .home
+                return
+            }
             await showPairingPage(qrString: qrString)
         case .failure(.cancel):
             await returnHome()
@@ -226,31 +291,14 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
-    var navigationTitle: String {
-        switch route {
-        case .home:
-            return "AuBackup"
-        case .scan:
-            return "Scan QR"
-        case .pair:
-            return "Pairing"
-        case .permissions:
-            return "Permissions"
-        case .transfer:
-            return "Backup in Progress"
-        case .completed:
-            return "Backup Complete"
-        case .error(_):
-            return "Backup Error"
-        }
-    }
-
     var routeName: String {
         switch route {
         case .home:
             return "home"
         case .scan:
             return "scan"
+        case .genericScan:
+            return "generic_scan"
         case .pair:
             return "pair"
         case .permissions:
@@ -270,6 +318,8 @@ final class MobileAppModel: ObservableObject {
         }
 
         hasLoaded = true
+        try? await appIdentityProvider.ensureSelfIdentity()
+        
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
         let backupSession = backupSessionProvider.currentBackupSession
@@ -290,7 +340,9 @@ final class MobileAppModel: ObservableObject {
         // Process any universal link that arrived before load completed.
         if let pendingPayload = pendingIncomingUniversalLinkPayload {
             pendingIncomingUniversalLinkPayload = nil
-            await processIncomingUniversalLinkPayload(pendingPayload)
+            if let url = URL(string: pendingPayload) {
+                await handleIncomingUniversalLink(url)
+            }
         }
 
         let pairingService = pairingService
@@ -298,6 +350,7 @@ final class MobileAppModel: ObservableObject {
             await pairingService.primeNetworkAccess()
         }
         recordTelemetry(.appLaunched)
+        scheduleLaunchUpdateCheckIfNeeded()
     }
 
     func openScanFlow() async {
@@ -313,6 +366,8 @@ final class MobileAppModel: ObservableObject {
         guard isSupportedUniversalLink(url) else {
             return
         }
+
+        // Otherwise treat as pairing universal link
         let payload = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !payload.isEmpty else {
             return
@@ -321,6 +376,12 @@ final class MobileAppModel: ObservableObject {
         // Stash the link if load() hasn't completed yet — it will process it after setting route = .home.
         if !hasFinishedLoad {
             pendingIncomingUniversalLinkPayload = payload
+            return
+        }
+
+        // Check if this is a /share link (instant share / QR claim)
+        if let claimPayload = QRClaimPayload(universalLinkURL: url) {
+            self.instantShareQRPayload = claimPayload
             return
         }
 
@@ -491,6 +552,25 @@ final class MobileAppModel: ObservableObject {
         await permissionService.setRemoveAfterBackupEnabled(false)
         transitionBackupFlow(.resetToPendingPairing)
         route = .home
+    }
+
+    func dismissUpdatePrompt() {
+        guard let activeUpdatePrompt, !activeUpdatePrompt.required else {
+            return
+        }
+        recordInteraction(name: "update_prompt_dismissed", location: "update_prompt")
+        self.activeUpdatePrompt = nil
+    }
+
+    func updateDestinationForActivePrompt() -> URL? {
+        guard let activeUpdatePrompt else {
+            return nil
+        }
+        recordInteraction(name: "update_prompt_update_tapped", location: "update_prompt")
+        if !activeUpdatePrompt.required {
+            self.activeUpdatePrompt = nil
+        }
+        return activeUpdatePrompt.appStoreURL
     }
 
     private func presentErrorSummary(title: String, message: String) {
@@ -873,4 +953,77 @@ final class MobileAppModel: ObservableObject {
         return .empty(transport: fallbackTransport)
     }
 
+    private func scheduleLaunchUpdateCheckIfNeeded() {
+        guard !hasScheduledLaunchUpdateCheck else {
+            return
+        }
+        hasScheduledLaunchUpdateCheck = true
+
+        Task { [weak self] in
+            await self?.checkForLaunchUpdatePrompt()
+        }
+    }
+
+    private func checkForLaunchUpdatePrompt() async {
+        guard let currentVersion = appVersionProvider.currentVersion(),
+              !currentVersion.isEmpty
+        else {
+            recordDiagnosticCheckpoint(
+                area: "app_update_check_skipped",
+                attributes: [
+                    "app.update_check_reason": .string("missing_current_version")
+                ]
+            )
+            return
+        }
+
+        do {
+            let requirement = try await appUpdateChecker.fetchVersionRequirement()
+            guard let prompt = requirement.promptIfNeeded(
+                currentVersion: currentVersion,
+                appStoreURL: Self.appStoreURL
+            ) else {
+                recordDiagnosticCheckpoint(
+                    area: "app_update_not_needed",
+                    attributes: [
+                        "app.current_version": .string(currentVersion),
+                        "app.minimum_supported_version": .string(requirement.minimumVersion),
+                        "app.update_required": .bool(requirement.required)
+                    ]
+                )
+                return
+            }
+
+            activeUpdatePrompt = prompt
+            recordDialogView(name: prompt.required ? "required_update_prompt" : "optional_update_prompt")
+            recordDiagnosticCheckpoint(
+                area: "app_update_prompt_presented",
+                attributes: [
+                    "app.current_version": .string(currentVersion),
+                    "app.minimum_supported_version": .string(prompt.minimumVersion),
+                    "app.update_required": .bool(prompt.required)
+                ]
+            )
+        } catch {
+            recordDiagnosticCheckpoint(
+                area: "app_update_check_failed",
+                attributes: [
+                    "app.current_version": .string(currentVersion),
+                    "app.update_error": .string(String(describing: error))
+                ]
+            )
+        }
+    }
+
+    // MARK: - First Launch Detection
+
+    private static let hasLaunchedBeforeKey = "hasLaunchedBefore"
+
+    private func isFirstLaunchAfterInstallation() -> Bool {
+        return !UserDefaults.standard.bool(forKey: Self.hasLaunchedBeforeKey)
+    }
+
+    private func markFirstLaunchCompleted() {
+        UserDefaults.standard.set(true, forKey: Self.hasLaunchedBeforeKey)
+    }
 }

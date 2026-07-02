@@ -18,4 +18,5 @@ node_modules
 xcuserdata/
 obj/
 .build/
+pyinstaller-dist*/
 .env.credential

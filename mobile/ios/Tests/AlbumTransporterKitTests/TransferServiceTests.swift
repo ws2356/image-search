@@ -247,6 +247,113 @@ final class TransferServiceTests: XCTestCase {
         )
     }
 
+    func test_photo_library_transfer_service_fails_when_strict_security_requires_encryption() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                strictSecurityEnabled: true
+            )
+        )
+        let transferClient = RecordingMobileTransferClient(
+            capabilityExchangeResult: .success(
+                CapabilityExchangeResponse(
+                    schema: CapabilityExchangeProtocol.schema,
+                    status: .accepted,
+                    message: "Desktop completed capability exchange.",
+                    sessionID: "pairing-demo-001",
+                    deviceUUID: "ios-device-001",
+                    capabilities: [:]
+                )
+            )
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(
+                descriptors: [
+                    TransferAssetDescriptor(
+                        assetID: "ph://asset-001",
+                        assetVersion: "v1",
+                        filename: "IMG_0001.JPG",
+                        mediaType: "image",
+                        createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                        updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                    ),
+                ]
+            ),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+
+        XCTAssertEqual(snapshot.phase, .failed)
+        XCTAssertEqual(snapshot.failedCount, 1)
+        XCTAssertEqual(
+            snapshot.failureMessage,
+            "The desktop does not support encrypted transport. Update the desktop app and try again."
+        )
+        let startedAssetCount = await transferClient.startedAssetCount()
+        XCTAssertNil(startedAssetCount)
+    }
+
+    func test_photo_library_transfer_service_allows_plaintext_fallback_when_strict_security_is_disabled() async {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+                strictSecurityEnabled: false
+            )
+        )
+        let transferClient = RecordingMobileTransferClient(
+            capabilityExchangeResult: .success(
+                CapabilityExchangeResponse(
+                    schema: CapabilityExchangeProtocol.schema,
+                    status: .accepted,
+                    message: "Desktop completed capability exchange.",
+                    sessionID: "pairing-demo-001",
+                    deviceUUID: "ios-device-001",
+                    capabilities: [:]
+                )
+            )
+        )
+        let service = PhotoLibraryTransferService(
+            assetSource: StaticTransferAssetSource(
+                descriptors: [
+                    TransferAssetDescriptor(
+                        assetID: "ph://asset-001",
+                        assetVersion: "v1",
+                        filename: "IMG_0001.JPG",
+                        mediaType: "image",
+                        createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                        updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                    ),
+                ]
+            ),
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        let snapshot = await service.startTransfer(progress: { _ in })
+        let startedAssetCount = await transferClient.startedAssetCount()
+
+        XCTAssertEqual(snapshot.phase, .transferring)
+        XCTAssertEqual(snapshot.transferredCount, 1)
+        XCTAssertEqual(snapshot.failedCount, 0)
+        XCTAssertEqual(startedAssetCount, 1)
+    }
+
     func test_photo_library_transfer_service_uses_resolved_transport_for_progress() async {
         let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
             record: TrustedDesktopRecord(
@@ -314,6 +421,55 @@ final class TransferServiceTests: XCTestCase {
 
         XCTAssertEqual(refreshedSnapshot?.transport, .usb)
         XCTAssertEqual(refreshedSnapshot?.liveTransports, [.usb, .lan])
+    }
+
+    func test_photo_library_transfer_service_resets_progress_snapshot_when_new_transfer_starts() async throws {
+        let trustedDesktopStore = InMemoryTransferTrustedDesktopStore(
+            record: TrustedDesktopRecord(
+                desktopDeviceID: "desktop-device-001",
+                desktopName: "Studio Mac",
+                endpointURL: URL(string: "http://192.168.50.17:38933/api/mobile/pairing/claim")!,
+                mobileDeviceUUID: "ios-device-001",
+                sharedKeyBase64: "shared-key-001",
+                transport: .lan,
+                lastSessionID: "pairing-demo-001",
+                pairedAt: Date(timeIntervalSince1970: 1_776_123_610)
+            )
+        )
+        let assetSource = StaticTransferAssetSource(
+            descriptors: [
+                TransferAssetDescriptor(
+                    assetID: "ph://asset-001",
+                    assetVersion: "v1",
+                    filename: "IMG_0001.JPG",
+                    mediaType: "image",
+                    createdAt: Date(timeIntervalSince1970: 1_776_123_610),
+                    updatedAt: Date(timeIntervalSince1970: 1_776_123_610)
+                )
+            ]
+        )
+        let transferClient = RecordingMobileTransferClient(startDelayNanoseconds: 250_000_000)
+        let service = PhotoLibraryTransferService(
+            assetSource: assetSource,
+            transferClient: transferClient,
+            trustedDesktopStore: trustedDesktopStore
+        )
+
+        _ = await service.startTransfer(progress: { _ in })
+        _ = await service.completeTransfer()
+
+        let secondTransferTask = Task {
+            await service.startTransfer(progress: { _ in })
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let inFlightSnapshot = await service.progressSnapshot()
+        _ = await secondTransferTask.value
+
+        XCTAssertEqual(inFlightSnapshot?.transferredCount, 0)
+        XCTAssertEqual(inFlightSnapshot?.totalCount, 0)
+        XCTAssertEqual(inFlightSnapshot?.failedCount, 0)
+        XCTAssertEqual(inFlightSnapshot?.phase, .preparing)
+        XCTAssertNil(inFlightSnapshot?.failureMessage)
     }
 
     func test_photo_library_transfer_service_reports_usb_alive_through_adaptive_transfer_client() async {
@@ -1131,7 +1287,7 @@ private actor ChunkSizeRecorder {
     }
 }
 
-private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving, USBTransportConnectivityChecking {
+private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobileTransferClient, TransferTransportResolving, TransferLiveTransportResolving, USBTransportConnectivityChecking, MobileCapabilityExchangeClient {
     private var startedCount: Int?
     private let existingAssetIDs: Set<String>
     private let startDelayNanoseconds: UInt64
@@ -1152,6 +1308,7 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
     private var preferredUploadTransports: [TransferTransport] = []
     private let simulatedChunkTransferSizes: [Int]
     private let uploadErrorByAssetID: [String: TransferClientError]
+    private let capabilityExchangeResult: Result<CapabilityExchangeResponse, TransferClientError>?
 
     init(
         existingAssetIDs: Set<String> = [],
@@ -1161,7 +1318,8 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
         startDelayNanoseconds: UInt64 = 0,
         uploadDelayNanoseconds: UInt64 = 0,
         simulatedChunkTransferSizes: [Int] = [],
-        uploadErrorByAssetID: [String: TransferClientError] = [:]
+        uploadErrorByAssetID: [String: TransferClientError] = [:],
+        capabilityExchangeResult: Result<CapabilityExchangeResponse, TransferClientError>? = nil
     ) {
         self.existingAssetIDs = existingAssetIDs
         self.usbConnected = usbConnected
@@ -1171,6 +1329,30 @@ private actor RecordingMobileTransferClient: ChunkProgressPreferredTransportMobi
         self.uploadDelayNanoseconds = uploadDelayNanoseconds
         self.simulatedChunkTransferSizes = simulatedChunkTransferSizes
         self.uploadErrorByAssetID = uploadErrorByAssetID
+        self.capabilityExchangeResult = capabilityExchangeResult
+    }
+
+    func exchangeCapabilities(
+        _ mobileCapabilities: [String: Int],
+        desktop: TrustedDesktopRecord
+    ) async throws -> CapabilityExchangeResponse {
+        XCTAssertEqual(mobileCapabilities[MobileTransferCapabilities.encryption], 1)
+        if let capabilityExchangeResult {
+            switch capabilityExchangeResult {
+            case .success(let response):
+                return response
+            case .failure(let error):
+                throw error
+            }
+        }
+        return CapabilityExchangeResponse(
+            schema: CapabilityExchangeProtocol.schema,
+            status: .accepted,
+            message: "Desktop completed capability exchange.",
+            sessionID: desktop.lastSessionID,
+            deviceUUID: desktop.mobileDeviceUUID,
+            capabilities: [MobileTransferCapabilities.encryption: desktop.encryptionEnabled ? 1 : 0]
+        )
     }
 
     func startSession(desktop: TrustedDesktopRecord, totalAssets: Int) async throws {

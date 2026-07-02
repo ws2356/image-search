@@ -46,7 +46,7 @@ class MobileCapabilityExchangeService:
                 message="The capability exchange request schema version is unsupported.",
             )
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             transfer_context = get_mobile_transfer_context(
                 conn,
                 session_id=request.session_id,

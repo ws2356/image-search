@@ -15,9 +15,7 @@ import threading
 from importlib.resources import files
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
-from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.tools.dts_perf import perffunc
-from dt_image_search.bm_context import BMContext
 
 
 def _folder_path_variants(folder_path: str) -> tuple[str, ...]:
@@ -41,8 +39,9 @@ class _ManagedSQLiteConnection(sqlite3.Connection):
             self.close()
 
 
-def create_db_conn(ctx: BMContext) -> sqlite3.Connection:
-    db_path = get_app_data_path(ctx) / "app_data.sqlite"
+def create_db_conn() -> sqlite3.Connection:
+    from dt_image_search.model.dts_fs import get_app_data_path
+    db_path = get_app_data_path() / "app_data.sqlite"
     conn = None
     with db_init_lock:
         if not db_path.exists():

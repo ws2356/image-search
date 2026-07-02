@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "swift-composable-architecture": {
+      "source": "tryhuset/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-composable-architecture/SKILL.md",
+      "computedHash": "6d50f98e950c41c5cf5933b01978102fd62c11341404d68f7ecd8af0d4da23a4"
+    }
+  }
+}

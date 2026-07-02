@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import Common
 
 struct HomeView: View {
     @ObservedObject var viewModel: HomePageViewModel
@@ -21,17 +22,30 @@ struct HomeView: View {
             content
         }
         .compatibleScrollBounceBasedOnSize()
+        .appNavigationBar(title: "AuBackup")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    scanQRCode(target: .genericScan)
+                } label: {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 17, weight: .medium))
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         if hasSessionHistory {
-            ReturningHomeContent(summary: summary, onScan: scanQRCode)
+            ReturningHomeContent(summary: summary) {
+                scanQRCode(target: .backupScan)
+            }
         } else {
             FirstTimeHomeContent(
                 summary: summary,
                 setupSteps: setupSteps,
-                onScan: scanQRCode
+                onScan: { scanQRCode(target: .backupScan) }
             )
         }
     }
@@ -44,9 +58,9 @@ struct HomeView: View {
         viewModel.summary
     }
 
-    private func scanQRCode() {
+    private func scanQRCode(target: HomeClickTarget) {
         Task {
-            await viewModel.handlePrimaryActionTapped()
+            await viewModel.handlePrimaryActionTapped(target: target)
         }
     }
 }
@@ -490,6 +504,7 @@ private final class HomeViewPreviewPageModel: AppPageModeling {
 
     func onHomeCompleted(with result: HomePageResult) async {}
     func onScanningCompleted(with result: ScanningPageResult) async {}
+    func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async {}
     func onPairingCompleted(with result: PairingPageResult) async {}
     func onPermissionsCompleted(with result: PermissionsPageResult) async {}
     func onTransferCompleted(with result: TransferPageResult) async {}

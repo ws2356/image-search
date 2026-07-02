@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import Common
 
 struct PermissionsGateView: View {
     @ObservedObject var viewModel: PermissionsPageViewModel
@@ -9,6 +10,7 @@ struct PermissionsGateView: View {
             PermissionsGateContent()
         }
         .compatibleScrollBounceBasedOnSize()
+        .appNavigationBar(title: "Permissions")
         .task {
             await viewModel.startPreflight()
         }

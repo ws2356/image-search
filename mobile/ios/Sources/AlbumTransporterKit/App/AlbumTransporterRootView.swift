@@ -2,10 +2,13 @@ import SwiftUI
 import Foundation
 import Factory
 import UIKit
+import ISFromPC
+import Common
 
 @MainActor
 public struct AlbumTransporterRootView: View {
     private let container: Container
+    @Environment(\.openURL) private var openURL
     @StateObject private var model: MobileAppModel
     @StateObject private var homeViewModel: HomePageViewModel
     @StateObject private var pairingViewModel: PairingPageViewModel
@@ -97,6 +100,28 @@ public struct AlbumTransporterRootView: View {
                     await model.handleIncomingUniversalLink(url)
                 }
             }
+            .alert(
+                model.activeUpdatePrompt?.title ?? "",
+                isPresented: isShowingUpdatePrompt,
+                presenting: model.activeUpdatePrompt
+            ) { prompt in
+                Button("Update") {
+                    guard let destination = model.updateDestinationForActivePrompt() else {
+                        return
+                    }
+                    openURL(destination)
+                }
+                if !prompt.required {
+                    Button("Later", role: .cancel) {
+                        model.dismissUpdatePrompt()
+                    }
+                }
+            } message: { prompt in
+                Text(prompt.message)
+            }
+            .fullScreenCover(item: $model.instantShareQRPayload) { payload in
+                ISQRRootView(qrPayload: payload, navigator: model.createNavigator())
+            }
     }
 
     @ViewBuilder
@@ -105,8 +130,6 @@ public struct AlbumTransporterRootView: View {
             NavigationStack {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .navigationTitle(model.navigationTitle)
-                    .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(.visible, for: .navigationBar)
                     .toolbarBackground(navigationBarBackground, for: .navigationBar)
                     .toolbarColorScheme(.light, for: .navigationBar)
@@ -115,8 +138,6 @@ public struct AlbumTransporterRootView: View {
             NavigationView {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .navigationTitle(model.navigationTitle)
-                    .navigationBarTitleDisplayMode(.inline)
             }
             .navigationViewStyle(.stack)
         }
@@ -133,6 +154,12 @@ public struct AlbumTransporterRootView: View {
                 telemetryService: container.telemetryService()
             )
             ScanningPageView(viewModel: scanningViewModel)
+        case .genericScan:
+            let genericScanViewModel = GenericQRScanPageViewModel(
+                model: model,
+                telemetryService: container.telemetryService()
+            )
+            GenericQRScanView(viewModel: genericScanViewModel)
         case .pair:
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
@@ -142,11 +169,13 @@ public struct AlbumTransporterRootView: View {
         case .completed:
             CompletionStateView(viewModel: completionViewModel)
         case .error(_):
-            let errorViewModel = ErrorPageViewModel(
-                model: model,
-                telemetryService: container.telemetryService()
-            )
-            ErrorStateView(viewModel: errorViewModel)
+            let errorViewModelFactory = {
+                BackupErrorPageViewModel(
+                    model: model,
+                    telemetryService: container.telemetryService()
+                )
+            }
+            ErrorStateView(viewModelFactory: errorViewModelFactory)
         }
     }
 
@@ -171,6 +200,17 @@ public struct AlbumTransporterRootView: View {
             ],
             startPoint: .top,
             endPoint: .bottom
+        )
+    }
+
+    private var isShowingUpdatePrompt: Binding<Bool> {
+        Binding(
+            get: { model.activeUpdatePrompt != nil },
+            set: { isPresented in
+                if !isPresented {
+                    model.dismissUpdatePrompt()
+                }
+            }
         )
     }
 }

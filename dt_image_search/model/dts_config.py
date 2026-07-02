@@ -3,11 +3,11 @@ import logging
 import os
 from importlib.resources import files
 from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.bm_context import get_context, BMContext
+from dt_image_search.bm_context import BMContext
 
 def get_config() -> dict:
     config = _read_build_vars_from_resource()
-    config_path = get_app_data_path(get_context()) / "config.json"
+    config_path = get_app_data_path() / "config.json"
     if config_path.exists():
         with open(config_path, "r", encoding="utf-8") as f:
             file_config = json.load(f)
@@ -17,7 +17,7 @@ def get_config() -> dict:
 
 
 def _read_build_vars_from_resource() -> dict:
-    resource_path = files("dt_image_search").joinpath("resources", "build_vars")
+    resource_path = files("dt_image_search.resources").joinpath("build_vars")
     if not resource_path.is_file():
         return {}
     try:
@@ -52,6 +52,36 @@ def is_mobile_folder_feature_enabled(default: bool = True) -> bool:
         return _as_bool(mobile_folder_config.get("enabled"), default)
     if "mobile_folder.enabled" in config:
         return _as_bool(config.get("mobile_folder.enabled"), default)
+    return default
+
+
+def is_encryption_feature_enabled(default: bool = True) -> bool:
+    config = get_config()
+    encryption_config = config.get("encryption")
+    if isinstance(encryption_config, dict) and "enabled" in encryption_config:
+        return _as_bool(encryption_config.get("enabled"), default)
+    if "encryption.enabled" in config:
+        return _as_bool(config.get("encryption.enabled"), default)
+    return default
+
+
+def is_strict_security_feature_enabled(default: bool = False) -> bool:
+    config = get_config()
+    strict_security_config = config.get("strict_security")
+    if isinstance(strict_security_config, dict) and "enabled" in strict_security_config:
+        return _as_bool(strict_security_config.get("enabled"), default)
+    if "strict_security.enabled" in config:
+        return _as_bool(config.get("strict_security.enabled"), default)
+    return default
+
+
+def is_instant_share_feature_enabled(default: bool = False) -> bool:
+    config = get_config()
+    instant_share_config = config.get("instant_share")
+    if isinstance(instant_share_config, dict) and "enabled" in instant_share_config:
+        return _as_bool(instant_share_config.get("enabled"), default)
+    if "instant_share.enabled" in config:
+        return _as_bool(config.get("instant_share.enabled"), default)
     return default
 
 

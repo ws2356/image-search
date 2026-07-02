@@ -1,13 +1,38 @@
 import Foundation
+import ISFromPC
 
 enum AppRoute: Equatable, Sendable {
     case home
     case scan
+    case genericScan
     case pair(qrString: String)
     case permissions
     case transfer
     case completed
     case error(ErrorSummary)
+}
+
+extension AppRoute {
+    var routeName: String {
+        switch self {
+        case .home:
+            return "home"
+        case .scan:
+            return "scan"
+        case .genericScan:
+            return "genericScan"
+        case .pair:
+            return "pair"
+        case .permissions:
+            return "permissions"
+        case .transfer:
+            return "transfer"
+        case .completed:
+            return "completed"
+        case .error:
+            return "error"
+        }
+    }
 }
 
 struct ErrorSummary: Equatable, Sendable, Codable {
@@ -117,6 +142,7 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
     var sessionID: String
     var oneTimePasscode: String
     var suggestedUSBPort: Int? = nil
+    var strictSecurityEnabled = false
 
     var endpointTarget: String {
         guard let target = endpointTargets.first else {
@@ -156,12 +182,15 @@ struct PairingQRCodePayload: Codable, Equatable, Sendable {
             URLQueryItem(name: "v", value: String(demo.schemaVersion)),
             URLQueryItem(name: "ept", value: demo.endpointTargets.joined(separator: ",")),
             URLQueryItem(name: "sid", value: demo.sessionID),
-            URLQueryItem(name: "opt", value: demo.oneTimePasscode),
         ]
         if let suggestedUSBPort = demo.suggestedUSBPort {
             queryItems.append(URLQueryItem(name: "usp", value: String(suggestedUSBPort)))
         }
+        if demo.strictSecurityEnabled {
+            queryItems.append(URLQueryItem(name: "sec", value: "1"))
+        }
         components.queryItems = queryItems
+        components.fragment = "opt=\(demo.oneTimePasscode)"
         return components.string ?? "https://dl.boldman.net"
     }
 

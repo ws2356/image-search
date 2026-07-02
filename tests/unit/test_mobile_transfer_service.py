@@ -16,9 +16,16 @@ from urllib.parse import urlsplit
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64, ensure_mobile_pairing_schema
+from dt_image_search.mobile.mobile_payload_encryption import (
+    decrypt_mobile_json_payload,
+    encrypt_mobile_binary_chunk,
+    encrypt_mobile_json_payload,
+    is_mobile_encrypted_payload,
+)
 from dt_image_search.mobile.mobile_trust_proof import derive_trust_proof_b64
 from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
@@ -58,7 +65,7 @@ class TestMobileTransferService(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -147,7 +154,7 @@ class TestMobileTransferService(unittest.TestCase):
         self.assertEqual(complete_status, 200)
         self.assertEqual(complete_response["status"], "completed")
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             asset_row = conn.execute(
                 """
                 SELECT remote_asset_version, local_relative_path
@@ -249,13 +256,164 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
+    def test_live_transfer_http_endpoints_accept_encrypted_json_and_chunk_payloads(self):
+        pairing_context = self._pair_device()
+        session_id = pairing_context["session_id"]
+        device_uuid = pairing_context["device_uuid"]
+        trust_key_b64 = pairing_context["trust_key_b64"]
+
+        encrypted_start_payload = encrypt_mobile_json_payload(
+            payload={
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": session_id,
+                "device_uuid": device_uuid,
+                "trust_proof": derive_trust_proof_b64(
+                    trust_key_b64=trust_key_b64,
+                    purpose=MOBILE_TRANSFER_START_PROOF_PURPOSE,
+                    schema=MOBILE_TRANSFER_SCHEMA,
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                ),
+                "total_assets": 1,
+            },
+            trust_key_b64=trust_key_b64,
+            locator_fields={
+                "session_id": session_id,
+            },
+        )
+        start_status, start_response = self._post_json(
+            MOBILE_TRANSFER_START_PATH,
+            encrypted_start_payload,
+        )
+        if is_mobile_encrypted_payload(start_response):
+            self.assertNotIn("device_uuid", start_response)
+            start_response = decrypt_mobile_json_payload(
+                encrypted_payload=start_response,
+                trust_key_b64=trust_key_b64,
+            )
+        self.assertEqual(start_status, 200)
+        self.assertEqual(start_response["status"], "accepted")
+
+        request_id = uuid.uuid4().hex
+        encrypted_metadata_payload = encrypt_mobile_json_payload(
+            payload={
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": session_id,
+                "device_uuid": device_uuid,
+                "trust_proof": derive_trust_proof_b64(
+                    trust_key_b64=trust_key_b64,
+                    purpose=MOBILE_TRANSFER_ASSET_PROOF_PURPOSE,
+                    schema=MOBILE_TRANSFER_SCHEMA,
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                ),
+                "asset_id": "ph://asset-encrypted-001",
+                "asset_version": "2026-04-09T12:30:00+00:00",
+                "filename": "IMG_ENCRYPTED.JPG",
+                "media_type": "image",
+                "created_at": "2026-04-09T12:00:00+00:00",
+                "updated_at": "2026-04-09T12:30:00+00:00",
+                **self._signature_metadata_fields(b"encrypted-image-bytes"),
+            },
+            trust_key_b64=trust_key_b64,
+            locator_fields={
+                "session_id": session_id,
+            },
+        )
+        stream_start_status, stream_start_response = self._post_transfer_asset_json(
+            endpoint=urlsplit(self._pairing_service.endpoint_url),
+            request_id=request_id,
+            stream_state=TRANSFER_ASSET_STREAM_STATE_START,
+            payload=encrypted_metadata_payload,
+        )
+        if is_mobile_encrypted_payload(stream_start_response):
+            self.assertNotIn("device_uuid", stream_start_response)
+            stream_start_response = decrypt_mobile_json_payload(
+                encrypted_payload=stream_start_response,
+                trust_key_b64=trust_key_b64,
+            )
+        self.assertEqual(stream_start_status, 200)
+        self.assertEqual(stream_start_response["status"], "accepted")
+
+        encrypted_chunk = encrypt_mobile_binary_chunk(
+            chunk=b"encrypted-image-bytes",
+            trust_key_b64=trust_key_b64,
+        )
+        chunk_status, chunk_response = self._post_transfer_asset_binary_chunk(
+            endpoint=urlsplit(self._pairing_service.endpoint_url),
+            request_id=request_id,
+            chunk=encrypted_chunk,
+        )
+        if is_mobile_encrypted_payload(chunk_response):
+            self.assertNotIn("device_uuid", chunk_response)
+            chunk_response = decrypt_mobile_json_payload(
+                encrypted_payload=chunk_response,
+                trust_key_b64=trust_key_b64,
+            )
+        self.assertEqual(chunk_status, 200)
+        self.assertEqual(chunk_response["status"], "accepted")
+
+        stored_status, stored_response = self._post_transfer_asset_json(
+            endpoint=urlsplit(self._pairing_service.endpoint_url),
+            request_id=request_id,
+            stream_state=TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+            payload={
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                TRANSFER_ASSET_STREAM_STATE_FIELD: TRANSFER_ASSET_STREAM_STATE_COMPLETE,
+            },
+        )
+        if is_mobile_encrypted_payload(stored_response):
+            self.assertNotIn("device_uuid", stored_response)
+            stored_response = decrypt_mobile_json_payload(
+                encrypted_payload=stored_response,
+                trust_key_b64=trust_key_b64,
+            )
+        self.assertEqual(stored_status, 200)
+        self.assertEqual(stored_response["status"], "stored")
+        stored_path = Path(pairing_context["folder_path"]) / stored_response["local_relative_path"]
+        self.assertTrue(stored_path.exists())
+        self.assertEqual(stored_path.read_bytes(), b"encrypted-image-bytes")
+
+        encrypted_complete_payload = encrypt_mobile_json_payload(
+            payload={
+                "schema": MOBILE_TRANSFER_SCHEMA,
+                "session_id": session_id,
+                "device_uuid": device_uuid,
+                "trust_proof": derive_trust_proof_b64(
+                    trust_key_b64=trust_key_b64,
+                    purpose=MOBILE_TRANSFER_COMPLETE_PROOF_PURPOSE,
+                    schema=MOBILE_TRANSFER_SCHEMA,
+                    session_id=session_id,
+                    device_uuid=device_uuid,
+                ),
+                "transferred_count": 1,
+                "failed_count": 0,
+            },
+            trust_key_b64=trust_key_b64,
+            locator_fields={
+                "session_id": session_id,
+            },
+        )
+        complete_status, complete_response = self._post_json(
+            MOBILE_TRANSFER_COMPLETE_PATH,
+            encrypted_complete_payload,
+        )
+        if is_mobile_encrypted_payload(complete_response):
+            self.assertNotIn("device_uuid", complete_response)
+            complete_response = decrypt_mobile_json_payload(
+                encrypted_payload=complete_response,
+                trust_key_b64=trust_key_b64,
+            )
+        self.assertEqual(complete_status, 200)
+        self.assertEqual(complete_response["status"], "completed")
+
     def test_start_request_rejects_stopped_session(self):
         pairing_context = self._pair_device()
         session_id = pairing_context["session_id"]
         device_uuid = pairing_context["device_uuid"]
         trust_key_b64 = pairing_context["trust_key_b64"]
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             conn.execute(
                 """
                 UPDATE mobile_backup_sessions
@@ -362,7 +520,7 @@ class TestMobileTransferService(unittest.TestCase):
         self.assertEqual(complete_response["status"], "completed")
         self.assertIn("marked the transfer session as stopped", complete_response["message"])
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             session_row = conn.execute(
                 "SELECT status, transferred_count FROM mobile_backup_sessions WHERE session_id = ?",
                 (pairing_context["session_id"],),
@@ -438,7 +596,7 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             session_row = conn.execute(
                 "SELECT status, ended_at, failed_count FROM mobile_backup_sessions WHERE session_id = ?",
                 (pairing_context["session_id"],),
@@ -520,7 +678,7 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             session_row = conn.execute(
                 "SELECT status, ended_at FROM mobile_backup_sessions WHERE session_id = ?",
                 (pairing_context["session_id"],),
@@ -584,7 +742,7 @@ class TestMobileTransferService(unittest.TestCase):
         self.assertEqual(skipped_response["status"], "skipped")
         self.assertEqual(skipped_response["local_relative_path"], stored_response["local_relative_path"])
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             asset_count_row = conn.execute(
                 "SELECT COUNT(*) AS asset_count FROM mobile_assets WHERE device_uuid = ?",
                 (pairing_context["device_uuid"],),

@@ -6,9 +6,9 @@ from functools import lru_cache
 from importlib.resources import files
 
 _BUILD_TYPE_ENV_VAR = "DTIS_BUILD_TYPE"
-_BUILD_TYPE_PROD = "prod"
-_BUILD_TYPE_DEV = "dev"
-_SUPPORTED_BUILD_TYPES = {_BUILD_TYPE_PROD, _BUILD_TYPE_DEV}
+BUILD_TYPE_PROD = "prod"
+BUILD_TYPE_DEV = "dev"
+_SUPPORTED_BUILD_TYPES = {BUILD_TYPE_PROD, BUILD_TYPE_DEV}
 
 
 def _normalize_build_type(raw_value: str | None) -> str | None:
@@ -21,7 +21,7 @@ def _normalize_build_type(raw_value: str | None) -> str | None:
 
 
 def _read_build_type_from_resource() -> str | None:
-    resource_path = files("dt_image_search").joinpath("resources", "build_vars")
+    resource_path = files("dt_image_search.resources").joinpath("build_vars")
     if not resource_path.is_file():
         return None
 
@@ -52,11 +52,7 @@ def get_build_type() -> str:
     resource_build_type = _read_build_type_from_resource()
     if resource_build_type is not None:
         return resource_build_type
-    return _BUILD_TYPE_PROD
-
-
-def get_app_data_segment() -> str:
-    return "DTImageSearch-dev" if get_build_type() == _BUILD_TYPE_DEV else "DTImageSearch"
+    return BUILD_TYPE_PROD
 
 
 def clear_build_type_cache() -> None:

@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import XCTest
 @testable import AlbumTransporterKit
 
@@ -64,6 +65,46 @@ final class TraceContextPropagationTests: XCTestCase {
         XCTAssertEqual(requestBody["tracestate"] as? String, StaticTraceContextTelemetryClient.traceState)
     }
 
+    func test_transfer_client_decodes_encrypted_transfer_response() async throws {
+        let trustedDesktop = TrustedDesktopRecord(
+            desktopDeviceID: "desktop-device-001",
+            desktopName: "Studio Mac",
+            endpointURL: URL(string: "http://127.0.0.1:38933/api/mobile/pairing/claim")!,
+            mobileDeviceUUID: "ios-device-001",
+            sharedKeyBase64: "shared-key-001",
+            transport: .lan,
+            lastSessionID: "pairing-demo-001",
+            pairedAt: Date(timeIntervalSince1970: 1_776_123_610),
+            encryptionEnabled: true
+        )
+        TraceContextCapturingURLProtocol.responseData = try encryptedResponseData(
+            payload: [
+                "schema": TransferProtocol.schema,
+                "status": "accepted",
+                "message": "Desktop is ready to receive assets.",
+                "session_id": "pairing-demo-001",
+                "device_uuid": "ios-device-001",
+                "total_assets": 3,
+            ],
+            trustKeyBase64: trustedDesktop.sharedKeyBase64,
+            sessionID: trustedDesktop.lastSessionID,
+            deviceUUID: trustedDesktop.mobileDeviceUUID
+        )
+        let client = URLSessionMobileTransferClient(
+            session: makeSession(),
+            telemetryClient: StaticTraceContextTelemetryClient()
+        )
+
+        try await client.startSession(
+            desktop: trustedDesktop,
+            totalAssets: 3
+        )
+
+        let requestBody = try XCTUnwrap(TraceContextCapturingURLProtocol.capturedJSONObject)
+        XCTAssertEqual(requestBody["schema"] as? String, MobilePayloadEncryptionProtocol.schema)
+        XCTAssertNil(requestBody["device_uuid"])
+    }
+
     private func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TraceContextCapturingURLProtocol.self]
@@ -101,6 +142,45 @@ final class TraceContextPropagationTests: XCTestCase {
           "total_assets": 3
         }
         """.data(using: .utf8)!
+    }
+
+    private func pairingTrustKey(
+        sessionID: String,
+        oneTimePasscode: String,
+        platform: String
+    ) -> String {
+        let material = [
+            PairingProtocol.schema,
+            sessionID,
+            oneTimePasscode,
+            platform,
+        ].joined(separator: "\n")
+        let digest = SHA256.hash(data: Data(material.utf8))
+        return base64URLEncodedString(Data(digest))
+    }
+
+    private func encryptedResponseData(
+        payload: [String: Any],
+        trustKeyBase64: String,
+        sessionID: String,
+        deviceUUID: String? = nil,
+        platform: String? = nil
+    ) throws -> Data {
+        let encryptedPayload = try MobilePayloadEncryption.encryptPayloadObject(
+            payload,
+            trustKeyBase64: trustKeyBase64,
+            sessionID: sessionID,
+            deviceUUID: deviceUUID,
+            platform: platform
+        )
+        return try JSONEncoder.pairingEncoder.encode(encryptedPayload)
+    }
+
+    private func base64URLEncodedString(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 }
 

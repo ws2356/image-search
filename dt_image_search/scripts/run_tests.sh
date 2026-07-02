@@ -46,6 +46,16 @@ fi
 export IS_TESTING=true
 
 unit_and_functional_tests=(
+  tests/unit/test_instant_share_client.py
+  tests/unit/test_instant_share_session.py
+  tests/unit/test_instant_share_delivery.py
+  tests/unit/test_instant_share_receiver.py
+  tests/unit/test_instant_share_lifecycle_notifications.py
+  tests/unit/test_instant_share_runtime.py
+  tests/unit/test_instant_share_sender_validation.py
+  tests/unit/test_instant_share_signature_verification.py
+  tests/unit/test_instant_share_tls_server.py
+  tests/unit/test_instant_share_telemetry.py
   tests/unit/test_mobile_apple_mobile_device_support.py
   tests/unit/test_dts_index.py
   tests/unit/test_browse_controller_mobile_folder.py
@@ -69,10 +79,12 @@ unit_and_functional_tests=(
   tests/unit/test_fs_image_list_model.py
   tests/unit/test_thumbnail_job.py
   tests/unit/test_crash_support.py
+  tests/unit/test_device_identity.py
   tests/unit/test_runtime_metadata.py
   tests/unit/test_search_controller.py
   tests/functional/test_mobile_backup_flow.py
   tests/functional/test_usb_handshake_pc_side.py
+  # tests/functional/test_instant_share_e2e.py
   tests/functional/test_crash_recovery_harness.py
 )
  # tests/functional/test_app_flow.py
@@ -102,4 +114,17 @@ if [ "$has_failed" = true ]; then
   exit 1
 else
   echo "All tests passed successfully."
+fi
+
+# Run snapshot tests (if pytest-qt is available)
+echo ""
+echo "Running snapshot tests..."
+if $python_bin -c "import pytest_qt" 2>/dev/null; then
+  if ! $python_bin -m pytest tests/snapshot/ -v; then
+    echo "Some snapshot tests failed."
+    exit 1
+  fi
+  echo "All snapshot tests passed."
+else
+  echo "Skipping snapshot tests (pytest-qt not installed)."
 fi

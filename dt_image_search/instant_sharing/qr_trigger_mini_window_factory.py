@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+import logging
+import socket
+from typing import Any
+
+from PySide6.QtCore import QObject, Qt, Signal
+
+from dt_image_search.instant_sharing.activation_policy import (
+    acquire_activation_policy,
+    bring_to_front,
+    release_activation_policy,
+)
+from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry
+from dt_image_search.instant_sharing.qr_trigger_mini_window import QRTriggerMiniWindow
+from dt_image_search.tools.dts_dispatcher import dispatcher
+
+_logger = logging.getLogger(__name__)
+
+
+class _Bridge(QObject):
+    stash_created = Signal(object)  # StashEntry
+    stash_claimed = Signal(str, str)  # stash_id, peer_device_name
+    stash_expired = Signal(str)
+
+
+class QRTriggerMiniWindowFactory:
+    def __init__(
+        self,
+        handler: QRTriggerHandler,
+        *,
+        pc_name: str = "",
+        pc_port: int,
+        pc_tls_port: int,
+        device_id: str = "",
+    ) -> None:
+        self._handler = handler
+        self._pc_name = pc_name or socket.gethostname()
+        self._pc_port = pc_port
+        self._pc_tls_port = pc_tls_port
+        self._device_id = device_id
+        self._windows: dict[str, QRTriggerMiniWindow] = {}
+        self._stash_created_sub: Any = None
+        self._stash_claimed_sub: Any = None
+        self._stash_expired_sub: Any = None
+        self._bridge = _Bridge()
+        self._bridge.stash_created.connect(self._show_window, Qt.QueuedConnection)
+        self._bridge.stash_claimed.connect(self._mark_claimed, Qt.QueuedConnection)
+        self._bridge.stash_expired.connect(self._mark_expired, Qt.QueuedConnection)
+
+    def start(self) -> None:
+        if self._stash_created_sub is not None:
+            return
+        self._stash_created_sub = self._handler._on_stash_created
+        self._stash_claimed_sub = self._handler._on_stash_claimed
+        self._stash_expired_sub = self._handler._on_stash_expired
+        self._handler._on_stash_created = self._on_stash_created
+        self._handler._on_stash_claimed = self._on_stash_claimed
+        self._handler._on_stash_expired = self._on_stash_expired
+        _logger.info("[QRTriggerMiniWindowFactory] started")
+
+    def stop(self) -> None:
+        self._handler._on_stash_created = self._stash_created_sub
+        self._handler._on_stash_claimed = self._stash_claimed_sub
+        self._handler._on_stash_expired = self._stash_expired_sub
+        self._stash_created_sub = None
+        self._stash_claimed_sub = None
+        self._stash_expired_sub = None
+        window_count = len(self._windows)
+        for window in list(self._windows.values()):
+            try:
+                window.close()
+            except RuntimeError:
+                pass
+        self._windows.clear()
+        for _ in range(window_count):
+            release_activation_policy()
+        _logger.info("[QRTriggerMiniWindowFactory] stopped")
+
+    def _on_stash_created(self, stash: StashEntry) -> None:
+        self._bridge.stash_created.emit(stash)
+
+    def _on_stash_claimed(self, stash_id: str, peer_device_name: str = "") -> None:
+        self._bridge.stash_claimed.emit(stash_id, peer_device_name)
+
+    def _on_stash_expired(self, stash_id: str) -> None:
+        self._bridge.stash_expired.emit(stash_id)
+
+    def _show_window(self, stash: StashEntry) -> None:
+        session_id = self._handler.get_session_id_for_stash(stash.stash_id) or ""
+        # Extract batch metadata from stash.files
+        file_count = len(stash.files) if stash.files else 0
+        filenames: list[str] = []
+        for fe in stash.files:
+            if fe.filename:
+                filenames.append(fe.filename)
+        window = QRTriggerMiniWindow(
+            stash,
+            session_id=session_id,
+            pc_name=self._pc_name,
+            pc_port=self._pc_port,
+            pc_tls_port=self._pc_tls_port,
+            device_id=self._device_id,
+            on_cancel=self._on_cancel,
+            file_count=file_count,
+            filenames=filenames if filenames else None,
+        )
+        window.show_qr()
+        window.show()
+        bring_to_front(window)
+        self._windows[stash.stash_id] = window
+        acquire_activation_policy()
+        _logger.info(
+            "[QRTriggerMiniWindowFactory] window shown: stash=%s type=%s file_count=%d session_id=%s",
+            stash.stash_id,
+            stash.content_type,
+            file_count,
+            session_id,
+        )
+
+    def _on_cancel(self, stash_id: str) -> None:
+        self._handler.cancel_stash(stash_id)
+        if self._windows.pop(stash_id, None) is not None:
+            release_activation_policy()
+
+    def _mark_claimed(self, stash_id: str, peer_device_name: str = "") -> None:
+        window = self._windows.pop(stash_id, None)
+        if window is not None:
+            window.on_claimed(peer_device_name=peer_device_name)
+            release_activation_policy()
+
+    def _mark_expired(self, stash_id: str) -> None:
+        window = self._windows.pop(stash_id, None)
+        if window is not None:
+            window.on_expired()
+            release_activation_policy()

@@ -47,10 +47,23 @@ class TestMobilePairingSession(unittest.TestCase):
         self.assertEqual(payload_query["sid"][0], session.session_id)
         self.assertEqual(payload_query["opt"][0], android_token.one_time_passcode)
         self.assertEqual(payload_query["usp"][0], str(android_token.suggested_usb_port))
+        self.assertNotIn("sec", payload_query)
         self.assertGreaterEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MIN)
         self.assertLessEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MAX)
         self.assertGreaterEqual(ios_token.suggested_usb_port, USB_SUGGESTED_PORT_MIN)
         self.assertLessEqual(ios_token.suggested_usb_port, USB_SUGGESTED_PORT_MAX)
+
+    def test_create_adds_strict_security_flag_to_qr_payload_when_enabled(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = MobilePairingSessionDraft.create(
+                temp_dir,
+                desktop_endpoint_url="http://127.0.0.1:38933/api/mobile/pairing/claim",
+                strict_security_enabled=True,
+            )
+
+        payload_query = parse_qs(urlsplit(session.token_for(MobilePlatform.IOS).payload).query)
+
+        self.assertEqual(payload_query["sec"][0], "1")
 
     def test_refresh_replaces_only_requested_platform_token(self):
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)

@@ -40,9 +40,9 @@ final class HomePageViewModel: ObservableObject {
             }
     }
 
-    func handlePrimaryActionTapped() async {
+    func handlePrimaryActionTapped(target: HomeClickTarget) async {
         telemetryService.recordInteraction(name: "primary_action_tapped", location: "home")
-        let result = HomePageResult(result: .success(()))
+        let result = HomePageResult(result: .success(target))
         await model.onHomeCompleted(with: result)
     }
 

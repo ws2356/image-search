@@ -34,6 +34,7 @@ class TransferAssetUploadPayload:
     content_length: int
     temp_file_path: str | None = None
     content_sha1: str | None = None
+    encryption_trust_key_b64: str | None = None
 
 
 @dataclass(frozen=True)

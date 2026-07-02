@@ -19,6 +19,12 @@ from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_STATE_START,
     TransferAssetUploadStream,
 )
+from dt_image_search.mobile.mobile_payload_encryption import (
+    MobilePayloadEncryptionError,
+    decrypt_mobile_binary_chunk,
+    decrypt_mobile_json_payload,
+    is_mobile_encrypted_payload,
+)
 from dt_image_search.mobile.transport.contracts import (
     TRANSFER_ASSET_OPERATION,
     MobileTransportContext,
@@ -180,6 +186,7 @@ class UsbWebSocketTransportAdapter:
         background_probe_interval_seconds: float = 6.0,
         background_response_poll_timeout_seconds: float = 1.0,
         is_desktop_foreground_fn: Callable[[], bool] | None = None,
+        resolve_transfer_trust_key: Callable[..., str | None] | None = None,
     ):
         if probe_interval_seconds <= 0:
             raise ValueError("USB probe_interval_seconds must be greater than zero.")
@@ -198,6 +205,7 @@ class UsbWebSocketTransportAdapter:
         self._background_probe_interval_seconds = background_probe_interval_seconds
         self._background_response_poll_timeout_seconds = background_response_poll_timeout_seconds
         self._is_desktop_foreground = is_desktop_foreground_fn
+        self._resolve_transfer_trust_key = resolve_transfer_trust_key
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._worker_thread: threading.Thread | None = None
@@ -664,9 +672,23 @@ class UsbWebSocketTransportAdapter:
             metadata_payload = dict(raw_body)
             metadata_payload.pop(TRANSFER_ASSET_STREAM_STATE_FIELD, None)
             metadata_payload.pop("chunk_size", None)
+            encrypted_chunk_trust_key: str | None = None
+            if is_mobile_encrypted_payload(metadata_payload):
+                (
+                    metadata_payload,
+                    encrypted_chunk_trust_key,
+                    decrypt_error_message,
+                ) = self._decrypt_transfer_asset_stream_metadata(
+                    metadata_payload=metadata_payload,
+                )
+                if decrypt_error_message is not None:
+                    return self._transport_error_response(
+                        message=decrypt_error_message,
+                    )
             self._start_pending_asset_upload(
                 request_id=request_id,
                 metadata_payload=metadata_payload,
+                encryption_trust_key_b64=encrypted_chunk_trust_key,
             )
             return None
         if stream_state == TRANSFER_ASSET_STREAM_STATE_COMPLETE:
@@ -684,15 +706,29 @@ class UsbWebSocketTransportAdapter:
         *,
         request_id: str,
         metadata_payload: dict[str, object],
+        encryption_trust_key_b64: str | None = None,
     ) -> None:
         with self._lock:
             self._asset_upload_stream.start(
                 request_id=request_id,
                 metadata_payload=metadata_payload,
+                encryption_trust_key_b64=encryption_trust_key_b64,
             )
 
     def _append_pending_asset_chunk(self, chunk: bytes) -> None:
         framed_request_id, frame_payload = self._decode_transfer_asset_binary_frame(chunk)
+        with self._lock:
+            encrypted_chunk_trust_key = self._asset_upload_stream.encryption_trust_key(
+                request_id=framed_request_id,
+            )
+        if encrypted_chunk_trust_key is not None:
+            try:
+                frame_payload = decrypt_mobile_binary_chunk(
+                    encrypted_chunk=frame_payload,
+                    trust_key_b64=encrypted_chunk_trust_key,
+                )
+            except MobilePayloadEncryptionError as exc:
+                raise RuntimeError(str(exc)) from exc
         append_error: str | None = None
         with self._lock:
             append_error = self._asset_upload_stream.append_chunk(
@@ -758,6 +794,42 @@ class UsbWebSocketTransportAdapter:
                 "Desktop rejected transfer asset stream chunk because binary frame length does not match the header."
             )
         return request_id, frame_payload
+
+    def _decrypt_transfer_asset_stream_metadata(
+        self,
+        *,
+        metadata_payload: dict[str, object],
+    ) -> tuple[dict[str, object], str | None, str | None]:
+        if self._resolve_transfer_trust_key is None:
+            return (
+                metadata_payload,
+                None,
+                "Desktop does not support encrypted transfer asset metadata requests.",
+            )
+        session_id = metadata_payload.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return (
+                metadata_payload,
+                None,
+                "Desktop rejected encrypted transfer asset metadata field 'session_id'.",
+            )
+        trust_key_b64 = self._resolve_transfer_trust_key(
+            session_id=session_id.strip(),
+        )
+        if trust_key_b64 is None:
+            return (
+                metadata_payload,
+                None,
+                "Desktop rejected the transfer session.",
+            )
+        try:
+            decrypted_payload = decrypt_mobile_json_payload(
+                encrypted_payload=metadata_payload,
+                trust_key_b64=trust_key_b64,
+            )
+        except MobilePayloadEncryptionError as exc:
+            return metadata_payload, None, str(exc)
+        return decrypted_payload, trust_key_b64, None
 
     def _complete_pending_asset_upload(
         self,
