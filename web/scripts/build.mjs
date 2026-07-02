@@ -11,6 +11,7 @@ const distFile = path.join(distDir, "index.html");
 const distAssets = path.join(distDir, "assets");
 const distScreenshots = path.join(distAssets, "screenshots");
 const macosDownloadUrl = process.env.AUSEARCH_MACOS_DOWNLOAD_URL;
+const instantshareDownloadUrl = process.env.INSTANTSHARE_DOWNLOAD_URL;
 const screenshotSizeLimitBytes = 512 * 1024;
 const screenshotMinDimension = 320;
 const screenshotScaleFactor = 0.85;
@@ -18,11 +19,13 @@ const screenshotScaleFactor = 0.85;
 if (!macosDownloadUrl) {
   throw new Error("AUSEARCH_MACOS_DOWNLOAD_URL is required to build dist/index.html");
 }
+if (!instantshareDownloadUrl) {
+  throw new Error("INSTANTSHARE_DOWNLOAD_URL is required to build dist/index.html");
+}
 
-const html = (await readFile(srcFile, "utf8")).replaceAll(
-  "__AUSEARCH_MACOS_DOWNLOAD_URL__",
-  escapeHtmlAttribute(macosDownloadUrl),
-);
+let html = await readFile(srcFile, "utf8");
+html = html.replaceAll("__AUSEARCH_MACOS_DOWNLOAD_URL__", escapeHtmlAttribute(macosDownloadUrl));
+html = html.replaceAll("__INSTANTSHARE_DOWNLOAD_URL__", escapeHtmlAttribute(instantshareDownloadUrl));
 
 await rm(distDir, { recursive: true, force: true });
 await mkdir(distDir, { recursive: true });
