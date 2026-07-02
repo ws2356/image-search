@@ -525,7 +525,7 @@ def _preload_model(ctx: BMContext):
             log("info", message=f"Attempt {_attempt + 1} before loading model")
             model, _, preprocess = open_clip.create_model_and_transforms(
                 ctx.model_name,
-                pretrained=ctx.get_pretrained_model_name_or_path(),
+                pretrained=ctx.get_pretrained_model_name(),
                 download_callback=_throttled_progress_callback
                 )
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
@@ -543,7 +543,7 @@ def _preload_model(ctx: BMContext):
             #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
             break
         except Exception as e:
-            log("error", "model", message=f"Attempt {_attempt + 1}. Pretrained: {ctx.get_pretrained_model_name_or_path()}. offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. model version: {ctx.version}. offline mode: {ctx.offline_mode}. Preloading model failed: {e}")
+            log("error", "model", message=f"Attempt {_attempt + 1}. Pretrained: {ctx.get_pretrained_model_name()}. offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. model version: {ctx.version}. offline mode: {ctx.offline_mode}. Preloading model failed: {e}")
             if _attempt == _MAX_ATTEMPTS - 1:
                 status_bar_messenger.show_status_message.emit("Model load failed")
             else:

@@ -1,7 +1,9 @@
 import hashlib
 import os
 from pathlib import Path
+import requests
 import threading
+import zipfile
 import dt_image_search.index.bm_model_spec as bm_model_spec
 from dt_image_search.tools.bm_sys import is_cn, is_language_en
 
@@ -21,46 +23,29 @@ class BMContext:
         self._model_file_info_url = model_file_info_url
         self._model_file_info = None
 
-    def get_pretrained_model_name_or_path(self) -> str:
-        if self.offline_mode:
-            return self.get_model_cache_path()
-        else:
+    def get_pretrained_model_name(self) -> str:
             return self._pretrained_model
 
     def get_model_cache_path(self) -> str:
         from dt_image_search.model.dts_fs import get_app_data_path
-        if self.version == 2:
-            return str(get_app_data_path() / "model_cache")
-        elif self.version == 1:
-            return os.path.join(get_app_data_path(), "open_clip_pytorch_model.bin")
-        else:
-            raise ValueError("Unknown BMContext")
+        return str(get_app_data_path() / "model_cache")
 
     def is_local_cache_valid(self) -> bool:
-        if self.version == 1:
-            return os.path.exists(self.get_model_cache_path()) and _check_md5(self.get_model_cache_path(), self._get_cache_file_md5())
-        elif self.version == 2:
-            return os.path.exists(self.get_model_cache_path()) and os.path.isdir(self.get_model_cache_path())
+        if self.offline_mode:
+            return os.path.exists(self.get_model_cache_path())
         else:
-            raise ValueError("Unknown BMContext")
+            return False
 
     def is_downloaded_file_valid(self, file_path) -> bool:
         return _check_md5(file_path, self._get_cache_file_md5())
 
     def process_downloaded_file(self, tmp_file_path):
-        if self.version == 1:
-            final_path = self.get_model_cache_path()
-            os.rename(tmp_file_path, final_path)
-        elif self.version == 2:
-            final_path = self.get_model_cache_path()
-            Path(final_path).mkdir(parents=True, exist_ok=True)
-            # unzip tmp_file_path to final_path
-            import zipfile
-            with zipfile.ZipFile(tmp_file_path, 'r') as zip_ref:
-                zip_ref.extractall(final_path)
-            os.remove(tmp_file_path)
-        else:
-            raise ValueError("Unknown BMContext")
+        final_path = self.get_model_cache_path()
+        Path(final_path).mkdir(parents=True, exist_ok=True)
+        # unzip tmp_file_path to final_path
+        with zipfile.ZipFile(tmp_file_path, 'r') as zip_ref:
+            zip_ref.extractall(final_path)
+        os.remove(tmp_file_path)
 
     def get_model_download_url(self) -> str:
         return self._get_model_file_info()["download_url"]
@@ -71,7 +56,7 @@ class BMContext:
     def _get_model_file_info(self) -> dict:
         if self.version == 1:
             return self._get_model_file_info() or \
-                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v1/open_clip_pytorch_model.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v1/v1.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
         elif self.version == 2:
             return self._get_model_file_info() or \
                 { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v2/v2.zip", "md5": "92fb01a4fd9ce5e2fb82644aadc81b34" }
@@ -80,7 +65,6 @@ class BMContext:
 
     def _get_model_file_info(self) -> dict:
         if self._model_file_info is None:
-            import requests
             url = self._model_file_info_url
             try:
                 response = requests.get(url, timeout=10, allow_redirects=True)
