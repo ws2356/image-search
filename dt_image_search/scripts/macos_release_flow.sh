@@ -77,7 +77,7 @@ if [[ ! -f "$app_info_plist" ]]; then
     echo "Error: AppInfo.plist not found at expected path: $app_info_plist"
     exit 1
 fi
-tag="$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$app_info_plist")"
+tag="$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$app_info_plist")-$product"
 if [[ -z "$tag" ]]; then
     echo "Error: CFBundleVersion not found or empty in AppInfo.plist"
     exit 1
@@ -157,19 +157,17 @@ if [ "$skip_release" = false ]; then
         exit 1
     fi
     echo "──── Step 8: Push to Github Release"
-    (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
+    (cd "$parent_repo_root" && "$this_dir/create_github_release.sh" \
         --repo "$parent_repo" --tag "$tag" \
         --title "Release $tag ($product)" --notes "Bug free code" \
         --asset-path "$package_file" --target main)
 
-    # TODO: get the release url for the other package (main app or instant share) and set both links as environment variables for the web build
-    if [[ "$product" == "main-app" ]]; then
-        echo "──── Step 9: Release to Official Side (only for main-app)"
-        (cd "$repo_root/web" && \
-            export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/${app_bundle_name}.pkg" && \
-            npm run build && \
-            npm run sync)
-    fi
+    echo "──── Step 9: Release to Official Side (only for main-app)"
+    # TODO: query the downoad URL of both components - main app and instant share - and update the web repo accordingly
+    (cd "$repo_root/web" && \
+        export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/$(basename "$package_file")" && \
+        npm run build && \
+        npm run sync)
 fi
 
 echo "──── Done!"

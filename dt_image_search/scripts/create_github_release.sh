@@ -8,7 +8,7 @@ set -euo pipefail
 #       --tag v1.2.3 \
 #       --title "AuSearch v1.2.3" \
 #       --notes-file ./release-notes.md \
-#       --pkg-path ./pyinstaller-dist-prod/AuSearch.pkg \
+#       --asset-path ./pyinstaller-dist-prod/AuSearch.pkg \
 #       [--repo ws2356/image-search] \
 #       [--target main] \
 #       [--draft] \
@@ -124,10 +124,12 @@ if [[ -n "$TARGET" ]]; then
     COMMON_FLAGS+=(--target "$TARGET")
 fi
 
+git tag "$TAG"
+git push origin "$TAG"
+
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-    echo "Release '$TAG' already exists in $REPO. Updating metadata and replacing asset..."
-    gh release edit "$TAG" "${EDIT_FLAGS[@]}" --title "$TITLE" "${NOTES_ARGS[@]}"
-    gh release upload "$TAG" "$ASSET_PATH" --repo "$REPO" --clobber
+    echo "Release '$TAG' already exists in $REPO. Aborting to avoid overwriting. Use a different tag or delete the existing release first."
+    exit 1
 else
     echo "Creating release '$TAG' in $REPO..."
     gh release create "$TAG" "$ASSET_PATH" "${COMMON_FLAGS[@]}" --title "$TITLE" "${NOTES_ARGS[@]}"
