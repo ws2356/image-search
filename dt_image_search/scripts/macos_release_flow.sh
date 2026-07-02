@@ -156,7 +156,7 @@ if [ "$skip_release" = false ]; then
         echo "Error: Package file not found. Ensure build and packaging steps completed successfully."
         exit 1
     fi
-    echo "-- Step 8: Push to Github Release"
+    echo "──── Step 8: Push to Github Release"
     (cd "$parent_repo_root" && git push && "$this_dir/create_github_release.sh" \
         --repo "$parent_repo" --tag "$tag" \
         --title "Release $tag ($product)" --notes "Bug free code" \
@@ -164,7 +164,7 @@ if [ "$skip_release" = false ]; then
 
     # TODO: get the release url for the other package (main app or instant share) and set both links as environment variables for the web build
     if [[ "$product" == "main-app" ]]; then
-        echo "-- Step 9: Release to Official Side (only for main-app)"
+        echo "──── Step 9: Release to Official Side (only for main-app)"
         (cd "$repo_root/web" && \
             export AUSEARCH_MACOS_DOWNLOAD_URL="https://github.com/$parent_repo/releases/download/$tag/${app_bundle_name}.pkg" && \
             npm run build && \
@@ -172,4 +172,4 @@ if [ "$skip_release" = false ]; then
     fi
 fi
 
-echo "Done!"
+echo "──── Done!"
