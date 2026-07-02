@@ -4,6 +4,7 @@ from pathlib import Path
 import requests
 import threading
 import zipfile
+import tarfile
 import dt_image_search.index.bm_model_spec as bm_model_spec
 from dt_image_search.tools.bm_sys import is_cn, is_language_en
 
@@ -43,8 +44,8 @@ class BMContext:
         final_path = self.get_model_cache_path()
         Path(final_path).mkdir(parents=True, exist_ok=True)
         # unzip tmp_file_path to final_path
-        with zipfile.ZipFile(tmp_file_path, 'r') as zip_ref:
-            zip_ref.extractall(final_path)
+        with tarfile.open(tmp_file_path, 'r:gz') as tar_ref:
+            tar_ref.extractall(final_path)
         os.remove(tmp_file_path)
 
     def get_model_download_url(self) -> str:
@@ -54,16 +55,20 @@ class BMContext:
         return self._get_model_file_info()["md5"]
     
     def _get_model_file_info(self) -> dict:
+        ret = None
         if self.version == 1:
-            return self._get_model_file_info() or \
-                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip-model-v1/v1.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
+            ret = self._load_model_file_info() or \
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/model-en/models.tar.gz", "md5": "a459f820eece24bf929d49d4ab0d2333" }
         elif self.version == 2:
-            return self._get_model_file_info() or \
-                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v2/v2.zip", "md5": "92fb01a4fd9ce5e2fb82644aadc81b34" }
+            ret = self._load_model_file_info() or \
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/model-all/models.tar.gz", "md5": "1f9483b31509986f3991cc03ff640cf8" }
         else:
             raise ValueError("Unknown BMContext")
+        from dt_image_search.telemetry.telemetry_client import log
+        log("info", message=f"Model file info for version {self.version}: {ret}")
+        return ret
 
-    def _get_model_file_info(self) -> dict:
+    def _load_model_file_info(self) -> dict:
         if self._model_file_info is None:
             url = self._model_file_info_url
             try:

@@ -17,7 +17,7 @@ def _download_pretrained_model(ctx: BMContext):
             log("debug", message=f"Model already exists at: {ctx.get_model_cache_path()}")
             return
 
-        log("info", message="Start downloading pretrained model")
+        log("info", message=f"Start downloading pretrained model - {ctx.get_model_download_url()}")
         tmp_path = f"{ctx.get_model_cache_path()}.tmp"
 
         try:
