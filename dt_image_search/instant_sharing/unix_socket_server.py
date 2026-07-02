@@ -5,6 +5,8 @@ import logging
 import threading
 from pathlib import Path
 from typing import Callable
+from PySide6.QtCore import QStandardPaths
+from Foundation import NSFileManager
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -25,8 +27,8 @@ def _group_container_socket_path(group_container_dir: Path | None = None) -> Pat
     Both the launch agent (non-sandboxed) and the Share Extension (sandboxed) use
     this path, bridged by the ``com.apple.security.application-groups`` entitlement.
     """
-    container_root = group_container_dir or Path.home() / "Library" / "Group Containers" / APP_GROUP_ID
-    return container_root / SOCKET_RELATIVE_PATH
+    url = NSFileManager.defaultManager().containerURLForSecurityApplicationGroupIdentifier_(APP_GROUP_ID)
+    return Path(url.path()) / SOCKET_RELATIVE_PATH
 
 
 def _build_app(

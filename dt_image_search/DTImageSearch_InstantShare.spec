@@ -48,7 +48,7 @@ datas += [(str(build_vars_path), "dt_image_search/resources")]
 # UPX is disabled on macOS: UPX modifies Mach-O headers in a way that breaks
 # code signatures and notarization.  Enable it only on non-macOS platforms.
 upx_enabled = sys.platform != "darwin"
-excludes = ["torchvision", "torch", "faiss", "transformers"]
+excludes = ["torchvision", "torch", "transformers", "faiss-cpu", "tensorflow", "hf-get", "huggingface_hub", "pymobiledevice3"]
 if sys.platform == "darwin":
     excludes += [
         "IPython",
