@@ -56,7 +56,7 @@ class BMContext:
     def _get_model_file_info(self) -> dict:
         if self.version == 1:
             return self._get_model_file_info() or \
-                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v1/v1.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/clip-model-v1/v1.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
         elif self.version == 2:
             return self._get_model_file_info() or \
                 { "download_url": "https://github.com/ws2356/image-search/releases/download/clip_model-v2/v2.zip", "md5": "92fb01a4fd9ce5e2fb82644aadc81b34" }
