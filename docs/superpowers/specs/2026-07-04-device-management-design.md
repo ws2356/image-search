@@ -26,9 +26,9 @@ ShareExtension ─ ISFromMobile ── Common
 ```
 InstantShareApp.swift
   └── RootView (new, in the app target)
-        ├── [default] DeviceManagementView (ISDeviceManagement)
-        │     ├── List of TrustedDevice rows (name, deviceID)
-        │     └── Toolbar: QR scan button
+        ├── [default] DeviceManagementView (ISDeviceManagement, no toolbar)
+        │     └── List of TrustedDevice rows (name, deviceID)
+        ├── Toolbar: QR scan button (owned by RootView, outside ISDeviceManagement)
         └── [fullScreenCover] ISQRRootView (ISFromPC, separate nav stack)
               └── NavigationStack
                     ├── [.scan] ISQRScanPageView → scans QR
@@ -91,7 +91,7 @@ Since `ISDeviceManagement` does not depend on `ISFromMobile`, it cannot use the 
 - List of `TrustedDevice` rows
 - Each row shows device name and device ID
 - Swipe-to-delete action
-- Toolbar button with QR code icon
+- No toolbar — the enclosing `RootView` owns all toolbar items including the QR button
 - Empty state when no devices paired
 - Uses `DesignSystem` tokens from Common (colors, spacing, typography)
 
@@ -100,7 +100,7 @@ Since `ISDeviceManagement` does not depend on `ISFromMobile`, it cannot use the 
 **Loading:**
 ```
 DeviceManagementFeature.onAppear
-  → identityClient.loadAllPeerCertificates()
+  → appIdentityProvider.loadAllPeerCertificates()
   → map [SecCertificate] → [TrustedDevice] (extract commonName, deviceUUID, pubkeyHash)
   → set state.trustedDevices
 ```
@@ -109,7 +109,7 @@ DeviceManagementFeature.onAppear
 ```
 User swipes to delete
   → store.send(.deleteDevice(device))
-  → identityClient.deletePeerCertificate(forPubkeyHash: device.pubkeyHash)
+  → appIdentityProvider.deletePeerCertificate(forPubkeyHash: device.pubkeyHash)
   → remove from state.trustedDevices
 ```
 
@@ -196,7 +196,7 @@ struct InstantShareApp: App {
 }
 ```
 
-**RootView** (new file in the app target, not in any package):
+**RootView** (new file in the app target, not in any package) — wraps `DeviceManagementView`, owns the QR toolbar button and the full-screen cover:
 
 ```swift
 struct RootView: View {
@@ -205,14 +205,23 @@ struct RootView: View {
     @Binding var pendingQRPayload: QRClaimPayload?
 
     var body: some View {
-        DeviceManagementView()
-            .fullScreenCover(isPresented: $showQRSheet) {
-                if qrSheetInitialState == .scan {
-                    ISQRRootView(navigator: QRSheetNavigator(dismiss: { showQRSheet = false }))
-                } else if let payload = pendingQRPayload {
-                    ISQRRootView(qrPayload: payload, navigator: QRSheetNavigator(dismiss: { showQRSheet = false }))
+        NavigationStack {
+            DeviceManagementView()
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: { showQRSheet = true }) {
+                            Image(systemName: "qrcode.viewfinder")
+                        }
+                    }
                 }
-            }
+                .fullScreenCover(isPresented: $showQRSheet) {
+                    if qrSheetInitialState == .scan {
+                        ISQRRootView(navigator: QRSheetNavigator(dismiss: { showQRSheet = false }))
+                    } else if let payload = pendingQRPayload {
+                        ISQRRootView(qrPayload: payload, navigator: QRSheetNavigator(dismiss: { showQRSheet = false }))
+                    }
+                }
+        }
     }
 }
 ```
