@@ -19,6 +19,7 @@ public protocol AppIdentityProviding: Sendable {
     func peerCertificate(forPubkeyHash hash: Data) async throws -> SecCertificate?
     func peerCertificate(for cert: SecCertificate) async throws -> SecCertificate?
     func deletePeerCertificate(forPubkeyHash hash: Data) async throws
+    func loadAllPeerCertificates() async throws -> [SecCertificate]
 }
 
 public extension AppIdentityProviding {
@@ -54,7 +55,7 @@ public actor KeychainAppIdentityProvider: AppIdentityProviding {
     private static let keyLabel = "AuBackup App Identity"
     private static let SELF_CERT_VERSION = 3
     private static let certVersionOID = ASN1ObjectIdentifier("2.25.37020860436019520")
-    static let deviceIdOID = ASN1ObjectIdentifier("2.25.37020860436019521")
+    public static let deviceIdOID = ASN1ObjectIdentifier("2.25.37020860436019521")
     
     static var sharedAccessGroup: String {
         return Bundle.main.object(
