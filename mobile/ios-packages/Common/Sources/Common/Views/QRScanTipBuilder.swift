@@ -6,6 +6,7 @@
 //
 import SwiftUI
 
+#if os(iOS)
 public struct QRScanTipBuilder {
     static public func buildBackupSessionScanTips() -> some View {
         buildScanTipsImpl {
@@ -62,3 +63,4 @@ public struct QRScanTipBuilder {
         }
     }
 }
+#endif

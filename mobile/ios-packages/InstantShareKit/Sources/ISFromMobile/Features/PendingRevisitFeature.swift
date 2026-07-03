@@ -9,6 +9,7 @@ import ComposableArchitecture
 import Common
 import Foundation
 
+#if os(iOS)
 @Reducer
 public struct PendingRevisitFeature {
     @ObservableState
@@ -111,3 +112,4 @@ public struct PendingRevisitFeature {
         }
     }
 }
+#endif

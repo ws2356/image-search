@@ -6,6 +6,7 @@ let package = Package(
     name: "InstantShareKit",
     platforms: [
         .iOS(.v15),
+        .macOS(.v10_15),
     ],
     products: [
         .library(

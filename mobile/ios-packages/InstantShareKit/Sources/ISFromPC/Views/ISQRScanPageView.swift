@@ -1,6 +1,7 @@
 import SwiftUI
 import Common
 
+#if os(iOS)
 struct ISQRScanPageView: View {
     @StateObject private var viewModel: ISQRScanViewModel
     
@@ -14,3 +15,4 @@ struct ISQRScanPageView: View {
         }
     }
 }
+#endif

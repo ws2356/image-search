@@ -6,7 +6,9 @@
 //
 import Combine
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 public protocol LocalDeviceIdentifierProviding: Sendable {
     func currentIdentifier() async -> LocalDeviceIdentifier
@@ -68,7 +70,11 @@ public actor LocalDeviceIdentifierStore: LocalDeviceIdentifierProviding {
     }
 
     private func currentDeviceName() -> String {
+        #if canImport(UIKit)
         UIDevice.current.name
+        #else
+        ProcessInfo.processInfo.hostName
+        #endif
     }
 }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(iOS)
 struct PrimaryButton: View {
     let title: String
     var icon: String? = nil
@@ -63,3 +64,4 @@ struct PrimaryButton: View {
     .padding()
     .background(Color(.systemBackground))
 }
+#endif

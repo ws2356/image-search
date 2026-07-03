@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 
+#if os(iOS)
 public struct RichTextReceiveView: View {
     let html: String
     @State private var showCopiedToast = false
@@ -80,3 +81,4 @@ struct RichTextWebView: UIViewRepresentable {
         uiView.loadHTMLString(html, baseURL: nil)
     }
 }
+#endif

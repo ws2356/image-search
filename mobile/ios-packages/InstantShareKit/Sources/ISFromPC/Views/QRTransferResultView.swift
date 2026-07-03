@@ -1,6 +1,9 @@
 import SwiftUI
+#if os(iOS)
 import UIKit
+#endif
 
+#if os(iOS)
 struct QRTransferResultView: View {
     let result: QRClaimResult
     @StateObject var viewModel: ISQRResultViewModel
@@ -216,3 +219,4 @@ extension QRClaimResult {
         return newURL
     }
 }
+#endif

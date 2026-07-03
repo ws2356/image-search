@@ -12,6 +12,7 @@ import Common
 import Factory
 import Foundation
 
+#if os(iOS)
 @DependencyClient
 struct UploadClient {
     var uploadText: @Sendable (
@@ -72,3 +73,4 @@ extension DependencyValues {
         set { self[UploadClient.self] = newValue }
     }
 }
+#endif

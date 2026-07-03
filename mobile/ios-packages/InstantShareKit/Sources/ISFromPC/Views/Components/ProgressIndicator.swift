@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(iOS)
 struct LoadingSpinner: View {
     var message: String = "Connecting..."
 
@@ -60,3 +61,4 @@ struct ScanningBadge: View {
     }
     .background(Color(.systemBackground))
 }
+#endif

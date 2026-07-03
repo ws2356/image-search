@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(iOS)
 struct QRClaimView: View {
     let qrClaimPayload: QRClaimPayload
     let delegate: QRClaimDelegate
@@ -18,3 +19,4 @@ struct QRClaimView: View {
             }
     }
 }
+#endif

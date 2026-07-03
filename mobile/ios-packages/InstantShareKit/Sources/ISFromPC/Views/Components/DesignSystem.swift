@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreText
 
+#if os(iOS)
 private extension Color {
     init(hex: UInt, opacity: Double = 1.0) {
         self.init(
@@ -82,3 +83,4 @@ extension Font {
         return .system(size: size, weight: weight, design: .monospaced)
     }
 }
+#endif

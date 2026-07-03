@@ -1,7 +1,9 @@
 import Common
 import CryptoKit
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 // MARK: - Internal Trust Session Manager (pc-to-mobile flow)
 
@@ -254,6 +256,7 @@ extension QRClaimResult {
     }
 }
 
+#if os(iOS)
 public final class QRTriggerDownloadClient: Sendable {
     private let urlSession: URLSession
     private let timeoutInterval: TimeInterval
@@ -538,7 +541,11 @@ public final class QRTriggerDownloadClient: Sendable {
         let delegate = TlsTrustDelegate(appIdentityProvider: appIdentityProvider)
         let (data, response): (Data, URLResponse)
         do {
+            #if os(iOS)
             (data, response) = try await urlSession.data(for: request, delegate: delegate)
+            #else
+            (data, response) = try await urlSession.data(for: request)
+            #endif
         } catch {
             throw QRTriggerDownloadClientError.networkError(error)
         }
@@ -615,7 +622,11 @@ public final class QRTriggerDownloadClient: Sendable {
         let delegate = TlsTrustDelegate(appIdentityProvider: appIdentityProvider)
         let (tempFileURL, response): (URL, URLResponse)
         do {
+            #if os(iOS)
             (tempFileURL, response) = try await urlSession.download(for: request, delegate: delegate)
+            #else
+            (tempFileURL, response) = try await urlSession.download(for: request)
+            #endif
         } catch {
             throw QRTriggerDownloadClientError.networkError(error)
         }
@@ -746,3 +757,4 @@ public final class QRTriggerDownloadClient: Sendable {
         )
     }
 }
+#endif

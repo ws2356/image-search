@@ -9,6 +9,7 @@ import ComposableArchitecture
 import Common
 import Foundation
 
+#if os(iOS)
 @Reducer
 public struct TransferFeature {
     @ObservableState
@@ -109,3 +110,4 @@ public struct TransferFeature {
         }
     }
 }
+#endif

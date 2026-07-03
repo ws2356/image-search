@@ -1,6 +1,7 @@
 import Foundation
 import Common
 
+#if os(iOS)
 enum InstantShareUploadClientError: RetryableError, Sendable {
     case uploadFailed(String)
     case invalidResponse(String)
@@ -321,3 +322,4 @@ final class InstantShareUploadClient: Sendable {
         )
     }
 }
+#endif

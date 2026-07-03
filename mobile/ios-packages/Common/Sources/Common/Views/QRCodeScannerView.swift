@@ -1,7 +1,10 @@
 import SwiftUI
+#if canImport(UIKit)
 import AVFoundation
 import UIKit
+#endif
 
+#if canImport(UIKit)
 @MainActor
 public protocol ScanningBaseViewModel {
     func onQRScanned(scannedValue: String) async
@@ -433,3 +436,4 @@ final class QRScanError: Error {
         self.message = message
     }
 }
+#endif

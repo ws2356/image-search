@@ -7,6 +7,7 @@
 import SwiftUI
 import ComposableArchitecture
 
+#if os(iOS)
 struct TransferView: View {
     let store: StoreOf<TransferFeature>
 
@@ -30,3 +31,4 @@ struct TransferView: View {
         }
     }
 }
+#endif

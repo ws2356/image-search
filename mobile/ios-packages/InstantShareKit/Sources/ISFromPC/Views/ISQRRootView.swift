@@ -1,6 +1,7 @@
 import SwiftUI
 import Common
 
+#if os(iOS)
 public struct ISQRRootView: View {
     @StateObject private var viewModel: ISQRRootViewModel
     let navigator: Navigator
@@ -86,6 +87,7 @@ public struct ISQRRootView: View {
         }
     }
 }
+#endif
 
 @MainActor
 protocol ViewLifeCycle {

@@ -1,5 +1,6 @@
 import Foundation
 
+#if os(iOS)
 struct InstantShareHandoffContext: Codable {
     let payloadType: String
     let textContent: String?
@@ -86,3 +87,4 @@ enum InstantShareHandoffError: Error, LocalizedError {
         }
     }
 }
+#endif

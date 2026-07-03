@@ -8,6 +8,7 @@
 import SwiftUI
 import ComposableArchitecture
 
+#if os(iOS)
 public struct FlowView: View {
     @Shared(.instantShareContext) var context
     
@@ -81,3 +82,4 @@ public struct FlowView: View {
         }
     }
 }
+#endif

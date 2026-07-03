@@ -1,5 +1,6 @@
 import Common
 
+#if os(iOS)
 enum ErrorHandlingResult {
     case retry
     case cancel
@@ -30,3 +31,4 @@ class ISQRErrorViewModel: ErrorPageViewDelegate {
         await delegate.onErrorHandlingResult(.cancel)
     }
 }
+#endif

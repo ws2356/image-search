@@ -1,7 +1,10 @@
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 import UniformTypeIdentifiers
 
+#if canImport(UIKit)
 public enum InstantSharePayloadType: String, Codable, Sendable {
     case text
     case link
@@ -278,3 +281,4 @@ struct InstantSharePayloadExtractor {
         )
     }
 }
+#endif

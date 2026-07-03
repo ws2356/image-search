@@ -8,6 +8,7 @@
 import SwiftUI
 import ComposableArchitecture
 
+#if os(iOS)
 struct PendingRevisitView: View {
     let store: StoreOf<PendingRevisitFeature>
 
@@ -32,3 +33,4 @@ struct PendingRevisitView: View {
         }
     }
 }
+#endif

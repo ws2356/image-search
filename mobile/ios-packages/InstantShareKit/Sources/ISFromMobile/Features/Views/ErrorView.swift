@@ -7,6 +7,7 @@
 import SwiftUI
 import ComposableArchitecture
 
+#if os(iOS)
 struct ErrorView: View {
     let store: StoreOf<ErrorFeature>
 
@@ -39,3 +40,4 @@ struct ErrorView: View {
         }
     }
 }
+#endif

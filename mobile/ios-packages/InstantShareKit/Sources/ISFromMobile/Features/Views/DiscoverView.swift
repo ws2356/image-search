@@ -8,6 +8,7 @@
 import SwiftUI
 import ComposableArchitecture
 
+#if os(iOS)
 struct DiscoverView: View {
     let store: StoreOf<DiscoverFeature>
     @Shared(.instantShareContext) var context
@@ -162,3 +163,4 @@ struct DiscoverView: View {
         }
     }
 }
+#endif

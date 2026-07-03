@@ -1,6 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
+#if canImport(UIKit)
 // TODO: This is a hacky solution. Consider adding an UI automation test.
 private final class HiddenPinTextField: UITextField {
     var onDigit: ((Character) -> Void)?
@@ -169,3 +172,4 @@ public struct PinCodeInputView: View {
             )
     }
 }
+#endif

@@ -2,6 +2,7 @@ import SwiftUI
 import Factory
 import Common
 
+#if os(iOS)
 @MainActor
 public class MultiFileReceiveViewModel: ObservableObject {
     public let manifest: MultiFileManifest
@@ -246,8 +247,8 @@ public struct MultiFileReceiveView: View {
             }
             .onDisappear {
                 Task { await viewModel.cleanupDownloadedFiles() }
-            }
     }
+}
 
     private var content: some View {
         VStack(spacing: 0) {
@@ -547,3 +548,4 @@ public struct MultiFileReceiveView: View {
         return String(format: "%.1f MB", mb)
     }
 }
+#endif

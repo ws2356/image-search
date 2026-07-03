@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(iOS)
 public struct LinkReceiveView: View {
     let urlString: String
     @State private var copied = false
@@ -49,3 +50,4 @@ public struct LinkReceiveView: View {
         }
     }
 }
+#endif

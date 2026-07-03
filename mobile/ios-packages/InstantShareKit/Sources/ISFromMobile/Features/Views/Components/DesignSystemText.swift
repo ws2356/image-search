@@ -6,6 +6,7 @@
 //
 import SwiftUI
 
+#if os(iOS)
 /// Heading text using design system typography
 struct DSText: View {
     let text: String
@@ -56,3 +57,4 @@ struct DSText: View {
     .padding()
     .background(Color(.systemBackground))
 }
+#endif

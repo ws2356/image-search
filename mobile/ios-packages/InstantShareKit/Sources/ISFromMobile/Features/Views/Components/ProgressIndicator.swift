@@ -6,6 +6,7 @@
 //
 import SwiftUI
 
+#if os(iOS)
 /// Centered loading spinner with optional text label
 struct LoadingSpinner: View {
     var message: String = "Connecting..."
@@ -69,3 +70,4 @@ struct ScanningBadge: View {
     }
     .background(Color(.systemBackground))
 }
+#endif

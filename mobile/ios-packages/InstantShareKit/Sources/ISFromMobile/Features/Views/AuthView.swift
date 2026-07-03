@@ -9,6 +9,7 @@ import SwiftUI
 import ComposableArchitecture
 import Common
 
+#if os(iOS)
 struct AuthView: View {
     let store: StoreOf<AuthFeature>
 
@@ -50,3 +51,4 @@ struct AuthView: View {
         }
     }
 }
+#endif

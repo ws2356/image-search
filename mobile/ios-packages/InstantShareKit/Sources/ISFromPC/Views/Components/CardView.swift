@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(iOS)
 struct CardView<Content: View>: View {
     var content: Content
 
@@ -29,3 +30,4 @@ struct CardView<Content: View>: View {
     .padding()
     .background(Color(.systemBackground))
 }
+#endif

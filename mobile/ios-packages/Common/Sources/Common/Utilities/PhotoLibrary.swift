@@ -5,6 +5,7 @@
 //  Created by Song Wan on 2026/4/23.
 //
 
+#if canImport(UIKit)
 import UIKit
 import Photos
 import PhotosUI
@@ -28,3 +29,4 @@ extension PHPhotoLibrary {
         }
     }
 }
+#endif

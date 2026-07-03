@@ -1,6 +1,7 @@
 import SwiftUI
 import Common
 
+#if os(iOS)
 @MainActor
 public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate, QRScanDelegate, ISQRDeliverDelegate, ISQRErrorDelegate {
     public enum State {
@@ -97,3 +98,4 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
         }
     }
 }
+#endif

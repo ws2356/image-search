@@ -1,6 +1,8 @@
 import CryptoKit
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 import Common
 
 enum InstantShareTrustClientError: Error, Sendable {
@@ -183,7 +185,7 @@ final class InstantShareTrustClient: @unchecked Sendable {
 
         let requestPayload: [String: Any] = [
             "action": "request_pin",
-            "peer_device_name": await UIDevice.current.name,
+            "peer_device_name": await Self.currentDeviceName(),
         ]
         let envelope = try trustSessionManager.encryptResponse(requestPayload)
 
@@ -365,6 +367,14 @@ final class InstantShareTrustClient: @unchecked Sendable {
             }
         }
         throw lastError ?? InstantShareTrustClientError.networkError(URLError(.cannotFindHost))
+    }
+
+    private static func currentDeviceName() -> String {
+        #if canImport(UIKit)
+        UIDevice.current.name
+        #else
+        ProcessInfo.processInfo.hostName
+        #endif
     }
 
     private func tryParseErrorBody(_ data: Data) -> (errorCode: String, message: String) {

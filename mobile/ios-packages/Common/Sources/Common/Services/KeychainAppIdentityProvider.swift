@@ -3,7 +3,6 @@ import Security
 import CryptoKit
 import X509
 import SwiftASN1
-import UIKit
 
 public protocol AppIdentityProviding: Sendable {
     func ensureSelfIdentity() async throws

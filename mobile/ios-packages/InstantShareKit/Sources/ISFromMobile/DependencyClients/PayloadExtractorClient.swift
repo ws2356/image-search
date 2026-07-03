@@ -8,6 +8,7 @@
 import ComposableArchitecture
 import Foundation
 
+#if os(iOS)
 @DependencyClient
 struct PayloadExtractorClient {
     var extract: @Sendable @MainActor (_ extensionItems: [NSExtensionItem]) async throws -> [InstantSharePayloadEnvelope]
@@ -27,3 +28,4 @@ extension DependencyValues {
         set { self[PayloadExtractorClient.self] = newValue }
     }
 }
+#endif

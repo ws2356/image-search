@@ -6,6 +6,7 @@
 //
 import SwiftUI
 
+#if os(iOS)
 extension View {
     @ViewBuilder
     public func compatibleScrollBounceBasedOnSize() -> some View {
@@ -48,6 +49,7 @@ extension View {
         }
     }
 }
+#endif
 
 extension Color {
     public init(hex: UInt, opacity: Double = 1.0) {
@@ -61,6 +63,7 @@ extension Color {
     }
 }
 
+#if os(iOS)
 public func heroCircle(icon: String, gradient: [Color], size: CGFloat = 100) -> some View {
     ZStack {
         Circle()
@@ -144,7 +147,9 @@ public struct ActionButton: View {
         }
     }
 }
+#endif
 
+#if os(iOS)
 // MARK: - Navigation Bar Styling
 
 extension View {
@@ -193,3 +198,4 @@ public struct CornerRadiusShape: Shape {
         return Path(path.cgPath)
     }
 }
+#endif

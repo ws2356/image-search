@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(iOS)
 @MainActor
 public protocol ErrorPageViewDelegate: ObservableObject {
     var title: String { get }
@@ -67,3 +68,4 @@ public struct ErrorStateView<DelegateType: ErrorPageViewDelegate>: View {
         .appNavigationBar(title: viewModel.title)
     }
 }
+#endif

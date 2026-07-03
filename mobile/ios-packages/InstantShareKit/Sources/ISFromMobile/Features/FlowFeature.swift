@@ -11,6 +11,7 @@ import ComposableArchitecture
 import Common
 import Foundation
 
+#if os(iOS)
 @Reducer
 public struct FlowFeature {
     @ObservableState
@@ -179,3 +180,4 @@ public struct FlowFeature {
         }
     }
 }
+#endif

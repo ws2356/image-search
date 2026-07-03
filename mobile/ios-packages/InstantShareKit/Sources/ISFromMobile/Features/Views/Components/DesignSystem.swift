@@ -8,6 +8,7 @@
 //
 import SwiftUI
 
+#if os(iOS)
 // Local Color(hex:) initializer (also available via Common module)
 private extension Color {
     init(hex: UInt, opacity: Double = 1.0) {
@@ -88,3 +89,4 @@ extension Font {
         .custom("DM Sans", size: size).weight(weight)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(iOS)
 import SwiftUI
 import Common
 import Factory
@@ -38,3 +39,4 @@ class QRClaimViewModel: ObservableObject {
         }
     }
 }
+#endif

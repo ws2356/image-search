@@ -1,6 +1,7 @@
 import SwiftUI
 import Common
 
+#if os(iOS)
 enum QRScanResult {
     case success(qrLink: String)
     case failure(error: Error)
@@ -37,3 +38,4 @@ class ISQRScanViewModel: ObservableObject, ScanningBaseViewModel {
         await delegate.onQRScanResult(.changeSetting)
     }
 }
+#endif

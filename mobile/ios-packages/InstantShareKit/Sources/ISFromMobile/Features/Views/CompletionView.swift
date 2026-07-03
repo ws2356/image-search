@@ -8,6 +8,7 @@
 import SwiftUI
 import ComposableArchitecture
 
+#if os(iOS)
 struct CompletionView: View {
     let store: StoreOf<CompletionFeature>
 
@@ -35,3 +36,4 @@ struct CompletionView: View {
         }
     }
 }
+#endif
