@@ -283,6 +283,9 @@
 			name = AlbumTransporterApp;
 			packageProductDependencies = (
 				CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */,
+				CMN00002CMN00002CMN00002 /* Common */,
+				ISK00002ISK00002ISK00002 /* ISFromMobile */,
+				ISK00003ISK00003ISK00003 /* ISFromPC */,
 			);
 			productName = AlbumTransporterApp;
 			productReference = 1A5D5D04B6A631A962A9E1F7 /* AuBackup.app */;
@@ -303,6 +306,8 @@
 			name = ShareExtension;
 			packageProductDependencies = (
 				CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */,
+				CMN00002CMN00002CMN00002 /* Common */,
+				ISK00002ISK00002ISK00002 /* ISFromMobile */,
 			);
 			productName = ShareExtension;
 			productReference = SE0002010000000000000004 /* Instant Share.appex */;
@@ -328,6 +333,8 @@
 			mainGroup = B2F2B86624660D3ED940BFE0;
 			packageReferences = (
 				34F85B90D4B6FF60D0920E9A /* XCLocalSwiftPackageReference "." */,
+				CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "../ios-packages/Common" */,
+				ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */,
 				AB000023AB000023AB000023 /* XCRemoteSwiftPackageReference "opentelemetry-swift-core" */,
 			);
 			productRefGroup = 86F9AA3367D98B280C0BE44C /* Products */;
@@ -738,6 +745,14 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = .;
 		};
+		CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "../ios-packages/Common" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../ios-packages/Common;
+		};
+		ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../ios-packages/InstantShareKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -766,6 +781,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 34F85B90D4B6FF60D0920E9A /* XCLocalSwiftPackageReference "." */;
 			productName = AlbumTransporterKit;
+		};
+		CMN00002CMN00002CMN00002 /* Common */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "../ios-packages/Common" */;
+			productName = Common;
+		};
+		ISK00002ISK00002ISK00002 /* ISFromMobile */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */;
+			productName = ISFromMobile;
+		};
+		ISK00003ISK00003ISK00003 /* ISFromPC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */;
+			productName = ISFromPC;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
