@@ -3,7 +3,7 @@ require "dotenv"
 credential_env_path = File.expand_path(".env.credential", __dir__)
 Dotenv.overload(credential_env_path) if File.exist?(credential_env_path)
 
-app_identifier(ENV.fetch("APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instantshare"))
+app_identifier(ENV.fetch("APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instant-share"))
 
 apple_id(ENV["FASTLANE_USER"]) if ENV["FASTLANE_USER"].to_s != ""
 

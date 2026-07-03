@@ -173,7 +173,7 @@ platform :ios do
         UI.user_error!("Set IOS_PROVISIONING_PROFILE_SPECIFIER when IOS_SIGNING_STYLE=manual.")
       end
       UI.important(
-        "Ensure the provisioning profile for #{option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instantshare")} is valid."
+        "Ensure the provisioning profile for #{option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instant-share")} is valid."
       )
     end
 
@@ -227,7 +227,7 @@ platform :ios do
     keychain_path = option_or_env(options, :keychain_path, "IOS_KEYCHAIN_PATH")
     signing_style = option_or_env(options, :signing_style, "IOS_SIGNING_STYLE", "automatic").downcase
     provisioning_profile_specifier = option_or_env(options, :provisioning_profile_specifier, "IOS_PROVISIONING_PROFILE_SPECIFIER")
-    bundle_identifier = option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instantshare")
+    bundle_identifier = option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instant-share")
 
     UI.user_error!("Set IOS_CODE_SIGN_IDENTITY to the Keychain certificate name before building.") if certificate_name.to_s.empty?
     ensure_codesigning_identity!(certificate_name)

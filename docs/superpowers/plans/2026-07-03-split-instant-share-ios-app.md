@@ -484,7 +484,7 @@ git add -A && git commit -m "feat: create instant-share app project shell"
 - Create: `mobile/instant-share/InstantShare.xcodeproj/project.pbxproj`
 
 This is the most complex task. The Xcode project needs:
-- App target (net.boldman.instantshare)
+- App target (net.boldman.instant-share)
 - ShareExtension target (app extension)
 - Local package references to Common and InstantShareKit
 - Product dependencies for Common, ISFromMobile, ISFromPC
