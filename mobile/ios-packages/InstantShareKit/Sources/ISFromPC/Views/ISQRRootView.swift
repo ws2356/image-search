@@ -7,7 +7,19 @@ public struct ISQRRootView: View {
     let navigator: Navigator
 
     public init(qrPayload: QRClaimPayload, navigator: Navigator) {
-        _viewModel = StateObject(wrappedValue: ISQRRootViewModel(qrClaimPayload: qrPayload, navigator: navigator))
+        _viewModel = StateObject(wrappedValue: ISQRRootViewModel(
+            initialState: .claiming,
+            qrClaimPayload: qrPayload,
+            navigator: navigator
+        ))
+        self.navigator = navigator
+    }
+
+    public init(navigator: Navigator) {
+        _viewModel = StateObject(wrappedValue: ISQRRootViewModel(
+            initialState: .scan,
+            navigator: navigator
+        ))
         self.navigator = navigator
     }
 
@@ -53,7 +65,11 @@ public struct ISQRRootView: View {
         case .scan:
             ISQRScanPageView(delegate: viewModel)
         case .claiming:
-            QRClaimView(qrClaimPayload: viewModel.qrClaimPayload, delegate: viewModel)
+            if let payload = viewModel.qrClaimPayload {
+                QRClaimView(qrClaimPayload: payload, delegate: viewModel)
+            } else {
+                EmptyView()
+            }
         case .result(let result):
             switch result {
             case .multiFile(let manifest, let host, let tlsPort, let sessionId, let correlationID):

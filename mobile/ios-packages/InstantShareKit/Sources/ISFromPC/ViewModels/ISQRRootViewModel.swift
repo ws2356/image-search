@@ -11,10 +11,10 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
         case error(title: String, message: String)
     }
 
-    @Published public private(set) var state: State = .claiming
+    @Published public private(set) var state: State
     let navigator: Navigator
-    let qrClaimPayload: QRClaimPayload
-    
+    private(set) var qrClaimPayload: QRClaimPayload?
+
     var qrClaimResult: QRClaimResult? {
         didSet {
             let oldUrls = oldValue?.fileUrls ?? []
@@ -27,7 +27,12 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
         }
     }
 
-    public init(qrClaimPayload: QRClaimPayload, navigator: Navigator) {
+    public init(
+        initialState: State = .claiming,
+        qrClaimPayload: QRClaimPayload? = nil,
+        navigator: Navigator
+    ) {
+        self.state = initialState
         self.qrClaimPayload = qrClaimPayload
         self.navigator = navigator
     }
@@ -87,6 +92,7 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
             state = .error(title: "Invalid QR Code", message: "Could not parse the scanned QR code.")
             return
         }
+        self.qrClaimPayload = payload
         state = .claiming
     }
     
