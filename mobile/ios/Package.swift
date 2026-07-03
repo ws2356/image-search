@@ -13,23 +13,10 @@ let package = Package(
             type: .dynamic,
             targets: ["AlbumTransporterKit"]
         ),
-        .library(
-            name: "Common",
-            type: .dynamic,
-            targets: ["Common"]
-        ),
-        .library(
-            name: "ISFromPC",
-            type: .dynamic,
-            targets: ["ISFromPC"]
-        ),
-        .library(
-            name: "ISFromMobile",
-            type: .dynamic,
-            targets: ["ISFromMobile"]
-        )
     ],
     dependencies: [
+        .package(path: "../ios-packages/Common"),
+        .package(path: "../ios-packages/InstantShareKit"),
         .package(url: "https://github.com/hmlongco/Factory.git", from: "2.4.12"),
         .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
         .package(url: "https://github.com/apple/swift-asn1.git", from: "1.3.0"),
@@ -43,32 +30,11 @@ let package = Package(
                 .product(name: "Factory", package: "Factory"),
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
                 .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-                "Common",
-                "ISFromPC",
-                "ISFromMobile"
+                .product(name: "Common", package: "Common"),
+                .product(name: "ISFromPC", package: "InstantShareKit"),
+                .product(name: "ISFromMobile", package: "InstantShareKit"),
             ],
             resources: []
         ),
-        .target(name: "Common",
-               dependencies: [
-                .product(name: "Factory", package: "Factory"),
-                .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-                .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-                .product(name: "SwiftASN1", package: "swift-asn1"),
-                .product(name: "X509", package: "swift-certificates"),
-               ],
-               resources: [
-                .process("Resources")
-               ]),
-        .target(name: "ISFromPC",
-               dependencies: ["Common"],
-               resources: []),
-        .target(name: "ISFromMobile",
-               dependencies: [
-                .product(name: "Factory", package: "Factory"),
-                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
-                "Common"
-               ],
-               resources: []),
     ]
 )
