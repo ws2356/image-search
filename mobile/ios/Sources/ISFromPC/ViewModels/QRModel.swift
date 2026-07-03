@@ -41,12 +41,12 @@ public struct QRClaimPayload: Equatable, Sendable, Identifiable {
             return nil
         }
 
-        let portStr = valueFor("p") ?? valueFor("port")
+        let portStr = valueFor("p")
         guard let portVal = portStr, let port = Int(portVal) else {
             return nil
         }
 
-        let sessionId = valueFor("sid") ?? valueFor("stash")
+        let sessionId = valueFor("sid")
         guard let unwrappedSessionId = sessionId, !unwrappedSessionId.isEmpty else {
             return nil
         }
