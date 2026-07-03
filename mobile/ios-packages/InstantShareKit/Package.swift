@@ -29,6 +29,7 @@ let package = Package(
         .target(
             name: "ISFromPC",
             dependencies: [
+                .product(name: "Factory", package: "Factory"),
                 .product(name: "Common", package: "Common"),
             ],
             resources: []

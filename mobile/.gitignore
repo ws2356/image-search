@@ -1,0 +1,8 @@
+# Xcode user data
+**/xcuserdata/
+
+# Derived data
+DerivedData/
+
+# SwiftPM build artifacts
+.build/
