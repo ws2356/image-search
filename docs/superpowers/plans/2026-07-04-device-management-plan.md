@@ -161,6 +161,7 @@ Insert the target after the `ISFromMobile` target:
     name: "ISDeviceManagement",
     dependencies: [
         .product(name: "Factory", package: "Factory"),
+        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
         .product(name: "Common", package: "Common"),
     ],
     resources: []
@@ -381,7 +382,6 @@ git commit -m "feat: add DeviceManagementFeature TCA reducer"
 ```swift
 import SwiftUI
 import ComposableArchitecture
-import Common
 
 #if os(iOS)
 public struct DeviceManagementView: View {
@@ -398,51 +398,48 @@ public struct DeviceManagementView: View {
                     HStack {
                         Spacer()
                         ProgressView()
-                            .controlSize(.small)
-                            .tint(DesignSystem.Colors.primary)
                         Spacer()
                     }
                 } else if store.trustedDevices.isEmpty {
-                    VStack(spacing: DesignSystem.Spacing.md) {
+                    VStack(spacing: 12) {
                         Image(systemName: "externaldrive.badge.questionmark")
                             .font(.system(size: 40))
-                            .foregroundStyle(DesignSystem.Colors.secondaryText)
-                    DSText(
-                        text: "No Trusted Devices",
-                        style: .body,
-                        color: DesignSystem.Colors.secondaryText
-                    )
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, DesignSystem.Spacing.xxl)
-                .listRowBackground(Color.clear)
-            } else {
-                ForEach(store.trustedDevices) { device in
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-                        DSText(text: device.name, style: .body)
-                        DSText(
-                            text: device.id,
-                            style: .caption2,
-                            color: DesignSystem.Colors.secondaryText
-                        )
+                            .foregroundStyle(.secondary)
+                        Text("No Trusted Devices")
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, DesignSystem.Spacing.sm)
-                }
-                .onDelete { indexSet in
-                    for index in indexSet {
-                        let device = store.trustedDevices[index]
-                        store.send(.deleteDevice(device))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(store.trustedDevices) { device in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(device.name)
+                                .font(.body)
+                            Text(device.id)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .onDelete { indexSet in
+                        for index in indexSet {
+                            let device = store.trustedDevices[index]
+                            store.send(.deleteDevice(device))
+                        }
                     }
                 }
             }
-        }
-        .listStyle(.insetGrouped)
-        .navigationTitle("Devices")
-        .task { store.send(.onAppear) }
-        .overlay(alignment: .bottom) {
-            if let error = store.errorMessage {
-                DSText(text: error, style: .caption, color: DesignSystem.Colors.error)
-                    .padding(DesignSystem.Spacing.md)
+            .listStyle(.insetGrouped)
+            .navigationTitle("Devices")
+            .task { store.send(.onAppear) }
+            .overlay(alignment: .bottom) {
+                if let error = store.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(12)
+                }
             }
         }
     }
