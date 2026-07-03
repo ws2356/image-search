@@ -14,14 +14,14 @@ struct RootView: View {
     @State private var showQRSheet = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             DeviceManagementView(
                 store: Store(initialState: DeviceManagementFeature.State()) {
                     DeviceManagementFeature()
                 }
             )
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showQRSheet = true }) {
                         Image(systemName: "qrcode.viewfinder")
                     }
@@ -31,5 +31,6 @@ struct RootView: View {
                 ISQRRootView(navigator: QRSheetNavigator(dismiss: { showQRSheet = false }))
             }
         }
+        .navigationViewStyle(.stack)
     }
 }

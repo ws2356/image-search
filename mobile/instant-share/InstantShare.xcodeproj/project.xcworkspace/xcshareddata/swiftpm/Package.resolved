@@ -1,5 +1,5 @@
 {
-  "originHash" : "50f97280b98f4cf191372521e4f11e8c914060e429f8088fc4b35a61f7e46290",
+  "originHash" : "56bd2501c8561444064a637a4790f92aeb3123b18c99c8a617372a4a90c35289",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -141,8 +141,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/swift-navigation",
       "state" : {
-        "revision" : "5c16d3a4645c3f51083bd6c12821fe57a0b455c5",
-        "version" : "2.10.1"
+        "revision" : "fad75807c596fecd724b0fc81cd61c94008faad4",
+        "version" : "2.10.3"
       }
     },
     {
