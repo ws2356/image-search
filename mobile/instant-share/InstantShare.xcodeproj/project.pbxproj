@@ -12,8 +12,6 @@
 		3D802F2B2FF7FFC100A02CD7 /* ISFromPC in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000004 /* ISFromPC */; };
 		3D802F2C2FF7FFC100A02CD7 /* Common in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000002 /* Common */; };
 		3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; };
-		ISBF000000000000000009 /* ISDeviceManagement in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000005 /* ISDeviceManagement */; };
-		ISBF000000000000000010 /* ISDeviceManagement in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000005 /* ISDeviceManagement */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000001 /* InstantShareApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000003 /* InstantShareApp.swift */; };
 		ISBF000000000000000002 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000008 /* ShareViewController.swift */; };
 		ISBF000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000011 /* RootView.swift */; };
@@ -45,7 +43,6 @@
 				ISBF000000000000000006 /* Common in Embed Frameworks */,
 				ISBF000000000000000007 /* ISFromMobile in Embed Frameworks */,
 				ISBF000000000000000008 /* ISFromPC in Embed Frameworks */,
-				ISBF000000000000000010 /* ISDeviceManagement in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -85,7 +82,6 @@
 				3D802F2B2FF7FFC100A02CD7 /* ISFromPC in Frameworks */,
 				3D802F2A2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
 				3D802F292FF7FFC100A02CD7 /* Common in Frameworks */,
-				ISBF000000000000000009 /* ISDeviceManagement in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

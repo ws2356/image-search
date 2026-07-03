@@ -2,7 +2,7 @@ import ComposableArchitecture
 import Foundation
 
 @Reducer
-public struct DeviceManagementFeature {
+public struct DeviceManagementFeature: Sendable {
     public init() {}
 
     @ObservableState

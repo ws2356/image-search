@@ -21,7 +21,6 @@ let package = Package(
         ),
         .library(
             name: "ISDeviceManagement",
-            type: .dynamic,
             targets: ["ISDeviceManagement"]
         ),
     ],
