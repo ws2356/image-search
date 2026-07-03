@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3D802F292FF7FFC100A02CD7 /* Common in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000002 /* Common */; };
+		3D802F2A2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; };
+		3D802F2B2FF7FFC100A02CD7 /* ISFromPC in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000004 /* ISFromPC */; };
+		3D802F2C2FF7FFC100A02CD7 /* Common in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000002 /* Common */; };
+		3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; };
 		ISBF000000000000000001 /* InstantShareApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000003 /* InstantShareApp.swift */; };
 		ISBF000000000000000002 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000008 /* ShareViewController.swift */; };
 		ISBF000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000005 /* Assets.xcassets */; };
@@ -16,6 +21,16 @@
 		ISBF000000000000000007 /* ISFromMobile in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000008 /* ISFromPC in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000004 /* ISFromPC */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		ISTP000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ISPR00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ISNT000000000000000002;
+			remoteInfo = ShareExtension;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		ISFB000000000000000001 /* Embed Frameworks */ = {
@@ -53,7 +68,7 @@
 		ISFR000000000000000006 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = App/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		ISFR000000000000000007 /* InstantShareApp.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = InstantShareApp.entitlements; path = App/InstantShareApp.entitlements; sourceTree = "<group>"; };
 		ISFR000000000000000008 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = ShareExtension/ShareViewController.swift; sourceTree = "<group>"; };
-		ISFR000000000000000009 /* ShareExtension-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "ShareExtension-Info.plist"; path = "ShareExtension/Info.plist"; sourceTree = "<group>"; };
+		ISFR000000000000000009 /* ShareExtension-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "ShareExtension-Info.plist"; path = ShareExtension/Info.plist; sourceTree = "<group>"; };
 		ISFR000000000000000010 /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = ShareExtension.entitlements; path = ShareExtension/ShareExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -62,6 +77,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3D802F2B2FF7FFC100A02CD7 /* ISFromPC in Frameworks */,
+				3D802F2A2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
+				3D802F292FF7FFC100A02CD7 /* Common in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +87,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
+				3D802F2C2FF7FFC100A02CD7 /* Common in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,21 +258,10 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin PBXContainerItemProxy section */
-		ISTP000000000000000001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = ISPR00000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = ISNT000000000000000002;
-			remoteInfo = ShareExtension;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin XCBuildConfiguration section */
 		ISBC000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = App/InstantShareApp.entitlements;
@@ -260,14 +269,14 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZU6V838VRQ;
 				INFOPLIST_FILE = App/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Instant Share";
+				INFOPLIST_KEY_CFBundleDisplayName = "Snap Get";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.instant-share;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.boldman.instant-share";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
@@ -278,7 +287,6 @@
 		ISBC000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = App/InstantShareApp.entitlements;
@@ -286,14 +294,14 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZU6V838VRQ;
 				INFOPLIST_FILE = App/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Instant Share";
+				INFOPLIST_KEY_CFBundleDisplayName = "Snap Get";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.instant-share;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.boldman.instant-share";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
@@ -320,7 +328,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.instant-share.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.boldman.instant-share.ShareExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -347,7 +355,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.boldman.instant-share.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.boldman.instant-share.ShareExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -507,11 +515,11 @@
 /* Begin XCLocalSwiftPackageReference section */
 		ISXLP000000000000000001 /* XCLocalSwiftPackageReference "../ios-packages/Common" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../ios-packages/Common;
+			relativePath = "../ios-packages/Common";
 		};
 		ISXLP000000000000000002 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../ios-packages/InstantShareKit;
+			relativePath = "../ios-packages/InstantShareKit";
 		};
 /* End XCLocalSwiftPackageReference section */
 
