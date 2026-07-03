@@ -1,0 +1,362 @@
+# frozen_string_literal: true
+
+require "dotenv"
+require "deliver"
+require "deliver/options"
+require "deliver/setup"
+require "fileutils"
+require "tmpdir"
+
+credential_env_path = File.expand_path(".env.credential", __dir__)
+Dotenv.overload(credential_env_path) if File.exist?(credential_env_path)
+
+default_platform(:ios)
+
+def ios_root
+  File.expand_path("..", __dir__)
+end
+
+def env_presence(name)
+  value = ENV[name]
+  return nil if value.to_s.strip.empty?
+  value
+end
+
+def api_key_id
+  env_presence("API_KEY_ID")
+end
+
+def api_key_file_path
+  env_presence("API_KEY_FILE_PATH")
+end
+
+def api_key_issuer_id
+  env_presence("API_KEY_ISSUER_ID")
+end
+
+def api_key_configured?
+  [api_key_id, api_key_file_path, api_key_issuer_id].any? { |value| !value.nil? }
+end
+
+def api_key_complete?
+  !api_key_id.nil? && !api_key_file_path.nil?
+end
+
+def resolved_api_key_file_path
+  path = api_key_file_path
+  return nil if path.nil?
+  return path if path.start_with?("/")
+  ios_candidate = File.expand_path(path, ios_root)
+  return ios_candidate if File.exist?(ios_candidate)
+  File.expand_path(path, __dir__)
+end
+
+def project_path(options)
+  options ||= {}
+  File.expand_path(
+    options[:project_path] || env_presence("IOS_PROJECT_PATH") || File.join(ios_root, "InstantShare.xcodeproj"),
+    ios_root
+  )
+end
+
+def export_path(options)
+  options ||= {}
+  File.expand_path(
+    options[:export_path] || env_presence("IOS_EXPORT_PATH") || File.join(ios_root, "build/ipa"),
+    ios_root
+  )
+end
+
+def metadata_path(options)
+  options ||= {}
+  File.expand_path(
+    options[:metadata_path] || env_presence("APP_STORE_METADATA_PATH") || File.join(ios_root, "fastlane/metadata"),
+    ios_root
+  )
+end
+
+def option_or_env(options, key, env_key, default = nil)
+  options ||= {}
+  value = options[key]
+  return value.to_s unless value.nil?
+  env_value = ENV[env_key]
+  return env_value unless env_value.to_s.empty?
+  default
+end
+
+def truthy?(value, default:)
+  return default if value.nil?
+  case value
+  when true, false
+    value
+  else
+    %w[1 true yes on].include?(value.to_s.strip.downcase)
+  end
+end
+
+def require_env_vars!(*names)
+  missing = names.select { |name| ENV[name].to_s.strip.empty? }
+  return if missing.empty?
+  UI.user_error!("Missing required environment variables: #{missing.join(', ')}")
+end
+
+def ensure_codesigning_identity!(identity_name)
+  identities = sh("security find-identity -v -p codesigning", log: false)
+  return if identities.include?(identity_name)
+  UI.user_error!("Code signing identity not found in Keychain: #{identity_name}")
+end
+
+def ensure_metadata_ready!(path)
+  unless Dir.exist?(path)
+    UI.user_error!("Metadata path does not exist: #{path}")
+  end
+  locale_directories = Dir.children(path)
+    .map { |entry| File.join(path, entry) }
+    .select { |entry| File.directory?(entry) && !File.basename(entry).start_with?(".") }
+  return unless locale_directories.empty?
+  UI.user_error!("Metadata path must contain at least one locale directory: #{path}")
+end
+
+def build_upload_flags(options)
+  options ||= {}
+  upload_binary = truthy?(options[:upload_binary], default: true)
+  upload_metadata = truthy?(options[:upload_metadata], default: false)
+  upload_screenshots = truthy?(
+    options[:upload_screenshots] || ENV["APP_STORE_UPLOAD_SCREENSHOTS"],
+    default: false
+  )
+  submit_for_review = truthy?(
+    options[:submit_for_review] || ENV["APP_STORE_SUBMIT_FOR_REVIEW"],
+    default: false
+  )
+  automatic_release = truthy?(
+    options[:automatic_release] || ENV["APP_STORE_AUTOMATIC_RELEASE"],
+    default: false
+  )
+  {
+    upload_binary: upload_binary,
+    upload_metadata: upload_metadata,
+    upload_screenshots: upload_screenshots,
+    submit_for_review: submit_for_review,
+    automatic_release: automatic_release
+  }
+end
+
+platform :ios do
+  desc "Validate Fastlane, signing, and upload prerequisites"
+  lane :prerelease_check do |options|
+    options ||= {}
+    flags = build_upload_flags(options)
+
+    project = project_path(options)
+    UI.user_error!("Xcode project not found: #{project}") unless File.directory?(project)
+    UI.user_error!("Xcode project is missing project.pbxproj: #{project}") unless File.exist?(File.join(project, "project.pbxproj"))
+
+    scheme = option_or_env(options, :scheme, "IOS_SCHEME", "InstantShare")
+    team_id = option_or_env(options, :team_id, "IOS_TEAM_ID", "ZU6V838VRQ")
+    certificate_name = option_or_env(options, :certificate_name, "IOS_CODE_SIGN_IDENTITY")
+    keychain_path = option_or_env(options, :keychain_path, "IOS_KEYCHAIN_PATH")
+    signing_style = option_or_env(options, :signing_style, "IOS_SIGNING_STYLE", "automatic").downcase
+    provisioning_profile_specifier = option_or_env(
+      options,
+      :provisioning_profile_specifier,
+      "IOS_PROVISIONING_PROFILE_SPECIFIER"
+    )
+
+    if flags[:upload_binary]
+      UI.user_error!("Set IOS_CODE_SIGN_IDENTITY to the Keychain certificate name for app uploads.") if certificate_name.to_s.empty?
+      ensure_codesigning_identity!(certificate_name)
+      if keychain_path && !keychain_path.empty? && !File.exist?(keychain_path)
+        UI.user_error!("Configured keychain path does not exist: #{keychain_path}")
+      end
+      if signing_style == "manual" && provisioning_profile_specifier.to_s.empty?
+        UI.user_error!("Set IOS_PROVISIONING_PROFILE_SPECIFIER when IOS_SIGNING_STYLE=manual.")
+      end
+      UI.important(
+        "Ensure the provisioning profile for #{option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instantshare")} is valid."
+      )
+    end
+
+    if api_key_configured?
+      UI.user_error!("Set both API_KEY_ID and API_KEY_FILE_PATH for App Store Connect API key auth.") unless api_key_complete?
+      UI.user_error!("API key file not found: #{resolved_api_key_file_path}") unless File.exist?(resolved_api_key_file_path)
+    else
+      if flags[:upload_binary] || flags[:upload_metadata]
+        require_env_vars!("FASTLANE_USER")
+      end
+      if flags[:upload_binary]
+        if ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"].to_s.strip.empty? &&
+           ENV["FASTLANE_PASSWORD"].to_s.strip.empty?
+          UI.user_error!("Set FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD or FASTLANE_PASSWORD for binary uploads.")
+        end
+      end
+      if flags[:upload_metadata]
+        require_env_vars!("FASTLANE_PASSWORD")
+        UI.important("FASTLANE_SESSION is not set; metadata uploads may prompt for 2FA in non-interactive shells.") if ENV["FASTLANE_SESSION"].to_s.strip.empty?
+      end
+    end
+    if flags[:upload_metadata] && truthy?(options[:require_existing_metadata], default: true)
+      ensure_metadata_ready!(metadata_path(options))
+    end
+
+    UI.message("Project: #{project}")
+    UI.message("Scheme: #{scheme}")
+    UI.message("Team ID: #{team_id}")
+    UI.message("Binary upload: #{flags[:upload_binary]}")
+    UI.success("Prerequisite check passed.")
+  end
+
+  desc "Archive and export an App Store Connect IPA"
+  lane :build_ipa do |options|
+    options ||= {}
+    project = project_path(options)
+    scheme = option_or_env(options, :scheme, "IOS_SCHEME", "InstantShare")
+    configuration = option_or_env(options, :configuration, "IOS_CONFIGURATION", "Release")
+    destination = option_or_env(options, :destination, "IOS_DESTINATION", "generic/platform=iOS")
+    archive_path = File.expand_path(
+      option_or_env(options, :archive_path, "IOS_ARCHIVE_PATH", File.join(ios_root, "build/#{scheme}.xcarchive")),
+      ios_root
+    )
+    ipa_export_path = export_path(options)
+    export_method = option_or_env(options, :export_method, "IOS_EXPORT_METHOD", "app-store-connect")
+    export_options_plist = option_or_env(options, :export_options_plist, "IOS_EXPORT_OPTIONS_PLIST")
+    team_id = option_or_env(options, :team_id, "IOS_TEAM_ID", "ZU6V838VRQ")
+    allow_provisioning_updates = truthy?(options[:allow_provisioning_updates] || ENV["IOS_ALLOW_PROVISIONING_UPDATES"], default: false)
+    clean_build = truthy?(options[:clean_build] || ENV["IOS_CLEAN_BUILD"], default: true)
+    certificate_name = option_or_env(options, :certificate_name, "IOS_CODE_SIGN_IDENTITY")
+    keychain_path = option_or_env(options, :keychain_path, "IOS_KEYCHAIN_PATH")
+    signing_style = option_or_env(options, :signing_style, "IOS_SIGNING_STYLE", "automatic").downcase
+    provisioning_profile_specifier = option_or_env(options, :provisioning_profile_specifier, "IOS_PROVISIONING_PROFILE_SPECIFIER")
+    bundle_identifier = option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instantshare")
+
+    UI.user_error!("Set IOS_CODE_SIGN_IDENTITY to the Keychain certificate name before building.") if certificate_name.to_s.empty?
+    ensure_codesigning_identity!(certificate_name)
+    if signing_style == "manual" && provisioning_profile_specifier.to_s.empty?
+      UI.user_error!("Set IOS_PROVISIONING_PROFILE_SPECIFIER when IOS_SIGNING_STYLE=manual.")
+    end
+
+    env = {
+      "PROJECT_PATH" => project,
+      "SCHEME" => scheme,
+      "CONFIGURATION" => configuration,
+      "DESTINATION" => destination,
+      "ARCHIVE_PATH" => archive_path,
+      "EXPORT_PATH" => ipa_export_path,
+      "EXPORT_METHOD" => export_method,
+      "TEAM_ID" => team_id,
+      "ALLOW_PROVISIONING_UPDATES" => allow_provisioning_updates ? "1" : "0",
+      "CLEAN_BUILD" => clean_build ? "1" : "0",
+      "CODE_SIGN_IDENTITY_NAME" => certificate_name,
+      "SIGNING_STYLE" => signing_style,
+      "BUNDLE_IDENTIFIER" => bundle_identifier
+    }
+    env["EXPORT_OPTIONS_PLIST"] = export_options_plist unless export_options_plist.to_s.empty?
+    env["KEYCHAIN_PATH"] = keychain_path unless keychain_path.to_s.empty?
+    env["PROVISIONING_PROFILE_SPECIFIER"] = provisioning_profile_specifier unless provisioning_profile_specifier.to_s.empty?
+
+    sh(env, "bash", File.join(ios_root, "scripts/export_ipa.sh"))
+
+    ipa_path = Dir[File.join(ipa_export_path, "*.ipa")].max_by { |path| File.mtime(path) }
+    UI.user_error!("IPA not found under #{ipa_export_path}") if ipa_path.nil?
+    UI.success("IPA ready at #{ipa_path}")
+    ipa_path
+  end
+
+  desc "Download current App Store Connect metadata"
+  lane :download_metadata do |options|
+    options ||= {}
+    prerelease_check(options.merge(upload_binary: false, upload_metadata: true, require_existing_metadata: false))
+    UI.user_error!("API key auth is required for download_metadata.") unless api_key_complete?
+
+    app_identifier = option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier))
+    metadata_dir = metadata_path(options)
+    FileUtils.mkdir_p(File.join(ios_root, "build"))
+    staging_root = Dir.mktmpdir("fastlane-metadata-", File.join(ios_root, "build"))
+    staging_dir = File.join(staging_root, "metadata")
+
+    begin
+      deliver_options = FastlaneCore::Configuration.create(
+        Deliver::Options.available_options,
+        {
+          app_identifier: app_identifier,
+          metadata_path: staging_dir,
+          platform: "ios",
+          api_key: {
+            key_id: api_key_id,
+            filepath: resolved_api_key_file_path,
+            issuer_id: api_key_issuer_id
+          }
+        }
+      )
+      Deliver::Runner.new(deliver_options)
+      app = Deliver.cache[:app]
+      platform = Spaceship::ConnectAPI::Platform.map(deliver_options[:platform])
+      version = app.get_latest_app_store_version(platform: platform)
+      requested_version = option_or_env(options, :app_version, "APP_STORE_CONNECT_APP_VERSION")
+      if requested_version.to_s.length > 0
+        version = app.get_live_app_store_version(platform: platform) if version.version_string != requested_version
+        if version.nil? || version.version_string != requested_version
+          UI.user_error!("Neither the current nor live version match specified app_version \"#{requested_version}\"")
+        end
+      end
+      Deliver::Setup.new.generate_metadata_files(app, version, staging_dir, deliver_options)
+      unless Dir.exist?(staging_dir) && Dir.children(staging_dir).any?
+        UI.user_error!("Metadata download produced no files at #{staging_dir}; leaving existing metadata untouched.")
+      end
+      if Dir.exist?(metadata_dir)
+        if Dir.children(metadata_dir).any?
+          backup_dir = "#{metadata_dir}.backup-#{Time.now.utc.strftime('%Y%m%d%H%M%S')}"
+          FileUtils.mv(metadata_dir, backup_dir)
+          UI.message("Backed up existing metadata to #{backup_dir}")
+        else
+          FileUtils.rm_rf(metadata_dir)
+        end
+      end
+      FileUtils.mv(staging_dir, metadata_dir)
+      staging_dir = nil
+      staging_root = nil
+    ensure
+      FileUtils.rm_rf(staging_root) if staging_root && Dir.exist?(staging_root)
+      FileUtils.rm_rf(staging_dir) if staging_dir && Dir.exist?(staging_dir)
+    end
+  end
+
+  desc "Build and upload the IPA and/or metadata to App Store Connect"
+  lane :app_store_release do |options|
+    options ||= {}
+    flags = build_upload_flags(options)
+    if !flags[:upload_binary] && !flags[:upload_metadata]
+      UI.user_error!("At least one of upload_binary or upload_metadata must be true.")
+    end
+    prerelease_check(options)
+    ipa_path = nil
+    if flags[:upload_binary]
+      ipa_path = build_ipa(options)
+    end
+    app_identifier = option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier))
+    asc_api_key = nil
+    if api_key_complete?
+      asc_api_key = app_store_connect_api_key(key_id: api_key_id, issuer_id: api_key_issuer_id, key_filepath: resolved_api_key_file_path)
+    end
+    if flags[:upload_binary] && !flags[:upload_metadata]
+      upload_to_testflight(app_identifier: app_identifier, api_key: asc_api_key, ipa: ipa_path, skip_waiting_for_build_processing: true, distribute_external: false, notify_external_testers: false)
+      next
+    end
+    upload_to_app_store(app_identifier: app_identifier, api_key: asc_api_key, ipa: ipa_path, metadata_path: flags[:upload_metadata] ? metadata_path(options) : nil, skip_binary_upload: !flags[:upload_binary], skip_metadata: !flags[:upload_metadata], skip_screenshots: !flags[:upload_screenshots], submit_for_review: flags[:submit_for_review], automatic_release: flags[:automatic_release], force: true, precheck_include_in_app_purchases: false)
+  end
+
+  desc "Build and upload only the IPA to App Store Connect"
+  lane :release_binary do |options|
+    app_store_release((options || {}).merge(upload_binary: true, upload_metadata: false))
+  end
+
+  desc "Upload only metadata to App Store Connect"
+  lane :release_metadata do |options|
+    app_store_release((options || {}).merge(upload_binary: false, upload_metadata: true))
+  end
+
+  desc "Build and upload both IPA and metadata to App Store Connect"
+  lane :release_all do |options|
+    app_store_release((options || {}).merge(upload_binary: true, upload_metadata: true))
+  end
+end
