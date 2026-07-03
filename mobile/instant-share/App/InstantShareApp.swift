@@ -1,6 +1,4 @@
 import Common
-import ComposableArchitecture
-import ISFromMobile
 import SwiftUI
 
 @main
@@ -15,11 +13,7 @@ struct InstantShareApp: App {
                 Color.clear
                     .ignoresSafeArea()
             } else {
-                FlowView(
-                    store: Store(initialState: FlowFeature.State()) {
-                        FlowFeature()
-                    }
-                )
+                RootView()
             }
         }
     }
