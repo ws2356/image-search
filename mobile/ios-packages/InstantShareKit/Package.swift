@@ -19,6 +19,11 @@ let package = Package(
             type: .dynamic,
             targets: ["ISFromMobile"]
         ),
+        .library(
+            name: "ISDeviceManagement",
+            type: .dynamic,
+            targets: ["ISDeviceManagement"]
+        ),
     ],
     dependencies: [
         .package(path: "../Common"),
@@ -36,6 +41,15 @@ let package = Package(
         ),
         .target(
             name: "ISFromMobile",
+            dependencies: [
+                .product(name: "Factory", package: "Factory"),
+                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+                .product(name: "Common", package: "Common"),
+            ],
+            resources: []
+        ),
+        .target(
+            name: "ISDeviceManagement",
             dependencies: [
                 .product(name: "Factory", package: "Factory"),
                 .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
