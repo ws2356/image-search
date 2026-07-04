@@ -12,6 +12,8 @@
 		3D802F2B2FF7FFC100A02CD7 /* ISFromPC in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000004 /* ISFromPC */; };
 		3D802F2C2FF7FFC100A02CD7 /* Common in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000002 /* Common */; };
 		3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; };
+		3D802F2E2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000006 /* ComposableArchitecture */; };
+		3D802F2F2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000006 /* ComposableArchitecture */; };
 		ISBF000000000000000001 /* InstantShareApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000003 /* InstantShareApp.swift */; };
 		ISBF000000000000000002 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000008 /* ShareViewController.swift */; };
 		ISBF000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000011 /* RootView.swift */; };
@@ -82,6 +84,7 @@
 				3D802F2B2FF7FFC100A02CD7 /* ISFromPC in Frameworks */,
 				3D802F2A2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
 				3D802F292FF7FFC100A02CD7 /* Common in Frameworks */,
+				3D802F2F2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +94,7 @@
 			files = (
 				3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
 				3D802F2C2FF7FFC100A02CD7 /* Common in Frameworks */,
+				3D802F2E2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -162,6 +166,7 @@
 				ISPD000000000000000003 /* ISFromMobile */,
 				ISPD000000000000000004 /* ISFromPC */,
 				ISPD000000000000000005 /* ISDeviceManagement */,
+				ISPD000000000000000006 /* ComposableArchitecture */,
 			);
 			productName = InstantShare;
 			productReference = ISFR000000000000000001 /* InstantShare.app */;
@@ -182,6 +187,7 @@
 			packageProductDependencies = (
 				ISPD000000000000000002 /* Common */,
 				ISPD000000000000000003 /* ISFromMobile */,
+				ISPD000000000000000006 /* ComposableArchitecture */,
 			);
 			productName = ShareExtension;
 			productReference = ISFR000000000000000002 /* Instant Share.appex */;
@@ -575,6 +581,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ISXLP000000000000000002 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */;
 			productName = ISDeviceManagement;
+		};
+		ISPD000000000000000006 /* ComposableArchitecture */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ISXRP000000000000000002 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
+			productName = ComposableArchitecture;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
