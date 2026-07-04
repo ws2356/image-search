@@ -91,6 +91,12 @@ struct QRTransferResultView: View {
                 .padding(.vertical, DesignSystem.Spacing.xs)
                 .background(DesignSystem.Colors.primary.opacity(0.1))
                 .clipShape(Capsule())
+            
+            Button("Done") {
+                viewModel.onComplete()
+            }
+            .font(DesignSystem.Typography.h4)
+            .foregroundStyle(DesignSystem.Colors.secondaryText)
         }
         .padding(.horizontal, DesignSystem.Spacing.lg)
         .padding(.vertical, DesignSystem.Spacing.md)

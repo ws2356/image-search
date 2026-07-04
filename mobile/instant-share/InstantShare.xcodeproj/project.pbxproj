@@ -14,15 +14,16 @@
 		3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; };
 		3D802F2E2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000006 /* ComposableArchitecture */; };
 		3D802F2F2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000006 /* ComposableArchitecture */; };
+		3DEAE3662FF8D7E900656799 /* ISDeviceManagement in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000005 /* ISDeviceManagement */; };
 		ISBF000000000000000001 /* InstantShareApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000003 /* InstantShareApp.swift */; };
 		ISBF000000000000000002 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000008 /* ShareViewController.swift */; };
-		ISBF000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000011 /* RootView.swift */; };
 		ISBF000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000005 /* Assets.xcassets */; };
 		ISBF000000000000000004 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000006 /* LaunchScreen.storyboard */; };
 		ISBF000000000000000005 /* Instant Share.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000002 /* Instant Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		ISBF000000000000000006 /* Common in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000002 /* Common */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000007 /* ISFromMobile in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000008 /* ISFromPC in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000004 /* ISFromPC */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		ISBF000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000011 /* RootView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +82,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3DEAE3662FF8D7E900656799 /* ISDeviceManagement in Frameworks */,
 				3D802F2B2FF7FFC100A02CD7 /* ISFromPC in Frameworks */,
 				3D802F2A2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
 				3D802F292FF7FFC100A02CD7 /* Common in Frameworks */,
@@ -273,7 +275,9 @@
 		ISBC000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = App/InstantShareApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -281,6 +285,7 @@
 				DEVELOPMENT_TEAM = ZU6V838VRQ;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Snap Get";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -298,7 +303,9 @@
 		ISBC000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = App/InstantShareApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -306,6 +313,7 @@
 				DEVELOPMENT_TEAM = ZU6V838VRQ;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Snap Get";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

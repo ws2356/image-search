@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="23504" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="LaunchScreenViewController">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24506" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="LaunchScreenViewController">
     <device id="retina6_12" orientation="portrait" appearance="light"/>
     <dependencies>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="23506"/>
+        <deployment identifier="iOS"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24504"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
+        <!--View Controller-->
         <scene sceneID="LaunchScreenScene">
             <objects>
                 <viewController id="LaunchScreenViewController" sceneMemberID="viewController">
@@ -14,17 +16,17 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Instant Share" textAlignment="center" lineBreakMode="middleTruncation" baselineAdjustment="alignBaselines" minimumFontSize="18" translatesAutoresizingMaskIntoConstraints="NO" id="LaunchScreenLabel">
-                                <rect key="frame" x="0.0" y="390" width="393" height="72"/>
-                                <fontDescription key="fontDescription" type="boldSystem" pointSize="36"/>
-                                <color key="textColor" white="0.33333333333333331" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-                            </label>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" image="LaunchSplash" translatesAutoresizingMaskIntoConstraints="NO" id="LaunchSplashImageView">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="LaunchScreenSafeArea"/>
                         <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
                         <constraints>
-                            <constraint firstItem="LaunchScreenLabel" firstAttribute="centerX" secondItem="LaunchScreenView" secondAttribute="centerX" id="LabelCenterX"/>
-                            <constraint firstItem="LaunchScreenLabel" firstAttribute="centerY" secondItem="LaunchScreenView" secondAttribute="centerY" id="LabelCenterY"/>
+                            <constraint firstAttribute="bottom" secondItem="LaunchSplashImageView" secondAttribute="bottom" id="SplashBottom"/>
+                            <constraint firstItem="LaunchSplashImageView" firstAttribute="leading" secondItem="LaunchScreenView" secondAttribute="leading" id="SplashLeading"/>
+                            <constraint firstItem="LaunchSplashImageView" firstAttribute="top" secondItem="LaunchScreenView" secondAttribute="top" id="SplashTop"/>
+                            <constraint firstAttribute="trailing" secondItem="LaunchSplashImageView" secondAttribute="trailing" id="SplashTrailing"/>
                         </constraints>
                     </view>
                 </viewController>
@@ -33,4 +35,7 @@
             <point key="canvasLocation" x="50" y="375"/>
         </scene>
     </scenes>
+    <resources>
+        <image name="LaunchSplash" width="630" height="1240"/>
+    </resources>
 </document>
