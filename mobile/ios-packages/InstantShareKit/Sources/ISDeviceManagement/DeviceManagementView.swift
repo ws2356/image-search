@@ -26,8 +26,7 @@ public struct DeviceManagementView: View {
                         Text("No Trusted Devices")
                             .foregroundStyle(.secondary)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                    .frame(maxWidth: .infinity, minHeight: 400)
                     .listRowBackground(Color.clear)
                 } else {
                     ForEach(store.trustedDevices) { device in
@@ -51,6 +50,7 @@ public struct DeviceManagementView: View {
             .listStyle(.insetGrouped)
             .navigationTitle("Devices")
             .task { await store.send(.onAppear).finish() }
+            .refreshable { await store.send(.pullToRefresh).finish() }
             .overlay(alignment: .bottom) {
                 if let error = store.errorMessage {
                     Text(error)

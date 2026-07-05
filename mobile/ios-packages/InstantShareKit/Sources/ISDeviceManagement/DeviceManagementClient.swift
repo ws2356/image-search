@@ -14,6 +14,7 @@ extension DeviceManagementClient: DependencyKey {
         loadDevices: {
             let provider = Container.shared.appIdentityProvider()
             let certs = try await provider.loadAllPeerCertificates()
+            LocalLog.debug("[dm] loaded certs: \(certs)")
             return certs.compactMap { cert in
                 guard let name = cert.commonName,
                       let id = cert.deviceUUIDFromExtension(KeychainAppIdentityProvider.deviceIdOID),

@@ -1,12 +1,16 @@
 import Common
 import SwiftUI
 import ISFromPC
+import ComposableArchitecture
 
 @main
 struct InstantShareApp: App {
-    @State private var sharePayload: QRClaimPayload?
+    let store: StoreOf<RootFeature>
 
     init() {
+        self.store = Store(initialState: RootFeature.State()) {
+            RootFeature()
+        }
         FontRegistration.registerCustomFonts()
     }
 
@@ -16,11 +20,11 @@ struct InstantShareApp: App {
                 Color.clear
                     .ignoresSafeArea()
             } else {
-                RootView(sharePayload: $sharePayload)
+                RootView(store: store)
                     .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                         guard let url = activity.webpageURL else { return }
                         if let payload = QRClaimPayload(universalLinkURL: url) {
-                            sharePayload = payload
+                            store.send(.receivedSharePayload(payload))
                         }
                     }
             }

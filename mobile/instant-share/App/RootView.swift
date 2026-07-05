@@ -3,6 +3,47 @@ import ISDeviceManagement
 import ISFromPC
 import ComposableArchitecture
 
+@Reducer
+struct RootFeature: Sendable {
+    @ObservableState
+    struct State: Equatable {
+        var deviceManagement: DeviceManagementFeature.State = .init()
+        var sheetContent: ShareSheetContent?
+    }
+
+    @CasePathable
+    enum Action {
+        case deviceManagement(DeviceManagementFeature.Action)
+        case scanButtonTapped
+        case receivedSharePayload(QRClaimPayload)
+        case dismissSheet
+    }
+
+    var body: some ReducerOf<Self> {
+        Scope(state: \.deviceManagement, action: \.deviceManagement) {
+            DeviceManagementFeature()
+        }
+        Reduce { state, action in
+            switch action {
+            case .scanButtonTapped:
+                state.sheetContent = .scan
+                return .none
+
+            case .receivedSharePayload(let payload):
+                state.sheetContent = .claim(payload)
+                return .none
+
+            case .dismissSheet:
+                state.sheetContent = nil
+                return .none
+
+            case .deviceManagement:
+                return .none
+            }
+        }
+    }
+}
+
 struct QRSheetNavigator: Navigator {
     let dismiss: () -> Void
     func requestExit() {
@@ -10,7 +51,7 @@ struct QRSheetNavigator: Navigator {
     }
 }
 
-enum ShareSheetContent: Identifiable {
+enum ShareSheetContent: Equatable, Identifiable {
     case scan
     case claim(QRClaimPayload)
 
@@ -23,41 +64,41 @@ enum ShareSheetContent: Identifiable {
 }
 
 struct RootView: View {
-    @Binding var sharePayload: QRClaimPayload?
+    let store: StoreOf<RootFeature>
     @State private var sheetContent: ShareSheetContent?
 
     var body: some View {
-        NavigationView {
-            DeviceManagementView(
-                store: Store(initialState: DeviceManagementFeature.State()) {
-                    DeviceManagementFeature()
-                }
-            )
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { sheetContent = .scan }) {
-                        Image(systemName: "qrcode.viewfinder")
+        WithPerceptionTracking {
+            NavigationView {
+                DeviceManagementView(
+                    store: store.scope(state: \.deviceManagement, action: \.deviceManagement)
+                )
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { store.send(.scanButtonTapped) }) {
+                            Image(systemName: "qrcode.viewfinder")
+                        }
                     }
                 }
             }
+            .navigationViewStyle(.stack)
+            .onChange(of: store.sheetContent) { newContent in
+                sheetContent = newContent
+            }
         }
-        .navigationViewStyle(.stack)
-        .onChange(of: sharePayload) { newPayload in
-            if let payload = newPayload {
-                sheetContent = .claim(payload)
+        .onChange(of: sheetContent) { newContent in
+            if newContent == nil {
+                store.send(.dismissSheet)
             }
         }
         .fullScreenCover(item: $sheetContent) { content in
             switch content {
             case .scan:
-                ISQRRootView(navigator: QRSheetNavigator(dismiss: { sheetContent = nil }))
+                ISQRRootView(navigator: QRSheetNavigator(dismiss: { store.send(.dismissSheet) }))
             case .claim(let payload):
                 ISQRRootView(
                     qrPayload: payload,
-                    navigator: QRSheetNavigator(dismiss: {
-                        sharePayload = nil
-                        sheetContent = nil
-                    })
+                    navigator: QRSheetNavigator(dismiss: { store.send(.dismissSheet) })
                 )
             }
         }
