@@ -38,14 +38,6 @@ The PC self-signed certificate SHALL contain the device UUID in a custom X.509 e
 - **THEN** the certificate SHALL include a custom extension with OID `2.25.37020860436019521`
 - **AND** the extension SHALL encode the device UUID as an ASN.1 UTF8String value
 
-### Requirement: No PC storage/query API changes
-The PC-side `device_identity.py` public APIs for peer certificate storage and query (`store_peer_certificate`, `load_peer_certificate`, `load_all_peer_certificates`, `delete_peer_certificate`) SHALL NOT change their signatures or storage mechanism. Only the self-cert content generation (`_generate_identity`) SHALL be updated.
-
-#### Scenario: PC peer cert APIs unchanged
-- **WHEN** `store_peer_certificate(peer_device_id, certificate_pem)` is called
-- **THEN** it SHALL store using the same keychain service/account/label as before
-- **AND** `load_peer_certificate(peer_device_id)` SHALL continue to work as before
-
 ### Requirement: iOS self-cert version bump to 3
 The `SELF_CERT_VERSION` constant in `KeychainAppIdentityProvider` SHALL be updated from 2 to 3. On next launch, the migration logic SHALL detect the version mismatch (stored cert version extension value < 3) and regenerate the certificate with the new CN (device name) and new extension (device UUID in OID `2.25.37020860436019521`), preserving the same EC key pair. Old-format peer certificates SHALL be deleted during migration.
 
