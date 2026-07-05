@@ -7,6 +7,7 @@ import Foundation
 struct DeviceManagementClient {
     var loadDevices: @Sendable () async throws -> [TrustedDevice] = { [] }
     var deleteDevice: @Sendable (_ pubkeyHash: Data) async throws -> Void
+    var ensureSelfIdentity: @Sendable () async throws -> Void
 }
 
 extension DeviceManagementClient: DependencyKey {
@@ -26,6 +27,10 @@ extension DeviceManagementClient: DependencyKey {
         deleteDevice: { hash in
             let provider = Container.shared.appIdentityProvider()
             try await provider.deletePeerCertificate(forPubkeyHash: hash)
+        },
+        ensureSelfIdentity: {
+            let provider = Container.shared.appIdentityProvider()
+            try? await provider.ensureSelfIdentity()
         }
     )
 }

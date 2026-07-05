@@ -8,15 +8,15 @@ struct RootFeature: Sendable {
     @ObservableState
     struct State: Equatable {
         var deviceManagement: DeviceManagementFeature.State = .init()
-        var sheetContent: ShareSheetContent?
+        @Presents var sheetContent: ShareSheetContent?
     }
 
     @CasePathable
     enum Action {
         case deviceManagement(DeviceManagementFeature.Action)
+        case sheetContent(PresentationAction<Never>)
         case scanButtonTapped
         case receivedSharePayload(QRClaimPayload)
-        case dismissSheet
     }
 
     var body: some ReducerOf<Self> {
@@ -33,7 +33,7 @@ struct RootFeature: Sendable {
                 state.sheetContent = .claim(payload)
                 return .none
 
-            case .dismissSheet:
+            case .sheetContent(.dismiss):
                 state.sheetContent = nil
                 return .none
 
@@ -65,10 +65,10 @@ enum ShareSheetContent: Equatable, Identifiable {
 
 struct RootView: View {
     let store: StoreOf<RootFeature>
-    @State private var sheetContent: ShareSheetContent?
 
     var body: some View {
         WithPerceptionTracking {
+            let sheetObserved = store.sheetContent
             NavigationView {
                 DeviceManagementView(
                     store: store.scope(state: \.deviceManagement, action: \.deviceManagement)
@@ -82,24 +82,21 @@ struct RootView: View {
                 }
             }
             .navigationViewStyle(.stack)
-            .onChange(of: store.sheetContent) { newContent in
-                sheetContent = newContent
-            }
-        }
-        .onChange(of: sheetContent) { newContent in
-            if newContent == nil {
-                store.send(.dismissSheet)
-            }
-        }
-        .fullScreenCover(item: $sheetContent) { content in
-            switch content {
-            case .scan:
-                ISQRRootView(navigator: QRSheetNavigator(dismiss: { store.send(.dismissSheet) }))
-            case .claim(let payload):
-                ISQRRootView(
-                    qrPayload: payload,
-                    navigator: QRSheetNavigator(dismiss: { store.send(.dismissSheet) })
+            .fullScreenCover(
+                item: Binding(
+                    get: { sheetObserved },
+                    set: { if $0 == nil { store.send(.sheetContent(.dismiss)) } }
                 )
+            ) { content in
+                switch content {
+                case .scan:
+                    ISQRRootView(navigator: QRSheetNavigator(dismiss: { store.send(.sheetContent(.dismiss)) }))
+                case .claim(let payload):
+                    ISQRRootView(
+                        qrPayload: payload,
+                        navigator: QRSheetNavigator(dismiss: { store.send(.sheetContent(.dismiss)) })
+                    )
+                }
             }
         }
     }
