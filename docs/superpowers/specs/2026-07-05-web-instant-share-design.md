@@ -1,7 +1,7 @@
 # Web-Based Instant Share (PC-to-Mobile Fallback Flow)
 
 **Date:** 2026-07-05
-**Status:** Draft — pending user review
+**Status:** Implemented — verified pending E2E manual tests
 **Author:** Brainstorming session (opencode + ws2356)
 
 ## Purpose
