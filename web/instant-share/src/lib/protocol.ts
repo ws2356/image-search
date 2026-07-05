@@ -30,20 +30,34 @@ const KNOWN_MSGS = new Set<string>([
   'file_start', 'file_end', 'error', 'bye',
 ]);
 
+import { log } from './log';
+
 export function encodeControl(message: ControlMessage): string {
+  const safe = { ...message, opt_code: message.msg === 'auth' ? '***' : undefined };
+  log.debug('encodeControl', safe);
   return JSON.stringify(message);
 }
 
 export function decodeWireEvent(data: string | ArrayBuffer): WireEvent | null {
   if (typeof data !== 'string') {
+    const size = data.byteLength;
+    log.debug('decodeWireEvent: binary chunk', `${size}B`);
     return { kind: 'binary', buffer: data };
   }
-  if (!data) return null;
+  if (!data) {
+    log.warn('decodeWireEvent: empty string');
+    return null;
+  }
   try {
     const parsed = JSON.parse(data) as { msg?: string };
-    if (!parsed.msg || !KNOWN_MSGS.has(parsed.msg)) return null;
+    if (!parsed.msg || !KNOWN_MSGS.has(parsed.msg)) {
+      log.warn('decodeWireEvent: unknown msg', parsed);
+      return null;
+    }
+    log.debug('decodeWireEvent: control', parsed.msg, parsed);
     return { kind: 'control', message: parsed as ControlMessage };
-  } catch {
+  } catch (err) {
+    log.warn('decodeWireEvent: json parse failed', { data: data.slice(0, 80) }, err);
     return null;
   }
 }

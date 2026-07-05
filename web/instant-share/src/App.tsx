@@ -6,12 +6,15 @@ import { ConnectingScreen } from './components/ConnectingScreen';
 import { TransferScreen } from './components/TransferScreen';
 import { DoneScreen } from './components/DoneScreen';
 import { ErrorScreen } from './components/ErrorScreen';
+import { log } from './lib/log';
 
 const RELAY_URL = 'wss://dl.boldman.net/relay';
 
 function AppContent() {
+  log.info('App: init', { search: window.location.search });
   const params = parseShareUrlParams(window.location.search);
   if (!params) {
+    log.warn('App: invalid or missing URL params');
     return <ErrorScreen error={{ code: 'bad_url', message: 'Missing or invalid share parameters' }} />;
   }
 
@@ -19,9 +22,18 @@ function AppContent() {
   const webrtc = useWebRTC(signal);
   const transfer = useTransfer(params, webrtc);
 
-  if (transfer.status === 'done') return <DoneScreen />;
-  if (transfer.status === 'error') return <ErrorScreen error={transfer.error ?? { code: 'unknown', message: '' }} />;
+  log.info('App: state snapshot', { webrtcState: webrtc.state, signalReady: signal.ready, transferStatus: transfer.status, fileCount: transfer.files.length });
+
+  if (transfer.status === 'done') {
+    log.info('App: rendering DoneScreen');
+    return <DoneScreen />;
+  }
+  if (transfer.status === 'error') {
+    log.warn('App: rendering ErrorScreen', transfer.error);
+    return <ErrorScreen error={transfer.error ?? { code: 'unknown', message: '' }} />;
+  }
   if (transfer.status === 'transferring' && transfer.files.length > 0 && transfer.manifest) {
+    log.info('App: rendering TransferScreen', { fileCount: transfer.files.length });
     return <TransferScreen files={transfer.files} manifest={transfer.manifest} />;
   }
   const labels: Record<string, string> = {
@@ -29,7 +41,9 @@ function AppContent() {
     authenticating: 'Authenticating with PC…',
     booting: 'Loading…',
   };
-  return <ConnectingScreen label={labels[transfer.status] ?? 'Connecting to PC…'} />;
+  const label = labels[transfer.status] ?? 'Connecting to PC…';
+  log.info('App: rendering ConnectingScreen', { transferStatus: transfer.status, webrtcState: webrtc.state, label });
+  return <ConnectingScreen label={label} />;
 }
 
 export default function App() {
