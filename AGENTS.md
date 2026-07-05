@@ -16,6 +16,7 @@ This is a monorepo containing source code for the following products:
 - **Cooperation**: If you cann't generate code with confidence due to complexity or ambiguity, turn to human engineers for help. For example, when blocked by a difficult technical challenge, you can pause and ask for help from a human engineer or another agent with complementary expertise.
 - **Ask for Clarification**: If any requirement or guideline is unclear, ask for clarification before proceeding with planning or coding. Do not make assumptions that could lead to non-compliant code.
 - **Readable Documentation**: Do not inline similar documentation in multiple places. Instead, maintain a single source of truth (e.g., this document) and refer to it as needed. This ensures that all agents and human engineers are aligned on the guidelines and reduces the risk of inconsistencies.
+- **Take Responsibility**: Always ensure the code builds and tests pass before completing a task. Even if the root cause of a failure is not on your side, take responsibility for the whole project and fix the issue or escalate it to the appropriate team member. Do not leave broken code in the repository.
 
 ## 1. Tech Stack & Environment
 - **Language**: Python 3.10.
