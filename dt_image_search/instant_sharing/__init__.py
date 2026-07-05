@@ -76,6 +76,7 @@ from dt_image_search.instant_sharing.orchestrator import (
 )
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 from dt_image_search.instant_sharing.runtime import InstantShareRuntime
+from dt_image_search.instant_sharing.webrtc_peer import WebRTCPeer, WebRTCPeerManager
 from dt_image_search.instant_sharing.session import (
     InstantShareSession,
     InstantShareSessionRegistry,
@@ -131,5 +132,7 @@ __all__ = [
     "TrustSessionRegistry",
     "TrustSessionProtector",
     "TrustMode",
+    "WebRTCPeer",
+    "WebRTCPeerManager",
     "X25519TrustSessionKeyResolver",
 ]

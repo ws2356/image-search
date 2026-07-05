@@ -29,6 +29,7 @@ from dt_image_search.instant_sharing.session import InstantShareSession, Instant
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 from dt_image_search.instant_sharing.transfer_server import TransferHandler
 from dt_image_search.instant_sharing.unix_socket_server import UnixSocketHttpServer
+from dt_image_search.instant_sharing.webrtc_peer import WebRTCPeerManager
 from dt_image_search.model.dt_device_id import get_device_id
 from dt_image_search.model.feature_flags import is_instant_share_enabled
 
@@ -54,6 +55,7 @@ class InstantShareRuntime:
         trust_session_registry: TrustSessionRegistry | None = None,
         pin_display_callback: Callable[[str, str], None] | None = None,
         qr_window_factory: QRTriggerMiniWindowFactory | None = None,
+        webrtc_peer_manager: WebRTCPeerManager | None = None,
     ) -> None:
         initialize_device_identity()
 
@@ -102,6 +104,14 @@ class InstantShareRuntime:
             trust_session_registry=self._trust_session_registry,
         )
         self._qr_window_factory = qr_window_factory
+        self._webrtc_peer_manager = (
+            webrtc_peer_manager
+            if webrtc_peer_manager is not None
+            else WebRTCPeerManager(
+                qr_handler=self._qr_trigger_handler,
+                trust_session_registry=self._trust_session_registry,
+            )
+        )
         self._unix_socket_server = UnixSocketHttpServer(
             request_handler=self._qr_trigger_handler.handle_trigger,
         )
@@ -180,6 +190,10 @@ class InstantShareRuntime:
         return self._qr_window_factory
 
     @property
+    def webrtc_peer_manager(self) -> WebRTCPeerManager:
+        return self._webrtc_peer_manager
+
+    @property
     def unix_socket_server(self) -> UnixSocketHttpServer:
         return self._unix_socket_server
 
@@ -241,6 +255,8 @@ class InstantShareRuntime:
         if self._qr_window_factory is not None:
             self._qr_window_factory.start()
             _logger.info("[InstantShareRuntime] QR window factory started")
+        self._webrtc_peer_manager.start()
+        _logger.info("[InstantShareRuntime] WebRTC peer manager started")
         return result
 
     def stop(self) -> None:
@@ -251,6 +267,7 @@ class InstantShareRuntime:
             self._network_change_subscription.dispose()
             self._network_change_subscription = None
         self._unix_socket_server.stop()
+        self._webrtc_peer_manager.stop()
         self._tls_server.stop()
         self._http_server.stop()
         self._ble_daemon.stop()

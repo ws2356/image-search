@@ -85,6 +85,12 @@ def is_instant_share_feature_enabled(default: bool = False) -> bool:
     return default
 
 
+def get_signal_relay_url() -> str:
+    config = get_config()
+    relay = config.get("signal_relay_url", "").strip()
+    return relay or "wss://dl.boldman.net/relay"
+
+
 def _as_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
         return value
