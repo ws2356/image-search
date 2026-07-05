@@ -26,3 +26,4 @@ pyobjc-framework-Cocoa>=12.2,<13; sys_platform == 'darwin'
 pyobjc-framework-SystemConfiguration>=12.2,<13; sys_platform == 'darwin'
 fastapi >= 0.135.0, < 0.137.0
 uvicorn >= 0.44.0, < 0.45.0
+aiortc >= 1.14.0, < 2.0.0
