@@ -1,0 +1,11 @@
+[Unit]
+Description=Instant-Share WebSocket Relay
+After=network.target
+
+[Service]
+ExecStart=/home/ubuntu/.nvm/versions/node/v24.18.0/bin/node /opt/instant-share-relay/relay.mjs
+Restart=always
+Environment=RELAY_PORT=8787
+
+[Install]
+WantedBy=multi-user.target
