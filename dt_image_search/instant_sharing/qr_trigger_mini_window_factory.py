@@ -79,6 +79,8 @@ class QRTriggerMiniWindowFactory:
 
     def _on_stash_created(self, stash: StashEntry) -> None:
         self._bridge.stash_created.emit(stash)
+        if self._stash_created_sub is not None:
+            self._stash_created_sub(stash)
 
     def _on_stash_claimed(self, stash_id: str, peer_device_name: str = "") -> None:
         self._bridge.stash_claimed.emit(stash_id, peer_device_name)
