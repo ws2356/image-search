@@ -7,7 +7,7 @@ const PORT = 3401;
 let relay;
 
 before(async () => {
-  relay = await createRelay(PORT);
+  relay = await createRelay(PORT, { reconnectGraceMs: 0 });
 });
 
 after(async () => {

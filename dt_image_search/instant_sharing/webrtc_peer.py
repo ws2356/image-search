@@ -86,6 +86,7 @@ class WebRTCPeer:
         asyncio.run_coroutine_threadsafe(self._run(), self._loop)
 
     async def _run(self) -> None:
+        _logger.debug("[WebRTCPeer] relay url=%s", self._relay_url)
         _logger.info(
             "[WebRTCPeer] _run starting session=%s stash=%s relay=%s",
             self._session_id, self._stash.stash_id, self._relay_url,

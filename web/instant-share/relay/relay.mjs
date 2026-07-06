@@ -1,7 +1,8 @@
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
-export function createRelay(port) {
+export function createRelay(port, opts) {
+  const reconnectGraceMs = opts?.reconnectGraceMs ?? parseInt(process.env.RECONNECT_GRACE_MS ?? '3000', 10);
   const rooms = new Map();
 
   function getRoom(sid) {
@@ -25,10 +26,12 @@ export function createRelay(port) {
     const room = getRoom(sid);
 
     if (role === 'pc') {
-      if (room.pc) { ws.close(4002, 'room_full'); return; }
+      if (room.pc && room.pc.readyState === WebSocket.OPEN) { ws.close(4002, 'room_full'); return; }
+      if (room._pcReconnectTimer) { clearTimeout(room._pcReconnectTimer); room._pcReconnectTimer = null; }
       room.pc = ws;
     } else {
-      if (room.browser) { ws.close(4002, 'room_full'); return; }
+      if (room.browser && room.browser.readyState === WebSocket.OPEN) { ws.close(4002, 'room_full'); return; }
+      if (room._browserReconnectTimer) { clearTimeout(room._browserReconnectTimer); room._browserReconnectTimer = null; }
       room.browser = ws;
     }
 
@@ -61,12 +64,23 @@ export function createRelay(port) {
     ws.on('close', () => {
       if (role === 'pc') {
         room.pc = null;
-        if (room.browser?.readyState === 1) room.browser.send(JSON.stringify({ type: 'peer_left' }));
+        room._pcReconnectTimer = setTimeout(() => {
+          room._pcReconnectTimer = null;
+          if (!room.pc && room.browser?.readyState === 1) {
+            room.browser.send(JSON.stringify({ type: 'peer_left' }));
+          }
+          if (!room.pc && !room.browser) rooms.delete(sid);
+        }, reconnectGraceMs);
       } else {
         room.browser = null;
-        if (room.pc?.readyState === 1) room.pc.send(JSON.stringify({ type: 'peer_left' }));
+        room._browserReconnectTimer = setTimeout(() => {
+          room._browserReconnectTimer = null;
+          if (!room.browser && room.pc?.readyState === 1) {
+            room.pc.send(JSON.stringify({ type: 'peer_left' }));
+          }
+          if (!room.pc && !room.browser) rooms.delete(sid);
+        }, reconnectGraceMs);
       }
-      if (!room.pc && !room.browser) rooms.delete(sid);
     });
   });
 
