@@ -77,21 +77,27 @@ export async function applyDelivery(action: DeliveryAction): Promise<void> {
         break;
       }
       case 'save_to_photos': {
-        const file = new File([action.blob], action.filename, { type: action.blob.type });
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          log.info('deliverer: navigator.share', { filename: action.filename });
-          await navigator.share({ files: [file] });
-        } else {
-          log.info('deliverer: navigator.share unavailable, falling back to download', { filename: action.filename });
-          const url = URL.createObjectURL(action.blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = action.filename;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
+          const file = new File([action.blob], action.filename, { type: action.blob.type });
+          if (navigator.canShare({ files: [file] })) {
+            log.info('deliverer: navigator.share', { filename: action.filename });
+            try {
+              await navigator.share({ files: [file] });
+              break;
+            } catch (shareErr) {
+              log.warn('deliverer: navigator.share failed, falling back to download', { filename: action.filename, error: String(shareErr) });
+            }
+          }
         }
+        log.info('deliverer: save_blob download fallback', { filename: action.filename, size: action.blob.size });
+        const url = URL.createObjectURL(action.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = action.filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         break;
       }
       case 'none':
