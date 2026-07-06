@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import struct
 import threading
 from dataclasses import dataclass, field
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-RELAY_URL = "wss://dl.boldman.net/relay"
+RELAY_URL = os.getenv("RELAY_URL") or "wss://dl.boldman.net/relay"
 MAX_MESSAGE_SIZE = 16 * 1024  # 16KB chunks
 AUTH_TIMEOUT_SECONDS = 15
 

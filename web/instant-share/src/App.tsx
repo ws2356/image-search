@@ -8,7 +8,11 @@ import { DoneScreen } from './components/DoneScreen';
 import { ErrorScreen } from './components/ErrorScreen';
 import { log } from './lib/log';
 
-const RELAY_URL = 'wss://dl.boldman.net/relay';
+const RELAY_URL = import.meta.env.VITE_RELAY_URL;
+
+if (!RELAY_URL) {
+  throw new Error('RELAY_URL is not defined in environment variables');
+}
 
 function AppContent() {
   log.info('App: init', { search: window.location.search });

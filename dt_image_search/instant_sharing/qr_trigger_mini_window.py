@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import socket
 from typing import Callable
-
+import os
 from PIL import Image
 from PySide6.QtCore import Qt, QTimer, QRect
 from PySide6.QtGui import QImage, QPainter, QPen, QColor, QPixmap, QFont
@@ -59,7 +59,8 @@ def build_qr_url(
     opt_code: str
 ) -> str:
     ips_str = ",".join(ips)
-    return f"https://dl.boldman.net/share?ips={ips_str}&p={port}&sp={tls_port}&sid={session_id}&opt={opt_code}"
+    base_url = os.environ.get("INSTANT_SHARE_QR_BASE_URL", "https://dl.boldman.net")
+    return f"{base_url}/share?ips={ips_str}&p={port}&sp={tls_port}&sid={session_id}&opt={opt_code}"
 
 
 def render_qr_pixmap(payload: str, size: int) -> QPixmap:
@@ -365,6 +366,7 @@ class QRTriggerMiniWindow(QDialog):
             session_id=self._session_id,
             opt_code=self._stash.opt_code
         )
+        _logger.debug("QR payload: %s", payload)
         pixmap = render_qr_pixmap(payload, QR_SIZE)
         self.set_qr_pixmap(pixmap)
 
