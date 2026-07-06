@@ -22,6 +22,16 @@ describe('protocol codec', () => {
     }
   });
 
+  it('decodes an ArrayBuffer containing a control message as control', () => {
+    const text = '{"msg":"auth_ok","payload_type":"file"}\n\n';
+    const buf = new TextEncoder().encode(text).buffer;
+    const ev = decodeWireEvent(buf);
+    expect(ev?.kind).toBe('control');
+    if (ev?.kind === 'control') {
+      expect(ev.message.msg).toBe('auth_ok');
+    }
+  });
+
   it('returns null for malformed JSON string', () => {
     expect(decodeWireEvent('not json')).toBeNull();
   });

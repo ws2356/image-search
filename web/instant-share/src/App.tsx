@@ -15,7 +15,6 @@ if (!RELAY_URL) {
 }
 
 function AppContent() {
-  log.info('App: init', { search: window.location.search });
   const params = parseShareUrlParams(window.location.search);
   if (!params) {
     log.warn('App: invalid or missing URL params');
@@ -25,8 +24,6 @@ function AppContent() {
   const signal = useSignalChannel(RELAY_URL, params.sessionId, 'browser');
   const webrtc = useWebRTC(signal);
   const transfer = useTransfer(params, webrtc);
-
-  log.info('App: state snapshot', { webrtcState: webrtc.state, signalReady: signal.ready, transferStatus: transfer.status, fileCount: transfer.files.length });
 
   if (transfer.status === 'done') {
     log.info('App: rendering DoneScreen');
@@ -46,7 +43,6 @@ function AppContent() {
     booting: 'Loading…',
   };
   const label = labels[transfer.status] ?? 'Connecting to PC…';
-  log.info('App: rendering ConnectingScreen', { transferStatus: transfer.status, webrtcState: webrtc.state, label });
   return <ConnectingScreen label={label} />;
 }
 

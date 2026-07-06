@@ -137,7 +137,7 @@ class TestWebRTCPeerMessages(unittest.TestCase):
         binary_messages = []
         for call in calls:
             data = call[0][0]
-            if isinstance(data, bytes) and data.endswith(CONTROL_TERMINATOR):
+            if isinstance(data, str) and data.endswith(CONTROL_TERMINATOR):
                 control_messages.append(_read_control_message(data))
             elif isinstance(data, bytes):
                 binary_messages.append(data)

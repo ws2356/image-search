@@ -68,7 +68,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     }
     log.debug('useTransfer: sendControl', msg.msg);
     dc.send(encodeControl(msg));
-  }, [webrtc]);
+  }, [webrtc.channel]);
 
   const downloadNext = useCallback(() => {
     const pending = pendingManifestRef.current ?? [];
@@ -191,18 +191,6 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
       log.info('useTransfer: dc not open yet, waiting', { state: dc.readyState });
       return;
     }
-    if (sentAuthRef.current) {
-      log.debug('useTransfer: auth already sent, skipping');
-      return;
-    }
-    sentAuthRef.current = true;
-    log.info('useTransfer: sending auth', { optCode: '***' });
-    setStatus('authenticating');
-    sendControl({ msg: 'auth', opt_code: params.optCode });
-    authTimerRef.current = setTimeout(() => {
-      log.error('useTransfer: auth timeout (15s)');
-      fail('auth_timeout', 'Authentication timed out');
-    }, AUTH_TIMEOUT_MS);
 
     const onMessage = (e: MessageEvent) => handleMessage(e.data);
     const onClose = () => {
@@ -212,13 +200,25 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     };
     dc.addEventListener('message', onMessage);
     dc.addEventListener('close', onClose);
+
+    if (!sentAuthRef.current) {
+      sentAuthRef.current = true;
+      log.info('useTransfer: sending auth', { optCode: '***' });
+      setStatus('authenticating');
+      sendControl({ msg: 'auth', opt_code: params.optCode });
+      authTimerRef.current = setTimeout(() => {
+        log.error('useTransfer: auth timeout (15s)');
+        fail('auth_timeout', 'Authentication timed out');
+      }, AUTH_TIMEOUT_MS);
+    }
+
     return () => {
       log.debug('useTransfer: removing dc listeners');
       dc.removeEventListener('message', onMessage);
       dc.removeEventListener('close', onClose);
       if (authTimerRef.current) clearTimeout(authTimerRef.current);
     };
-  }, [webrtc, params.optCode, sendControl, handleMessage, fail]);
+  }, [webrtc.channel, params.optCode, sendControl, handleMessage, fail]);
 
   useEffect(() => {
     if (webrtc.state === 'failed') {

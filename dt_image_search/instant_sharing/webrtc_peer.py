@@ -26,7 +26,7 @@ AUTH_TIMEOUT_SECONDS = 15
 CHUNK_HEADER_FMT = "!II"  # index (4B) + offset (4B) per chunk
 CHUNK_HEADER_SIZE = struct.calcsize(CHUNK_HEADER_FMT)
 
-CONTROL_TERMINATOR = b"\n\n"
+CONTROL_TERMINATOR = "\n\n"
 
 
 @dataclass
@@ -40,8 +40,8 @@ class InFlightDownload:
     total_chunks: int = 0
 
 
-def _encode_control(obj: dict) -> bytes:
-    return json.dumps(obj).encode("utf-8") + CONTROL_TERMINATOR
+def _encode_control(obj: dict) -> str:
+    return json.dumps(obj) + CONTROL_TERMINATOR
 
 
 def _read_control_message(msg: str | bytes) -> dict | None:
@@ -141,6 +141,16 @@ class WebRTCPeer:
                     "sdp": self._pc.localDescription.sdp,
                 }))
                 _logger.info("[WebRTCPeer] offer sent, waiting for relay messages (session=%s)", self._session_id)
+
+                for candidate in self._get_local_ice_candidates():
+                    _logger.info(
+                        "[WebRTCPeer] sending ice candidate to relay (session=%s): %s",
+                        self._session_id, candidate["candidate"][:80],
+                    )
+                    await ws.send(json.dumps({
+                        "type": "candidate",
+                        "candidate": candidate,
+                    }))
 
                 async for raw in ws:
                     _logger.debug("[WebRTCPeer] relay recv: %s (session=%s)", raw[:200], self._session_id)
@@ -305,6 +315,31 @@ class WebRTCPeer:
         })
 
     def _send_control(self, msg: dict) -> None:
+        if self._dc and self._dc.readyState == "open":
+            self._dc.send(_encode_control(msg))
+        else:
+            _logger.warning("[WebRTCPeer] _send_control failed, dc not open: %s (session=%s)", msg.get("msg"), self._session_id)
+
+    def _get_local_ice_candidates(self) -> list[dict]:
+        candidates: list[dict] = []
+        if self._pc is None:
+            return candidates
+        try:
+            transports = self._pc._RTCPeerConnection__iceTransports
+            for transport in transports:
+                gatherer = transport._RTCIceTransport__iceGatherer
+                for c in gatherer.getLocalCandidates():
+                    cand_str = f"candidate:{c.foundation} {c.component} {c.protocol} {c.priority} {c.ip} {c.port} typ {c.type}"
+                    if c.relatedAddress and c.relatedPort:
+                        cand_str += f" raddr {c.relatedAddress} rport {c.relatedPort}"
+                    candidates.append({
+                        "candidate": cand_str,
+                        "sdpMid": c.sdpMid or "0",
+                        "sdpMLineIndex": c.sdpMLineIndex if c.sdpMLineIndex is not None else 0,
+                    })
+        except Exception:
+            pass
+        return candidates
         if self._dc and self._dc.readyState == "open":
             _logger.debug("[WebRTCPeer] sending control: %s (session=%s)", msg.get("msg"), self._session_id)
             self._dc.send(_encode_control(msg))

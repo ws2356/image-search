@@ -40,6 +40,17 @@ export function encodeControl(message: ControlMessage): string {
 
 export function decodeWireEvent(data: string | ArrayBuffer): WireEvent | null {
   if (typeof data !== 'string') {
+    const bytes = new Uint8Array(data);
+    const asText = new TextDecoder().decode(bytes);
+    try {
+      const parsed = JSON.parse(asText) as { msg?: string };
+      if (parsed.msg && KNOWN_MSGS.has(parsed.msg)) {
+        log.debug('decodeWireEvent: control (from binary)', parsed.msg, parsed);
+        return { kind: 'control', message: parsed as ControlMessage };
+      }
+    } catch {
+      // not JSON, fall through to binary
+    }
     const size = data.byteLength;
     log.debug('decodeWireEvent: binary chunk', `${size}B`);
     return { kind: 'binary', buffer: data };

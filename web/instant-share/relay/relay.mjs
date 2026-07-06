@@ -6,12 +6,14 @@ export function createRelay(port, opts) {
   const rooms = new Map();
 
   function getRoom(sid) {
-    if (!rooms.has(sid)) rooms.set(sid, { pc: null, browser: null });
+    if (!rooms.has(sid)) rooms.set(sid, { pc: null, browser: null, _buffer: [] });
     return rooms.get(sid);
   }
 
   const server = createServer();
   const wss = new WebSocketServer({ server });
+
+  function sidShort(sid) { return sid.slice(0, 8); }
 
   wss.on('connection', (ws, req) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -19,43 +21,77 @@ export function createRelay(port, opts) {
     const role = url.searchParams.get('role');
 
     if (!sid || (role !== 'pc' && role !== 'browser')) {
+      console.log(`[relay] REJECT invalid params sid=${sid} role=${role}`);
       ws.close(4001, 'invalid params');
       return;
     }
 
     const room = getRoom(sid);
+    const ss = sidShort(sid);
 
     if (role === 'pc') {
-      if (room.pc && room.pc.readyState === WebSocket.OPEN) { ws.close(4002, 'room_full'); return; }
+      if (room.pc && room.pc.readyState === WebSocket.OPEN) {
+        console.log(`[relay] REJECT room_full sid=${ss} role=pc`);
+        ws.close(4002, 'room_full'); return;
+      }
       if (room._pcReconnectTimer) { clearTimeout(room._pcReconnectTimer); room._pcReconnectTimer = null; }
       room.pc = ws;
+      console.log(`[relay] CONNECT sid=${ss} role=pc bufferLen=${room._buffer.length}`);
     } else {
-      if (room.browser && room.browser.readyState === WebSocket.OPEN) { ws.close(4002, 'room_full'); return; }
+      if (room.browser && room.browser.readyState === WebSocket.OPEN) {
+        console.log(`[relay] REJECT room_full sid=${ss} role=browser`);
+        ws.close(4002, 'room_full'); return;
+      }
       if (room._browserReconnectTimer) { clearTimeout(room._browserReconnectTimer); room._browserReconnectTimer = null; }
       room.browser = ws;
+      console.log(`[relay] CONNECT sid=${ss} role=browser bufferLen=${room._buffer.length}`);
     }
 
     ws.on('message', (raw) => {
       let msg;
-      try { msg = JSON.parse(raw.toString()); } catch { return; }
+      try { msg = JSON.parse(raw.toString()); } catch { console.log(`[relay] BAD_JSON sid=${ss} role=${role}`); return; }
 
       if (msg.type === 'join') {
+        console.log(`[relay] JOIN sid=${ss} role=${role}`);
         ws.send(JSON.stringify({ type: 'joined', role }));
+        if (!ws._joinFlushed) {
+          ws._joinFlushed = true;
+          const buffered = room._buffer;
+          console.log(`[relay] FLUSH sid=${ss} role=${role} buffered=${buffered.length}`);
+          for (const raw of buffered) {
+            const m = JSON.parse(raw);
+            console.log(`[relay] FLUSH_MSG sid=${ss} to=${role} type=${m.type}`);
+            if (ws.readyState === 1) ws.send(raw);
+          }
+        }
         return;
       }
 
       if (msg.type === 'offer' || msg.type === 'candidate') {
         const target = role === 'pc' ? room.browser : room.pc;
-        if (target?.readyState === 1) target.send(raw.toString());
+        const targetRole = role === 'pc' ? 'browser' : 'pc';
+        if (target?.readyState === 1) {
+          console.log(`[relay] FORWARD sid=${ss} ${role}->${targetRole} type=${msg.type}`);
+          target.send(raw.toString());
+        } else {
+          console.log(`[relay] BUFFER sid=${ss} ${role}->${targetRole} type=${msg.type} (target not connected)`);
+          room._buffer.push(raw.toString());
+        }
         return;
       }
 
       if (msg.type === 'answer') {
-        if (room.pc?.readyState === 1) room.pc.send(raw.toString());
+        if (room.pc?.readyState === 1) {
+          console.log(`[relay] FORWARD sid=${ss} ${role}->pc type=answer`);
+          room.pc.send(raw.toString());
+        } else {
+          console.log(`[relay] DROP sid=${ss} ${role}->pc type=answer (pc not connected)`);
+        }
         return;
       }
 
       if (msg.type === 'leave') {
+        console.log(`[relay] LEAVE sid=${ss} role=${role}`);
         if (role === 'pc') room.pc = null;
         else room.browser = null;
       }
@@ -69,7 +105,7 @@ export function createRelay(port, opts) {
           if (!room.pc && room.browser?.readyState === 1) {
             room.browser.send(JSON.stringify({ type: 'peer_left' }));
           }
-          if (!room.pc && !room.browser) rooms.delete(sid);
+          if (!room.pc && !room.browser) { room._buffer = []; rooms.delete(sid); }
         }, reconnectGraceMs);
       } else {
         room.browser = null;
@@ -78,7 +114,7 @@ export function createRelay(port, opts) {
           if (!room.browser && room.pc?.readyState === 1) {
             room.pc.send(JSON.stringify({ type: 'peer_left' }));
           }
-          if (!room.pc && !room.browser) rooms.delete(sid);
+          if (!room.pc && !room.browser) { room._buffer = []; rooms.delete(sid); }
         }, reconnectGraceMs);
       }
     });

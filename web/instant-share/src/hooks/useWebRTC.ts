@@ -8,13 +8,17 @@ export interface UseWebRTCReturn {
   close: () => void;
 }
 
+const ICE_CONFIG: RTCConfiguration = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  iceCandidatePoolSize: 10,
+};
+
 export function useWebRTC(signal: UseSignalChannelReturn): UseWebRTCReturn {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const [channel, setChannel] = useState<RTCDataChannel | null>(null);
   const [state, setState] = useState<UseWebRTCReturn['state']>('new');
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const signalSend = useCallback((msg: object) => signal.send(msg), [signal.send]);
 
   const handleSignalEvent = useCallback((e: SignalEvent) => {
     const pc = pcRef.current;
@@ -24,14 +28,52 @@ export function useWebRTC(signal: UseSignalChannelReturn): UseWebRTCReturn {
     }
 
     if (e.type === 'offer') {
-      log.info('useWebRTC: setting remote offer, creating answer');
+      log.info('useWebRTC: received offer, setting remote description');
       pc.setRemoteDescription({ type: 'offer', sdp: e.sdp })
         .then(async () => {
-          log.info('useWebRTC: remote desc set, creating answer');
-          const answer = await pc.createAnswer({ offerToReceiveData: true } as RTCOfferOptions);
-          log.info('useWebRTC: sending answer');
+          log.info('useWebRTC: remote desc set, creating answer', {
+            iceGathering: pc.iceGatheringState,
+            iceConn: pc.iceConnectionState,
+          });
+          const answer = await pc.createAnswer();
+          log.info('useWebRTC: answer created', {
+            sdpLen: answer.sdp?.length,
+            hasCandidates: (answer.sdp?.match(/a=candidate:/g) || []).length,
+          });
           await pc.setLocalDescription(answer);
-          signal.send({ type: 'answer', sdp: answer.sdp });
+          log.info('useWebRTC: local desc set', { iceGathering: pc.iceGatheringState });
+
+          if (pc.iceGatheringState !== 'complete') {
+            await new Promise<void>((resolve) => {
+              const check = () => {
+                log.info('useWebRTC: icegatheringstatechange', { state: pc.iceGatheringState });
+                if (pc.iceGatheringState === 'complete') {
+                  pc.removeEventListener('icegatheringstatechange', check);
+                  resolve();
+                }
+              };
+              pc.addEventListener('icegatheringstatechange', check);
+              setTimeout(() => {
+                if (pc.iceGatheringState !== 'complete') {
+                  log.warn('useWebRTC: ICE gathering timeout after 5s, sending answer anyway');
+                }
+                pc.removeEventListener('icegatheringstatechange', check);
+                resolve();
+              }, 5000);
+            });
+          }
+
+          const finalSdp = pc.localDescription?.sdp ?? '';
+          const candidateCount = (finalSdp.match(/a=candidate:/g) || []).length;
+          log.info('useWebRTC: sending answer', {
+            sdpLength: finalSdp.length,
+            candidateCount,
+            iceState: pc.iceGatheringState,
+          });
+          if (candidateCount === 0) {
+            log.warn('useWebRTC: ZERO candidates in answer SDP — ICE will fail');
+          }
+          signalSend({ type: 'answer', sdp: finalSdp });
           setState('connecting');
         })
         .catch((err) => {
@@ -47,31 +89,30 @@ export function useWebRTC(signal: UseSignalChannelReturn): UseWebRTCReturn {
           setState('failed');
         });
     } else if (e.type === 'candidate') {
-      log.debug('useWebRTC: adding ice candidate');
+      log.info('useWebRTC: adding ice candidate from PC');
       pc.addIceCandidate(e.candidate)
-        .then(() => log.debug('useWebRTC: ice candidate added'))
+        .then(() => log.info('useWebRTC: ice candidate added OK'))
         .catch((err) => log.warn('useWebRTC: ice candidate rejected', err));
     } else if (e.type === 'peer_left' || e.type === 'room_full') {
       log.warn('useWebRTC: peer left or room full', e.type);
       setState('closed');
     }
-  }, [signal]);
+  }, [signalSend]);
 
   useEffect(() => {
-    log.info('useWebRTC: creating RTCPeerConnection');
-    const pc = new RTCPeerConnection({ iceServers: [] });
+    log.info('useWebRTC: creating RTCPeerConnection', { config: ICE_CONFIG });
+    const pc = new RTCPeerConnection(ICE_CONFIG);
     pcRef.current = pc;
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        log.debug('useWebRTC: sending ice candidate');
-        signal.send({ type: 'candidate', candidate: event.candidate.toJSON() });
+        log.info('useWebRTC: ice candidate gathered', event.candidate.candidate);
       } else {
-        log.info('useWebRTC: ice gathering complete');
+        log.info('useWebRTC: ice gathering complete (onicecandidate=null)');
       }
     };
     pc.onicegatheringstatechange = () => {
-      log.debug('useWebRTC: ice gathering state', pc.iceGatheringState);
+      log.info('useWebRTC: ice gathering state changed', pc.iceGatheringState);
     };
     pc.oniceconnectionstatechange = () => {
       log.info('useWebRTC: ice connection state', pc.iceConnectionState);
@@ -107,15 +148,14 @@ export function useWebRTC(signal: UseSignalChannelReturn): UseWebRTCReturn {
 
     const unsubscribe = signal.onEvent(handleSignalEvent);
     return () => {
-      log.info('useWebRTC: cleanup');
+      log.info('useWebRTC: cleanup, closing pc', { connState: pc.connectionState });
       unsubscribe();
       try { channelRef.current?.close(); } catch {}
       try { pc.close(); } catch {}
       pcRef.current = null;
       channelRef.current = null;
-      setChannel(null);
     };
-  }, [signal, handleSignalEvent]);
+  }, [signal.onEvent, handleSignalEvent, signalSend]);
 
   const close = useCallback(() => {
     log.info('useWebRTC: close called');
