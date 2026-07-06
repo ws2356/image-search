@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { log } from '../lib/log';
 import type { ParsedShareParams } from '../lib/urlParams';
 import type { ManifestFileEntry, PayloadType, ControlMessage } from '../lib/protocol';
-import { encodeControl, decodeWireEvent } from '../lib/protocol';
+import { encodeControl, decodeWireEvent, CHUNK_HEADER_SIZE } from '../lib/protocol';
 import type { UseWebRTCReturn } from './useWebRTC';
 
 export interface FileProgress {
@@ -102,12 +102,13 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     }
     if (ev.kind === 'binary') {
       if (currentBinaryRef.current) {
-        currentBinaryRef.current.chunks.push(ev.buffer);
+        const payload = ev.buffer.slice(CHUNK_HEADER_SIZE);
+        currentBinaryRef.current.chunks.push(payload);
         const total = currentBinaryRef.current.chunks.reduce((s, c) => s + c.byteLength, 0);
-        log.debug('useTransfer: binary chunk', { index: currentBinaryRef.current.index, chunkBytes: ev.buffer.byteLength, totalBytes: total });
+        log.debug('useTransfer: binary chunk', { index: currentBinaryRef.current.index, chunkBytes: payload.byteLength, totalBytes: total });
         filesRef.current = filesRef.current.map((f) =>
           f.index === currentBinaryRef.current!.index
-            ? { ...f, received: f.received + ev.buffer.byteLength }
+            ? { ...f, received: f.received + payload.byteLength }
             : f,
         );
         setFiles([...filesRef.current]);

@@ -1,5 +1,7 @@
 export type PayloadType = 'text' | 'link' | 'html' | 'file';
 
+export const CHUNK_HEADER_SIZE = 8;
+
 export interface ManifestFileEntry {
   index: number;
   type: 'text' | 'link' | 'html' | 'file';

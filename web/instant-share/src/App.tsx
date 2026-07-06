@@ -26,8 +26,8 @@ function AppContent() {
   const transfer = useTransfer(params, webrtc);
 
   if (transfer.status === 'done') {
-    log.info('App: rendering DoneScreen');
-    return <DoneScreen />;
+    log.info('App: rendering DoneScreen', { fileCount: transfer.files.length });
+    return <DoneScreen files={transfer.files} manifest={transfer.manifest ?? []} />;
   }
   if (transfer.status === 'error') {
     log.warn('App: rendering ErrorScreen', transfer.error);
