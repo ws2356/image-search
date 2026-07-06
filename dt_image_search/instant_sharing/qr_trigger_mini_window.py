@@ -59,7 +59,7 @@ def build_qr_url(
     opt_code: str
 ) -> str:
     ips_str = ",".join(ips)
-    base_url = os.environ.get("INSTANT_SHARE_QR_BASE_URL", "https://dl.boldman.net")
+    base_url = os.environ.get("INSTANT_SHARE_QR_BASE_URL") or "https://dl.boldman.net"
     return f"{base_url}/share?ips={ips_str}&p={port}&sp={tls_port}&sid={session_id}&opt={opt_code}"
 
 

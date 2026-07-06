@@ -3,7 +3,7 @@ Description=Instant-Share WebSocket Relay
 After=network.target
 
 [Service]
-ExecStart=/opt/instant-share-relay/start.sh
+ExecStart=/opt/instant-share-relay/scripts/start.sh
 Restart=always
 Environment=RELAY_PORT=8787
 
