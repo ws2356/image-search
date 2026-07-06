@@ -79,7 +79,6 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
       return;
     }
     const entry = pending[idx];
-    log.info('useTransfer: downloadNext', { idx, type: entry.type, filename: entry.filename });
     if (entry.type === 'text' || entry.type === 'link' || entry.type === 'html') {
       log.info('useTransfer: inline content, marking done', { idx, type: entry.type });
       filesRef.current = filesRef.current.map((f) =>
@@ -118,7 +117,6 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
       return;
     }
     const m = ev.message;
-    log.info('useTransfer: control msg', m.msg, m);
     if (m.msg === 'auth_ok') {
       if (authTimerRef.current) clearTimeout(authTimerRef.current);
       log.info('useTransfer: auth ok', { payload_type: m.payload_type });

@@ -35,8 +35,6 @@ const KNOWN_MSGS = new Set<string>([
 import { log } from './log';
 
 export function encodeControl(message: ControlMessage): string {
-  const safe = { ...message, opt_code: message.msg === 'auth' ? '***' : undefined };
-  log.debug('encodeControl', safe);
   return JSON.stringify(message);
 }
 

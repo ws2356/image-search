@@ -9,6 +9,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
+import websockets
 
 from aiortc import RTCDataChannel, RTCPeerConnection, RTCSessionDescription
 
@@ -86,16 +87,8 @@ class WebRTCPeer:
         asyncio.run_coroutine_threadsafe(self._run(), self._loop)
 
     async def _run(self) -> None:
-        _logger.debug("[WebRTCPeer] relay url=%s", self._relay_url)
-        _logger.info(
-            "[WebRTCPeer] _run starting session=%s stash=%s relay=%s",
-            self._session_id, self._stash.stash_id, self._relay_url,
-        )
         try:
-            import websockets
-
             relay_url = f"{self._relay_url}?sid={self._session_id}&role=pc"
-            _logger.info("[WebRTCPeer] connecting to relay %s", relay_url)
             async with websockets.connect(relay_url) as ws:
                 self._relay_ws = ws
                 _logger.info("[WebRTCPeer] relay ws connected, sending join")
@@ -106,7 +99,6 @@ class WebRTCPeer:
                     _logger.warning("[WebRTCPeer] unexpected join response: %s", msg)
                     return
 
-                _logger.info("[WebRTCPeer] creating RTCPeerConnection")
                 self._pc = RTCPeerConnection()
                 self._dc = self._pc.createDataChannel("share", ordered=True)
                 self._dc.on("open", self._on_dc_open)
@@ -127,15 +119,11 @@ class WebRTCPeer:
                     state = self._pc.connectionState if self._pc else "gone"
                     _logger.info("[WebRTCPeer] pc connection state: %s (session=%s)", state, self._session_id)
 
-                _logger.info("[WebRTCPeer] creating offer (session=%s)", self._session_id)
                 offer = await self._pc.createOffer()
-                _logger.info("[WebRTCPeer] setting local description (session=%s)", self._session_id)
+                _logger.info("[WebRTCPeer] offer created (session=%s)", self._session_id)
                 await self._pc.setLocalDescription(offer)
+                _logger.info("[WebRTCPeer] local description set (session=%s)", self._session_id)
 
-                _logger.info(
-                    "[WebRTCPeer] sending offer to relay, sdp length=%d (session=%s)",
-                    len(self._pc.localDescription.sdp), self._session_id,
-                )
                 await ws.send(json.dumps({
                     "type": "offer",
                     "sdp": self._pc.localDescription.sdp,
@@ -153,11 +141,10 @@ class WebRTCPeer:
                     }))
 
                 async for raw in ws:
-                    _logger.debug("[WebRTCPeer] relay recv: %s (session=%s)", raw[:200], self._session_id)
                     try:
                         data = json.loads(raw)
                     except json.JSONDecodeError:
-                        _logger.warning("[WebRTCPeer] relay msg not json: %s", raw[:200])
+                        _logger.error("[WebRTCPeer] relay msg not json: %s", raw[:200])
                         continue
                     if data["type"] == "answer":
                         _logger.info("[WebRTCPeer] received answer from relay (session=%s)", self._session_id)
@@ -172,11 +159,10 @@ class WebRTCPeer:
                         _logger.info("[WebRTCPeer] peer_left, breaking loop (session=%s)", self._session_id)
                         break
                     else:
-                        _logger.debug("[WebRTCPeer] unknown relay msg type: %s (session=%s)", data.get("type"), self._session_id)
+                        _logger.error("[WebRTCPeer] unknown relay msg type: %s (session=%s)", data.get("type"), self._session_id)
         except Exception as exc:
             _logger.exception("[WebRTCPeer] session failed (session=%s): %s", self._session_id, exc)
         finally:
-            _logger.info("[WebRTCPeer] _run cleanup (session=%s)", self._session_id)
             self._cleanup()
 
     def _on_dc_open(self) -> None:
@@ -186,7 +172,7 @@ class WebRTCPeer:
         raw = msg if isinstance(msg, (str, bytes)) else b""
         ctrl = _read_control_message(raw)
         if ctrl is None:
-            _logger.debug("[WebRTCPeer] dc binary/unknown recv %dB (session=%s)", len(raw) if isinstance(raw, (bytes, str)) else 0, self._session_id)
+            _logger.error("[WebRTCPeer] dc binary/unknown recv %dB (session=%s)", len(raw) if isinstance(raw, (bytes, str)) else 0, self._session_id)
             return
 
         ctrl_type = ctrl.get("msg")
@@ -206,7 +192,6 @@ class WebRTCPeer:
 
     def _handle_auth(self, msg: dict) -> None:
         opt_code = msg.get("opt_code", "")
-        _logger.info("[WebRTCPeer] _handle_auth (session=%s)", self._session_id)
         trust_session = self._trust_session_registry.get_session(self._session_id)
         if trust_session is None:
             _logger.warning("[WebRTCPeer] no trust session found for session=%s", self._session_id)
@@ -223,19 +208,14 @@ class WebRTCPeer:
             self._send_control({"msg": "auth_error", "error": "Invalid opt code"})
 
     def _handle_manifest(self) -> None:
-        _logger.info("[WebRTCPeer] _handle_manifest (session=%s stash=%s)", self._session_id, self._stash.stash_id)
         if not self._authenticated:
             _logger.warning("[WebRTCPeer] manifest requested before auth (session=%s)", self._session_id)
             self._send_control({"msg": "error", "code": "auth_required", "message": "Authenticate first"})
             return
         result = self._qr_handler.retrieve_stash_content(self._stash.stash_id)
         status = result.get("_status")
-        _logger.info(
-            "[WebRTCPeer] retrieve_stash_content status=%s stash=%s (session=%s)",
-            status, self._stash.stash_id, self._session_id,
-        )
         if status != 200:
-            _logger.warning("[WebRTCPeer] stash error: %s (session=%s)", result.get("error"), self._session_id)
+            _logger.error("[WebRTCPeer] stash error: %s (session=%s)", result.get("error"), self._session_id)
             self._send_control({
                 "msg": "error",
                 "code": "stash_error",
@@ -265,17 +245,12 @@ class WebRTCPeer:
 
     def _handle_download(self, msg: dict) -> None:
         index = msg.get("index", 0)
-        _logger.info("[WebRTCPeer] _handle_download index=%d (session=%s)", index, self._session_id)
         if not self._authenticated:
             _logger.warning("[WebRTCPeer] download before auth (session=%s)", self._session_id)
             self._send_control({"msg": "error", "code": "auth_required", "message": "Authenticate first"})
             return
         status, file_bytes, content_type, filename = self._qr_handler.retrieve_stash_file(
             self._stash.stash_id, index,
-        )
-        _logger.info(
-            "[WebRTCPeer] retrieve_stash_file status=%s index=%d bytes=%d content_type=%s (session=%s)",
-            status, index, len(file_bytes), content_type, self._session_id,
         )
         if status != 200:
             _logger.warning("[WebRTCPeer] download failed index=%d status=%d (session=%s)", index, status, self._session_id)
@@ -340,28 +315,21 @@ class WebRTCPeer:
         except Exception:
             pass
         return candidates
-        if self._dc and self._dc.readyState == "open":
-            _logger.debug("[WebRTCPeer] sending control: %s (session=%s)", msg.get("msg"), self._session_id)
-            self._dc.send(_encode_control(msg))
-        else:
-            _logger.warning("[WebRTCPeer] _send_control failed, dc not open: %s (session=%s)", msg.get("msg"), self._session_id)
 
     def _cleanup(self) -> None:
-        _logger.info("[WebRTCPeer] _cleanup start (session=%s)", self._session_id)
         try:
             if self._dc:
-                _logger.debug("[WebRTCPeer] closing dc (session=%s)", self._session_id)
+                _logger.info("[WebRTCPeer] closing dc (session=%s)", self._session_id)
                 self._dc.close()
         except Exception:
-            _logger.debug("[WebRTCPeer] dc close exception (session=%s)", self._session_id, exc_info=True)
+            _logger.error("[WebRTCPeer] dc close exception (session=%s)", self._session_id, exc_info=True)
         try:
             if self._pc:
-                _logger.debug("[WebRTCPeer] closing pc (session=%s)", self._session_id)
+                _logger.info("[WebRTCPeer] closing pc (session=%s)", self._session_id)
                 asyncio.run_coroutine_threadsafe(self._pc.close(), self._loop)
         except Exception:
-            _logger.debug("[WebRTCPeer] pc close exception (session=%s)", self._session_id, exc_info=True)
+            _logger.error("[WebRTCPeer] pc close exception (session=%s)", self._session_id, exc_info=True)
         self._done.set()
-        _logger.info("[WebRTCPeer] _cleanup done (session=%s)", self._session_id)
 
     def wait(self, timeout: float | None = None) -> bool:
         return self._done.wait(timeout)
@@ -392,7 +360,6 @@ class WebRTCPeerManager:
         self._active = True
         self._original_on_stash_created = self._qr_handler._on_stash_created
         self._qr_handler._on_stash_created = self._on_stash_created
-        _logger.info("[WebRTCPeerManager] intercepting on_stash_created callback")
 
         if self._loop is None:
             try:
@@ -431,7 +398,6 @@ class WebRTCPeerManager:
             stash.stash_id, stash.content_type, len(stash.files) if stash.files else 0,
         )
         if self._original_on_stash_created:
-            _logger.debug("[WebRTCPeerManager] forwarding to original on_stash_created")
             self._original_on_stash_created(stash)
         session_id = self._qr_handler.get_session_id_for_stash(stash.stash_id)
         if not session_id:
@@ -456,4 +422,3 @@ class WebRTCPeerManager:
             self._peers[session_id] = peer
         _logger.info("[WebRTCPeerManager] peer registered, calling peer.start() session=%s", session_id)
         peer.start()
-        _logger.info("[WebRTCPeerManager] peer.start() returned session=%s", session_id)
