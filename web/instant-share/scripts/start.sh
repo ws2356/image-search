@@ -6,4 +6,4 @@ this_dir="$(cd "$(dirname "$this_file")" && pwd)"
 
 cd "$this_dir/.."
 
-node_modules/.bin/vite --mode dev --config "vite.config.ts" --host
+pnpm run dev

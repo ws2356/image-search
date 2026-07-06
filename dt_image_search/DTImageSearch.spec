@@ -62,7 +62,7 @@ if sys.platform == "darwin":
     ]
 
 a = Analysis(
-    ['__main__.py', 'scripts/start_instant_share_gui_runtime.py'],
+    ['__main__.py', 'scripts/instant_share_agent_main.py'],
     pathex=[],
     binaries=heif_binaries,
     datas=datas,
@@ -93,13 +93,13 @@ for _entry in a.scripts:
     _src = _entry[1]
     if _src.endswith('__main__.py'):
         _main_script = _entry
-    elif _src.endswith('start_instant_share_gui_runtime.py'):
+    elif _src.endswith('instant_share_agent_main.py'):
         _daemon_script = _entry
 
 if _main_script is None or _daemon_script is None:
     raise ValueError(
         "Could not identify entry-point scripts in the Analysis TOC. "
-        "Expected '__main__.py' and 'start_instant_share_gui_runtime.py'."
+        "Expected '__main__.py' and 'instant_share_agent_main.py'."
     )
 
 pyz = PYZ(a.pure)

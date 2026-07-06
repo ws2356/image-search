@@ -71,7 +71,7 @@
 | `dt_image_search/requirements.txt` | Add `aiortc` |
 | `dt_image_search/model/dts_config.py` | Add `get_instant_share_webrtc_relay_url()` + `get_instant_share_webrtc_relay_timeout_seconds()` |
 | `dt_image_search/instant_sharing/runtime.py` | Wire `WebRTCPeerManager` into `InstantShareRuntime` lifecycle |
-| `dt_image_search/scripts/start_instant_share_gui_runtime.py` | Pass `WebRTCPeerManager` into runtime (or let runtime construct it) |
+| `dt_image_search/scripts/instant_share_agent_main.py` | Pass `WebRTCPeerManager` into runtime (or let runtime construct it) |
 | `dt_image_search/scripts/run_tests.sh` | Append `test_webrtc_peer.py` invocation |
 | `web/www/deploy/aurora.conf` | Add `/share` + `/relay` nginx locations |
 
@@ -2136,7 +2136,7 @@ git commit -m "[feat] add PC webrtc peer + peer manager for web instant-share"
 **Files:**
 - Modify: `dt_image_search/model/dts_config.py`
 - Modify: `dt_image_search/instant_sharing/runtime.py`
-- Modify: `dt_image_search/scripts/start_instant_share_gui_runtime.py`
+- Modify: `dt_image_search/scripts/instant_share_agent_main.py`
 
 **Interfaces:**
 - Produces two config readers in `dts_config.py`:
@@ -2245,7 +2245,7 @@ In `stop()`, before the existing `qr_window_factory.stop()` block, add:
 
 - [ ] **Step 3: Pass the relay URL from the GUI runtime script**
 
-Modify `dt_image_search/scripts/start_instant_share_gui_runtime.py`:
+Modify `dt_image_search/scripts/instant_share_agent_main.py`:
 
 Add import after the InstantShareRuntime import (top of file):
 
@@ -2274,7 +2274,7 @@ Expected: prints `ok`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add dt_image_search/model/dts_config.py dt_image_search/instant_sharing/runtime.py dt_image_search/scripts/start_instant_share_gui_runtime.py
+git add dt_image_search/model/dts_config.py dt_image_search/instant_sharing/runtime.py dt_image_search/scripts/instant_share_agent_main.py
 git commit -m "[feat] wire webrtc peer manager into instant-share runtime with config helpers"
 ```
 
@@ -2678,7 +2678,7 @@ Expected: SPA shows Connecting → Transferring → Done with `hello.txt` (5 byt
 On a dev PC with `is_instant_share_enabled()` flag turned on:
 
 ```bash
-python -m dt_image_search.scripts.start_instant_share_gui_runtime --force-enable
+python -m dt_image_search.scripts.instant_share_agent_main --force-enable
 ```
 
 Trigger a share from the macOS Share Extension (or test stub) → QR appears. Scan with phone (native app uninstalled). Expected:

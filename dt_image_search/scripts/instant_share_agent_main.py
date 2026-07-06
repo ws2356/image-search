@@ -6,12 +6,12 @@ device sends a bootstrap POST, the mini window pops up showing the
 trust/transfer/delivery lifecycle.
 
 Usage:
-    python -m dt_image_search.scripts.start_instant_share_gui_runtime [--downloads-dir DIR]
+    python -m dt_image_search.scripts.instant_share_agent_main [--downloads-dir DIR]
 
 The script runs until the window is closed or Ctrl+C is pressed. Requires
 PySide6 (Qt) — uses the same QApplication as the main AuSearch app.
 
-For headless testing without GUI, use `start_instant_share_gui_runtime.py`.
+For headless testing without GUI, use `instant_share_agent_main.py`.
 """
 
 from __future__ import annotations

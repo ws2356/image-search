@@ -56,7 +56,7 @@ if sys.platform == "darwin":
     ]
 
 a = Analysis(
-    ['scripts/start_instant_share_gui_runtime.py'],
+    ['scripts/instant_share_agent_main.py'],
     pathex=[],
     datas=datas,
     hiddenimports=[

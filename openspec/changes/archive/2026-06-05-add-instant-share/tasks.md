@@ -95,7 +95,7 @@
 - [x] 10.7 Rewrite `InstantShareDebugViewModel` and `InstantShareDebugView` for the full mDNS discovery → select → bootstrap → start → PIN display flow.
 - [x] 10.8 Build iOS app for iPhone 17 Pro Max simulator without errors.
 - [x] 10.9 Add iOS unit tests for `InstantShareTrustSessionManager` key derivation and `InstantShareHTTPServer` request parser.
-- [x] 10.10 Add PC CLI script `dt_image_search/scripts/start_instant_share_gui_runtime.py` to launch the mDNS + HTTP runtime for manual testing (standalone mini window receive flow).
+- [x] 10.10 Add PC CLI script `dt_image_search/scripts/instant_share_agent_main.py` to launch the mDNS + HTTP runtime for manual testing (standalone mini window receive flow).
 - [x] 10.11 Manual e2e test: run PC CLI, open iOS debug view, discover PC via mDNS, select PC, send bootstrap, verify trust handshake, verify text/photo transfer opens standalone mini window on desktop.
 
 ## 9. Rollout and Safeguards
