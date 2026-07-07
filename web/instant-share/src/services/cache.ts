@@ -66,10 +66,7 @@ export function openDB(): Promise<IDBDatabase> {
       }
     };
     request.onsuccess = () => {
-      const db = request.result;
-      cleanExpired(db)
-        .catch((err) => log.warn('cache: cleanExpired on open failed', err))
-        .finally(() => resolve(db));
+      resolve(request.result);
     };
     request.onerror = () => {
       log.warn('cache: openDB failed', request.error);
@@ -86,11 +83,7 @@ export async function saveFile(sessionId: string, entry: FileEntryInput): Promis
     const sessionStore = tx.objectStore('sessions');
     const fileStore = tx.objectStore('files');
 
-    const existing = await promisifyRequest(sessionStore.get(sessionId));
-    if (!existing) {
-      sessionStore.put({ sessionId, status: 'transferring', completedAt: null });
-    }
-
+    sessionStore.put({ sessionId, status: 'transferring', completedAt: null });
     fileStore.put({
       sessionId,
       index: entry.index,
@@ -175,5 +168,14 @@ export async function cleanExpired(db?: IDBDatabase): Promise<void> {
     }
   } catch (err) {
     log.warn('cache: cleanExpired failed', err);
+  }
+}
+
+export function closeDB(): void {
+  if (dbPromise) {
+    dbPromise.then((db) => {
+      try { db.close(); } catch { /* ignore */ }
+    });
+    dbPromise = null;
   }
 }
