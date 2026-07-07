@@ -45,6 +45,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
   const nextDownloadIndexRef = useRef<number>(0);
   const authTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sentAuthRef = useRef(false);
+  const transferCompleteRef = useRef(false);
 
   const fail = useCallback((code: string, message: string) => {
     log.error('useTransfer: fail', { code, message });
@@ -71,6 +72,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     const idx = nextDownloadIndexRef.current;
     if (idx >= pending.length) {
       log.info('useTransfer: all downloads complete, sending bye');
+      transferCompleteRef.current = true;
       sendControl({ msg: 'bye' });
       setState({ type: 'done' });
       webrtc.close();
@@ -191,6 +193,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
 
     const onMessage = (e: MessageEvent) => handleMessage(e.data);
     const onClose = () => {
+      if (transferCompleteRef.current) return;
       log.warn('useTransfer: dc closed');
       setState((prev) => {
         if (prev.type === 'done' || prev.type === 'error') return prev;
@@ -220,6 +223,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
   }, [webrtc.channel, params.optCode, sendControl, handleMessage, fail]);
 
   useEffect(() => {
+    if (transferCompleteRef.current) return;
     if (webrtc.state === 'failed') {
       log.warn('useTransfer: webrtc.state=failed');
       fail('disconnected', 'Connection failed');
