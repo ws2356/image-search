@@ -3,8 +3,7 @@ import { useSignalChannel } from './hooks/useSignalChannel';
 import { useWebRTC } from './hooks/useWebRTC';
 import { useTransfer } from './hooks/useTransfer';
 import { ConnectingScreen } from './components/ConnectingScreen';
-import { TransferScreen } from './components/TransferScreen';
-import { DoneScreen } from './components/DoneScreen';
+import { ReceiveScreen } from './components/ReceiveScreen';
 import { ErrorScreen } from './components/ErrorScreen';
 import { log } from './lib/log';
 
@@ -25,18 +24,17 @@ function AppContent() {
   const webrtc = useWebRTC(signal);
   const transfer = useTransfer(params, webrtc);
 
-  if (transfer.status === 'done') {
-    log.info('App: rendering DoneScreen', { fileCount: transfer.files.length });
-    return <DoneScreen files={transfer.files} manifest={transfer.manifest ?? []} />;
-  }
   if (transfer.status === 'error') {
     log.warn('App: rendering ErrorScreen', transfer.error);
-    return <ErrorScreen error={transfer.error ?? { code: 'unknown', message: '' }} />;
+    return <ErrorScreen error={transfer.error ?? { code: 'unknown', message: '' }} retry={transfer.retry} />;
   }
-  if (transfer.status === 'transferring' && transfer.files.length > 0 && transfer.manifest) {
-    log.info('App: rendering TransferScreen', { fileCount: transfer.files.length });
-    return <TransferScreen files={transfer.files} manifest={transfer.manifest} />;
+
+  if (transfer.status === 'transferring' || transfer.status === 'done') {
+    const files = transfer.files.length > 0 ? transfer.files : [];
+    const manifest = transfer.manifest ?? [];
+    return <ReceiveScreen files={files} manifest={manifest} onDone={() => { window.close(); }} />;
   }
+
   const labels: Record<string, string> = {
     connecting: 'Connecting to PC…',
     authenticating: 'Authenticating with PC…',
