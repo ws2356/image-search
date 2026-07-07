@@ -93,7 +93,7 @@ export function ReceiveScreen({ files, manifest }: ReceiveScreenProps) {
       if (delivered.has(entry.index)) continue;
       const file = files.find((f) => f.index === entry.index) ?? null;
       const action = planDelivery(entry, file);
-      if (action.kind === 'none' || action.kind === 'save_to_photos' || action.kind === 'open_link') continue;
+      if (action.kind === 'none') continue;
       await deliver(entry.index);
     }
   }, [manifest, files, delivered, deliver]);
