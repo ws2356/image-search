@@ -7,7 +7,36 @@ this_dir="$(cd "$(dirname "$this_file")" && pwd)"
 
 cd "$this_dir/.."
 
-ssh_target=$1
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --ssh-user)
+            SSH_USER="$2"
+            shift 2
+            ;;
+        --ssh-host)
+            SSH_HOST="$2"
+            shift 2
+            ;;
+        --ssh-target)
+            SSH_TARGET="$2"
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+ssh_target=
+if [ -n "${SSH_TARGET:-}" ]; then
+    ssh_target="$SSH_TARGET"
+elif [ -n "${SSH_USER:-}" ] && [ -n "${SSH_HOST:-}" ]; then
+    ssh_target="${SSH_USER}@${SSH_HOST}"
+else
+    echo "Usage: $0 --ssh-user <user> --ssh-host <host>"
+    echo "   or: $0 --ssh-target <user@host>"
+    exit 1
+fi
 
 : "${WEB_ROOT:=/var/www/html/instant-share}"
 : "${RELAY_ROOT:=/opt/instant-share-relay}"
