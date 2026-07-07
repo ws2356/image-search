@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { parseShareUrlParams } from './lib/urlParams';
 import { useSignalChannel } from './hooks/useSignalChannel';
 import { useWebRTC } from './hooks/useWebRTC';
 import { useTransfer, type FileProgress } from './hooks/useTransfer';
 import { ConnectingScreen } from './components/ConnectingScreen';
-import { ReceiveScreen } from './components/ReceiveScreen';
 import { ErrorScreen } from './components/ErrorScreen';
 import { log } from './lib/log';
 import { getCachedSession, cleanExpired } from './services/cache';
 import type { ManifestFileEntry } from './lib/protocol';
+
+const ReceiveScreen = React.lazy(() => import('./components/ReceiveScreen').then(m => ({ default: m.ReceiveScreen })));
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL;
 
@@ -29,7 +30,11 @@ function OnlineFlow({ sessionId, optCode }: { sessionId: string; optCode: string
   if (transfer.state.type === 'transferring' || transfer.state.type === 'done') {
     const files = transfer.files.length > 0 ? transfer.files : [];
     const manifest = transfer.manifest ?? [];
-    return <ReceiveScreen files={files} manifest={manifest} />;
+    return (
+      <Suspense fallback={<ConnectingScreen label="Loading…" />}>
+        <ReceiveScreen files={files} manifest={manifest} />
+      </Suspense>
+    );
   }
 
   const labels: Record<string, string> = {
@@ -96,7 +101,11 @@ function AppContent() {
   }
 
   if (cached) {
-    return <ReceiveScreen files={cached.files} manifest={cached.manifest} />;
+    return (
+      <Suspense fallback={<ConnectingScreen label="Loading…" />}>
+        <ReceiveScreen files={cached.files} manifest={cached.manifest} />
+      </Suspense>
+    );
   }
 
   return <OnlineFlow sessionId={params.sessionId} optCode={params.optCode} />;
