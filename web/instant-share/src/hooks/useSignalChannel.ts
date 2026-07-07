@@ -25,6 +25,7 @@ export function useSignalChannel(
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<Set<(e: SignalEvent) => void>>(new Set());
   const [ready, setReady] = useState(false);
+  const closedByUser = useRef(false);
   const sidShort = sessionId.slice(0, 8);
   const paramsKey = `${relayUrl}|${sessionId}|${role}`;
   const prevParamsKey = useRef(paramsKey);
@@ -91,7 +92,9 @@ export function useSignalChannel(
     ws.onclose = (e) => {
       log.info('useSignalChannel: ws closed', { code: e.code, reason: e.reason, sidShort });
       setReady(false);
-      emit({ type: 'peer_left' });
+      if (!closedByUser.current) {
+        emit({ type: 'peer_left' });
+      }
     };
 
     return () => {
@@ -111,7 +114,7 @@ export function useSignalChannel(
 
   const close = useCallback(() => {
     log.info('useSignalChannel: close', { sidShort });
-    try { wsRef.current?.send(JSON.stringify({ type: 'leave' })); } catch {}
+    closedByUser.current = true;
     wsRef.current?.close();
   }, [sidShort]);
 
