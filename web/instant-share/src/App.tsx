@@ -24,12 +24,12 @@ function AppContent() {
   const webrtc = useWebRTC(signal);
   const transfer = useTransfer(params, webrtc);
 
-  if (transfer.status === 'error') {
-    log.warn('App: rendering ErrorScreen', transfer.error);
-    return <ErrorScreen error={transfer.error ?? { code: 'unknown', message: '' }} retry={transfer.retry} />;
+  if (transfer.state.type === 'error') {
+    log.warn('App: rendering ErrorScreen', transfer.state);
+    return <ErrorScreen error={{ code: transfer.state.code, message: transfer.state.message }} retry={transfer.retry} />;
   }
 
-  if (transfer.status === 'transferring' || transfer.status === 'done') {
+  if (transfer.state.type === 'transferring' || transfer.state.type === 'done') {
     const files = transfer.files.length > 0 ? transfer.files : [];
     const manifest = transfer.manifest ?? [];
     return <ReceiveScreen files={files} manifest={manifest} />;
@@ -40,7 +40,7 @@ function AppContent() {
     authenticating: 'Authenticating with PC…',
     booting: 'Loading…',
   };
-  const label = labels[transfer.status] ?? 'Connecting to PC…';
+  const label = labels[transfer.state.type] ?? 'Connecting to PC…';
   return <ConnectingScreen label={label} />;
 }
 

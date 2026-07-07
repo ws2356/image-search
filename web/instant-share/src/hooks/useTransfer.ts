@@ -15,18 +15,16 @@ export interface FileProgress {
   status: 'queued' | 'downloading' | 'done';
 }
 
-export type TransferStatus =
-  | 'booting' | 'connecting' | 'authenticating'
-  | 'transferring' | 'done' | 'error';
-
-export interface TransferError {
-  code: string;
-  message: string;
-}
+export type TransferState =
+  | { type: 'booting' }
+  | { type: 'connecting' }
+  | { type: 'authenticating' }
+  | { type: 'transferring' }
+  | { type: 'done' }
+  | { type: 'error'; code: string; message: string };
 
 export interface UseTransferReturn {
-  status: TransferStatus;
-  error: TransferError | null;
+  state: TransferState;
   manifest: ManifestFileEntry[] | null;
   payloadType: PayloadType | null;
   files: FileProgress[];
@@ -36,8 +34,7 @@ export interface UseTransferReturn {
 const AUTH_TIMEOUT_MS = 15000;
 
 export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn): UseTransferReturn {
-  const [status, setStatus] = useState<TransferStatus>('connecting');
-  const [error, setError] = useState<TransferError | null>(null);
+  const [state, setState] = useState<TransferState>({ type: 'connecting' });
   const [manifest, setManifest] = useState<ManifestFileEntry[] | null>(null);
   const [payloadType, setPayloadType] = useState<PayloadType | null>(null);
   const [files, setFiles] = useState<FileProgress[]>([]);
@@ -52,8 +49,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
   const fail = useCallback((code: string, message: string) => {
     log.error('useTransfer: fail', { code, message });
     if (authTimerRef.current) clearTimeout(authTimerRef.current);
-    setError({ code, message });
-    setStatus('error');
+    setState({ type: 'error', code, message });
   }, []);
 
   const sendControl = useCallback((msg: ControlMessage) => {
@@ -76,7 +72,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     if (idx >= pending.length) {
       log.info('useTransfer: all downloads complete, sending bye');
       sendControl({ msg: 'bye' });
-      setStatus('done');
+      setState({ type: 'done' });
       webrtc.close();
       return;
     }
@@ -123,7 +119,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
       if (authTimerRef.current) clearTimeout(authTimerRef.current);
       log.info('useTransfer: auth ok', { payload_type: m.payload_type });
       setPayloadType(m.payload_type);
-      setStatus('transferring');
+      setState({ type: 'transferring' });
       sendControl({ msg: 'manifest' });
     } else if (m.msg === 'auth_error') {
       log.warn('useTransfer: auth_error', m.error);
@@ -178,7 +174,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
       fail(m.code, m.message);
     } else if (m.msg === 'bye') {
       log.info('useTransfer: bye received');
-      setStatus('done');
+      setState({ type: 'done' });
     }
   }, [sendControl, downloadNext, fail]);
 
@@ -196,8 +192,10 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     const onMessage = (e: MessageEvent) => handleMessage(e.data);
     const onClose = () => {
       log.warn('useTransfer: dc closed');
-      setStatus((prev) => (prev === 'done' || prev === 'error') ? prev : 'error');
-      setError((prev) => prev ?? { code: 'disconnected', message: 'Connection lost' });
+      setState((prev) => {
+        if (prev.type === 'done' || prev.type === 'error') return prev;
+        return { type: 'error', code: 'disconnected', message: 'Connection lost' };
+      });
     };
     dc.addEventListener('message', onMessage);
     dc.addEventListener('close', onClose);
@@ -205,7 +203,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     if (!sentAuthRef.current) {
       sentAuthRef.current = true;
       log.info('useTransfer: sending auth', { optCode: '***' });
-      setStatus('authenticating');
+      setState({ type: 'authenticating' });
       sendControl({ msg: 'auth', opt_code: params.optCode });
       authTimerRef.current = setTimeout(() => {
         log.error('useTransfer: auth timeout (15s)');
@@ -225,18 +223,17 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     if (webrtc.state === 'failed') {
       log.warn('useTransfer: webrtc.state=failed');
       fail('disconnected', 'Connection failed');
-    } else if (webrtc.state === 'closed' && status !== 'done' && status !== 'error') {
+    } else if (webrtc.state === 'closed' && state.type !== 'done' && state.type !== 'error') {
       log.warn('useTransfer: webrtc.state=closed');
       fail('disconnected', 'Connection closed');
     }
-  }, [webrtc.state, fail, status]);
+  }, [webrtc.state, fail, state.type]);
 
   const retry = useCallback(() => {
     log.info('useTransfer: retry');
     webrtc.close();
-    setError({ code: 'rescan', message: 'Please re-scan the QR code to retry.' });
-    setStatus('error');
+    setState({ type: 'error', code: 'rescan', message: 'Please re-scan the QR code to retry.' });
   }, [webrtc]);
 
-  return { status, error, manifest, payloadType, files, retry };
+  return { state, manifest, payloadType, files, retry };
 }
