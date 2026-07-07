@@ -4,6 +4,7 @@ import type { ParsedShareParams } from '../lib/urlParams';
 import type { ManifestFileEntry, PayloadType, ControlMessage } from '../lib/protocol';
 import { encodeControl, decodeWireEvent, CHUNK_HEADER_SIZE } from '../lib/protocol';
 import type { UseWebRTCReturn } from './useWebRTC';
+import { saveFile, completeSession } from '../services/cache';
 
 export interface FileProgress {
   index: number;
@@ -73,6 +74,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     if (idx >= pending.length) {
       log.info('useTransfer: all downloads complete, sending bye');
       transferCompleteRef.current = true;
+      completeSession(params.sessionId);
       sendControl({ msg: 'bye' });
       setState({ type: 'done' });
       webrtc.close();
@@ -141,6 +143,20 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
       }));
       setFiles([...filesRef.current]);
       setManifest(resp.files);
+      for (const entry of resp.files) {
+        if (entry.content != null && (entry.type === 'text' || entry.type === 'link' || entry.type === 'html')) {
+          const mimeType = entry.type === 'html' ? 'text/html' : 'text/plain';
+          const blob = new Blob([entry.content], { type: mimeType });
+          saveFile(params.sessionId, {
+            index: entry.index,
+            type: entry.type,
+            contentType: mimeType,
+            filename: entry.filename ?? `${entry.type}.txt`,
+            size: blob.size,
+            blob,
+          });
+        }
+      }
       downloadNext();
     } else if (m.msg === 'file_start') {
       log.info('useTransfer: file_start', { index: m.index, filename: m.filename, size: m.size, content_type: m.content_type });
@@ -165,6 +181,14 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
           f.index === m.index ? { ...f, status: 'done', received: f.size, blob } : f,
         );
         setFiles([...filesRef.current]);
+        saveFile(params.sessionId, {
+          index: m.index,
+          type: 'file',
+          contentType: cur.contentType,
+          filename: cur.filename,
+          size: blob.size,
+          blob,
+        });
         currentBinaryRef.current = null;
         nextDownloadIndexRef.current = m.index + 1;
         downloadNext();
