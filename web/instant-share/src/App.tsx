@@ -7,7 +7,7 @@ import { ConnectingScreen } from './components/ConnectingScreen';
 import { ReceiveScreen } from './components/ReceiveScreen';
 import { ErrorScreen } from './components/ErrorScreen';
 import { log } from './lib/log';
-import { getCachedSession } from './services/cache';
+import { getCachedSession, cleanExpired } from './services/cache';
 import type { ManifestFileEntry } from './lib/protocol';
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL;
@@ -52,6 +52,8 @@ function AppContent() {
   const [cacheCheckDone, setCacheCheckDone] = useState(false);
 
   useEffect(() => {
+    cleanExpired().catch(() => {});
+
     let cancelled = false;
     getCachedSession(params.sessionId).then(async (result) => {
       if (cancelled) return;
