@@ -94,8 +94,13 @@ export function useWebRTC(signal: UseSignalChannelReturn): UseWebRTCReturn {
         .then(() => log.info('useWebRTC: ice candidate added OK'))
         .catch((err) => log.warn('useWebRTC: ice candidate rejected', err));
     } else if (e.type === 'peer_left' || e.type === 'room_full') {
-      log.warn('useWebRTC: peer left or room full', e.type);
+      log.warn('useWebRTC: peer left or room full, closing all', e.type);
+      try { channelRef.current?.close(); } catch {}
+      try { pcRef.current?.close(); } catch {}
+      pcRef.current = null;
+      channelRef.current = null;
       setState('closed');
+      signal.close();
     }
   }, [signalSend]);
 
