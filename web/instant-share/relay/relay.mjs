@@ -90,11 +90,7 @@ export function createRelay(port, opts) {
         return;
       }
 
-      if (msg.type === 'leave') {
-        console.log(`[relay] LEAVE sid=${ss} role=${role}`);
-        if (role === 'pc') room.pc = null;
-        else room.browser = null;
-      }
+
     });
 
     ws.on('close', () => {
