@@ -74,8 +74,10 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     const pending = pendingManifestRef.current ?? [];
     const idx = nextDownloadIndexRef.current;
     if (idx >= pending.length) {
-      log.info('useTransfer: all downloads complete, status=done');
+      log.info('useTransfer: all downloads complete, sending bye');
+      sendControl({ msg: 'bye' });
       setStatus('done');
+      webrtc.close();
       return;
     }
     const entry = pending[idx];
@@ -91,7 +93,7 @@ export function useTransfer(params: ParsedShareParams, webrtc: UseWebRTCReturn):
     }
     log.info('useTransfer: requesting download', { idx });
     sendControl({ msg: 'download', index: idx });
-  }, [sendControl]);
+  }, [sendControl, webrtc]);
 
   const handleMessage = useCallback((data: string | ArrayBuffer) => {
     const ev = decodeWireEvent(data);
