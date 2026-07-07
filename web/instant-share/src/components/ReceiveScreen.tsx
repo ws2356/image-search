@@ -124,8 +124,9 @@ export function ReceiveScreen({ files, manifest }: ReceiveScreenProps) {
       }
       try {
         await navigator.share(shareData);
-      } catch {
-        // user cancelled
+      } catch (error){
+        log.warn(`navigator.share failed: ${error}`);
+        await deliverAll();
       }
     }
   }, [files, manifest]);
