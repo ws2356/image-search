@@ -49,4 +49,7 @@ rsync -avz relay/           "${ssh_target}:${RELAY_ROOT}/"
 scp "${this_dir}/../deploy/instant-share-relay.service" "${ssh_target}:"
 ssh "${ssh_target}" "sudo mv instant-share-relay.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart instant-share-relay.service"
 
+scp "${this_dir}/../../../dt_image_search/deploy/nginx/dl.boldman.conf" "${ssh_target}:"
+ssh "${ssh_target}" "sudo mv dl.boldman.conf /etc/nginx/conf.d/ && sudo nginx -s reload"
+
 echo "Deploy complete:"
