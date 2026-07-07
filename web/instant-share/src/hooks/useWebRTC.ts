@@ -161,7 +161,6 @@ export function useWebRTC(signal: UseSignalChannelReturn): UseWebRTCReturn {
     log.info('useWebRTC: close called');
     try { channelRef.current?.close(); } catch {}
     try { pcRef.current?.close(); } catch {}
-    signal.send({ type: 'leave' });
     signal.close();
   }, [signal]);
 

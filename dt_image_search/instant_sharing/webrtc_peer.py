@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 import websockets
+import websockets.exceptions
 
 from aiortc import RTCDataChannel, RTCPeerConnection, RTCSessionDescription
 
@@ -160,6 +161,8 @@ class WebRTCPeer:
                         break
                     else:
                         _logger.error("[WebRTCPeer] unknown relay msg type: %s (session=%s)", data.get("type"), self._session_id)
+        except websockets.exceptions.ConnectionClosedOK:
+            _logger.info("[WebRTCPeer] relay ws closed cleanly (session=%s)", self._session_id)
         except Exception as exc:
             _logger.exception("[WebRTCPeer] session failed (session=%s): %s", self._session_id, exc)
         finally:
@@ -185,8 +188,10 @@ class WebRTCPeer:
         elif ctrl_type == "download":
             self._handle_download(ctrl)
         elif ctrl_type == "bye":
-            _logger.info("[WebRTCPeer] bye received, setting done (session=%s)", self._session_id)
+            _logger.info("[WebRTCPeer] bye received, closing (session=%s)", self._session_id)
             self._done.set()
+            if self._relay_ws is not None:
+                asyncio.ensure_future(self._relay_ws.close())
         else:
             _logger.warning("[WebRTCPeer] unknown dc msg: %s (session=%s)", ctrl_type, self._session_id)
 
