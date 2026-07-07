@@ -20,11 +20,6 @@ describe('ReceiveScreen', () => {
     expect(screen.getByText(/2 files/)).toBeInTheDocument();
   });
 
-  it('renders Done button', () => {
-    render(<ReceiveScreen files={files} manifest={manifest} />);
-    expect(screen.getByText('Done')).toBeInTheDocument();
-  });
-
   it('renders filenames', () => {
     render(<ReceiveScreen files={files} manifest={manifest} />);
     expect(screen.getByText('photo.png')).toBeInTheDocument();

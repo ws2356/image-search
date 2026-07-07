@@ -32,7 +32,7 @@ function AppContent() {
   if (transfer.status === 'transferring' || transfer.status === 'done') {
     const files = transfer.files.length > 0 ? transfer.files : [];
     const manifest = transfer.manifest ?? [];
-    return <ReceiveScreen files={files} manifest={manifest} onDone={() => { window.close(); }} />;
+    return <ReceiveScreen files={files} manifest={manifest} />;
   }
 
   const labels: Record<string, string> = {

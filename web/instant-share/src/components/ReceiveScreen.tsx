@@ -12,7 +12,6 @@ import { Toast } from './ui/Toast';
 interface ReceiveScreenProps {
   files: FileProgress[];
   manifest: ManifestFileEntry[];
-  onDone?: () => void;
 }
 
 function formatSize(bytes: number): string {
@@ -59,7 +58,7 @@ function actionIcon(action: DeliveryAction) {
   }
 }
 
-export function ReceiveScreen({ files, manifest, onDone }: ReceiveScreenProps) {
+export function ReceiveScreen({ files, manifest }: ReceiveScreenProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [delivered, setDelivered] = useState<Set<number>>(new Set());
   const [errors, setErrors] = useState<Record<number, string>>({});
@@ -108,12 +107,7 @@ export function ReceiveScreen({ files, manifest, onDone }: ReceiveScreenProps) {
             {totalCount} {totalCount === 1 ? 'file' : 'files'} from MacBook Pro
           </span>
         </div>
-        <button
-          onClick={onDone}
-          className="text-base font-medium text-secondary hover:text-foreground"
-        >
-          Done
-        </button>
+
       </header>
 
       <div className="border-t border-border" />
