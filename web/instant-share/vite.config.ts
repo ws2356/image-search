@@ -15,5 +15,8 @@ export default defineConfig(({ mode }) => {
       exclude: ['**/node_modules/**', '**/dist/**', '**/relay/**'],
     },
     base: env.VITE_BASE || '/',
+    build: {
+      modulePreload: false,
+    },
   }
 });

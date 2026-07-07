@@ -57,7 +57,11 @@ function AppContent() {
   const [cacheCheckDone, setCacheCheckDone] = useState(false);
 
   useEffect(() => {
-    cleanExpired().catch(() => {});
+    if ('requestIdleCallback' in window) {
+      (window as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(() => cleanExpired().catch(() => {}));
+    } else {
+      setTimeout(() => cleanExpired().catch(() => {}), 0);
+    }
 
     let cancelled = false;
     getCachedSession(params.sessionId).then(async (result) => {
