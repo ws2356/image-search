@@ -71,7 +71,9 @@ export function ReceiveScreen({ files, manifest }: ReceiveScreenProps) {
     const entry = manifest[index];
     const file = files.find((f) => f.index === index) ?? null;
     if (!entry) return;
-    const action = planDelivery(entry, file);
+    const action = entry.type === 'html'
+      ? { kind: 'copy' as const, text: entry.content ?? '' }
+      : planDelivery(entry, file);
     if (action.kind === 'none') return;
     try {
       await applyDelivery(action);
@@ -98,6 +100,38 @@ export function ReceiveScreen({ files, manifest }: ReceiveScreenProps) {
 
   const hasFileItems = files.some((f) => f.status === 'done' && manifest[f.index]?.type === 'file');
 
+  const shareAll = useCallback(async () => {
+    const fileItems: File[] = [];
+    const textParts: string[] = [];
+
+    for (const file of files) {
+      if (file.status !== 'done') continue;
+      const entry = manifest[file.index];
+      if (!entry) continue;
+
+      if (entry.type === 'text' || entry.type === 'link' || entry.type === 'html') {
+        if (entry.content) textParts.push(entry.content);
+      } else if (entry.type === 'file' && file.blob) {
+        fileItems.push(new File([file.blob], entry.filename ?? `file-${entry.index}`, { type: entry.content_type }));
+      }
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      const shareData: ShareData = {};
+      if (textParts.length > 0) shareData.text = textParts.join('\n\n');
+      if (fileItems.length > 0 && navigator.canShare?.({ files: fileItems })) {
+        shareData.files = fileItems;
+      }
+      try {
+        await navigator.share(shareData);
+      } catch {
+        // user cancelled
+      }
+    }
+  }, [files, manifest]);
+
+  const allDone = !isDownloading && downloadedCount > 0;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="flex items-center justify-between px-lg py-md">
@@ -107,7 +141,14 @@ export function ReceiveScreen({ files, manifest }: ReceiveScreenProps) {
             {totalCount} {totalCount === 1 ? 'file' : 'files'} from MacBook Pro
           </span>
         </div>
-
+        {allDone && (
+          <button
+            onClick={shareAll}
+            className="text-base font-medium text-primary hover:text-primary/80"
+          >
+            Share
+          </button>
+        )}
       </header>
 
       <div className="border-t border-border" />
@@ -131,7 +172,11 @@ export function ReceiveScreen({ files, manifest }: ReceiveScreenProps) {
             const isInline = entry.type === 'text' || entry.type === 'link' || entry.type === 'html';
             const isDone = file.status === 'done';
             const isSelectable = isInline || isDone;
-            const action = isDone ? planDelivery(entry, file) : { kind: 'none' } as DeliveryAction;
+            const action = isDone
+              ? entry.type === 'html'
+                ? { kind: 'copy' as const, text: entry.content ?? '' }
+                : planDelivery(entry, file)
+              : { kind: 'none' } as DeliveryAction;
             const copied = copiedIndex === file.index;
             const wasDelivered = delivered.has(file.index);
 
