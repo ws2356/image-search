@@ -104,7 +104,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name=f"{app_name}.app",
-    icon='resources/appicon.icns',
+    icon='resources/instantshare.icns',
     bundle_identifier=bundle_identifier,
     info_plist=plistlib.loads(
         Path("dt_image_search/resources/AppInfoInstantShare.plist").read_bytes()

@@ -15,7 +15,10 @@ let package = Package(
             dependencies: [
                 .product(name: "AsyncHTTPClient", package: "async-http-client")
             ],
-            path: "Sources/ShareExtension"
+            path: "Sources/ShareExtension",
+            resources: [
+                .process("Assets.xcassets")
+            ]
         )
     ]
 )

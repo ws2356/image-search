@@ -8,7 +8,7 @@ fi
 this_dir="$(dirname "$this_file")"
 repo_root="$(cd "${this_dir}/../.." && pwd)"
 
-set -a; . "$repo_root/.env.applecredential"; set +a
+set -a; . "$repo_root/.env-applecredential"; set +a
 
 APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
 if [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] ; then
