@@ -22,7 +22,6 @@ else
 fi
 
 # Fetch API token from macOS keychain
-echo "Fetching Cloudflare API token from keychain..." >&2
 export TF_VAR_cf_api_token
 TF_VAR_cf_api_token="$(security find-generic-password -s cloudflare-api-token -a "$cf_account_id" -w)"
 if [ -z "$TF_VAR_cf_api_token" ]; then
