@@ -10,5 +10,5 @@ output "nameservers" {
 
 output "test_record_fqdn" {
   description = "FQDN of the test A record"
-  value       = cloudflare_record.test.hostname
+  value       = cloudflare_dns_record.test.name
 }

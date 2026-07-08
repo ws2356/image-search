@@ -1,10 +1,23 @@
-resource "cloudflare_zone_settings_override" "boldman_net" {
-  zone_id = cloudflare_zone.boldman_net.id
+resource "cloudflare_zone_setting" "ssl" {
+  zone_id    = cloudflare_zone.boldman_net.id
+  setting_id = "ssl"
+  value      = "strict"
+}
 
-  settings {
-    ssl                      = "strict"
-    min_tls_version          = "1.2"
-    always_use_https         = "on"
-    automatic_https_rewrites = "on"
-  }
+resource "cloudflare_zone_setting" "min_tls_version" {
+  zone_id    = cloudflare_zone.boldman_net.id
+  setting_id = "min_tls_version"
+  value      = "1.2"
+}
+
+resource "cloudflare_zone_setting" "always_use_https" {
+  zone_id    = cloudflare_zone.boldman_net.id
+  setting_id = "always_use_https"
+  value      = "on"
+}
+
+resource "cloudflare_zone_setting" "automatic_https_rewrites" {
+  zone_id    = cloudflare_zone.boldman_net.id
+  setting_id = "automatic_https_rewrites"
+  value      = "on"
 }

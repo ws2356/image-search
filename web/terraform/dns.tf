@@ -6,10 +6,11 @@ resource "cloudflare_zone" "boldman_net" {
   }
 }
 
-resource "cloudflare_record" "test" {
+resource "cloudflare_dns_record" "test" {
   zone_id = cloudflare_zone.boldman_net.id
   name    = "test"
-  value   = var.origin_ip
+  content = var.origin_ip
   type    = "A"
+  ttl     = 1
   proxied = true
 }
