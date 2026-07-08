@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
+    from dt_image_search.instant_sharing.session_id_generator import SessionIdGenerator
     from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 
 _logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class QRTriggerHandler:
         on_stash_created: Callable[[StashEntry], None] | None = None,
         on_stash_expired: Callable[[str], None] | None = None,
         on_stash_claimed: Callable[[str, str], None] | None = None,
+        session_id_generator: SessionIdGenerator | None = None,
     ) -> None:
         self._trust_session_registry = trust_session_registry
         self._stashes: dict[str, StashEntry] = {}
@@ -53,6 +55,7 @@ class QRTriggerHandler:
         self._on_stash_created = on_stash_created
         self._on_stash_expired = on_stash_expired
         self._on_stash_claimed = on_stash_claimed
+        self._session_id_generator = session_id_generator
 
     @property
     def active_stash(self) -> StashEntry | None:
@@ -127,7 +130,10 @@ class QRTriggerHandler:
                     legacy_entry["filename"] = filename
                 stash = self._create_file_stash([legacy_entry])
 
-        session_id = str(uuid.uuid4())
+        if self._session_id_generator is not None:
+            session_id = self._session_id_generator.next_session_id()
+        else:
+            session_id = str(uuid.uuid4())
         if self._trust_session_registry is not None:
             from dt_image_search.instant_sharing.trust_server import TrustFlowType
             self._trust_session_registry.create_session(

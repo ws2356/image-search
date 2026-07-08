@@ -126,5 +126,31 @@ class TestBootstrapRequestShortSid(unittest.TestCase):
             ).validate()
 
 
+class TestQRTriggerHandlerShortSid(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from dt_image_search.instant_sharing.session_id_generator import SessionIdGenerator
+
+        self._tmp_dir = tempfile.mkdtemp()
+        self._counter_file = Path(self._tmp_dir) / "session_id_counter.txt"
+        self._generator = SessionIdGenerator(counter_file=self._counter_file)
+        from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler
+        self._handler = QRTriggerHandler(session_id_generator=self._generator)
+
+    def test_handle_trigger_returns_short_session_id(self):
+        body = {"type": "text", "content": "hello"}
+        result = self._handler.handle_trigger(body)
+        sid = result["session_id"]
+        self.assertRegex(sid, r"^[0-9a-f]{1,2}$")
+        self.assertNotIn("-", sid)
+
+    def test_session_ids_increment(self):
+        r1 = self._handler.handle_trigger({"type": "text", "content": "a"})
+        r2 = self._handler.handle_trigger({"type": "text", "content": "b"})
+        self.assertEqual(r1["session_id"], "1")
+        self.assertEqual(r2["session_id"], "2")
+
+
 if __name__ == "__main__":
     unittest.main()
