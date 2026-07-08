@@ -14,3 +14,8 @@ variable "zone_name" {
   type        = string
   default     = "boldman.net"
 }
+
+variable "cf_account_id" {
+  description = "Cloudflare account ID"
+  type        = string
+}
