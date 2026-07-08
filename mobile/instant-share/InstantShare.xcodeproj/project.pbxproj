@@ -14,6 +14,9 @@
 		3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; };
 		3D802F2E2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000006 /* ComposableArchitecture */; };
 		3D802F2F2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000006 /* ComposableArchitecture */; };
+		3D802F302FF7FFC100A02CD7 /* Dependencies in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000007 /* Dependencies */; };
+		3D802F312FF7FFC100A02CD7 /* IdentifiedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000008 /* IdentifiedCollections */; };
+		3D802F322FF7FFC100A02CD7 /* ConcurrencyExtras in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000009 /* ConcurrencyExtras */; };
 		3DEAE3662FF8D7E900656799 /* ISDeviceManagement in Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000005 /* ISDeviceManagement */; };
 		ISBF000000000000000001 /* InstantShareApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000003 /* InstantShareApp.swift */; };
 		ISBF000000000000000002 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000008 /* ShareViewController.swift */; };
@@ -87,6 +90,8 @@
 				3D802F2A2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
 				3D802F292FF7FFC100A02CD7 /* Common in Frameworks */,
 				3D802F2F2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */,
+				3D802F312FF7FFC100A02CD7 /* IdentifiedCollections in Frameworks */,
+				3D802F322FF7FFC100A02CD7 /* ConcurrencyExtras in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -97,6 +102,7 @@
 				3D802F2D2FF7FFC100A02CD7 /* ISFromMobile in Frameworks */,
 				3D802F2C2FF7FFC100A02CD7 /* Common in Frameworks */,
 				3D802F2E2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */,
+				3D802F302FF7FFC100A02CD7 /* Dependencies in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,6 +175,8 @@
 				ISPD000000000000000004 /* ISFromPC */,
 				ISPD000000000000000005 /* ISDeviceManagement */,
 				ISPD000000000000000006 /* ComposableArchitecture */,
+				ISPD000000000000000008 /* IdentifiedCollections */,
+				ISPD000000000000000009 /* ConcurrencyExtras */,
 			);
 			productName = InstantShare;
 			productReference = ISFR000000000000000001 /* InstantShare.app */;
@@ -190,6 +198,7 @@
 				ISPD000000000000000002 /* Common */,
 				ISPD000000000000000003 /* ISFromMobile */,
 				ISPD000000000000000006 /* ComposableArchitecture */,
+				ISPD000000000000000007 /* Dependencies */,
 			);
 			productName = ShareExtension;
 			productReference = ISFR000000000000000002 /* ShareExtension.appex */;
@@ -219,6 +228,9 @@
 				ISXRP000000000000000001 /* XCRemoteSwiftPackageReference "Factory" */,
 				ISXRP000000000000000002 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
 				ISXRP000000000000000003 /* XCRemoteSwiftPackageReference "opentelemetry-swift-core" */,
+				ISXRP000000000000000004 /* XCRemoteSwiftPackageReference "swift-dependencies" */,
+				ISXRP000000000000000005 /* XCRemoteSwiftPackageReference "swift-identified-collections" */,
+				ISXRP000000000000000006 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */,
 			);
 			productRefGroup = ISGR000000000000000002 /* Products */;
 			projectDirPath = "";
@@ -575,6 +587,30 @@
 				minimumVersion = 2.3.0;
 			};
 		};
+		ISXRP000000000000000004 /* XCRemoteSwiftPackageReference "swift-dependencies" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-dependencies";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.12.0;
+			};
+		};
+		ISXRP000000000000000005 /* XCRemoteSwiftPackageReference "swift-identified-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-identified-collections";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		ISXRP000000000000000006 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-concurrency-extras";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -602,6 +638,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ISXRP000000000000000002 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
 			productName = ComposableArchitecture;
+		};
+		ISPD000000000000000007 /* Dependencies */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ISXRP000000000000000004 /* XCRemoteSwiftPackageReference "swift-dependencies" */;
+			productName = Dependencies;
+		};
+		ISPD000000000000000008 /* IdentifiedCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ISXRP000000000000000005 /* XCRemoteSwiftPackageReference "swift-identified-collections" */;
+			productName = IdentifiedCollections;
+		};
+		ISPD000000000000000009 /* ConcurrencyExtras */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ISXRP000000000000000006 /* XCRemoteSwiftPackageReference "swift-concurrency-extras" */;
+			productName = ConcurrencyExtras;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
