@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>InstantShare</string>
 	<key>CFBundleIconFile</key>
-	<string>appicon.icns</string>
+	<string>instantshare</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.1</string>
 	<key>CFBundleVersion</key>
