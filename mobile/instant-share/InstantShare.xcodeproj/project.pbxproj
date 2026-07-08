@@ -19,7 +19,7 @@
 		ISBF000000000000000002 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000008 /* ShareViewController.swift */; };
 		ISBF000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000005 /* Assets.xcassets */; };
 		ISBF000000000000000004 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000006 /* LaunchScreen.storyboard */; };
-		ISBF000000000000000005 /* Instant Share.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000002 /* Instant Share.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		ISBF000000000000000005 /* ShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000002 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		ISBF000000000000000006 /* Common in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000002 /* Common */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000007 /* ISFromMobile in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000008 /* ISFromPC in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000004 /* ISFromPC */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -56,7 +56,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				ISBF000000000000000005 /* Instant Share.appex in Embed App Extensions */,
+				ISBF000000000000000005 /* ShareExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -65,7 +65,7 @@
 
 /* Begin PBXFileReference section */
 		ISFR000000000000000001 /* InstantShare.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InstantShare.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		ISFR000000000000000002 /* Instant Share.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = "Instant Share.appex"; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		ISFR000000000000000002 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		ISFR000000000000000003 /* InstantShareApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareApp.swift; path = App/InstantShareApp.swift; sourceTree = "<group>"; };
 		ISFR000000000000000004 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
 		ISFR000000000000000005 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = App/Assets.xcassets; sourceTree = "<group>"; };
@@ -116,7 +116,7 @@
 			isa = PBXGroup;
 			children = (
 				ISFR000000000000000001 /* InstantShare.app */,
-				ISFR000000000000000002 /* Instant Share.appex */,
+				ISFR000000000000000002 /* ShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -192,7 +192,7 @@
 				ISPD000000000000000006 /* ComposableArchitecture */,
 			);
 			productName = ShareExtension;
-			productReference = ISFR000000000000000002 /* Instant Share.appex */;
+			productReference = ISFR000000000000000002 /* ShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -308,9 +308,11 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = App/InstantShareApp.entitlements;
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZU6V838VRQ;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = ZU6V838VRQ;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Snap Get";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -322,6 +324,8 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.boldman.instant-share";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "snap-get production";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -361,9 +365,11 @@
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = ZU6V838VRQ;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = ZU6V838VRQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Instant Share";
@@ -376,6 +382,8 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "net.boldman.instant-share.ShareExtension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "snap-get extension production";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;

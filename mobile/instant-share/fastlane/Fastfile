@@ -117,6 +117,28 @@ def ensure_metadata_ready!(path)
   UI.user_error!("Metadata path must contain at least one locale directory: #{path}")
 end
 
+def provisioning_profiles_map(options)
+  options ||= {}
+  main_id = option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instant-share")
+  main_profile = option_or_env(options, :provisioning_profile_specifier, "IOS_PROVISIONING_PROFILE_SPECIFIER")
+  map = {}
+  map[main_id] = main_profile unless main_id.to_s.empty?
+  ENV.each do |key, value|
+    next unless key =~ /\AAPP_STORE_CONNECT_APP_IDENTIFIER_(\d+)\z/
+    suffix = Regexp.last_match(1)
+    bundle_id = value.to_s.strip
+    next if bundle_id.empty?
+    profile_key = "IOS_PROVISIONING_PROFILE_SPECIFIER_#{suffix}"
+    profile = ENV[profile_key].to_s.strip
+    map[bundle_id] = profile unless profile.empty?
+  end
+  map
+end
+
+def serialize_provisioning_profiles_map(map)
+  map.map { |bundle_id, profile| "#{bundle_id}=#{profile}" }.join("|")
+end
+
 def build_upload_flags(options)
   options ||= {}
   upload_binary = truthy?(options[:upload_binary], default: true)
@@ -169,8 +191,12 @@ platform :ios do
       if keychain_path && !keychain_path.empty? && !File.exist?(keychain_path)
         UI.user_error!("Configured keychain path does not exist: #{keychain_path}")
       end
-      if signing_style == "manual" && provisioning_profile_specifier.to_s.empty?
-        UI.user_error!("Set IOS_PROVISIONING_PROFILE_SPECIFIER when IOS_SIGNING_STYLE=manual.")
+      if signing_style == "manual"
+        profiles_map = provisioning_profiles_map(options)
+        UI.user_error!("No provisioning profiles configured. Set IOS_PROVISIONING_PROFILE_SPECIFIER (and APP_STORE_CONNECT_APP_IDENTIFIER) in .env.") if profiles_map.empty?
+        profiles_map.each do |bid, profile|
+          UI.user_error!("Provisioning profile for #{bid} is empty. Set IOS_PROVISIONING_PROFILE_SPECIFIER[_N] for this target.") if profile.to_s.empty?
+        end
       end
       UI.important(
         "Ensure the provisioning profile for #{option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instant-share")} is valid."
@@ -226,14 +252,10 @@ platform :ios do
     certificate_name = option_or_env(options, :certificate_name, "IOS_CODE_SIGN_IDENTITY")
     keychain_path = option_or_env(options, :keychain_path, "IOS_KEYCHAIN_PATH")
     signing_style = option_or_env(options, :signing_style, "IOS_SIGNING_STYLE", "automatic").downcase
-    provisioning_profile_specifier = option_or_env(options, :provisioning_profile_specifier, "IOS_PROVISIONING_PROFILE_SPECIFIER")
     bundle_identifier = option_or_env(options, :app_identifier, "APP_STORE_CONNECT_APP_IDENTIFIER", "net.boldman.instant-share")
 
     UI.user_error!("Set IOS_CODE_SIGN_IDENTITY to the Keychain certificate name before building.") if certificate_name.to_s.empty?
     ensure_codesigning_identity!(certificate_name)
-    if signing_style == "manual" && provisioning_profile_specifier.to_s.empty?
-      UI.user_error!("Set IOS_PROVISIONING_PROFILE_SPECIFIER when IOS_SIGNING_STYLE=manual.")
-    end
 
     env = {
       "PROJECT_PATH" => project,
@@ -252,7 +274,15 @@ platform :ios do
     }
     env["EXPORT_OPTIONS_PLIST"] = export_options_plist unless export_options_plist.to_s.empty?
     env["KEYCHAIN_PATH"] = keychain_path unless keychain_path.to_s.empty?
-    env["PROVISIONING_PROFILE_SPECIFIER"] = provisioning_profile_specifier unless provisioning_profile_specifier.to_s.empty?
+
+    profiles_map = provisioning_profiles_map(options)
+    if signing_style == "manual"
+      UI.user_error!("No provisioning profiles configured. Set IOS_PROVISIONING_PROFILE_SPECIFIER (and APP_STORE_CONNECT_APP_IDENTIFIER) in .env.") if profiles_map.empty?
+      profiles_map.each do |bid, profile|
+        UI.user_error!("Provisioning profile for #{bid} is empty. Set IOS_PROVISIONING_PROFILE_SPECIFIER[_N] for this target.") if profile.to_s.empty?
+      end
+      env["PROVISIONING_PROFILES_MAP"] = serialize_provisioning_profiles_map(profiles_map)
+    end
 
     sh(env, "bash", File.join(ios_root, "scripts/export_ipa.sh"))
 

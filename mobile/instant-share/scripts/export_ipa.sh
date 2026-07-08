@@ -21,6 +21,7 @@ KEYCHAIN_PATH="${KEYCHAIN_PATH:-}"
 SIGNING_STYLE="${SIGNING_STYLE:-automatic}"
 PROVISIONING_PROFILE_SPECIFIER="${PROVISIONING_PROFILE_SPECIFIER:-}"
 BUNDLE_IDENTIFIER="${BUNDLE_IDENTIFIER:-net.boldman.instant-share}"
+PROVISIONING_PROFILES_MAP="${PROVISIONING_PROFILES_MAP:-}"
 
 usage() {
     cat <<'EOF'
@@ -42,7 +43,8 @@ Environment overrides:
   CODE_SIGN_IDENTITY_NAME      Optional code signing identity name from Keychain
   KEYCHAIN_PATH                Optional keychain path forwarded via OTHER_CODE_SIGN_FLAGS
   SIGNING_STYLE                automatic (default) or manual
-  PROVISIONING_PROFILE_SPECIFIER Provisioning profile name/specifier for manual signing
+  PROVISIONING_PROFILE_SPECIFIER Provisioning profile name/specifier for manual signing (single target)
+  PROVISIONING_PROFILES_MAP    Pipe-delimited bundle-id=profile pairs for multi-target manual signing
   BUNDLE_IDENTIFIER            Bundle identifier used in ExportOptions.plist for manual signing
 EOF
 }
@@ -79,8 +81,24 @@ EOF
             cat <<EOF
     <key>provisioningProfiles</key>
     <dict>
+EOF
+            if [[ -n "${PROVISIONING_PROFILES_MAP}" ]]; then
+                local IFS='|'
+                for entry in ${PROVISIONING_PROFILES_MAP}; do
+                    local bid="${entry%%=*}"
+                    local profile="${entry#*=}"
+                    cat <<EOF
+        <key>${bid}</key>
+        <string>${profile}</string>
+EOF
+                done
+            else
+                cat <<EOF
         <key>${BUNDLE_IDENTIFIER}</key>
         <string>${PROVISIONING_PROFILE_SPECIFIER}</string>
+EOF
+            fi
+            cat <<EOF
     </dict>
 EOF
         fi
@@ -117,8 +135,8 @@ main() {
         echo "error: SIGNING_STYLE must be 'automatic' or 'manual'" >&2
         exit 1
     fi
-    if [[ "${SIGNING_STYLE}" == "manual" && -z "${PROVISIONING_PROFILE_SPECIFIER}" ]]; then
-        echo "error: PROVISIONING_PROFILE_SPECIFIER is required when SIGNING_STYLE=manual" >&2
+    if [[ "${SIGNING_STYLE}" == "manual" && -z "${PROVISIONING_PROFILE_SPECIFIER}" && -z "${PROVISIONING_PROFILES_MAP}" ]]; then
+        echo "error: PROVISIONING_PROFILE_SPECIFIER or PROVISIONING_PROFILES_MAP is required when SIGNING_STYLE=manual" >&2
         exit 1
     fi
 
@@ -169,7 +187,11 @@ main() {
         echo "==> Using code signing identity: ${CODE_SIGN_IDENTITY_NAME}"
     fi
     if [[ "${SIGNING_STYLE}" == "manual" ]]; then
-        echo "==> Using provisioning profile during export: ${PROVISIONING_PROFILE_SPECIFIER}"
+        if [[ -n "${PROVISIONING_PROFILES_MAP}" ]]; then
+            echo "==> Using provisioning profiles map: ${PROVISIONING_PROFILES_MAP}"
+        else
+            echo "==> Using provisioning profile during export: ${PROVISIONING_PROFILE_SPECIFIER}"
+        fi
     fi
     xcodebuild "${common_args[@]}" "${archive_args[@]}"
 
