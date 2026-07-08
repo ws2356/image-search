@@ -1,0 +1,6 @@
+# Copy this file to terraform.tfvars and fill in values.
+# Do NOT commit terraform.tfvars (it contains secrets).
+
+cf_api_token   = ""  # Fetched automatically by scripts/deploy.sh from keychain
+origin_ip      = ""  # Public IP of the nginx origin server
+cf_account_id  = ""  # Cloudflare account ID (from dashboard URL or API)
