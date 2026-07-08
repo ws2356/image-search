@@ -1,0 +1,1 @@
+share,transfer,photo,text,clipboard,desktop,pc,local,private,secure,wifi,wireless,instant,quick,send

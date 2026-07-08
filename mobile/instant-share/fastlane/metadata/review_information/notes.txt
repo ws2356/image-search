@@ -1,0 +1,5 @@
+Prerequisite:
+1. A macOS or Windows device with AuSearch (the companion desktop app) installed is required.
+2. Desktop and iOS device must be on the same Wi-Fi network.
+
+Download AuSearch (the companion desktop app) here - "https://aurora.boldman.net/".

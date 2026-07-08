@@ -9,6 +9,10 @@ __pycache__
 /mobile/ios/fastlane/Preview.html
 /mobile/ios/fastlane/report.xml
 /mobile/ios/fastlane/test_output/
+/mobile/instant-share/build/
+/mobile/instant-share/fastlane/Preview.html
+/mobile/instant-share/fastlane/report.xml
+/mobile/instant-share/fastlane/test_output/
 MagicMock/
 /DTImageSearchApp
 /*.msix
