@@ -10,7 +10,7 @@ from dt_image_search.instant_sharing.contracts import (
     TargetIntent,
     TrustMode,
 )
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
+from dt_image_search.instant_sharing.mdns import BootstrapRequest, ConnectionConfig
 from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
 
 
@@ -68,6 +68,62 @@ class TestBootstrapRevisit(unittest.TestCase):
             session.connection_config.metadata.trust_mode,
             TrustMode.TRUSTED_DIRECT,
         )
+
+
+class TestConnectionConfigShortSid(unittest.TestCase):
+    def test_validate_accepts_short_hex_session_id(self):
+        config = ConnectionConfig(
+            session_id="a",
+            mobile_port=8080,
+            mobile_ip_list=("192.168.1.1",),
+            correlation_id="abc123",
+            metadata=InstantShareMetadata(
+                payload_class=PayloadClass.TEXT,
+                target_intent=TargetIntent.CLIPBOARD_ONLY,
+                trust_mode=TrustMode.TRUSTED_DIRECT,
+            ),
+        )
+        # Should not raise
+        config.validate()
+
+    def test_validate_rejects_empty_session_id(self):
+        with self.assertRaises(ValueError):
+            ConnectionConfig(
+                session_id="",
+                mobile_port=8080,
+                mobile_ip_list=("192.168.1.1",),
+                correlation_id="abc123",
+                metadata=InstantShareMetadata(
+                    payload_class=PayloadClass.TEXT,
+                    target_intent=TargetIntent.CLIPBOARD_ONLY,
+                    trust_mode=TrustMode.TRUSTED_DIRECT,
+                ),
+            ).validate()
+
+
+class TestBootstrapRequestShortSid(unittest.TestCase):
+    def test_validate_accepts_short_hex_session_id(self):
+        req = BootstrapRequest(
+            session_id="ff",
+            mobile_port=8080,
+            mobile_ip_list=("192.168.1.1",),
+            correlation_id="abc123",
+            payload_class="text",
+            target_intent="clipboard_only",
+        )
+        # Should not raise
+        req.validate()
+
+    def test_validate_rejects_empty_session_id(self):
+        with self.assertRaises(ValueError):
+            BootstrapRequest(
+                session_id="",
+                mobile_port=8080,
+                mobile_ip_list=("192.168.1.1",),
+                correlation_id="abc123",
+                payload_class="text",
+                target_intent="clipboard_only",
+            ).validate()
 
 
 if __name__ == "__main__":

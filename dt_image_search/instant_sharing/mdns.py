@@ -61,10 +61,10 @@ class ConnectionConfig:
     metadata: InstantShareMetadata
 
     def validate(self) -> None:
-        from uuid import UUID
-
-        UUID(self.session_id)
-        UUID(self.correlation_id)
+        if not self.session_id.strip():
+            raise ValueError("session_id must not be empty.")
+        if not self.correlation_id.strip():
+            raise ValueError("correlation_id must not be empty.")
         if self.mobile_port <= 0 or self.mobile_port > 65535:
             raise ValueError("mobile_port must be between 1 and 65535.")
         if not self.mobile_ip_list:
@@ -142,10 +142,10 @@ class BootstrapRequest:
     target_intent: str
 
     def validate(self) -> None:
-        from uuid import UUID
-
-        UUID(self.session_id)
-        UUID(self.correlation_id)
+        if not self.session_id.strip():
+            raise ValueError("session_id must not be empty.")
+        if not self.correlation_id.strip():
+            raise ValueError("correlation_id must not be empty.")
         if self.mobile_port <= 0 or self.mobile_port > 65535:
             raise ValueError("mobile_port must be between 1 and 65535.")
         if not self.mobile_ip_list:
