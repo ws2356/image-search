@@ -14,7 +14,7 @@ if [[ -z "$account_id_line" ]]; then
   exit 1
 fi
 if [[ "$account_id_line" =~ ^[[:space:]]*cf_account_id[[:space:]]*=[[:space:]]*(\"|\')([^\"\']+)(\"|\') ]] && \
-  ["${BASH_REMATCH[1]}" == "${BASH_REMATCH[3]}"] ; then
+  [ "${BASH_REMATCH[1]}" == "${BASH_REMATCH[3]}" ] ; then
   cf_account_id="${BASH_REMATCH[2]}"
 else
   echo "Error: Could not parse cf_account_id from terraform.tfvars" >&2
