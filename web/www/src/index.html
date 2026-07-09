@@ -1,572 +1,109 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AuSearch &amp; AuBackup | Official downloads</title>
-  <meta name="description" content="Official bilingual landing page for AuSearch desktop and AuBackup mobile downloads, screenshots, and privacy notice.">
-  <style>
-    :root {
-      color-scheme: dark;
-      --panel: rgba(15, 22, 36, 0.78);
-      --line: rgba(255, 255, 255, 0.1);
-      --text: #f5f8fc;
-      --muted: #a4b3c9;
-      --brand-a: #007aff;
-      --brand-b: #34aadc;
-      --success: #30d158;
-      --warn: #ff9f0a;
-      --shadow: 0 28px 60px rgba(0, 0, 0, 0.35);
-      --radius-xl: 28px;
-      --radius-lg: 22px;
-    }
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aurora Software | Home</title>
+    <style>
+        :root {
+            --bg-color: #0b111e;
+            --accent-color: #1e70e6;
+            --text-color: #ffffff;
+            --text-muted: #8fa0bc;
+            --nav-bg: rgba(15, 23, 42, 0.8);
+            --card-bg: #131c2e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); min-height: 100vh; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        /* Navbar */
+        header { background: var(--nav-bg); backdrop-filter: blur(12px); border-bottom: 1px solid #1e293b; position: fixed; width: 100%; top: 0; z-index: 1000; }
+        .nav-container { max-width: 1200px; margin: 0 auto; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-weight: 700; font-size: 1.2rem; letter-spacing: -0.5px; text-decoration: none; color: var(--text-color); }
+        .nav-links { display: flex; gap: 25px; list-style: none; }
+        .dropdown { position: relative; }
+        .dropdown-toggle { color: var(--text-color); text-decoration: none; font-size: 0.95rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .dropdown-toggle::after { content: '▾'; font-size: 0.75rem; color: var(--text-muted); }
+        .dropdown-menu { position: absolute; top: 100%; left: 0; background: var(--card-bg); border: 1px solid #1e293b; border-radius: 8px; width: 220px; padding: 8px 0; box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; transform: translateY(10px); transition: all 0.2s ease; margin-top: 10px; }
+        .dropdown:hover .dropdown-menu { opacity: 1; visibility: visible; transform: translateY(0); }
+        .dropdown-menu a { display: block; padding: 10px 16px; color: var(--text-muted); text-decoration: none; font-size: 0.9rem; transition: background 0.2s, color 0.2s; }
+        .dropdown-menu a:hover { background: rgba(30, 112, 230, 0.1); color: var(--text-color); }
 
-    * {
-      box-sizing: border-box;
-    }
+        /* Hero Section */
+        .hero { max-width: 800px; margin: 180px auto 100px auto; text-align: center; padding: 0 20px; }
+        .hero h1 { font-size: 3rem; font-weight: 800; margin-bottom: 20px; letter-spacing: -1px; background: linear-gradient(to right, #ffffff, #a5c7f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { font-size: 1.15rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 40px; }
+        
+        /* Product Cards Hub */
+        .product-grid { max-width: 1000px; margin: 0 auto 120px auto; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; padding: 0 20px; }
+        .product-card { background: var(--card-bg); border: 1px solid #1e293b; padding: 35px; border-radius: 16px; text-align: left; display: flex; flex-direction: column; justify-content: space-between; transition: border-color 0.3s, transform 0.3s; text-decoration: none; color: inherit; }
+        .product-card:hover { border-color: var(--accent-color); transform: translateY(-4px); }
+        .product-card h2 { font-size: 1.5rem; margin-bottom: 12px; font-weight: 700; }
+        .product-card p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin-bottom: 25px; }
+        .product-card .btn { display: inline-flex; align-items: center; color: var(--accent-color); font-weight: 600; font-size: 0.95rem; gap: 6px; }
 
-    html {
-      scroll-behavior: smooth;
-    }
+        /* Footer */
+        footer { border-top: 1px solid #1e293b; padding: 30px 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+        footer .contact { margin-top: 5px; }
+        footer a { color: var(--text-muted); text-decoration: none; }
+        footer a:hover { color: var(--text-color); }
 
-    body {
-      margin: 0;
-      color: var(--text);
-      font: 16px/1.5 Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(52, 170, 220, 0.18), transparent 28%),
-        radial-gradient(circle at top right, rgba(0, 122, 255, 0.16), transparent 26%),
-        linear-gradient(180deg, #07101d, #0b1322 48%, #09101c);
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    img {
-      display: block;
-      max-width: 100%;
-    }
-
-    .site-shell {
-      width: min(1160px, calc(100% - 32px));
-      margin: 0 auto;
-      padding-bottom: 64px;
-    }
-
-    .topbar {
-      position: sticky;
-      top: 16px;
-      z-index: 20;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      margin: 16px 0 28px;
-      padding: 14px 18px;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: rgba(8, 13, 23, 0.72);
-      backdrop-filter: blur(18px);
-      box-shadow: var(--shadow);
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      min-width: 0;
-    }
-
-    .brand__mark {
-      display: grid;
-      place-items: center;
-      width: 44px;
-      height: 44px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-      color: #06111c;
-      font-size: 18px;
-      font-weight: 800;
-    }
-
-    .brand strong {
-      display: block;
-      font-size: 15px;
-      letter-spacing: 0.01em;
-    }
-
-    .brand small {
-      display: block;
-      margin-top: 4px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .topnav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .topnav a:hover {
-      color: var(--text);
-    }
-
-    .hero,
-    .screenshots-panel,
-    .privacy-panel {
-      border: 1px solid var(--line);
-      border-radius: var(--radius-xl);
-      background: var(--panel);
-      backdrop-filter: blur(20px);
-      box-shadow: var(--shadow);
-    }
-
-    .hero {
-      padding: 40px 36px;
-      margin-bottom: 28px;
-    }
-
-    h1 {
-      margin: 0 0 16px;
-      font-size: clamp(38px, 7vw, 64px);
-      line-height: 1.03;
-      letter-spacing: -0.03em;
-    }
-
-    .lead {
-      max-width: 68ch;
-      margin: 0;
-      color: var(--muted);
-      font-size: 18px;
-      line-height: 1.75;
-    }
-
-    .section {
-      margin-top: 28px;
-      scroll-margin-top: 108px;
-    }
-
-    .section__intro {
-      margin-bottom: 16px;
-    }
-
-    .section__intro h2 {
-      margin: 0 0 10px;
-      font-size: clamp(28px, 4vw, 40px);
-      line-height: 1.08;
-      letter-spacing: -0.03em;
-    }
-
-    .section__intro p {
-      max-width: 72ch;
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.75;
-    }
-
-    .group-label {
-      margin: 24px 0 12px;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    .group-label:first-of-type {
-      margin-top: 0;
-    }
-
-    .platform-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-    }
-
-    .platform-link {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 52px;
-      min-width: 136px;
-      padding: 0 20px;
-      border-radius: 16px;
-      border: 1px solid transparent;
-      background: linear-gradient(135deg, var(--brand-a), var(--brand-b));
-      color: #06111c;
-      font-weight: 700;
-      transition: transform 0.16s ease, opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-    }
-
-    .platform-link:hover {
-      transform: translateY(-1px);
-    }
-
-    .platform-link--muted {
-      background: rgba(255, 255, 255, 0.06);
-      border-color: var(--line);
-      color: var(--muted);
-    }
-
-    .platform-link--live::before,
-    .platform-link--muted::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      margin-right: 10px;
-      border-radius: 999px;
-      background: currentColor;
-    }
-
-    .platform-link--live::before {
-      color: var(--success);
-    }
-
-    .platform-link--muted::before {
-      color: var(--warn);
-    }
-
-    .screenshots-panel,
-    .privacy-panel {
-      padding: 24px;
-    }
-
-    .shots {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px;
-      margin-top: 18px;
-    }
-
-    .shot {
-      overflow: hidden;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-lg);
-      background: rgba(255, 255, 255, 0.03);
-    }
-
-    .shot__frame {
-      position: relative;
-      aspect-ratio: 16 / 10;
-      background:
-        linear-gradient(135deg, rgba(52, 170, 220, 0.12), rgba(0, 122, 255, 0.12)),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
-    }
-
-    .shot img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0;
-      transition: opacity 0.24s ease;
-    }
-
-    .shot.is-ready img {
-      opacity: 1;
-    }
-
-    .shot__placeholder {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-content: center;
-      gap: 10px;
-      padding: 24px;
-      text-align: center;
-      background:
-        linear-gradient(135deg, rgba(52, 170, 220, 0.1), rgba(0, 122, 255, 0.1)),
-        repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0 12px, transparent 12px 24px);
-      color: var(--muted);
-      transition: opacity 0.24s ease;
-    }
-
-    .shot.is-ready .shot__placeholder {
-      opacity: 0;
-    }
-
-    .shot__filename {
-      display: inline-block;
-      padding: 8px 10px;
-      border-radius: 10px;
-      background: rgba(0, 0, 0, 0.24);
-      color: var(--text);
-      font-size: 13px;
-    }
-
-    .shot figcaption {
-      padding: 16px 18px 20px;
-      color: var(--muted);
-      line-height: 1.6;
-    }
-
-    .privacy-panel h2 {
-      margin: 0 0 18px;
-      font-size: clamp(28px, 4vw, 40px);
-      line-height: 1.08;
-      letter-spacing: -0.03em;
-    }
-
-    .privacy-panel h3 {
-      margin: 20px 0 8px;
-      font-size: 18px;
-    }
-
-    .privacy-panel p,
-    .privacy-panel li {
-      color: var(--muted);
-      line-height: 1.75;
-    }
-
-    .privacy-panel p {
-      margin: 0 0 10px;
-    }
-
-    .privacy-panel ul {
-      margin: 8px 0 0 20px;
-      padding: 0;
-    }
-
-    .footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 34px;
-      padding-top: 24px;
-      border-top: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    @media (max-width: 980px) {
-      .shots {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 720px) {
-      .site-shell {
-        width: min(100%, calc(100% - 24px));
-      }
-
-      .topbar {
-        position: static;
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .platform-links,
-      .shots {
-        grid-template-columns: 1fr;
-      }
-
-      .hero,
-      .screenshots-panel,
-      .privacy-panel,
-      .shot {
-        border-radius: 24px;
-      }
-
-      .footer {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-    }
-  </style>
+        @media (max-width: 768px) {
+            .product-grid { grid-template-columns: 1fr; }
+            .hero h1 { font-size: 2.3rem; }
+        }
+    </style>
 </head>
 <body>
-  <div class="site-shell">
-    <header class="topbar">
-      <a class="brand" href="#top">
-        <span class="brand__mark">A</span>
-        <span>
-          <strong>AuSearch &amp; AuBackup</strong>
-          <small data-en="Official app downloads" data-zh="官方应用下载">Official app downloads</small>
-        </span>
-      </a>
-      <nav class="topnav" aria-label="Primary">
-        <a href="#downloads" data-en="Downloads" data-zh="下载">Downloads</a>
-        <a href="#screenshots" data-en="Screenshots" data-zh="截图">Screenshots</a>
-        <a href="#privacy" data-en="Privacy" data-zh="隐私">Privacy</a>
-      </nav>
+
+    <header>
+        <div class="nav-container">
+            <a href="index.html" class="logo">Aurora Software</a>
+            <ul class="nav-links">
+                <li class="dropdown">
+                    <span class="dropdown-toggle">Products</span>
+                    <div class="dropdown-menu">
+                        <a href="ausearch-aubackup.html">AuSearch & AuBackup</a>
+                        <a href="snapget.html">SnapGet</a>
+                    </div>
+                </li>
+                <li class="dropdown">
+                    <span class="dropdown-toggle">Download</span>
+                    <div class="dropdown-menu">
+                        <a href="ausearch-aubackup.html#download">AuSearch & AuBackup</a>
+                        <a href="snapget.html#download">SnapGet</a>
+                    </div>
+                </li>
+            </ul>
+        </div>
     </header>
 
-    <main id="top">
-      <section class="hero">
-        <h1 data-en="AuSearch &amp; AuBackup" data-zh="AuSearch 与 AuBackup">AuSearch &amp; AuBackup</h1>
-        <p class="lead" data-en="Use AuSearch to find local images with AI-powered similarity search. Use AuBackup to back up your media files on Mobile phone to your PC fast, secure and searchable by AuSearch." data-zh="使用 AuSearch 通过 AI 相似检索查找本地图片。使用 AuBackup 可将手机中的媒体文件快速、安全地备份到电脑，并让这些内容可被 AuSearch 检索。">Use AuSearch to find local images with AI-powered similarity search. Use AuBackup to back up your media files on Mobile phone to your PC fast, secure and searchable by AuSearch.</p>
-      </section>
-
-      <section id="downloads" class="section">
-        <div class="section__intro">
-          <h2 data-en="Downloads" data-zh="下载">Downloads</h2>
+    <main class="hero">
+        <h1>Next-Gen Productivity Tools</h1>
+        <p>Experience local-first, secure, and lightning-fast utilities crafted beautifully for all your major cross-platform ecosystems.</p>
+        
+        <div class="product-grid">
+            <a href="ausearch-aubackup.html" class="product-card">
+                <div>
+                    <h2>AuSearch & AuBackup</h2>
+                    <p>Locate images instantly using AI semantic similarity search. Back up phone media safely directly to your PC.</p>
+                </div>
+                <span class="btn">Explore Product &rarr;</span>
+            </a>
+            <a href="snapget.html" class="product-card">
+                <div>
+                    <h2>SnapGet</h2>
+                    <p>Share files, images, and text snippets securely from your PC to mobile devices with just a single right-click.</p>
+                </div>
+                <span class="btn">Explore Product &rarr;</span>
+            </a>
         </div>
-
-        <h3 class="group-label">AuSearch</h3>
-        <div class="platform-links">
-          <a class="platform-link platform-link--live" href="__AUSEARCH_MACOS_DOWNLOAD_URL__" download="AuSearch.dmg" data-en="macOS" data-zh="macOS" data-title-en="Download AuSearch.dmg" data-title-zh="下载 AuSearch.dmg" title="Download AuSearch.dmg">macOS</a>
-          <a class="platform-link platform-link--live" href="https://apps.microsoft.com/detail/9N5N8GVNRZDN" target="_blank" rel="noreferrer" data-en="Windows" data-zh="Windows" data-title-en="Open Microsoft Store listing" data-title-zh="打开 Microsoft Store 页面" title="Open Microsoft Store listing">Windows</a>
-          <a class="platform-link platform-link--live" href="https://apps.apple.com/app/6764228721" target="_blank" rel="noreferrer" data-en="iOS" data-zh="iOS" data-title-en="Open the App Store listing" data-title-zh="打开 App Store 页面" title="Open the App Store listing">iOS</a>
-          <span class="platform-link platform-link--muted" data-en="Android" data-zh="Android" data-title-en="Coming soon" data-title-zh="即将推出" title="Coming soon">Android</span>
-        </div>
-
-        <h3 class="group-label">InstantShare</h3>
-        <div class="platform-links">
-          <a class="platform-link platform-link--live" href="__INSTANTSHARE_DOWNLOAD_URL__" download="InstantShare.pkg" data-en="macOS" data-zh="macOS" data-title-en="Download InstantShare.pkg" data-title-zh="下载 InstantShare.pkg" title="Download InstantShare.pkg">macOS</a>
-        </div>
-      </section>
-
-      <section id="screenshots" class="section">
-        <div class="screenshots-panel">
-          <div class="section__intro">
-            <h2 data-en="Preview" data-zh="预览">Preview</h2>
-            
-          </div>
-
-          <div class="shots">
-            <figure class="shot">
-              <div class="shot__frame">
-                <img src="./assets/screenshots/ausearch-desktop-1.png" alt="AuSearch desktop screenshot 1" loading="lazy">
-                <div class="shot__placeholder">
-                  <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
-                  <strong class="shot__filename">ausearch-desktop-1.png</strong>
-                </div>
-              </div>
-              <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
-            </figure>
-
-            <figure class="shot">
-              <div class="shot__frame">
-                <img src="./assets/screenshots/ausearch-desktop-2.png" alt="AuSearch desktop screenshot 2" loading="lazy">
-                <div class="shot__placeholder">
-                  <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
-                  <strong class="shot__filename">ausearch-desktop-2.png</strong>
-                </div>
-              </div>
-              <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
-            </figure>
-
-            <figure class="shot">
-              <div class="shot__frame">
-                <img src="./assets/screenshots/ausearch-desktop-3.png" alt="AuSearch desktop screenshot 3" loading="lazy">
-                <div class="shot__placeholder">
-                  <span data-en="AuSearch desktop preview" data-zh="AuSearch 桌面预览">AuSearch desktop preview</span>
-                  <strong class="shot__filename">ausearch-desktop-3.png</strong>
-                </div>
-              </div>
-              <figcaption data-en="AuSearch desktop preview." data-zh="AuSearch 桌面预览。">AuSearch desktop preview.</figcaption>
-            </figure>
-
-            <figure class="shot">
-              <div class="shot__frame">
-                <img src="./assets/screenshots/aubackup-ios-1.png" alt="AuBackup iOS screenshot 1" loading="lazy">
-                <div class="shot__placeholder">
-                  <span data-en="AuBackup iOS preview" data-zh="AuBackup iOS 预览">AuBackup iOS preview</span>
-                  <strong class="shot__filename">aubackup-ios-1.png</strong>
-                </div>
-              </div>
-              <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
-            </figure>
-
-            <figure class="shot">
-              <div class="shot__frame">
-                <img src="./assets/screenshots/aubackup-ios-2.png" alt="AuBackup iOS screenshot 2" loading="lazy">
-                <div class="shot__placeholder">
-                  <span data-en="AuBackup iOS preview" data-zh="AuBackup iOS 预览">AuBackup iOS preview</span>
-                  <strong class="shot__filename">aubackup-ios-2.png</strong>
-                </div>
-              </div>
-              <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
-            </figure>
-
-            <figure class="shot">
-              <div class="shot__frame">
-                <img src="./assets/screenshots/aubackup-ios-3.png" alt="AuBackup iOS screenshot 3" loading="lazy">
-                <div class="shot__placeholder">
-                  <span data-en="AuBackup iOS preview" data-zh="AuBackup iOS 预览">AuBackup iOS preview</span>
-                  <strong class="shot__filename">aubackup-ios-3.png</strong>
-                </div>
-              </div>
-              <figcaption data-en="AuBackup mobile preview." data-zh="AuBackup 移动端预览。">AuBackup mobile preview.</figcaption>
-            </figure>
-          </div>
-        </div>
-      </section>
-
-      <section id="privacy" class="section">
-        <article class="privacy-panel">
-          <h2 data-en="Privacy Notice" data-zh="隐私说明">Privacy Notice</h2>
-
-          <h3 data-en="1. Product scope" data-zh="1. 产品范围">1. Product scope</h3>
-          <p data-en="This privacy statement describes AuSearch and AuBackup themselves. It focuses on how the products handle your files, search workflows, transfer workflows, and operational diagnostics." data-zh="本隐私说明面向 AuSearch 与 AuBackup 产品本身，重点说明它们如何处理你的文件、搜索流程、传输流程以及运行诊断信息。">This privacy statement describes AuSearch and AuBackup themselves. It focuses on how the products handle your files, search workflows, transfer workflows, and operational diagnostics.</p>
-
-          <h3 data-en="2. Local-first by design" data-zh="2. 以本地处理为默认方式">2. Local-first by design</h3>
-          <p data-en="We do not collect your personal files, photos, videos, search content, or other user data for our own servers. AuSearch is designed for local semantic search, and AuBackup is designed for authenticated and encrypted transfer between your devices in a professional manner. Your content is intended to stay under your control." data-zh="我们不会将你的个人文件、照片、视频、搜索内容或其他用户数据收集到我们的服务器。AuSearch 按本地语义搜索设计，AuBackup 按设备间经过认证并加密的专业传输方式设计。你的内容应始终由你自己控制。">We do not collect your personal files, photos, videos, search content, or other user data for our own servers. AuSearch is designed for local semantic search, and AuBackup is designed for authenticated and encrypted transfer between your devices in a professional manner. Your content is intended to stay under your control.</p>
-
-          <h3 data-en="3. Telemetry and diagnostics" data-zh="3. 遥测与诊断">3. Telemetry and diagnostics</h3>
-          <p data-en="The products may generate limited usage telemetry only for app health maintenance, stability monitoring, and troubleshooting. This is not used to build user profiles, and is never sent to external servers by us." data-zh="产品可能仅为应用健康维护、稳定性监控和故障排查生成有限的使用遥测信息。这些信息不会用于建立用户画像，不会用于广告，也不会被我们发送到外部服务器。">The products may generate limited usage telemetry only for app health maintenance, stability monitoring, and troubleshooting. This is not used to build user profiles, and is never sent to external servers by us.</p>
-
-          <h3 data-en="4. Local AI model use" data-zh="4. 本地 AI 模型使用">4. Local AI model use</h3>
-          <p data-en="AuSearch uses open source multi-modal models for local semantic search. Model inference is intended to happen locally for search features. We do not perform hidden training on your content, and your files are not used behind the scenes to train proprietary models." data-zh="AuSearch 使用开源多模态模型进行本地语义搜索。搜索相关的模型推理旨在本地完成。我们不会对你的内容进行隐藏训练，也不会在后台将你的文件用于训练专有模型。">AuSearch uses open source multi-modal models for local semantic search. Model inference is intended to happen locally for search features. We do not perform hidden training on your content, and your files are not used behind the scenes to train proprietary models.</p>
-
-          <h3 data-en="5. Security and transport protection" data-zh="5. 安全与传输保护">5. Security and transport protection</h3>
-          <p data-en="We value software security. Data transfer paths are designed to use authentication and encryption so that connected devices can verify one another and protect content in transit. Access to local files and device permissions should be limited to what is necessary for search, transfer, indexing, preview, and backup features." data-zh="我们重视软件安全。数据传输链路按认证与加密方式设计，使已连接设备能够相互验证身份，并保护传输中的内容。对本地文件和系统权限的访问应仅限于搜索、传输、索引、预览和备份功能所必需的范围。">We value software security. Data transfer paths are designed to use authentication and encryption so that connected devices can verify one another and protect content in transit. Access to local files and device permissions should be limited to what is necessary for search, transfer, indexing, preview, and backup features.</p>
-
-          <h3 data-en="6. Changes" data-zh="6. 变更说明">6. Changes</h3>
-          <p data-en="If product behavior changes in a way that materially affects privacy, telemetry, model usage, or security handling, this notice should be updated to reflect that change." data-zh="如果产品行为发生会实质影响隐私、遥测、模型使用方式或安全处理方式的变更，本说明应同步更新。">If product behavior changes in a way that materially affects privacy, telemetry, model usage, or security handling, this notice should be updated to reflect that change.</p>
-        </article>
-      </section>
     </main>
 
-    <footer class="footer">
-      <span>© 2026 AuSearch &amp; AuBackup. All rights reserved.</span>
-      <a href="mailto:wansong2356@hotmail.com" data-en="Contact: wansong2356@hotmail.com" data-zh="联系邮箱：wansong2356@hotmail.com">Contact: wansong2356@hotmail.com</a>
+    <footer>
+        <p>&copy; 2026 Aurora Software. All rights reserved.</p>
+        <p class="contact">Contact: <a href="mailto:wansong2356@hotmail.com">wansong2356@hotmail.com</a></p>
     </footer>
-  </div>
 
-  <script>
-    (() => {
-      const useZh = navigator.language && navigator.language.toLowerCase().startsWith("zh");
-      const root = document.documentElement;
-      root.lang = useZh ? "zh-CN" : "en";
-
-      document.querySelectorAll("[data-en]").forEach((node) => {
-        node.textContent = useZh ? node.dataset.zh : node.dataset.en;
-      });
-
-      document.querySelectorAll("[data-title-en]").forEach((node) => {
-        node.title = useZh ? node.dataset.titleZh : node.dataset.titleEn;
-      });
-
-      document.title = useZh
-        ? "AuSearch 与 AuBackup | 官方下载"
-        : "AuSearch & AuBackup | Official downloads";
-
-      document.querySelectorAll(".shot").forEach((card) => {
-        const image = card.querySelector("img");
-        if (!image) {
-          return;
-        }
-
-        const markReady = () => {
-          card.classList.add("is-ready");
-        };
-
-        if (image.complete && image.naturalWidth > 0) {
-          markReady();
-          return;
-        }
-
-        image.addEventListener("load", markReady, { once: true });
-      });
-    })();
-  </script>
-
-
-</body></html>
+</body>
+</html>
