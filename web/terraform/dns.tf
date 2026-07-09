@@ -120,10 +120,10 @@ resource "cloudflare_dns_record" "s_cname" {
 resource "cloudflare_dns_record" "dl_cname" {
   zone_id = cloudflare_zone.boldman_net.id
   name    = "dl"
-  content   = "tc.boldman.net"
   type    = "CNAME"
-  ttl     = 1
-  proxied = true
+  content   = "tc.boldman.net"
+  ttl     = 900
+  proxied = false
 }
 
 # ==========================================
