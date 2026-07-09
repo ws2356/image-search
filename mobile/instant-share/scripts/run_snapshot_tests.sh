@@ -6,7 +6,7 @@ PROJECT_PATH="$ROOT_DIR/InstantShare.xcodeproj"
 SCHEME_NAME="InstantShare"
 TEST_TARGET="InstantShareSnapshotTests"
 DERIVED_DATA_PATH="$ROOT_DIR/build/derived-data/snapshot-tests"
-SNAPSHOT_CONFIG_PATH="$ROOT_DIR/build/snapshot-config.json"
+SNAPSHOT_CONFIG_PATH="$ROOT_DIR/../build/snapshot-config.json"
 SNAPSHOT_LANGUAGE="${SNAPSHOT_LANGUAGE:-en-US}"
 
 MODE=test
