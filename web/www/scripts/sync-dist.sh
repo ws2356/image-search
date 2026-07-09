@@ -10,7 +10,7 @@ REMOTE_PATH="${1:-${REMOTE_PATH:-${DEFAULT_REMOTE_PATH}}}"
 cd "${WEB_DIR}"
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
-  npm run build
+  pnpm run build
 fi
 
 rsync -avz --delete --exclude='.DS_Store' dist/ "tc:${REMOTE_PATH%/}/"
