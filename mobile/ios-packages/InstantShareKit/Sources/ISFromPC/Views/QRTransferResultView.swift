@@ -28,9 +28,9 @@ struct QRTransferResultView: View {
     private var content: some View {
         switch result {
         case .text(let text):
-            textReceiveView(text: text)
+            textReceiveView(text: text, isHTML: false)
         case .html(let html):
-            textReceiveView(text: html)
+            textReceiveView(text: html, isHTML: true)
         case .link(let urlString):
             LinkReceiveView(urlString: urlString)
         default:
@@ -38,7 +38,7 @@ struct QRTransferResultView: View {
         }
     }
 
-    private func textReceiveView(text: String) -> some View {
+    private func textReceiveView(text: String, isHTML: Bool) -> some View {
         VStack(spacing: 0) {
             // Header bar matching design spec
             headerBar
@@ -47,14 +47,20 @@ struct QRTransferResultView: View {
             
             // Scrollable content
             ScrollView {
-                Text(text)
-                    .font(DesignSystem.Typography.monoBody)
-                    .foregroundStyle(DesignSystem.Colors.foreground)
-                    .padding(DesignSystem.Spacing.lg)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(DesignSystem.Colors.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
-                    .padding(DesignSystem.Spacing.lg)
+                Group {
+                    if isHTML {
+                        htmlContent(text)
+                    } else {
+                        Text(text)
+                            .font(DesignSystem.Typography.monoBody)
+                            .foregroundStyle(DesignSystem.Colors.foreground)
+                    }
+                }
+                .padding(DesignSystem.Spacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(DesignSystem.Colors.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.xl))
+                .padding(DesignSystem.Spacing.lg)
             }
             
             // Bottom action bar
@@ -66,6 +72,38 @@ struct QRTransferResultView: View {
                 toast("Copied!")
             }
         }
+    }
+    
+    @ViewBuilder
+    private func htmlContent(_ html: String) -> some View {
+        if let attributedString = parseHTML(html) {
+            Text(attributedString)
+                .foregroundStyle(DesignSystem.Colors.foreground)
+        } else {
+            // Fallback: strip HTML tags and show plain text
+            Text(html.strippingHTMLTags())
+                .font(DesignSystem.Typography.monoBody)
+                .foregroundStyle(DesignSystem.Colors.foreground)
+        }
+    }
+    
+    private func parseHTML(_ html: String) -> AttributedString? {
+        let data = Data(html.utf8)
+        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.html,
+            .characterEncoding: String.Encoding.utf8.rawValue
+        ]
+        
+        guard let nsAttributedString = try? NSAttributedString(data: data, options: options, documentAttributes: nil) else {
+            return nil
+        }
+        
+        var attributedString = AttributedString(nsAttributedString)
+        
+        // Apply design system font as base if no font is set
+        attributedString.font = DesignSystem.Typography.monoBody
+        
+        return attributedString
     }
     
     private var headerBar: some View {
@@ -82,15 +120,6 @@ struct QRTransferResultView: View {
             }
             
             Spacer()
-            
-            Text("Plain Text")
-                .font(DesignSystem.Typography.caption2)
-                .fontWeight(.semibold)
-                .foregroundStyle(DesignSystem.Colors.primary)
-                .padding(.horizontal, DesignSystem.Spacing.sm)
-                .padding(.vertical, DesignSystem.Spacing.xs)
-                .background(DesignSystem.Colors.primary.opacity(0.1))
-                .clipShape(Capsule())
             
             Button("Done") {
                 viewModel.onComplete()
@@ -223,6 +252,24 @@ extension QRClaimResult {
         let newURL = url.deletingLastPathComponent().appendingPathComponent(String(sanitized))
         try? FileManager.default.moveItem(at: url, to: newURL)
         return newURL
+    }
+}
+
+private extension String {
+    func strippingHTMLTags() -> String {
+        // Use NSAttributedString to strip HTML tags
+        let data = Data(self.utf8)
+        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.html,
+            .characterEncoding: String.Encoding.utf8.rawValue
+        ]
+        
+        if let attributedString = try? NSAttributedString(data: data, options: options, documentAttributes: nil) {
+            return attributedString.string
+        }
+        
+        // Fallback: simple regex strip
+        return self.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression, range: nil)
     }
 }
 #endif
