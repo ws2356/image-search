@@ -114,6 +114,148 @@ final class InstantShareSnapshotTests: XCTestCase {
         try SnapshotSupport.assertSnapshot(pageName: "share-receive-claiming", viewController: viewController)
     }
 
+    // MARK: - Text Card
+
+    func test_share_receive_text_card() throws {
+        let manifest = MultiFileManifest(
+            fileCount: 1,
+            files: [
+                .init(
+                    index: 0,
+                    type: "text",
+                    filename: "notes.txt",
+                    contentType: "text/plain",
+                    sizeBytes: 1234,
+                    content: "Hello from Mac!\n\nThis is a shared text message with multiple lines."
+                )
+            ]
+        )
+        let vm = MultiFileReceiveViewModel(
+            manifest: manifest,
+            host: "192.168.1.100",
+            tlsPort: 8443,
+            sessionId: "test-session",
+            correlationID: "test-correlation",
+            delegate: SnapshotISQRDeliverDelegate()
+        )
+        let viewController = makeHostedPage(title: "Received Files") {
+            MultiFileReceiveView(viewModel: vm)
+        }
+        try SnapshotSupport.assertSnapshot(pageName: "share-receive-text-card", viewController: viewController)
+    }
+
+    // MARK: - HTML Card
+
+    func test_share_receive_html_card() throws {
+        let manifest = MultiFileManifest(
+            fileCount: 1,
+            files: [
+                .init(
+                    index: 0,
+                    type: "html",
+                    filename: "note.html",
+                    contentType: "text/html",
+                    sizeBytes: 2048,
+                    content: "<html><body><h1>Hello</h1><p>Rich text preview.</p></body></html>"
+                )
+            ]
+        )
+        let vm = MultiFileReceiveViewModel(
+            manifest: manifest,
+            host: "192.168.1.100",
+            tlsPort: 8443,
+            sessionId: "test-session",
+            correlationID: "test-correlation",
+            delegate: SnapshotISQRDeliverDelegate()
+        )
+        let viewController = makeHostedPage(title: "Received Files") {
+            MultiFileReceiveView(viewModel: vm)
+        }
+        try SnapshotSupport.assertSnapshot(pageName: "share-receive-html-card", viewController: viewController)
+    }
+
+    // MARK: - Web Link Card
+
+    func test_share_receive_link_card() throws {
+        let result = QRClaimResult.link("https://example.com/shared-document")
+        let vm = MultiFileReceiveViewModel(singleResult: result, delegate: SnapshotISQRDeliverDelegate())
+        let viewController = makeHostedPage(title: "Received Files") {
+            MultiFileReceiveView(viewModel: vm)
+        }
+        try SnapshotSupport.assertSnapshot(pageName: "share-receive-link-card", viewController: viewController)
+    }
+
+    // MARK: - Mixed File List
+
+    func test_share_receive_mixed_list() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snapshot-test-mixed", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let imageURL = tempDir.appendingPathComponent("vacation_photo.jpg")
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100))
+        let image = renderer.image { ctx in
+            UIColor.systemOrange.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        }
+        try image.jpegData(compressionQuality: 0.8)?.write(to: imageURL)
+
+        let manifest = MultiFileManifest(
+            fileCount: 3,
+            files: [
+                .init(
+                    index: 0,
+                    type: "text",
+                    filename: "gllue_links.txt",
+                    contentType: "text/plain",
+                    sizeBytes: 1200,
+                    content: "x.gllue.com\nGllue - Remember me Sign In\nhire58.com.cn"
+                ),
+                .init(
+                    index: 1,
+                    type: "file",
+                    filename: "vacation_photo.jpg",
+                    contentType: "image/jpeg",
+                    sizeBytes: 2_400_000,
+                    content: nil
+                ),
+                .init(
+                    index: 2,
+                    type: "file",
+                    filename: "design_assets.zip",
+                    contentType: "application/zip",
+                    sizeBytes: 24_700_000,
+                    content: nil
+                )
+            ]
+        )
+        let vm = MultiFileReceiveViewModel(
+            manifest: manifest,
+            host: "192.168.1.100",
+            tlsPort: 8443,
+            sessionId: "test-session",
+            correlationID: "test-correlation",
+            delegate: SnapshotISQRDeliverDelegate()
+        )
+        // Pre-populate the image result so the card renders the thumbnail.
+        if let index = vm.fileStates.firstIndex(where: { $0.filename == "vacation_photo.jpg" }) {
+            vm.fileStates[index].result = .image(fileURL: imageURL, contentType: "image/jpeg", filename: "vacation_photo.jpg")
+            vm.fileStates[index].status = .downloaded
+        }
+        // Mark the zip file as downloaded with a temp file so the list is stable.
+        let zipURL = tempDir.appendingPathComponent("design_assets.zip")
+        try Data("zip contents".utf8).write(to: zipURL)
+        if let index = vm.fileStates.firstIndex(where: { $0.filename == "design_assets.zip" }) {
+            vm.fileStates[index].result = .file(fileURL: zipURL, contentType: "application/zip", filename: "design_assets.zip")
+            vm.fileStates[index].status = .downloaded
+        }
+        let viewController = makeHostedPage(title: "Received Files") {
+            MultiFileReceiveView(viewModel: vm)
+        }
+        try SnapshotSupport.assertSnapshot(pageName: "share-receive-mixed-list", viewController: viewController)
+
+        try? FileManager.default.removeItem(at: tempDir)
+    }
+
     // MARK: - Helpers
 
     private func makeHostedPage<Content: View>(
