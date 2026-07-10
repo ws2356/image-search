@@ -12,7 +12,7 @@ public class MultiFileReceiveViewModel: ObservableObject {
     public let correlationID: String
     public let delegate: ISQRDeliverDelegate
 
-    @Published public private(set) var fileStates: [FileDownloadState]
+    @Published public internal(set) var fileStates: [FileDownloadState]
     @Published public private(set) var isDownloading = false
     @Published public var selectedIndices: Set<Int> = []
     @Published public var shareItems: [Any] = []
