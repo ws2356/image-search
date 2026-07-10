@@ -17,6 +17,7 @@
 		78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
 		975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */; };
 		9E336B184E5B4929B277145B /* InstantShareSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */; };
+		A1F0390882356B79DBA465E3 /* MultiFileReceiveViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B8CE135E7AE52C292D519D /* MultiFileReceiveViewModelTests.swift */; };
 		A5C56128C12EEED37FC3210A /* AlbumTransporterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */; };
 		AB000001AB000001AB000001 /* PageViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013AB000013AB000013 /* PageViewModelTests.swift */; };
 		AB000002AB000002AB000002 /* MobileAppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000014AB000014AB000014 /* MobileAppModelTests.swift */; };
@@ -35,7 +36,7 @@
 		C7A0E9A13E414B28A8F4A101 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C7A0E9A23E414B28A8F4A101 /* Assets.xcassets */; };
 		C7A0E9A33E414B28A8F4A101 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C7A0E9A43E414B28A8F4A101 /* LaunchScreen.storyboard */; };
 		SE0001010000000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = SE0002010000000000000001 /* ShareViewController.swift */; };
-		SE0001010000000000000002 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		SE0001010000000000000002 /* BuildFile in Frameworks */ = {isa = PBXBuildFile; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,11 +83,11 @@
 
 /* Begin PBXFileReference section */
 		1A5D5D04B6A631A962A9E1F7 /* AuBackup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuBackup.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		21B8CE135E7AE52C292D519D /* MultiFileReceiveViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MultiFileReceiveViewModelTests.swift; path = Tests/AlbumTransporterKitTests/MultiFileReceiveViewModelTests.swift; sourceTree = "<group>"; };
 		32A33B28DE705EAD09C21466 /* SnapshotSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SnapshotSupport.swift; path = Tests/AlbumTransporterAppSnapshotTests/SnapshotSupport.swift; sourceTree = "<group>"; };
 		35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareServicesTests.swift; path = Tests/AlbumTransporterKitTests/InstantShareServicesTests.swift; sourceTree = "<group>"; };
 		3D9BBC222F9A6934002FE667 /* PhotosUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PhotosUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/PhotosUI.framework; sourceTree = DEVELOPER_DIR; };
 		4BACBA42A5F1F2715F293721 /* AlbumTransporterAppSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterAppSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests.swift; sourceTree = "<group>"; };
-		DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/InstantShareSnapshotTests.swift; sourceTree = "<group>"; };
 		5AC8CE28919C9157AC9030D9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		79D12E02C504AEC5A27313AF /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
 		963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AlbumTransporterApp.swift; path = App/AlbumTransporterApp.swift; sourceTree = "<group>"; };
@@ -103,6 +104,7 @@
 		C292EB02D1AB8B391C25D27A /* AlbumTransporterAppSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AlbumTransporterAppSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C7A0E9A23E414B28A8F4A101 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = App/Assets.xcassets; sourceTree = "<group>"; };
 		C7A0E9A43E414B28A8F4A101 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = App/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		DC058B19D5B740AFB67ED1EA /* InstantShareSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InstantShareSnapshotTests.swift; path = Tests/AlbumTransporterAppSnapshotTests/InstantShareSnapshotTests.swift; sourceTree = "<group>"; };
 		SE0002010000000000000001 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = ShareExtension/ShareViewController.swift; sourceTree = "<group>"; };
 		SE0002010000000000000002 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = ShareExtension/Info.plist; sourceTree = "<group>"; };
 		SE0002010000000000000003 /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = ShareExtension.entitlements; path = ShareExtension/ShareExtension.entitlements; sourceTree = "<group>"; };
@@ -136,7 +138,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3DF7BFC92FCF234B00CD5CF4 /* AlbumTransporterKit in Frameworks */,
-				SE0001010000000000000002 /* (null) in Frameworks */,
+				SE0001010000000000000002 /* BuildFile in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -205,6 +207,7 @@
 				AB000021AB000021AB000021 /* TransferServiceTests.swift */,
 				35C73B8112D84BA98E9DA0DF /* InstantShareServicesTests.swift */,
 				AB000028AB000028AB000028 /* KeychainAppIdentityProviderTests.swift */,
+				21B8CE135E7AE52C292D519D /* MultiFileReceiveViewModelTests.swift */,
 			);
 			name = AlbumTransporterKitTests;
 			sourceTree = "<group>";
@@ -258,6 +261,9 @@
 			name = AlbumTransporterAppSnapshotTests;
 			packageProductDependencies = (
 				CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */,
+				CMN00002CMN00002CMN00002 /* Common */,
+				ISK00002ISK00002ISK00002 /* ISFromMobile */,
+				ISK00003ISK00003ISK00003 /* ISFromPC */,
 				AB000024AB000024AB000024 /* OpenTelemetryApi */,
 				AB000025AB000025AB000025 /* OpenTelemetrySdk */,
 			);
@@ -333,8 +339,8 @@
 			mainGroup = B2F2B86624660D3ED940BFE0;
 			packageReferences = (
 				34F85B90D4B6FF60D0920E9A /* XCLocalSwiftPackageReference "." */,
-				CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "../ios-packages/Common" */,
-				ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */,
+				CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "Common" */,
+				ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "InstantShareKit" */,
 				AB000023AB000023AB000023 /* XCRemoteSwiftPackageReference "opentelemetry-swift-core" */,
 			);
 			productRefGroup = 86F9AA3367D98B280C0BE44C /* Products */;
@@ -401,6 +407,7 @@
 				159A65BE4FA95D1E82D62FA9 /* SnapshotSupport.swift in Sources */,
 				975AB7E5334347FA5011C493 /* AlbumTransporterAppSnapshotTests.swift in Sources */,
 				9E336B184E5B4929B277145B /* InstantShareSnapshotTests.swift in Sources */,
+				A1F0390882356B79DBA465E3 /* MultiFileReceiveViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -745,13 +752,13 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = .;
 		};
-		CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "../ios-packages/Common" */ = {
+		CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "Common" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../ios-packages/Common;
+			relativePath = "../ios-packages/Common";
 		};
-		ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */ = {
+		ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "InstantShareKit" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../ios-packages/InstantShareKit;
+			relativePath = "../ios-packages/InstantShareKit";
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -784,17 +791,17 @@
 		};
 		CMN00002CMN00002CMN00002 /* Common */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "../ios-packages/Common" */;
+			package = CMN00001CMN00001CMN00001 /* XCLocalSwiftPackageReference "Common" */;
 			productName = Common;
 		};
 		ISK00002ISK00002ISK00002 /* ISFromMobile */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */;
+			package = ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "InstantShareKit" */;
 			productName = ISFromMobile;
 		};
 		ISK00003ISK00003ISK00003 /* ISFromPC */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "../ios-packages/InstantShareKit" */;
+			package = ISK00001ISK00001ISK00001 /* XCLocalSwiftPackageReference "InstantShareKit" */;
 			productName = ISFromPC;
 		};
 /* End XCSwiftPackageProductDependency section */
