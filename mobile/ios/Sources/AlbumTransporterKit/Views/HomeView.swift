@@ -23,16 +23,6 @@ struct HomeView: View {
         }
         .compatibleScrollBounceBasedOnSize()
         .appNavigationBar(title: "AuBackup")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    scanQRCode(target: .genericScan)
-                } label: {
-                    Image(systemName: "qrcode.viewfinder")
-                        .font(.system(size: 17, weight: .medium))
-                }
-            }
-        }
     }
 
     @ViewBuilder
