@@ -25,18 +25,13 @@ This is a monorepo containing source code for the following products:
 - **UI Framework**: PySide6 (Qt for Python). UI layouts are often defined in `.ui` files and compiled.
 - **Core AI**: PyTorch, OpenCLIP, and FAISS for image embeddings and similarity search.
 - **Database**: SQLite (via `sqlite3`) with Write-Ahead Logging (WAL) for concurrency.
-- **Dependencies**: Listed in `requirements.txt` and `requirements-dev.txt` (or `environment.yml` for conda).
-- **Set up iOS Dev Environment**:
-  - Use rbenv: brew install rbenv ruby-build
+- **Dependencies**: Listed in `requirements.txt` and `requirements-dev.txt`.
 
 ## 2. Development Commands
 - **Package**: Run `dt_image_search/scripts/build_pyinstaller.sh --distpath pyinstaller-dist` to create a packaged app bundle.
 - **Package DMG**: Run `dt_image_search/scripts/package_dmg.sh  --app-path pyinstaller-dist/AuSearch.app` to create a standalone application bundle (macOS DMG in this case).
 - **Package DMG and notarize**: Run `dt_image_search/scripts/distribute_dmg.sh  --app-path pyinstaller-dist/AuSearch.app` to create a standalone application bundle (macOS DMG) and notarize it.
 - **Package MSIX**: Run `powershell dt_image_search/scripts/package_msix.ps1 && powershell dt_image_search/scripts/codesign.ps1` to create msix for Windows.
-- **iOS app build & distribution**: See [mobile/ios/fastlane/README.md](mobile/ios/fastlane/README.md) for Fastlane commands to build and upload the iOS companion app to App Store Connect. Fastlane prefers App Store Connect API key auth via `API_KEY_ID` and `API_KEY_FILE_PATH` in `mobile/ios/fastlane/.env.credential`; `API_KEY_ISSUER_ID` is optional for individual keys. Manual signing uses `IOS_CODE_SIGN_IDENTITY` and, when `IOS_SIGNING_STYLE=manual`, `IOS_PROVISIONING_PROFILE_SPECIFIER` from `mobile/ios/fastlane/.env`.
-- **iOS snapshot tests**: Run `cd mobile/ios && scripts/run_snapshot_tests.sh test` to assert the committed launch/home/transfer/completion snapshots on the configured simulator devices. Run `cd mobile/ios && scripts/run_snapshot_tests.sh record` to refresh the baselines, then `cd mobile/ios && scripts/export_snapshot_marketing_assets.sh` to copy the committed PNGs into `mobile/ios/build/marketing-screenshots/`. The export step flattens screenshots onto a white matte and removes the alpha channel so App Store Connect accepts them. Snapshot filenames include page, device model, and language, e.g. `launch-splash_iPhone-17-Pro-Max_en-US.png`.
-- **iOS unit tests**: Run `cd mobile/ios && xcodebuild test -project AlbumTransporterApp.xcodeproj -scheme AlbumTransporterApp -destination "platform=iOS Simulator,name=iPhone 17 Pro Max" -skip-testing:AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests`. Use `-only-testing:AlbumTransporterAppSnapshotTests/<TestCaseName>` or `-only-testing:AlbumTransporterAppSnapshotTests/<TestCaseName>/<testMethod>` for focused test runs. The USB functional challenge test expects a Python environment where `python3.10` can import `websockets.sync.client`; you can use the same venv used by the PC side.
 - **Run Application**: Usually executed from the root via `python dt_image_search/main.py` or `python -m dt_image_search`.
 - **Testing**: There is no established pytest suite yet, but individual test scripts like `test_exception_handlers.py` can be executed directly via `python test_exception_handlers.py`. Use standard Python `unittest` or `pytest` paradigms for new tests.
 

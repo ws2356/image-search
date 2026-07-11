@@ -89,5 +89,10 @@ Utilize Swift's modern concurrency model to keep the UI responsive.
 
 ## **5\. Testing in iOS**
 
-* **Unit Test:** Run `mobile/ios/scripts/run_unit_tests.sh`. Need to ensure this script runs sucessfully after making changes to the iOS codebase. 
-* **Snapshot Testing:** Run `mobile/ios/scripts/run_snapshot_tests.sh <record|test>`. Use record mode to update snapshots when intentional UI changes are made, and test mode to validate against existing snapshots.
+- **snapshot tests**: Run `cd mobile/ios && scripts/run_snapshot_tests.sh --mode test` to assert the committed launch/home/transfer/completion snapshots on the configured simulator devices. Run `cd mobile/ios && scripts/run_snapshot_tests.sh --mode record` to update the baseline snapthots. Snapshot filenames include page, device model, and language, e.g. `launch-splash_iPhone-17-Pro-Max_en-US.png`.
+- **unit tests**: Run `cd mobile/ios && xcodebuild test -project AlbumTransporterApp.xcodeproj -scheme AlbumTransporterApp -destination "platform=iOS Simulator,name=iPhone 17 Pro Max" -skip-testing:AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests`. Use `-only-testing:AlbumTransporterAppSnapshotTests/<TestCaseName>` or `-only-testing:AlbumTransporterAppSnapshotTests/<TestCaseName>/<testMethod>` for focused test runs. The USB functional challenge test expects a Python environment where `python3.10` can import `websockets.sync.client`; you can use the same venv used by the PC side.
+
+## **6\. Development Environment Setup**
+- **Use rbenv**: brew install rbenv ruby-build
+- **Install Ruby**: rbenv install 3.2.2 && rbenv local 3.2.2
+- **Use Bundler**: gem install bundler && bundle install
