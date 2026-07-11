@@ -9,11 +9,11 @@
 /* Begin PBXBuildFile section */
 		35630B3B9D407F91ADAA5627 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5AC8CE28919C9157AC9030D9 /* Foundation.framework */; };
 		3D3FB95830023A1700F0540C /* Common in Frameworks */ = {isa = PBXBuildFile; productRef = CMN00002CMN00002CMN00002 /* Common */; };
-		3D3FB95930023A1700F0540C /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISK00002ISK00002ISK00002 /* ISFromMobile */; };
-		3D3FB95A30023A1700F0540C /* ISFromPC in Frameworks */ = {isa = PBXBuildFile; productRef = ISK00003ISK00003ISK00003 /* ISFromPC */; };
+		3D3FB95930023A1700F0540C /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		3D3FB95A30023A1700F0540C /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		3D3FB95D30023A1700F0540C /* Common in Frameworks */ = {isa = PBXBuildFile; productRef = CMN00002CMN00002CMN00002 /* Common */; };
-		3D3FB95E30023A1700F0540C /* ISFromMobile in Frameworks */ = {isa = PBXBuildFile; productRef = ISK00002ISK00002ISK00002 /* ISFromMobile */; };
-		3D3FB95F30023A1700F0540C /* ISFromPC in Frameworks */ = {isa = PBXBuildFile; productRef = ISK00003ISK00003ISK00003 /* ISFromPC */; };
+		3D3FB95E30023A1700F0540C /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		3D3FB95F30023A1700F0540C /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		3D6AEAC82FE45E7300C3D4E0 /* AlbumTransporterKit in Embed Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D9BBC222F9A6934002FE667 /* PhotosUI.framework */; };
 		78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
@@ -96,8 +96,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3D3FB95A30023A1700F0540C /* ISFromPC in Frameworks */,
-				3D3FB95930023A1700F0540C /* ISFromMobile in Frameworks */,
+				3D3FB95A30023A1700F0540C /* (null) in Frameworks */,
+				3D3FB95930023A1700F0540C /* (null) in Frameworks */,
 				3D3FB95830023A1700F0540C /* Common in Frameworks */,
 				3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */,
 				B033F686D41CC0B658E2B4EF /* Foundation.framework in Frameworks */,
@@ -109,10 +109,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3D3FB95E30023A1700F0540C /* ISFromMobile in Frameworks */,
+				3D3FB95E30023A1700F0540C /* (null) in Frameworks */,
 				3D3FB95D30023A1700F0540C /* Common in Frameworks */,
 				AB000010AB000010AB000010 /* AlbumTransporterKit in Frameworks */,
-				3D3FB95F30023A1700F0540C /* ISFromPC in Frameworks */,
+				3D3FB95F30023A1700F0540C /* (null) in Frameworks */,
 				AB000011AB000011AB000011 /* OpenTelemetryApi in Frameworks */,
 				AB000012AB000012AB000012 /* OpenTelemetrySdk in Frameworks */,
 				35630B3B9D407F91ADAA5627 /* Foundation.framework in Frameworks */,
@@ -214,8 +214,6 @@
 			packageProductDependencies = (
 				CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */,
 				CMN00002CMN00002CMN00002 /* Common */,
-				ISK00002ISK00002ISK00002 /* ISFromMobile */,
-				ISK00003ISK00003ISK00003 /* ISFromPC */,
 				AB000024AB000024AB000024 /* OpenTelemetryApi */,
 				AB000025AB000025AB000025 /* OpenTelemetrySdk */,
 			);
@@ -241,8 +239,6 @@
 			packageProductDependencies = (
 				CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */,
 				CMN00002CMN00002CMN00002 /* Common */,
-				ISK00002ISK00002ISK00002 /* ISFromMobile */,
-				ISK00003ISK00003ISK00003 /* ISFromPC */,
 			);
 			productName = AlbumTransporterApp;
 			productReference = 1A5D5D04B6A631A962A9E1F7 /* AuBackup.app */;
