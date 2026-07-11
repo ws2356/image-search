@@ -16,6 +16,7 @@
 		3D3FB95F30023A1700F0540C /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		3D6AEAC82FE45E7300C3D4E0 /* AlbumTransporterKit in Embed Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		3D9BBC242F9A7BFB002FE667 /* PhotosUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3D9BBC222F9A6934002FE667 /* PhotosUI.framework */; };
+		3DB4EF383002B86500045047 /* Common in Embed Frameworks */ = {isa = PBXBuildFile; productRef = CMN00002CMN00002CMN00002 /* Common */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		78E0076FEACEAFDC47D03E59 /* AlbumTransporterKit in Frameworks */ = {isa = PBXBuildFile; productRef = CDBCF8EFFA35E8CC643A606C /* AlbumTransporterKit */; };
 		A5C56128C12EEED37FC3210A /* AlbumTransporterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963E74FFCDA7974E3E34C8C3 /* AlbumTransporterApp.swift */; };
 		AB000001AB000001AB000001 /* PageViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000013AB000013AB000013 /* PageViewModelTests.swift */; };
@@ -54,6 +55,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				3D6AEAC82FE45E7300C3D4E0 /* AlbumTransporterKit in Embed Frameworks */,
+				3DB4EF383002B86500045047 /* Common in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
