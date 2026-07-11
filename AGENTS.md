@@ -55,11 +55,12 @@ This is a monorepo containing source code for the following products:
     | **KISS (Keep It Simple, Stupid)** | Avoid over-engineering. Choose the simplest solution that fully satisfies the requirements. |
     | **YAGNI (You Ain't Gonna Need It)** | Do not add functionality until it is necessary. Avoid "future-proofing" that complicates the current design. |
     
+- **Clean &amp; Maintainable Code**: Clean &amp; Maintanable code is as important functionality. Always ask yourself if there are cleaner &amp; simpler plan/implementation that satisfies the requirements, even when that means the requirement to refactor existing code in which case you need to pause and ask the user whether do a refactor first before implementing the new changes.
 - **One way to do things**: For any given problem, there should ideally be one clear and consistent way to solve it within the codebase. This reduces cognitive load and makes it easier for developers to understand and contribute.
 - **Separation of Concerns**: UI code should not contain business logic. Business logic should be in separate controller or worker classes. Each file should have a clear and often singular responsibility.
 - **Use asyncio**: The existing codebase is primarily synchronous, but new code should prefer `asyncio` for any I/O-bound operations (e.g., database access, file I/O) to improve responsiveness and scalability. Use `async def` and `await` as needed.
 - **Concurrency**: Ensure correctness under concurrent conditions. Even for local http/websocket servers, prepare for potential concurrent requests.
-- **Design Patterns**: Use approriate design patterns, e.g. DI, MVC, MVVM, State Machine, etc. where they fit naturally.
+- **Design Patterns**: Use approriate design patterns, e.g. DI, MVC, MVVM, TCA, State Machine, etc. where they fit naturally.
 - **Classes**: `PascalCase` (e.g., `IndexWorker`, `SearchController`).
 - **Functions & Methods**: `snake_case` (e.g., `create_db_conn`, `update_folder_status`).
 - **Variables**: `snake_case`.
