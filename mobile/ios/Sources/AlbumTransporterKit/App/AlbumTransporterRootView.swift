@@ -2,7 +2,6 @@ import SwiftUI
 import Foundation
 import Factory
 import UIKit
-import ISFromPC
 import Common
 
 @MainActor
@@ -118,9 +117,6 @@ public struct AlbumTransporterRootView: View {
                 }
             } message: { prompt in
                 Text(prompt.message)
-            }
-            .fullScreenCover(item: $model.instantShareQRPayload) { payload in
-                ISQRRootView(qrPayload: payload, navigator: model.createNavigator())
             }
     }
 
