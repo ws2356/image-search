@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 #if os(iOS)
 struct ToastView: View {
@@ -19,7 +20,7 @@ struct ToastView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .onChange(of: isShowing) { _, newValue in
+        .compatibleOnChange(of: isShowing) { newValue in
             if newValue {
                 DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
                     withAnimation {
