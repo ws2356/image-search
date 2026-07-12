@@ -16,7 +16,7 @@ struct TextFileCard: View {
                     .frame(height: 120, alignment: .topLeading)
             } footer: {
                 HStack(spacing: DesignSystem.Spacing.md) {
-                    CardActionButton(title: showCopiedToast ? "Copied!" : "Copy", icon: "doc.on.doc", style: .secondary) {
+                    CardActionButton(title: "Copy", icon: "doc.on.doc", style: .secondary) {
                         UIPasteboard.general.string = state.inlineContent ?? ""
                         withAnimation {
                             showCopiedToast = true

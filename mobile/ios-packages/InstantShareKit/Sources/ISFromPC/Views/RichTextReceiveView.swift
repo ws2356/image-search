@@ -14,7 +14,7 @@ public struct RichTextReceiveView: View {
         VStack(spacing: DesignSystem.Spacing.lg) {
             RichTextWebView(html: html)
 
-            PrimaryButton(title: showCopiedToast ? "Copied!" : "Copy to Clipboard", icon: "doc.on.doc", style: .secondary) {
+            PrimaryButton(title: "Copy to Clipboard", icon: "doc.on.doc", style: .secondary) {
                 guard let data = html.data(using: .utf8) else { return }
                 UIPasteboard.general.setData(data, forPasteboardType: "public.html")
                 withAnimation {

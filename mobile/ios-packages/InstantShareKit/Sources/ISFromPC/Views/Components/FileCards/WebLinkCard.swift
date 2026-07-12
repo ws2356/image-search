@@ -25,7 +25,7 @@ struct WebLinkCard: View {
                 .frame(height: 120)
             } footer: {
                 HStack(spacing: DesignSystem.Spacing.md) {
-                    CardActionButton(title: showCopiedToast ? "Copied!" : "Copy Link", icon: "doc.on.doc", style: .secondary) {
+                    CardActionButton(title: "Copy Link", icon: "doc.on.doc", style: .secondary) {
                         UIPasteboard.general.string = urlString
                         withAnimation {
                             showCopiedToast = true

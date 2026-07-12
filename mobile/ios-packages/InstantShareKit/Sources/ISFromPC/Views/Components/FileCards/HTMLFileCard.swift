@@ -14,7 +14,7 @@ struct HTMLFileCard: View {
                     .frame(height: 120)
             } footer: {
                 HStack(spacing: DesignSystem.Spacing.md) {
-                    CardActionButton(title: showCopiedToast ? "Copied!" : "Copy", icon: "doc.on.doc", style: .secondary) {
+                    CardActionButton(title: "Copy", icon: "doc.on.doc", style: .secondary) {
                         guard let data = html.data(using: .utf8) else { return }
                         UIPasteboard.general.setData(data, forPasteboardType: "public.html")
                         withAnimation {
