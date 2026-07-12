@@ -9,18 +9,15 @@ public struct DeviceManagementFeature: Sendable {
     public struct State: Equatable {
         public var trustedDevices: [TrustedDevice] = []
         public var isLoading: Bool = false
-        public var isRefreshing: Bool = false
         public var errorMessage: String? = nil
 
         public init(
             trustedDevices: [TrustedDevice] = [],
             isLoading: Bool = false,
-            isRefreshing: Bool = false,
             errorMessage: String? = nil
         ) {
             self.trustedDevices = trustedDevices
             self.isLoading = isLoading
-            self.isRefreshing = isRefreshing
             self.errorMessage = errorMessage
         }
     }
@@ -52,7 +49,7 @@ public struct DeviceManagementFeature: Sendable {
                 }
 
             case .pullToRefresh:
-                state.isRefreshing = true
+                state.isLoading = true
                 state.errorMessage = nil
                 return .run { send in
                     let devices = try await deviceManagement.loadDevices()
@@ -63,7 +60,6 @@ public struct DeviceManagementFeature: Sendable {
 
             case .devicesLoaded(let devices):
                 state.isLoading = false
-                state.isRefreshing = false
                 state.trustedDevices = devices
                 return .none
 
