@@ -23,8 +23,10 @@ struct TextPreviewContentResolver {
             }
             guard let result else { return nil }
             switch result {
-            case .file(let url, let fileContentType, _):
-                guard fileContentType.lowercased().hasPrefix("text/") else { return nil }
+            case .text(let text):
+                return text
+            case .file(let url, _, _):
+                guard contentType.lowercased().hasPrefix("text/") else { return nil }
                 return readPreviewText(from: url)
             default:
                 return nil

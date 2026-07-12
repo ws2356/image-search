@@ -22,6 +22,15 @@ final class TextPreviewContentResolverTests: XCTestCase {
         XCTAssertTrue(result?.hasPrefix("aaa") == true)
     }
 
+    func testTextResultReturnsContent() {
+        let result = TextPreviewContentResolver.resolve(
+            inlineContent: nil,
+            contentType: "text/plain",
+            result: .text("Downloaded text content")
+        )
+        XCTAssertEqual(result, "Downloaded text content")
+    }
+
     func testTextFileReturnsContents() throws {
         let text = "File contents here"
         let url = FileManager.default.temporaryDirectory
@@ -33,6 +42,21 @@ final class TextPreviewContentResolverTests: XCTestCase {
             inlineContent: nil,
             contentType: "text/plain",
             result: .file(fileURL: url, contentType: "text/plain", filename: "test.txt")
+        )
+        XCTAssertEqual(result, text)
+    }
+
+    func testTextFileWithOctetStreamResponseReturnsContents() throws {
+        let text = "Plain text sent as application/octet-stream"
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString).txt")
+        try text.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let result = TextPreviewContentResolver.resolve(
+            inlineContent: nil,
+            contentType: "text/plain",
+            result: .file(fileURL: url, contentType: "application/octet-stream", filename: "test.txt")
         )
         XCTAssertEqual(result, text)
     }
