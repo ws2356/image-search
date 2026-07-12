@@ -14,7 +14,7 @@ import Foundation
 struct IdentityClient {
     var selfCertificatePEM: @Sendable () async throws -> String = { "" }
     var importPeerCertificate: @Sendable (_ pem: String) async throws -> Void
-    var ensureSelfIdentity: @Sendable () async throws -> Void
+    var initialize: @Sendable () async throws -> Void
     var currentDeviceName: @Sendable () async -> String = { "" }
     var deviceUUID: @Sendable () async throws -> String = { "" }
 }
@@ -23,7 +23,7 @@ extension IdentityClient: DependencyKey {
     static let liveValue = IdentityClient(
         selfCertificatePEM: { try await Container.shared.appIdentityProvider().selfCertificatePEM() },
         importPeerCertificate: { try await Container.shared.appIdentityProvider().importPeerCertificate(pem: $0) },
-        ensureSelfIdentity: { try await Container.shared.appIdentityProvider().ensureSelfIdentity() },
+        initialize: { try await Container.shared.appIdentityProvider().initialize() },
         currentDeviceName: { await Container.shared.localDeviceIdentityProvider().currentIdentifier().deviceName },
         deviceUUID: { try await Container.shared.appIdentityProvider().deviceUUID() }
     )

@@ -1,0 +1,21 @@
+Share photos and text from your iPhone to your computer instantly.
+
+AuShare adds a Share Extension to your iOS device so you can send content directly to your PC from any app. No cloud, no cables, no extra steps.
+
+How it works:
+1. Open AuSearch on your computer (the companion desktop app).
+2. In any app, tap the Share button and choose AuShare.
+3. Select your computer from the discovered devices.
+4. Confirm the PIN on both devices to establish trust.
+5. Your content is transferred instantly over your local Wi-Fi network.
+
+Why people use AuShare:
+- Send photos from any app in two taps
+- Share text snippets directly to your desktop clipboard
+- End-to-end encrypted transfers over your local network
+- No cloud upload required
+- Works over Wi-Fi with no cables
+- One-time trust setup with PIN confirmation
+- Companion desktop app (AuSearch) is free
+
+Built for people who want a fast, private way to move content from their phone to their computer.

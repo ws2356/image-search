@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Mapping
-from uuid import UUID
+
 
 
 API_PREFIX = "/api/instant-share/v1"
@@ -120,11 +120,10 @@ _TERMINAL_DELIVERY_STATES = {
 }
 
 
-def _normalize_uuid(value: str, *, field_name: str) -> str:
+def _require_non_empty(value: str, *, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:
         raise ValueError(f"{field_name} must not be empty.")
-    UUID(normalized)
     return normalized
 
 
@@ -177,8 +176,8 @@ class InstantShareHeaders:
     def validate(self, *, requires_signature: bool) -> None:
         if self.version != PROTOCOL_VERSION:
             raise ValueError(f"Unsupported protocol version: {self.version}.")
-        _normalize_uuid(self.correlation_id, field_name="correlation_id")
-        _normalize_uuid(self.session_id, field_name="session_id")
+        _require_non_empty(self.correlation_id, field_name="correlation_id")
+        _require_non_empty(self.session_id, field_name="session_id")
         if not self.device_id.strip():
             raise ValueError("device_id must not be empty.")
         if requires_signature:

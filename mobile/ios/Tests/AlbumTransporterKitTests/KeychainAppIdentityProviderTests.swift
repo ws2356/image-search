@@ -103,9 +103,9 @@ final class KeychainAppIdentityProviderTests: XCTestCase {
     }
 
     func test_signSessionID_returns_valid_signature() async throws {
-        // ensureSelfIdentity creates a persistent keychain identity
+        // initialize creates a persistent keychain identity
         // TODO: clear test userDefaults
-        try await provider.ensureSelfIdentity()
+        try await provider.initialize()
 
         let (signature, algorithm) = try await provider.signSessionID("test-session-id")
 

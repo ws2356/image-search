@@ -16,8 +16,6 @@ src_resources_dir = Path("resources")
 
 datas = [
     # 明确复制图标和必备文件，且明确指定在包内的存放路径
-    (str(src_resources_dir / "icon.png"), "dt_image_search/resources"),
-    (str(src_resources_dir / "appicon.icns"), "dt_image_search/resources"),
     (str(src_resources_dir / "net.boldman.ausearch.instantshare.plist"), ".")
 ]
 
@@ -104,7 +102,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name=f"{app_name}.app",
-    icon='resources/appicon.icns',
+    icon='resources/instantshare.icns',
     bundle_identifier=bundle_identifier,
     info_plist=plistlib.loads(
         Path("dt_image_search/resources/AppInfoInstantShare.plist").read_bytes()

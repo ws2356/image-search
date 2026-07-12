@@ -10,7 +10,7 @@ from dt_image_search.instant_sharing.contracts import (
     TargetIntent,
     TrustMode,
 )
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
+from dt_image_search.instant_sharing.mdns import BootstrapRequest, ConnectionConfig
 from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
 
 
@@ -68,6 +68,88 @@ class TestBootstrapRevisit(unittest.TestCase):
             session.connection_config.metadata.trust_mode,
             TrustMode.TRUSTED_DIRECT,
         )
+
+
+class TestConnectionConfigShortSid(unittest.TestCase):
+    def test_validate_accepts_short_hex_session_id(self):
+        config = ConnectionConfig(
+            session_id="a",
+            mobile_port=8080,
+            mobile_ip_list=("192.168.1.1",),
+            correlation_id="abc123",
+            metadata=InstantShareMetadata(
+                payload_class=PayloadClass.TEXT,
+                target_intent=TargetIntent.CLIPBOARD_ONLY,
+                trust_mode=TrustMode.TRUSTED_DIRECT,
+            ),
+        )
+        # Should not raise
+        config.validate()
+
+    def test_validate_rejects_empty_session_id(self):
+        with self.assertRaises(ValueError):
+            ConnectionConfig(
+                session_id="",
+                mobile_port=8080,
+                mobile_ip_list=("192.168.1.1",),
+                correlation_id="abc123",
+                metadata=InstantShareMetadata(
+                    payload_class=PayloadClass.TEXT,
+                    target_intent=TargetIntent.CLIPBOARD_ONLY,
+                    trust_mode=TrustMode.TRUSTED_DIRECT,
+                ),
+            ).validate()
+
+
+class TestBootstrapRequestShortSid(unittest.TestCase):
+    def test_validate_accepts_short_hex_session_id(self):
+        req = BootstrapRequest(
+            session_id="ff",
+            mobile_port=8080,
+            mobile_ip_list=("192.168.1.1",),
+            correlation_id="abc123",
+            payload_class="text",
+            target_intent="clipboard_only",
+        )
+        # Should not raise
+        req.validate()
+
+    def test_validate_rejects_empty_session_id(self):
+        with self.assertRaises(ValueError):
+            BootstrapRequest(
+                session_id="",
+                mobile_port=8080,
+                mobile_ip_list=("192.168.1.1",),
+                correlation_id="abc123",
+                payload_class="text",
+                target_intent="clipboard_only",
+            ).validate()
+
+
+class TestQRTriggerHandlerShortSid(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from dt_image_search.instant_sharing.session_id_generator import SessionIdGenerator
+
+        self._tmp_dir = tempfile.mkdtemp()
+        self._counter_file = Path(self._tmp_dir) / "session_id_counter.txt"
+        self._generator = SessionIdGenerator(counter_file=self._counter_file)
+        from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler
+        self._handler = QRTriggerHandler(session_id_generator=self._generator)
+
+    def test_handle_trigger_returns_short_session_id(self):
+        body = {"type": "text", "content": "hello"}
+        result = self._handler.handle_trigger(body)
+        sid = result["session_id"]
+        self.assertRegex(sid, r"^[0-9a-f]{1,2}$")
+        self.assertNotIn("-", sid)
+
+    def test_session_ids_increment(self):
+        r1 = self._handler.handle_trigger({"type": "text", "content": "a"})
+        r2 = self._handler.handle_trigger({"type": "text", "content": "b"})
+        self.assertEqual(r1["session_id"], "1")
+        self.assertEqual(r2["session_id"], "2")
 
 
 if __name__ == "__main__":

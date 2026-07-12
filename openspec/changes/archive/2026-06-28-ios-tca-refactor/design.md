@@ -248,7 +248,7 @@ extension IdentityClient: DependencyKey {
     static let liveValue = IdentityClient(
         selfCertificatePEM: { try await Container.shared.appIdentityProvider().selfCertificatePEM() },
         importPeerCertificate: { try await Container.shared.appIdentityProvider().importPeerCertificate(pem: $0) },
-        ensureSelfIdentity: { try await Container.shared.appIdentityProvider().ensureSelfIdentity() },
+        initialize: { try await Container.shared.appIdentityProvider().initialize() },
         currentDeviceName: { await Container.shared.localDeviceIdentityProvider().currentIdentifier().deviceName }
     )
 }
@@ -394,7 +394,7 @@ class ShareViewController: UIViewController {
 |---|---|---|
 | `loadPayload(from:)` → extract extension items | **FlowFeature.onAppear** — reads `inputItems` from `@Dependency(\.instantShareExtensionContext)`, calls `PayloadExtractor.extract(from:)`, writes result into `$context.sharedItems` |
 | `startDiscovery()` | `DiscoverFeature.onAppear` — starts mDNS browsing (payload already loaded by FlowFeature) |
-| `ensureSelfIdentity()` | `FlowFeature.onAppear` — fires as a fire-and-forget effect |
+| `initialize()` | `FlowFeature.onAppear` — fires as a fire-and-forget effect |
 | `beginRequestExtensionTime()` / expiring activity | `DiscoverFeature.onAppear` — initiates `ProcessInfo.performExpiringActivity` as an effect; expiration handler sends `.stopDiscovery` |
 | `cancelAction()` / `extensionContext?.cancelRequest(...)` | `ErrorFeature.delegate(.cancel)` → FlowFeature calls `@Dependency(\.instantShareExtensionContext).cancelRequest(...)` |
 | `doneAction()` / `extensionContext?.completeRequest(...)` | `CompletionFeature.delegate(.done)` → FlowFeature calls `@Dependency(\.instantShareExtensionContext).completeRequest()` |

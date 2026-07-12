@@ -86,7 +86,9 @@ unit_and_functional_tests=(
   tests/functional/test_usb_handshake_pc_side.py
   # tests/functional/test_instant_share_e2e.py
   tests/functional/test_crash_recovery_harness.py
+  dt_image_search/instant_sharing/test_contracts.py
   dt_image_search/instant_sharing/test_webrtc_peer.py
+  dt_image_search/instant_sharing/test_session_id_generator.py
 )
  # tests/functional/test_app_flow.py
 

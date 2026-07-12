@@ -14,41 +14,17 @@ public struct RichTextReceiveView: View {
         VStack(spacing: DesignSystem.Spacing.lg) {
             RichTextWebView(html: html)
 
-            PrimaryButton(title: showCopiedToast ? "Copied!" : "Copy to Clipboard", icon: "doc.on.doc", style: .secondary) {
-                copyToClipboard()
+            PrimaryButton(title: "Copy to Clipboard", icon: "doc.on.doc", style: .secondary) {
+                guard let data = html.data(using: .utf8) else { return }
+                UIPasteboard.general.setData(data, forPasteboardType: "public.html")
+                withAnimation {
+                    showCopiedToast = true
+                }
             }
         }
         .overlay(alignment: .bottom) {
-            if showCopiedToast {
-                toast("Copied to clipboard")
-            }
+            ToastView(message: "Copied to clipboard", isShowing: $showCopiedToast)
         }
-    }
-
-    private func copyToClipboard() {
-        guard let data = html.data(using: .utf8) else { return }
-        UIPasteboard.general.setData(data, forPasteboardType: "public.html")
-
-        withAnimation {
-            showCopiedToast = true
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation {
-                showCopiedToast = false
-            }
-        }
-    }
-
-    private func toast(_ message: String) -> some View {
-        Text(message)
-            .font(DesignSystem.Typography.body)
-            .foregroundStyle(.white)
-            .padding(.horizontal, DesignSystem.Spacing.xl)
-            .padding(.vertical, DesignSystem.Spacing.sm)
-            .background(Capsule().fill(Color.black.opacity(0.8)))
-            .padding(.bottom, DesignSystem.Spacing.xl)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 

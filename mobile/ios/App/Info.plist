@@ -4,10 +4,6 @@
 <dict>
 	<key>SharedKeychainAccessGroup</key>
 	<string>$(AppIdentifierPrefix)net.boldman.albumtransporter</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_instantshare._tcp</string>
-	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

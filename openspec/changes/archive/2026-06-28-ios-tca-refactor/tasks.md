@@ -104,7 +104,7 @@
 
 - [x] 9.1 Create `Features/FlowFeature.swift` with `@Reducer`, `@ObservableState` (Route enum with 6 cases: discover, pendingRevisit, auth, transfer, completion, error), `@Shared(.instantShareContext)`, and `@CasePathable` Action enum that scopes each child's actions.
 - [x] 9.2 Implement FlowFeature reducer using `Scope` to route each child action case to the corresponding child reducer. Add an `.onAppear` action that:
-    1. Fires `ensureSelfIdentity()` via `@Dependency(\.identityClient)`
+    1. Fires `initialize()` via `@Dependency(\.identityClient)`
     2. Loads shared items: reads `inputItems` from `@Dependency(\.instantShareExtensionContext)`, calls `PayloadExtractor.extract(from:)`, writes the result into `$context.sharedItems` with appropriate `SharedItems` case (text/images/files), sets `$context.isLoadingSharedItems = false`
     (Each child feature's view handles its own `.task`/`.onAppear` — FlowFeature does not forward it.)
 
@@ -149,7 +149,7 @@
   }
   let hosting = UIHostingController(rootView: FlowView(store: store))
   ```
-- [x] 10.3 Remove all legacy ShareViewController logic: no `loadPayload()`, no `startDiscovery()`, no `ensureSelfIdentity()`, no `beginRequestExtensionTime()`, no `cancelAction()`/`doneAction()` methods. These responsibilities have moved to FlowFeature, DiscoverFeature, and the `InstantShareExtensionContext` dependency.
+- [x] 10.3 Remove all legacy ShareViewController logic: no `loadPayload()`, no `startDiscovery()`, no `initialize()`, no `beginRequestExtensionTime()`, no `cancelAction()`/`doneAction()` methods. These responsibilities have moved to FlowFeature, DiscoverFeature, and the `InstantShareExtensionContext` dependency.
 
 ## 11. Remove Legacy Code
 

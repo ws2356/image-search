@@ -1,18 +1,16 @@
 import Foundation
 import UIKit
 import Combine
-import ISFromPC
 import Common
 
 @MainActor
-final class MobileAppModel: ObservableObject, NavigatorFactory {
+final class MobileAppModel: ObservableObject {
     @Published private(set) var route: AppRoute = .home {
         didSet { pushTelemetryContext() }
     }
 
     @Published var isShowingIncomingLinkReplacementConfirmation = false
     @Published private(set) var activeUpdatePrompt: AppUpdatePrompt?
-    @Published var instantShareQRPayload: QRClaimPayload?
 
     private var hasLoaded = false
     private var hasFinishedLoad = false
@@ -81,21 +79,6 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         appLifecycleObservationTask?.cancel()
     }
     
-    /// protocol NavigatorFactory
-    func createNavigator() -> Navigator {
-        return NavigatorImpl(vm: self)
-    }
-    
-    class NavigatorImpl: Navigator {
-        private weak var vm: MobileAppModel?
-        init(vm: MobileAppModel? = nil) {
-            self.vm = vm
-        }
-        func requestExit() {
-            vm?.instantShareQRPayload = nil
-        }
-    }
-    
     func onHomeCompleted(with result: HomePageResult) async {
         switch result.result {
         case .success(let target):
@@ -113,11 +96,6 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
     func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async {
         switch result.result {
         case .success(let qrString):
-            if let url = URL(string: qrString), let payload = QRClaimPayload(universalLinkURL: url) {
-                self.instantShareQRPayload = payload
-                self.route = .home
-                return
-            }
             beginBackupSessionTelemetry()
             await showPairingPage(qrString: qrString)
         case .failure(.cancel):
@@ -138,11 +116,6 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
     func onScanningCompleted(with result: ScanningPageResult) async {
         switch result.result {
         case .success(let qrString):
-            if let url = URL(string: qrString), let payload = QRClaimPayload(universalLinkURL: url) {
-                self.instantShareQRPayload = payload
-                self.route = .home
-                return
-            }
             await showPairingPage(qrString: qrString)
         case .failure(.cancel):
             await returnHome()
@@ -318,7 +291,7 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         }
 
         hasLoaded = true
-        try? await appIdentityProvider.ensureSelfIdentity()
+        try? await appIdentityProvider.initialize()
         
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
@@ -376,12 +349,6 @@ final class MobileAppModel: ObservableObject, NavigatorFactory {
         // Stash the link if load() hasn't completed yet — it will process it after setting route = .home.
         if !hasFinishedLoad {
             pendingIncomingUniversalLinkPayload = payload
-            return
-        }
-
-        // Check if this is a /share link (instant share / QR claim)
-        if let claimPayload = QRClaimPayload(universalLinkURL: url) {
-            self.instantShareQRPayload = claimPayload
             return
         }
 

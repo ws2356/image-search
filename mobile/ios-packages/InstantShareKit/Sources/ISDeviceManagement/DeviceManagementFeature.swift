@@ -44,7 +44,7 @@ public struct DeviceManagementFeature: Sendable {
                 state.isLoading = true
                 state.errorMessage = nil
                 return .run { send in
-                    try? await deviceManagement.ensureSelfIdentity()
+                    try? await deviceManagement.initialize()
                     let devices = try await deviceManagement.loadDevices()
                     await send(.devicesLoaded(devices))
                 } catch: { error, send in

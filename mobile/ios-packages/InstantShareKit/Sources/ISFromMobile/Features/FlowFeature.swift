@@ -70,7 +70,7 @@ public struct FlowFeature {
                 }
                 
                 return .run { [context = $context, extensionContext, identityClient, payloadExtractor] _ in
-                    try? await identityClient.ensureSelfIdentity()
+                    try? await identityClient.initialize()
 
                     let extractTask = await MainActor.run {
                         Task {

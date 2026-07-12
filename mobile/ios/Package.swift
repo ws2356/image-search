@@ -16,7 +16,6 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../ios-packages/Common"),
-        .package(path: "../ios-packages/InstantShareKit"),
         .package(url: "https://github.com/hmlongco/Factory.git", from: "2.4.12"),
         .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
         .package(url: "https://github.com/apple/swift-asn1.git", from: "1.3.0"),
@@ -31,8 +30,6 @@ let package = Package(
                 .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
                 .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
                 .product(name: "Common", package: "Common"),
-                .product(name: "ISFromPC", package: "InstantShareKit"),
-                .product(name: "ISFromMobile", package: "InstantShareKit"),
             ],
             resources: []
         ),

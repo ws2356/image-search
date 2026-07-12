@@ -71,26 +71,8 @@ public struct ISQRRootView: View {
                 EmptyView()
             }
         case .result(let result):
-            switch result {
-            case .multiFile(let manifest, let host, let tlsPort, let sessionId, let correlationID):
-                let vm = MultiFileReceiveViewModel(
-                    manifest: manifest,
-                    host: host,
-                    tlsPort: tlsPort,
-                    sessionId: sessionId,
-                    correlationID: correlationID,
-                    delegate: viewModel
-                )
-                MultiFileReceiveView(viewModel: vm)
-            case .image, .file:
-                let vm = MultiFileReceiveViewModel(
-                    singleResult: result,
-                    delegate: viewModel
-                )
-                MultiFileReceiveView(viewModel: vm)
-            default:
-                QRTransferResultView(result: result, delegate: viewModel)
-            }
+            let vm = makeMultiFileViewModel(for: result, delegate: viewModel)
+            MultiFileReceiveView(viewModel: vm)
         case .error(let title, let message):
             let errorVMFactory = {
                 ISQRErrorViewModel(
@@ -100,6 +82,25 @@ public struct ISQRRootView: View {
                 )
             }
             ErrorStateView(viewModelFactory: errorVMFactory)
+        }
+    }
+}
+
+@MainActor
+private extension ISQRRootView {
+    func makeMultiFileViewModel(for result: QRClaimResult, delegate: ISQRDeliverDelegate) -> MultiFileReceiveViewModel {
+        switch result {
+        case .multiFile(let manifest, let host, let tlsPort, let sessionId, let correlationID):
+            return MultiFileReceiveViewModel(
+                manifest: manifest,
+                host: host,
+                tlsPort: tlsPort,
+                sessionId: sessionId,
+                correlationID: correlationID,
+                delegate: delegate
+            )
+        default:
+            return MultiFileReceiveViewModel(singleResult: result, delegate: delegate)
         }
     }
 }

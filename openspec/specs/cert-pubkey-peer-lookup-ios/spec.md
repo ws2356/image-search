@@ -25,7 +25,7 @@ The `KeychainAppIdentityProvider` SHALL store peer certificates in the iOS Keych
 
 #### Scenario: Import same cert twice is idempotent
 - **WHEN** `importPeerCertificate(_:)` is called with a certificate whose public key hash already exists in the Keychain
-- **THEN** the provider SHALL first delete the existing item via `kSecAttrPublicKeyHash`, then add the new one (overwrite pattern matching existing `ensureSelfIdentity` behavior)
+- **THEN** the provider SHALL first delete the existing item via `kSecAttrPublicKeyHash`, then add the new one (overwrite pattern matching existing `initialize` behavior)
 
 ### Requirement: Public key hash extraction from SecCertificate (iOS)
 The `CertTools` extension SHALL provide a `publicKeyHash` computed property on `SecCertificate` that returns the SHA-1 hash `Data` of the certificate's public key external representation, matching the `kSecAttrPublicKeyHash` format.

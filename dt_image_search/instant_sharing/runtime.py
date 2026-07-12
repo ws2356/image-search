@@ -23,6 +23,8 @@ from dt_image_search.instant_sharing.contracts import TrustMode
 from dt_image_search.instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryService, QtClipboardWriter
 from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
 from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler
+from dt_image_search.instant_sharing.session_id_generator import SessionIdGenerator
+from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
 from dt_image_search.instant_sharing.sender_validation import SenderIdentity
 from dt_image_search.instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
@@ -100,8 +102,12 @@ class InstantShareRuntime:
             port=0,
             tls_port=0,
         )
+        session_id_gen = SessionIdGenerator(
+            counter_file=get_app_data_path() / "session_id_counter.txt"
+        )
         self._qr_trigger_handler = QRTriggerHandler(
             trust_session_registry=self._trust_session_registry,
+            session_id_generator=session_id_gen,
         )
         self._qr_window_factory = qr_window_factory
         self._webrtc_peer_manager = (
