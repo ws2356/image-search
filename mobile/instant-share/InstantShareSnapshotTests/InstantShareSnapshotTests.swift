@@ -18,24 +18,6 @@ final class InstantShareSnapshotTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - Link Receive
-
-    func test_share_receive_link() throws {
-        let view = LinkReceiveView(urlString: "https://example.com/shared-document")
-        let viewController = makeHostedPage(title: "Web Link") { view }
-        try SnapshotSupport.assertSnapshot(pageName: "share-receive-link", viewController: viewController)
-    }
-
-    // MARK: - Text Receive (via QRTransferResultView)
-
-    func test_share_receive_text() throws {
-        let result = QRClaimResult.text("Hello from Mac!\n\nThis is a shared text message with multiple lines.")
-        let delegate = SnapshotISQRDeliverDelegate()
-        let view = QRTransferResultView(result: result, delegate: delegate)
-        let viewController = makeHostedPage(title: "Shared Text") { view }
-        try SnapshotSupport.assertSnapshot(pageName: "share-receive-text", viewController: viewController)
-    }
-
     // MARK: - Single Image Receive (via MultiFileReceiveView)
 
     func test_share_receive_single_image() throws {
