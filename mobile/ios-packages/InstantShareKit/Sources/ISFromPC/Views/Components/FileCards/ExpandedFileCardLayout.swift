@@ -32,30 +32,7 @@ struct ExpandedFileCardLayout<Body: View, Footer: View>: View {
             }
 
             Spacer()
-
-            Text(typeLabel(for: state.entryType))
-                .font(DesignSystem.Typography.caption2)
-                .fontWeight(.semibold)
-                .foregroundStyle(DesignSystem.Colors.secondaryText)
         }
-    }
-
-    private func typeLabel(for entryType: String) -> String {
-        switch entryType.lowercased() {
-        case "text": return "TEXT"
-        case "html": return "HTML"
-        case "link": return "LINK"
-        case "file": return fileTypeLabel(for: state.filename)
-        default: return "FILE"
-        }
-    }
-
-    private func fileTypeLabel(for filename: String) -> String {
-        let lowercased = filename.lowercased()
-        if lowercased.hasSuffix(".png") || lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") { return "IMAGE" }
-        if lowercased.hasSuffix(".pdf") { return "PDF" }
-        if lowercased.hasSuffix(".zip") { return "ZIP" }
-        return "FILE"
     }
 
     private func formatBytes(_ bytes: Int) -> String {
