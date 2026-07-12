@@ -1,21 +1,36 @@
-Share photos and text from your iPhone to your computer instantly.
+Snap Get makes file sharing simple, fast, and private.
 
-AuShare adds a Share Extension to your iOS device so you can send content directly to your PC from any app. No cloud, no cables, no extra steps.
+Transfer photos, videos, documents, and more between your devices in just a few taps. No account required. No complicated setup.
 
-How it works:
-1. Open AuSearch on your computer (the companion desktop app).
-2. In any app, tap the Share button and choose AuShare.
-3. Select your computer from the discovered devices.
-4. Confirm the PIN on both devices to establish trust.
-5. Your content is transferred instantly over your local Wi-Fi network.
+Whether you're moving files between your phone and computer or sharing with someone nearby, Snap Get helps you transfer files quickly and securely.
 
-Why people use AuShare:
-- Send photos from any app in two taps
-- Share text snippets directly to your desktop clipboard
-- End-to-end encrypted transfers over your local network
-- No cloud upload required
-- Works over Wi-Fi with no cables
-- One-time trust setup with PIN confirmation
-- Companion desktop app (AuSearch) is free
+FEATURES
 
-Built for people who want a fast, private way to move content from their phone to their computer.
+• Fast peer-to-peer file transfers
+
+• Connect instantly by scanning a QR code or by mDNS broadcast
+
+• No account or sign-up required
+
+• Supports photos, videos, documents, and more
+
+• Works across phones, tablets, and computers
+
+• Send large files with ease
+
+• Privacy-first design — your files stay between your devices
+
+PERFECT FOR
+
+• Moving photos from your phone to your computer
+
+• Sharing original-quality videos
+
+• Sending documents between devices
+
+• Quickly transferring files without cables
+
+WHY SNAP GET?
+
+Snap Get is built to make file sharing effortless. Whether you're at home, at work, or on the go, you can transfer files in seconds with a simple, secure, and privacy-focused experience.
+
