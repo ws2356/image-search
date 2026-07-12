@@ -11,7 +11,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Instant Share</string>
+	<string>Snap Get</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -52,6 +52,6 @@
 		<string>com.apple.share-services</string>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Instant Share connects directly to your desktop on the local network for file transfer.</string>
+	<string>Snap Get connects directly to your desktop on the local network for file transfer.</string>
 </dict>
 </plist>

@@ -39,7 +39,7 @@ def _get_log_file_path() -> Path:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Start the PC-side instant share runtime with GUI for manual testing."
+        description="Start the PC-side Snap Get runtime with GUI for manual testing."
     )
     parser.add_argument(
         "--downloads-dir",
@@ -85,7 +85,7 @@ def main() -> int:
 
     args = _parse_args()
 
-    print(f"Starting instant share runtime with GUI...")
+    print(f"Starting Snap Get runtime with GUI...")
     print(f"  mDNS service:      {INSTANT_SHARE_MDNS_SERVICE_TYPE}")
     print(f"  Image delivery:    {args.image_delivery_mode}")
     print(f"  Auto-receive:      enabled")
@@ -101,7 +101,7 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setOrganizationDomain("net.boldman")
-    app.setApplicationName("AuSearch Instant Share")
+    app.setApplicationName("Snap Get")
     app.setQuitOnLastWindowClosed(False)
 
     logging.basicConfig(

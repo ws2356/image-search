@@ -508,7 +508,7 @@
 				DEVELOPMENT_TEAM = ZU6V838VRQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Instant Share";
+				INFOPLIST_KEY_CFBundleDisplayName = "Snap Get";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -537,7 +537,7 @@
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = ZU6V838VRQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Instant Share";
+				INFOPLIST_KEY_CFBundleDisplayName = "Snap Get";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
