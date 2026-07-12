@@ -42,6 +42,13 @@ public class MultiFileReceiveViewModel: ObservableObject {
             default: return nil
             }
         }
+        public var textPreviewContent: String? {
+            TextPreviewContentResolver.resolve(
+                inlineContent: inlineContent,
+                contentType: contentType,
+                result: result
+            )
+        }
         public var isSelectable: Bool { isInline || status == .downloaded }
 
         public enum DownloadStatus {
