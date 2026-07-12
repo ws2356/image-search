@@ -14,7 +14,10 @@ struct FileCard: View {
         case "link":
             WebLinkCard(state: state, shareAction: shareAction)
         case "file":
-            if state.contentType.lowercased().hasPrefix("image/") {
+            let lowercasedContentType = state.contentType.lowercased()
+            if lowercasedContentType.hasPrefix("text/") {
+                TextFileCard(state: state, shareAction: shareAction)
+            } else if lowercasedContentType.hasPrefix("image/") {
                 ImageFileCard(state: state, shareAction: shareAction)
             } else {
                 GenericFileCard(state: state, shareAction: shareAction)
