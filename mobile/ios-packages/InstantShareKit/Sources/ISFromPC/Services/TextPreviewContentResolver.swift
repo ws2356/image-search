@@ -1,3 +1,11 @@
+//
+//  TextPreviewContentResolver.swift
+//  InstantShareKit
+//
+//  Created by OpenCode on 2026/7/13.
+//  Resolves the text to display in a text-file card preview, whether from inline content or a downloaded file.
+//
+
 import Foundation
 
 struct TextPreviewContentResolver {
