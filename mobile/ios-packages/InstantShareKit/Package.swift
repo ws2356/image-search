@@ -68,5 +68,11 @@ let package = Package(
             ],
             resources: []
         ),
+        .testTarget(
+            name: "ISFromPCTests",
+            dependencies: [
+                .target(name: "ISFromPC"),
+            ]
+        ),
     ]
 )
