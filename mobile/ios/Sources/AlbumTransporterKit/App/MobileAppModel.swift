@@ -291,7 +291,7 @@ final class MobileAppModel: ObservableObject {
         }
 
         hasLoaded = true
-        try? await appIdentityProvider.ensureSelfIdentity()
+        try? await appIdentityProvider.initialize()
         
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)

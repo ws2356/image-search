@@ -5,7 +5,7 @@ import X509
 import SwiftASN1
 
 public protocol AppIdentityProviding: Sendable {
-    func ensureSelfIdentity() async throws
+    func initialize() async throws
     func selfCertificate() async throws -> SecCertificate
     func selfIdentity() async throws -> SecIdentity
     func signSessionID(_ sessionID: String) async throws -> (signature: String, algorithm: String)
@@ -94,8 +94,13 @@ public actor KeychainAppIdentityProvider: AppIdentityProviding {
         }
     }
 
-    public func ensureSelfIdentity() async throws {
-        try? await cleanupSelfIdentityAfterReinstall()
+    public func initialize() async throws {
+        if !self.userDefaults.bool(forKey: hasLaunchedKey) {
+            try? await cleanupSelfIdentityAfterReinstall()
+            try? await cleanupPeerCertsAfterReinstall()
+            self.userDefaults.set(true, forKey: hasLaunchedKey)
+        }
+
         
         LocalLog.info("Ensuring app identity...")
         if let identity = try? retrieveExistingIdentity() {
@@ -166,11 +171,6 @@ public actor KeychainAppIdentityProvider: AppIdentityProviding {
     }
 
     func cleanupSelfIdentityAfterReinstall() async throws {
-        if self.userDefaults.bool(forKey: hasLaunchedKey) {
-            return
-        }
-        self.userDefaults.set(true, forKey: hasLaunchedKey)
-
         LocalLog.info("Deleting app self identity from keychain...")
         var anyError: Error?
         
@@ -208,6 +208,43 @@ public actor KeychainAppIdentityProvider: AppIdentityProviding {
             throw error
         }
         LocalLog.info("App self identity deleted successfully")
+    }
+
+    func cleanupPeerCertsAfterReinstall() async throws {
+        LocalLog.info("Deleting peer certificates from keychain after reinstall...")
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassCertificate,
+            kSecAttrLabel as String: Self.peerCertLabel,
+            kSecAttrAccessGroup as String: Self.sharedAccessGroup,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnRef as String: true,
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let certs = result as? [SecCertificate] else {
+            LocalLog.info("No peer certificates found to delete")
+            return
+        }
+
+        var anyError: Error?
+        for cert in certs {
+            let deleteQuery: [String: Any] = [
+                kSecClass as String: kSecClassCertificate,
+                kSecValueRef as String: cert,
+                kSecAttrLabel as String: Self.peerCertLabel,
+                kSecAttrAccessGroup as String: Self.sharedAccessGroup,
+            ]
+            let deleteStatus = SecItemDelete(deleteQuery as CFDictionary)
+            if deleteStatus != errSecSuccess && deleteStatus != errSecItemNotFound {
+                LocalLog.error("[Keychain] cleanupPeerCertsAfterReinstall: failed to delete peer cert, status=\(deleteStatus)")
+                anyError = KeychainError.deleteFailed(deleteStatus)
+            }
+        }
+
+        if let error = anyError {
+            throw error
+        }
+        LocalLog.info("Peer certificates deleted successfully after reinstall")
     }
 
     private nonisolated func retrieveExistingIdentity() throws -> SecIdentity {

@@ -4,7 +4,7 @@
 When generating a self-signed device identity certificate, the iOS system SHALL set the certificate's Common Name (CN) field to the device's human-readable name instead of the device UUID.
 
 #### Scenario: Self-signed certificate CN is device name
-- **WHEN** `ensureSelfIdentity()` generates or regenerates the device identity certificate
+- **WHEN** `initialize()` generates or regenerates the device identity certificate
 - **THEN** the certificate's Subject CN SHALL be set to `UIDevice.current.name` (sanitized to ASCII)
 - **AND** the device UUID SHALL NOT appear in the CN field
 
@@ -12,12 +12,12 @@ When generating a self-signed device identity certificate, the iOS system SHALL 
 The iOS self-signed certificate SHALL contain the device UUID in a custom X.509 extension with OID `2.25.37020860436019521`, distinct from the cert version OID (`2.25.37020860436019520`).
 
 #### Scenario: Device UUID stored in dedicated extension
-- **WHEN** `ensureSelfIdentity()` generates or regenerates the device identity certificate
+- **WHEN** `initialize()` generates or regenerates the device identity certificate
 - **THEN** the certificate SHALL include a custom extension with OID `2.25.37020860436019521`
 - **AND** the extension value SHALL be the device UUID encoded as ASN.1 UTF8String
 
 #### Scenario: Cert version stored in separate extension
-- **WHEN** `ensureSelfIdentity()` generates or regenerates the device identity certificate
+- **WHEN** `initialize()` generates or regenerates the device identity certificate
 - **THEN** the certificate SHALL include a custom extension with OID `2.25.37020860436019520`
 - **AND** the extension value SHALL be `SELF_CERT_VERSION` encoded as ASN.1 INTEGER
 - **AND** the version extension SHALL NOT contain the device UUID
