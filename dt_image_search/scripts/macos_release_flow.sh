@@ -173,9 +173,11 @@ if [ "$skip_release" = false ]; then
     release_json="$repo_root/releases.json"
     download_main="$(python3 -c "import json; print(json.load(open('$release_json'))['main-app']['download_url'])")"
     download_is="$(python3 -c "import json; print(json.load(open('$release_json'))['instant-share']['download_url'])")"
-    (cd "$repo_root/web" && \
-        export AUSEARCH_MACOS_DOWNLOAD_URL="$download_main" && \
-        export INSTANTSHARE_DOWNLOAD_URL="$download_is" && \
+    (cd "$repo_root/web/www" && \
+        # export AUSEARCH_MACOS_DOWNLOAD_URL="$download_main" && \
+        # export INSTANTSHARE_DOWNLOAD_URL="$download_is" && \
+        sed -i '' "s|AUSEARCH_MACOS_DOWNLOAD_URL=.*|AUSEARCH_MACOS_DOWNLOAD_URL=$download_main|" .env && \
+        sed -i '' "s|INSTANTSHARE_MACOS_DOWNLOAD_URL=.*|INSTANTSHARE_MACOS_DOWNLOAD_URL=$download_is|" .env && \
         npm run build && \
         npm run sync)
 fi
