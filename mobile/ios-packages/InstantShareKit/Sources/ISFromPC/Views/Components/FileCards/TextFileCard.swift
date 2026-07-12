@@ -4,6 +4,7 @@ import SwiftUI
 struct TextFileCard: View {
     let state: MultiFileReceiveViewModel.FileDownloadState
     let shareAction: () -> Void
+    @State private var showCopiedToast = false
 
     var body: some View {
         FileCardContainer(isDownloading: state.status == .downloading) {
@@ -15,8 +16,11 @@ struct TextFileCard: View {
                     .frame(height: 120, alignment: .topLeading)
             } footer: {
                 HStack(spacing: DesignSystem.Spacing.md) {
-                    CardActionButton(title: "Copy", icon: "doc.on.doc", style: .secondary) {
+                    CardActionButton(title: showCopiedToast ? "Copied!" : "Copy", icon: "doc.on.doc", style: .secondary) {
                         UIPasteboard.general.string = state.inlineContent ?? ""
+                        withAnimation {
+                            showCopiedToast = true
+                        }
                     }
 
                     CardActionButton(title: "Share", icon: "square.and.arrow.up", style: .primary) {
@@ -24,6 +28,9 @@ struct TextFileCard: View {
                     }
                 }
             }
+        }
+        .overlay(alignment: .bottom) {
+            ToastView(message: "Copied to clipboard", isShowing: $showCopiedToast)
         }
     }
 }

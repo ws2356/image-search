@@ -25,8 +25,11 @@ struct WebLinkCard: View {
                 .frame(height: 120)
             } footer: {
                 HStack(spacing: DesignSystem.Spacing.md) {
-                    CardActionButton(title: "Copy Link", icon: "doc.on.doc", style: .secondary) {
-                        copyToClipboard(urlString)
+                    CardActionButton(title: showCopiedToast ? "Copied!" : "Copy Link", icon: "doc.on.doc", style: .secondary) {
+                        UIPasteboard.general.string = urlString
+                        withAnimation {
+                            showCopiedToast = true
+                        }
                     }
 
                     if let url = URL(string: urlString) {
@@ -42,33 +45,8 @@ struct WebLinkCard: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if showCopiedToast {
-                toast("Copied to clipboard")
-            }
+            ToastView(message: "Copied to clipboard", isShowing: $showCopiedToast)
         }
-    }
-
-    private func copyToClipboard(_ urlString: String) {
-        UIPasteboard.general.string = urlString
-        withAnimation {
-            showCopiedToast = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation {
-                showCopiedToast = false
-            }
-        }
-    }
-
-    private func toast(_ message: String) -> some View {
-        Text(message)
-            .font(DesignSystem.Typography.body)
-            .foregroundStyle(.white)
-            .padding(.horizontal, DesignSystem.Spacing.xl)
-            .padding(.vertical, DesignSystem.Spacing.sm)
-            .background(Capsule().fill(Color.black.opacity(0.8)))
-            .padding(.bottom, DesignSystem.Spacing.xl)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 #endif
