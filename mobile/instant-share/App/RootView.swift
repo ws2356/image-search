@@ -2,6 +2,7 @@ import SwiftUI
 import ISDeviceManagement
 import ISFromPC
 import ComposableArchitecture
+import Common
 
 @Reducer
 struct RootFeature: Sendable {
@@ -9,6 +10,7 @@ struct RootFeature: Sendable {
     struct State: Equatable {
         var deviceManagement: DeviceManagementFeature.State = .init()
         @Presents var sheetContent: ShareSheetContent?
+        var hasCompletedSession: Bool = false
     }
 
     @CasePathable
@@ -17,7 +19,10 @@ struct RootFeature: Sendable {
         case sheetContent(PresentationAction<Never>)
         case scanButtonTapped
         case receivedSharePayload(QRClaimPayload)
+        case onAppear
     }
+
+    @Dependency(\.sharedStorage) var sharedStorage
 
     var body: some ReducerOf<Self> {
         Scope(state: \.deviceManagement, action: \.deviceManagement) {
@@ -25,6 +30,10 @@ struct RootFeature: Sendable {
         }
         Reduce { state, action in
             switch action {
+            case .onAppear:
+                state.hasCompletedSession = sharedStorage.hasCompletedSession()
+                return .none
+
             case .scanButtonTapped:
                 state.sheetContent = .scan
                 return .none
@@ -35,6 +44,7 @@ struct RootFeature: Sendable {
 
             case .sheetContent(.dismiss):
                 state.sheetContent = nil
+                state.hasCompletedSession = sharedStorage.hasCompletedSession()
                 return .none
 
             case .deviceManagement:
@@ -70,18 +80,23 @@ struct RootView: View {
         WithPerceptionTracking {
             let sheetObserved = store.sheetContent
             NavigationView {
-                DeviceManagementView(
-                    store: store.scope(state: \.deviceManagement, action: \.deviceManagement)
-                )
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: { store.send(.scanButtonTapped) }) {
-                            Image(systemName: "qrcode.viewfinder")
-                        }
-                    }
+                if store.hasCompletedSession {
+                    DeviceManagementView(
+                        store: store.scope(state: \.deviceManagement, action: \.deviceManagement)
+                    )
+                } else {
+                    UserInstructionView()
                 }
             }
             .navigationViewStyle(.stack)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { store.send(.scanButtonTapped) }) {
+                        Image(systemName: "qrcode.viewfinder")
+                    }
+                }
+            }
+            .task { store.send(.onAppear) }
             .fullScreenCover(
                 item: Binding(
                     get: { sheetObserved },
