@@ -28,7 +28,6 @@ final class MobileAppModel: ObservableObject {
     private let appVersionProvider: AppVersionProviding
     private let telemetryContextProvider: TelemetryContextProvider
     private let telemetryService: TelemetryService
-    private let appIdentityProvider: AppIdentityProviding
     private var backupFlowStateMachine = MobileBackupFlowStateMachine()
     private var memoryWarningObservationTask: Task<Void, Never>?
     private var appLifecycleObservationTask: Task<Void, Never>?
@@ -43,8 +42,7 @@ final class MobileAppModel: ObservableObject {
         appUpdateChecker: AppUpdateChecking,
         appVersionProvider: AppVersionProviding,
         telemetryService: TelemetryService,
-        telemetryContextProvider: TelemetryContextProvider,
-        appIdentityProvider: AppIdentityProviding
+        telemetryContextProvider: TelemetryContextProvider
     ) {
         self.backupSessionProvider = backupSessionProvider
         self.qrCodePayloadDecoder = qrCodePayloadDecoder
@@ -55,7 +53,6 @@ final class MobileAppModel: ObservableObject {
         self.appVersionProvider = appVersionProvider
         self.telemetryContextProvider = telemetryContextProvider
         self.telemetryService = telemetryService
-        self.appIdentityProvider = appIdentityProvider
         self.backupSessionObserver = backupSessionProvider.currentBackupSessionPublisher
             .sink { [weak self] session in
                 self?.pushTelemetryContext()
@@ -291,7 +288,6 @@ final class MobileAppModel: ObservableObject {
         }
 
         hasLoaded = true
-        try? await appIdentityProvider.initialize()
         
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
