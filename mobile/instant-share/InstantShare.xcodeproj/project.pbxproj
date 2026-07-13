@@ -33,6 +33,7 @@
 		ISBF000000000000000007 /* ISFromMobile in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000003 /* ISFromMobile */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000008 /* ISFromPC in Embed Frameworks */ = {isa = PBXBuildFile; productRef = ISPD000000000000000004 /* ISFromPC */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		ISBF000000000000000011 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000011 /* RootView.swift */; };
+		ISBF000000000000000040 /* UserInstructionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000040 /* UserInstructionView.swift */; };
 		ISBF000000000000000020 /* SampleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000020 /* SampleTests.swift */; };
 		ISBF000000000000000021 /* InstantShareServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000022 /* InstantShareServicesTests.swift */; };
 		ISBF000000000000000022 /* InstantShareTrustUploadClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000023 /* InstantShareTrustUploadClientTests.swift */; };
@@ -104,6 +105,7 @@
 		ISFR000000000000000009 /* ShareExtension-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "ShareExtension-Info.plist"; path = ShareExtension/Info.plist; sourceTree = "<group>"; };
 		ISFR000000000000000010 /* ShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = ShareExtension.entitlements; path = ShareExtension/ShareExtension.entitlements; sourceTree = "<group>"; };
 		ISFR000000000000000011 /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = App/RootView.swift; sourceTree = "<group>"; };
+		ISFR000000000000000040 /* UserInstructionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = UserInstructionView.swift; path = App/UserInstructionView.swift; sourceTree = "<group>"; };
 		ISFR000000000000000020 /* SampleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleTests.swift; sourceTree = "<group>"; };
 		ISFR000000000000000021 /* InstantShareTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InstantShareTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		ISFR000000000000000022 /* InstantShareServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InstantShareServicesTests.swift; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 			children = (
 				ISFR000000000000000003 /* InstantShareApp.swift */,
 				ISFR000000000000000011 /* RootView.swift */,
+				ISFR000000000000000040 /* UserInstructionView.swift */,
 				ISFR000000000000000004 /* Info.plist */,
 				ISFR000000000000000005 /* Assets.xcassets */,
 				ISFR000000000000000006 /* LaunchScreen.storyboard */,
@@ -382,6 +385,7 @@
 			files = (
 				ISBF000000000000000001 /* InstantShareApp.swift in Sources */,
 				ISBF000000000000000011 /* RootView.swift in Sources */,
+				ISBF000000000000000040 /* UserInstructionView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

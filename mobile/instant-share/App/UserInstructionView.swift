@@ -90,7 +90,6 @@ struct UserInstructionView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color(hex: 0x6E6E73))
                 .textCase(.uppercase)
-                .kerning(0.5)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
 

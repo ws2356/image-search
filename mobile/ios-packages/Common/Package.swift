@@ -21,6 +21,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-asn1.git", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-certificates.git", from: "1.0.0"),
         .package(url: "https://github.com/pointfreeco/swift-composable-architecture.git", from: "1.17.0"),
+        .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.12.0"),
     ],
     targets: [
         .target(
@@ -32,6 +33,8 @@ let package = Package(
                 .product(name: "SwiftASN1", package: "swift-asn1"),
                 .product(name: "X509", package: "swift-certificates"),
                 .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+                .product(name: "Dependencies", package: "swift-dependencies"),
+                .product(name: "DependenciesMacros", package: "swift-dependencies"),
             ],
             resources: [
                 .process("Resources")
