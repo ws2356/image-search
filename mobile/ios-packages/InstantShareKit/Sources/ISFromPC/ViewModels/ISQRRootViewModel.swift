@@ -1,5 +1,6 @@
 import SwiftUI
 import Common
+import Factory
 
 #if os(iOS)
 @MainActor
@@ -12,6 +13,7 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
     }
 
     @Published public private(set) var state: State
+    @Injected(\.sharedStorageProvider) private(set) var sharedStorageProvider: SharedStorageProtocol
     let navigator: Navigator
     private(set) var qrClaimPayload: QRClaimPayload?
 
@@ -55,6 +57,7 @@ public class ISQRRootViewModel: ObservableObject, ViewLifeCycle, QRClaimDelegate
         case .success(let claimResult):
             self.qrClaimResult = claimResult
             state = .result(claimResult)
+            sharedStorageProvider.hasCompletedSession = true
         case .failure(let error):
             let title = "Transfer Failed"
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
