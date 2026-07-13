@@ -29,21 +29,13 @@ struct UserInstructionView: View {
 
     private var headerSection: some View {
         VStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 22)
-                    .fill(
-                        .linearGradient(
-                            colors: [Color(hex: 0x0A84FF), Color(hex: 0x0040CC)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+            if let iconImage = UIImage(named: "AppIcon") {
+                Image(uiImage: iconImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
                     .frame(width: 88, height: 88)
-                    .shadow(color: Color(hex: 0x007AFF).opacity(0.45), radius: 12, y: 6)
-
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 40, weight: .medium))
-                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+                    .shadow(color: Color.black.opacity(0.15), radius: 12, y: 6)
             }
 
             Text("SnapGet")
