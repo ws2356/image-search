@@ -118,7 +118,7 @@ struct UserInstructionView: View {
                 SetupStepRow(
                     number: 3,
                     title: "Enable the share extension",
-                    detail: "In SnapGet settings, enable the share extension to allow sharing from your PC.",
+                    detail: "For macOS, visit `System Settings > General > Login Items & Extensions > Extensions > Sharing`, turn on SnapGet.",
                     isLink: false
                 )
             }
@@ -126,7 +126,7 @@ struct UserInstructionView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
         }
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .center) {
             if showCopiedToast {
                 toastView
                     .padding(.bottom, -40)
@@ -219,15 +219,9 @@ private struct SetupStepRow: View {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color(hex: 0x1C1C1E))
-                    if isLink {
-                        Text(detail)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color(hex: 0x007AFF))
-                    } else {
-                        Text(detail)
-                            .font(.system(size: 13))
-                            .foregroundStyle(Color(hex: 0x6E6E73))
-                    }
+                    Text(detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color(hex: 0x6E6E73))
                 }
                 Spacer(minLength: 0)
             }
@@ -235,7 +229,6 @@ private struct SetupStepRow: View {
             .padding(.vertical, 13)
         }
         .buttonStyle(.plain)
-        .disabled(!isLink)
     }
 }
 
