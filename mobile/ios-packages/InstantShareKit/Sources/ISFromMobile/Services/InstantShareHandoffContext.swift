@@ -15,7 +15,7 @@ struct InstantShareHandoffContext: Codable {
     let isTrustedDevice: Bool
     let createdAt: Date
 
-    static let appGroupIdentifier = "group.com.aubackup.instant-share"
+    static let appGroupIdentifier = "group.net.boldman.common"
     static let handoffKey = "pending-instant-share-handoff"
 
     init(

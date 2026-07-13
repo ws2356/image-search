@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>SharedKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)net.boldman.albumtransporter</string>
+	<string>$(AppIdentifierPrefix)net.boldman.common</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_instantshare._tcp</string>

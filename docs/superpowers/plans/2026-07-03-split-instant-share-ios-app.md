@@ -12,8 +12,8 @@
 
 - All SPM packages target iOS 15+
 - Keep forward slash file paths for consistency
-- App group: `group.com.aubackup.instant-share` (same as current ShareExtension)
-- Keychain access group: `$(AppIdentifierPrefix)net.boldman.albumtransporter` (same as current)
+- App group: `group.net.boldman.common` (same as current ShareExtension)
+- Keychain access group: `$(AppIdentifierPrefix)net.boldman.common` (same as current)
 - Team ID: ZU6V838VRQ (from existing project)
 - Commit after every task with a descriptive message
 
@@ -439,11 +439,11 @@ struct InstantShareApp: App {
 <dict>
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.com.aubackup.instant-share</string>
+        <string>group.net.boldman.common</string>
     </array>
     <key>keychain-access-groups</key>
     <array>
-        <string>$(AppIdentifierPrefix)net.boldman.albumtransporter</string>
+        <string>$(AppIdentifierPrefix)net.boldman.common</string>
     </array>
 </dict>
 </plist>

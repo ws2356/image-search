@@ -7,7 +7,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Snap Get uses the camera to scan the desktop pairing QR code and start a local backup session.</string>
 	<key>SharedKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)net.boldman.albumtransporter</string>
+	<string>$(AppIdentifierPrefix)net.boldman.common</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

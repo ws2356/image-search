@@ -13,7 +13,7 @@ import Factory
 extension Container {
     public var localDeviceIdentityProvider: Factory<LocalDeviceIdentifierProviding> {
         self {
-            LocalDeviceIdentifierStore(userDefaults: self.sharedStorageProvider().appGroupUserDefaults,
+            LocalDeviceIdentifierStore(userDefaults: self.sharedStorageProvider().commonAppGroupUserDefaults,
                                        installIDKey: LocalDeviceIdentifierStore.installIDKey,
                                        deviceUUIDKey: LocalDeviceIdentifierStore.deviceUUIDKey) }
             .singleton
@@ -21,7 +21,7 @@ extension Container {
 
     public var appIdentityProvider: Factory<AppIdentityProviding> {
         self { KeychainAppIdentityProvider(localDeviceIdentifierProvider: self.localDeviceIdentityProvider(),
-                                           userDefaults: self.sharedStorageProvider().appGroupUserDefaults) }
+                                           userDefaults: self.sharedStorageProvider().commonAppGroupUserDefaults) }
         .singleton
     }
     

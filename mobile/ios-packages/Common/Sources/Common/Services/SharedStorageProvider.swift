@@ -8,11 +8,11 @@
 import Foundation
 
 public protocol SharedStorageProtocol {
-    var appGroupUserDefaults: UserDefaults { get }
+    var commonAppGroupUserDefaults: UserDefaults { get }
 }
 
-let appGroupIdentifier = "group.com.aubackup.instant-share"
+let appGroupIdentifier = "group.net.boldman.common"
 
 public class SharedStorageProvider: SharedStorageProtocol {
-    public let appGroupUserDefaults: UserDefaults = .init(suiteName: appGroupIdentifier)!
+    public let commonAppGroupUserDefaults: UserDefaults = .init(suiteName: appGroupIdentifier)!
 }
