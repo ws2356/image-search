@@ -34,6 +34,8 @@ private final class ISPCTrustSessionManager: @unchecked Sendable {
     private var privateKey: Curve25519.KeyAgreement.PrivateKey
     private(set) var publicKeyBase64URL: String
     private var sessionKey: SymmetricKey?
+    private var pcDHPubKeyData: Data?
+    private var sharedSecretData: Data?
 
     init() {
         let ephemeralKey = Curve25519.KeyAgreement.PrivateKey()
@@ -71,12 +73,44 @@ private final class ISPCTrustSessionManager: @unchecked Sendable {
             outputByteCount: 32
         )
         self.sessionKey = derivedKey
+        self.pcDHPubKeyData = pcPublicKeyData
+        self.sharedSecretData = sharedSecret.withUnsafeBytes { Data($0) }
     }
 
     var isEstablished: Bool {
         lock.lock()
         defer { lock.unlock() }
         return sessionKey != nil
+    }
+
+    func computePairingAuth(shortSecret: String) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let sharedSecretData, let pcDHPubKeyData else {
+            throw ISPCServiceError.invalidTrustEnvelope
+        }
+
+        guard let shortSecretData = shortSecret.data(using: .utf8) else {
+            throw ISPCServiceError.invalidTrustEnvelope
+        }
+
+        let masterSecret = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: SymmetricKey(data: sharedSecretData),
+            salt: shortSecretData,
+            outputByteCount: 32
+        )
+
+        let transcript = Data("SnapGet Pairing v1".utf8)
+            + pcDHPubKeyData
+            + privateKey.publicKey.rawRepresentation
+
+        let authCode = HMAC<SHA256>.authenticationCode(
+            for: transcript,
+            using: masterSecret
+        )
+
+        return Data(authCode).ispcBase64URLEncodedString()
     }
 
     func encryptPayload(_ payload: [String: Any]) throws -> ISPCTrustEnvelope {
@@ -135,6 +169,8 @@ private final class ISPCTrustSessionManager: @unchecked Sendable {
         privateKey = ephemeralKey
         publicKeyBase64URL = ephemeralKey.publicKey.rawRepresentation.ispcBase64URLEncodedString()
         sessionKey = nil
+        pcDHPubKeyData = nil
+        sharedSecretData = nil
     }
 }
 
@@ -416,9 +452,10 @@ public final class QRTriggerDownloadClient: Sendable {
 
         var requestPayload: [String: Any] = [
             "action": "confirm",
-            "opt_code": optCode,
             "peer_device_name": await UIDevice.current.name,
         ]
+        let pairingAuth = try trustSessionManager.computePairingAuth(shortSecret: optCode)
+        requestPayload["pairing_auth"] = pairingAuth
         if let cert = deviceCertPEM {
             requestPayload["device_certificate_pem"] = cert
         }

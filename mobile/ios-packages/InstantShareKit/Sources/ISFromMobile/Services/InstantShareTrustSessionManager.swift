@@ -13,6 +13,8 @@ final class InstantShareTrustSessionManager: @unchecked Sendable {
     private var privateKey: Curve25519.KeyAgreement.PrivateKey
     private(set) var publicKeyBase64URL: String
     private var sessionKey: SymmetricKey?
+    private var pcDHPubKeyData: Data?
+    private var sharedSecretData: Data?
 
     init() {
         let ephemeralKey = Curve25519.KeyAgreement.PrivateKey()
@@ -60,6 +62,8 @@ final class InstantShareTrustSessionManager: @unchecked Sendable {
             outputByteCount: 32
         )
         self.sessionKey = derivedKey
+        self.pcDHPubKeyData = pcPublicKeyData
+        self.sharedSecretData = sharedSecret.withUnsafeBytes { Data($0) }
 
         return InstantShareTrustHandshakeResponse(
             mobileDHPublicKey: privateKey.publicKey.rawRepresentation.instantShareBase64URLEncodedString(),
@@ -101,6 +105,39 @@ final class InstantShareTrustSessionManager: @unchecked Sendable {
         return sessionKey != nil
     }
 
+    /// Compute the pairing auth string for trust confirmation.
+    /// master_secret = HKDF(ikm=DH_shared_secret, salt=short_secret)
+    /// auth = HMAC-SHA256(master_secret, "SnapGet Pairing v1" || pc_dh_pubkey || mobile_dh_pubkey)
+    func computePairingAuth(shortSecret: String) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let sharedSecretData, let pcDHPubKeyData else {
+            throw InstantShareServiceError.invalidTrustEnvelope
+        }
+
+        guard let shortSecretData = shortSecret.data(using: .utf8) else {
+            throw InstantShareServiceError.invalidTrustEnvelope
+        }
+
+        let masterSecret = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: SymmetricKey(data: sharedSecretData),
+            salt: shortSecretData,
+            outputByteCount: 32
+        )
+
+        let transcript = Data("SnapGet Pairing v1".utf8)
+            + pcDHPubKeyData
+            + privateKey.publicKey.rawRepresentation
+
+        let authCode = HMAC<SHA256>.authenticationCode(
+            for: transcript,
+            using: masterSecret
+        )
+
+        return Data(authCode).instantShareBase64URLEncodedString()
+    }
+
     /// Reset state for a new session.
     func reset() {
         lock.lock()
@@ -110,5 +147,7 @@ final class InstantShareTrustSessionManager: @unchecked Sendable {
         publicKeyBase64URL = ephemeralKey.publicKey.rawRepresentation
             .instantShareBase64URLEncodedString()
         sessionKey = nil
+        pcDHPubKeyData = nil
+        sharedSecretData = nil
     }
 }

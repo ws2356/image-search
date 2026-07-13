@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import hmac
 import os
 import sys
 import tempfile
@@ -15,6 +17,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from dt_image_search.instant_sharing.security import (
     PersistentEd25519SessionSigner,
     X25519TrustSessionKeyResolver,
+    compute_pairing_auth,
 )
 
 
@@ -79,6 +82,109 @@ class TestPersistentEd25519SessionSigner(unittest.TestCase):
 
             public_key = load_pem_public_key(public_key_pem.encode("utf-8"))
             public_key.verify(_base64url_decode(signature), b"session-123")
+
+
+_PAIRING_PROTOCOL_CONTEXT = b"SnapGet Pairing v1"
+
+
+class TestComputePairingAuth(unittest.TestCase):
+    def setUp(self):
+        self.pc_private_key = x25519.X25519PrivateKey.generate()
+        self.mobile_private_key = x25519.X25519PrivateKey.generate()
+        self.pc_public_key_bytes = self.pc_private_key.public_key().public_bytes(
+            Encoding.Raw, PublicFormat.Raw,
+        )
+        self.mobile_public_key_bytes = self.mobile_private_key.public_key().public_bytes(
+            Encoding.Raw, PublicFormat.Raw,
+        )
+        self.dh_shared_secret = self.pc_private_key.exchange(
+            self.mobile_private_key.public_key()
+        )
+
+    def test_computes_valid_auth(self):
+        short_secret = "123456"
+        auth = compute_pairing_auth(
+            dh_shared_secret=self.dh_shared_secret,
+            short_secret=short_secret,
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        self.assertEqual(len(auth), 32)
+
+    def test_both_sides_produce_same_auth(self):
+        short_secret = "123456"
+        pc_auth = compute_pairing_auth(
+            dh_shared_secret=self.dh_shared_secret,
+            short_secret=short_secret,
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        mobile_dh_shared = self.mobile_private_key.exchange(
+            self.pc_private_key.public_key()
+        )
+        mobile_auth = compute_pairing_auth(
+            dh_shared_secret=mobile_dh_shared,
+            short_secret=short_secret,
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        self.assertEqual(pc_auth, mobile_auth)
+
+    def test_different_short_secret_produces_different_auth(self):
+        auth1 = compute_pairing_auth(
+            dh_shared_secret=self.dh_shared_secret,
+            short_secret="123456",
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        auth2 = compute_pairing_auth(
+            dh_shared_secret=self.dh_shared_secret,
+            short_secret="654321",
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        self.assertNotEqual(auth1, auth2)
+
+    def test_different_dh_keys_produce_different_auth(self):
+        alt_pc_key = x25519.X25519PrivateKey.generate()
+        alt_pc_pub = alt_pc_key.public_key().public_bytes(
+            Encoding.Raw, PublicFormat.Raw,
+        )
+        auth1 = compute_pairing_auth(
+            dh_shared_secret=self.dh_shared_secret,
+            short_secret="123456",
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        auth2 = compute_pairing_auth(
+            dh_shared_secret=self.dh_shared_secret,
+            short_secret="123456",
+            pc_dh_public_key=alt_pc_pub,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        self.assertNotEqual(auth1, auth2)
+
+    def test_mitm_cannot_forge_auth(self):
+        mitm_private = x25519.X25519PrivateKey.generate()
+        mitm_public_bytes = mitm_private.public_key().public_bytes(
+            Encoding.Raw, PublicFormat.Raw,
+        )
+        mitm_shared_with_pc = mitm_private.exchange(
+            self.pc_private_key.public_key()
+        )
+        mitm_auth = compute_pairing_auth(
+            dh_shared_secret=mitm_shared_with_pc,
+            short_secret="123456",
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=mitm_public_bytes,
+        )
+        legit_auth = compute_pairing_auth(
+            dh_shared_secret=self.dh_shared_secret,
+            short_secret="123456",
+            pc_dh_public_key=self.pc_public_key_bytes,
+            mobile_dh_public_key=self.mobile_public_key_bytes,
+        )
+        self.assertNotEqual(mitm_auth, legit_auth)
 
 
 if __name__ == "__main__":

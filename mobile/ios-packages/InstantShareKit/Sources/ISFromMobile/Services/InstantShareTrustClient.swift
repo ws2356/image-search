@@ -263,7 +263,9 @@ final class InstantShareTrustClient: @unchecked Sendable {
             throw InstantShareTrustClientError.sessionKeyNotEstablished
         }
 
-        var requestPayload: [String: Any] = ["action": "confirm", "pin_code": pinCode]
+        var requestPayload: [String: Any] = ["action": "confirm"]
+        let pairingAuth = try trustSessionManager.computePairingAuth(shortSecret: pinCode)
+        requestPayload["pairing_auth"] = pairingAuth
         if let cert = deviceCertificatePEM {
             requestPayload["device_certificate_pem"] = cert
         }

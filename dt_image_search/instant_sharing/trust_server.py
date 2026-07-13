@@ -35,16 +35,25 @@ PC_TO_MOBILE (QR transfer):
 
 from __future__ import annotations
 
+import base64
 import enum
+import hmac
 import logging
 import os
 import threading
 import time
 from typing import Any, Mapping
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import x25519
+
 from dt_image_search.instant_sharing.contracts import ErrorCode
 from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.security import X25519TrustSessionKeyResolver
+from dt_image_search.instant_sharing.security import (
+    X25519TrustSessionKeyResolver,
+    base64url_decode,
+    compute_pairing_auth,
+)
 from dt_image_search.instant_sharing.trust_crypto import (
     TRUST_SESSION_ENVELOPE_SCHEMA,
     AesGcmTrustSessionProtector,
@@ -87,6 +96,7 @@ class TrustSession:
         self._pc_key_resolver = pc_key_resolver
         self._pc_protector = pc_protector
         self._mobile_dh_public_key: str | None = None
+        self._mobile_dh_public_key_bytes: bytes | None = None
         self._mobile_nonce: str | None = None
         self._kdf_context: str | None = None
         self._pin_code: str | None = None
@@ -168,6 +178,9 @@ class TrustSession:
     ) -> None:
         with self._lock:
             self._mobile_dh_public_key = mobile_dh_public_key
+            self._mobile_dh_public_key_bytes = base64url_decode(
+                mobile_dh_public_key, field_name="mobile_dh_public_key"
+            )
             self._mobile_nonce = mobile_nonce
 
     def handshake_response(self) -> dict[str, str]:
@@ -243,13 +256,30 @@ class TrustSession:
                 self._pin_code = _generate_pin_code()
             return self._pin_code
 
-    def verify_pin(self, pin_code: str) -> bool:
-        """Check whether the given pin_code matches the stored PIN."""
+    def verify_pairing_auth(self, auth_b64: str) -> bool:
         with self._lock:
-            return self._pin_code is not None and self._pin_code == pin_code
+            if self._flow_type == TrustFlowType.PC_TO_MOBILE:
+                short_secret = self._opt_code
+            else:
+                short_secret = self._pin_code
+            if short_secret is None:
+                return False
+            if self._mobile_dh_public_key_bytes is None:
+                return False
+            return _verify_pairing_auth(
+                auth_b64=auth_b64,
+                short_secret=short_secret,
+                pc_private_key_bytes=_extract_raw_private_key_bytes(
+                    self._pc_key_resolver._private_key
+                ),
+                mobile_dh_public_key_bytes=self._mobile_dh_public_key_bytes,
+                pc_dh_public_key_bytes=_extract_raw_public_key_bytes(
+                    self._pc_key_resolver._private_key.public_key()
+                ),
+            )
 
     def verify_opt(self, opt_code: str) -> bool:
-        """Check whether the given opt_code matches the stored opt code."""
+        """Legacy plaintext OPT comparison used by the WebRTC (DTLS-protected) path."""
         with self._lock:
             return self._opt_code is not None and self._opt_code == opt_code
 
@@ -388,3 +418,46 @@ def _base64url_encode(data: bytes) -> str:
     import base64
 
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _extract_raw_public_key_bytes(public_key: object) -> bytes:
+    return public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+
+def _extract_raw_private_key_bytes(private_key: object) -> bytes:
+    return private_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
+def _verify_pairing_auth(
+    *,
+    auth_b64: str,
+    short_secret: str,
+    pc_private_key_bytes: bytes,
+    mobile_dh_public_key_bytes: bytes,
+    pc_dh_public_key_bytes: bytes,
+) -> bool:
+    pc_private_key = x25519.X25519PrivateKey.from_private_bytes(pc_private_key_bytes)
+    mobile_public_key = x25519.X25519PublicKey.from_public_bytes(mobile_dh_public_key_bytes)
+    dh_shared_secret = pc_private_key.exchange(mobile_public_key)
+    expected_auth = compute_pairing_auth(
+        dh_shared_secret=dh_shared_secret,
+        short_secret=short_secret,
+        pc_dh_public_key=pc_dh_public_key_bytes,
+        mobile_dh_public_key=mobile_dh_public_key_bytes,
+    )
+    return hmac.compare_digest(
+        base64.urlsafe_b64decode(_pad_b64(auth_b64)),
+        expected_auth,
+    )
+
+
+def _pad_b64(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return (value + padding).encode("ascii")

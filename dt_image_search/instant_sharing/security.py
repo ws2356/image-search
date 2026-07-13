@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import logging
 import os
 from pathlib import Path
@@ -21,6 +23,24 @@ _logger = logging.getLogger(__name__)
 
 _TRUST_SESSION_INFO_PREFIX = b"dtis.instant-share.trust-session.v1"
 _TRUST_NONCE_BYTES = 32
+_PAIRING_PROTOCOL_CONTEXT = b"SnapGet Pairing v1"
+
+
+def compute_pairing_auth(
+    *,
+    dh_shared_secret: bytes,
+    short_secret: str,
+    pc_dh_public_key: bytes,
+    mobile_dh_public_key: bytes,
+) -> bytes:
+    master_secret = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=short_secret.encode("utf-8"),
+        info=b"",
+    ).derive(dh_shared_secret)
+    transcript = _PAIRING_PROTOCOL_CONTEXT + pc_dh_public_key + mobile_dh_public_key
+    return hmac.new(master_secret, transcript, hashlib.sha256).digest()
 
 
 def _base64url_encode(data: bytes) -> str:

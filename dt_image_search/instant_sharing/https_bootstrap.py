@@ -217,35 +217,24 @@ def _do_trust_confirm(
     if isinstance(peer_device_name, str) and peer_device_name.strip():
         trust_session.set_peer_device_name(peer_device_name.strip())
 
-    request_pin = decrypted.get("pin_code", "")
-    request_opt = decrypted.get("opt_code", "")
+    pairing_auth = decrypted.get("pairing_auth", "")
 
-    from dt_image_search.instant_sharing.trust_server import TrustFlowType
-
-    if trust_session.flow_type == TrustFlowType.PC_TO_MOBILE:
-        if not isinstance(request_opt, str) or not request_opt.strip():
-            raise InstantShareError(
-                error_code=ErrorCode.INVALID_REQUEST,
-                message="opt_code is required for pc-to-mobile flow.",
-                status_code=400,
-            )
-        if not trust_session.verify_opt(request_opt.strip()):
-            _logger.warning(
-                "[trust/confirm] invalid opt_code for pc-to-mobile flow session_id=%s",
-                session_id_header,
-            )
-            raise InstantShareError(
-                error_code=ErrorCode.PIN_MISMATCH_OR_REJECTED,
-                message="OPT code does not match.",
-                status_code=403,
-            )
-    else:
-        if not isinstance(request_pin, str) or not trust_session.verify_pin(request_pin):
-            raise InstantShareError(
-                error_code=ErrorCode.PIN_MISMATCH_OR_REJECTED,
-                message="PIN code does not match.",
-                status_code=403,
-            )
+    if not isinstance(pairing_auth, str) or not pairing_auth.strip():
+        raise InstantShareError(
+            error_code=ErrorCode.INVALID_REQUEST,
+            message="pairing_auth is required for trust confirmation.",
+            status_code=400,
+        )
+    if not trust_session.verify_pairing_auth(pairing_auth.strip()):
+        _logger.warning(
+            "[trust/confirm] invalid pairing_auth session_id=%s flow_type=%s",
+            session_id_header, trust_session.flow_type.value,
+        )
+        raise InstantShareError(
+            error_code=ErrorCode.PIN_MISMATCH_OR_REJECTED,
+            message="Pairing auth does not match.",
+            status_code=403,
+        )
 
     mobile_cert_pem = decrypted.get("device_certificate_pem")
     if isinstance(mobile_cert_pem, str) and mobile_cert_pem.strip():
