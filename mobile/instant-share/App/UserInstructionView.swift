@@ -29,7 +29,7 @@ struct UserInstructionView: View {
 
     private var headerSection: some View {
         VStack(spacing: 12) {
-            if let iconImage = UIImage(named: "AppIcon") {
+            if let iconImage = UIImage(named: "ic_app") {
                 Image(uiImage: iconImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
