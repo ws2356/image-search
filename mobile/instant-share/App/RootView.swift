@@ -1,6 +1,7 @@
 import SwiftUI
 import ISDeviceManagement
 import ISFromPC
+import ISFromMobile
 import ComposableArchitecture
 import Common
 
@@ -23,6 +24,7 @@ struct RootFeature: Sendable {
     }
 
     @Dependency(\.sharedStorage) var sharedStorage
+    @Dependency(\.identityClient) var identityClient
 
     var body: some ReducerOf<Self> {
         Scope(state: \.deviceManagement, action: \.deviceManagement) {
@@ -32,7 +34,9 @@ struct RootFeature: Sendable {
             switch action {
             case .onAppear:
                 state.hasCompletedSession = sharedStorage.hasCompletedSession()
-                return .none
+                return .run { _ in
+                    try await identityClient.initialize()
+                }
 
             case .scanButtonTapped:
                 state.sheetContent = .scan

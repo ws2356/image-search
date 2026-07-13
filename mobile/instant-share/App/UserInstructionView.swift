@@ -89,7 +89,7 @@ struct UserInstructionView: View {
                 SetupStepRow(
                     number: 1,
                     title: "Download SnapGet for PC",
-                    detail: downloadURL,
+                    detail: Text(downloadURL),
                     isLink: true,
                     onTap: copyDownloadURL
                 )
@@ -100,7 +100,7 @@ struct UserInstructionView: View {
                 SetupStepRow(
                     number: 2,
                     title: "Install SnapGet on your PC",
-                    detail: "Run the installer and open the app.",
+                    detail: Text("Run the installer and open the app."),
                     isLink: false
                 )
                 .overlay(alignment: .bottom) {
@@ -110,7 +110,7 @@ struct UserInstructionView: View {
                 SetupStepRow(
                     number: 3,
                     title: "Enable the share extension",
-                    detail: "For macOS, visit `System Settings > General > Login Items & Extensions > Extensions > Sharing`, turn on SnapGet.",
+                    detail: Text("For macOS, visit ") + Text("System Settings > General > Login Items & Extensions > Extensions > Sharing").bold() + Text(", turn on SnapGet."),
                     isLink: false
                 )
             }
@@ -191,7 +191,7 @@ private struct UsageCard: View {
 private struct SetupStepRow: View {
     let number: Int
     let title: String
-    let detail: String
+    let detail: Text
     let isLink: Bool
     var onTap: (() -> Void)? = nil
 
@@ -211,9 +211,15 @@ private struct SetupStepRow: View {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color(hex: 0x1C1C1E))
-                    Text(detail)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(hex: 0x6E6E73))
+                    if isLink {
+                        detail
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(hex: 0x007AFF))
+                    } else {
+                        detail
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(hex: 0x6E6E73))
+                    }
                 }
                 Spacer(minLength: 0)
             }

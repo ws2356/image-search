@@ -146,7 +146,7 @@ public struct AuthFeature {
 
                     // Import peer certificate
                     if let peerCert {
-                        try? await identityClient.importPeerCertificate(pem: peerCert)
+                        try? await identityClient.importPeerCertificate(peerCert)
                     }
 
                     await send(.confirmResponse)

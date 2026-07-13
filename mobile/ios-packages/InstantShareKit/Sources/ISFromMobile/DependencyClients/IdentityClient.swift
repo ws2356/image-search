@@ -11,16 +11,30 @@ import Factory
 import Foundation
 
 @DependencyClient
-struct IdentityClient {
-    var selfCertificatePEM: @Sendable () async throws -> String = { "" }
-    var importPeerCertificate: @Sendable (_ pem: String) async throws -> Void
-    var initialize: @Sendable () async throws -> Void
-    var currentDeviceName: @Sendable () async -> String = { "" }
-    var deviceUUID: @Sendable () async throws -> String = { "" }
+public struct IdentityClient : Sendable {
+    public let selfCertificatePEM: @Sendable () async throws -> String
+    public let importPeerCertificate: @Sendable (_ pem: String) async throws -> Void
+    public let initialize: @Sendable () async throws -> Void
+    public let currentDeviceName: @Sendable () async -> String
+    public let deviceUUID: @Sendable () async throws -> String
+    
+    public init(
+        selfCertificatePEM: @Sendable @escaping () async throws -> String,
+        importPeerCertificate: @Sendable @escaping (_: String) async throws -> Void,
+        initialize: @Sendable @escaping () async throws -> Void,
+        currentDeviceName: @Sendable @escaping () async -> String,
+        deviceUUID: @Sendable @escaping () async throws -> String
+    ) {
+        self.selfCertificatePEM = selfCertificatePEM
+        self.importPeerCertificate = importPeerCertificate
+        self.initialize = initialize
+        self.currentDeviceName = currentDeviceName
+        self.deviceUUID = deviceUUID
+    }
 }
 
 extension IdentityClient: DependencyKey {
-    static let liveValue = IdentityClient(
+    public static let liveValue = IdentityClient(
         selfCertificatePEM: { try await Container.shared.appIdentityProvider().selfCertificatePEM() },
         importPeerCertificate: { try await Container.shared.appIdentityProvider().importPeerCertificate(pem: $0) },
         initialize: { try await Container.shared.appIdentityProvider().initialize() },
@@ -30,7 +44,7 @@ extension IdentityClient: DependencyKey {
 }
 
 extension DependencyValues {
-    var identityClient: IdentityClient {
+    public var identityClient: IdentityClient {
         get { self[IdentityClient.self] }
         set { self[IdentityClient.self] = newValue }
     }
