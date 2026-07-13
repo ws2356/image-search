@@ -30,11 +30,14 @@ public struct CompletionFeature {
         }
     }
 
+    @Dependency(\.sharedStorage) var sharedStorage
+
     public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case .done:
                 LocalLog.debug("CompletionFeature done action received")
+                sharedStorage.setHasCompletedSession(true)
                 return .send(.delegate(.done))
             case .delegate:
                 return .none
