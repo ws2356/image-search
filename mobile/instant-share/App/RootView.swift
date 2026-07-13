@@ -84,18 +84,25 @@ struct RootView: View {
                     DeviceManagementView(
                         store: store.scope(state: \.deviceManagement, action: \.deviceManagement)
                     )
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button(action: { store.send(.scanButtonTapped) }) {
+                                Image(systemName: "qrcode.viewfinder")
+                            }
+                        }
+                    }
                 } else {
                     UserInstructionView()
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button(action: { store.send(.scanButtonTapped) }) {
+                                    Image(systemName: "qrcode.viewfinder")
+                                }
+                            }
+                        }
                 }
             }
             .navigationViewStyle(.stack)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { store.send(.scanButtonTapped) }) {
-                        Image(systemName: "qrcode.viewfinder")
-                    }
-                }
-            }
             .task { store.send(.onAppear) }
             .fullScreenCover(
                 item: Binding(
