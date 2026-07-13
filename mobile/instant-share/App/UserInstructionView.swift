@@ -60,16 +60,16 @@ struct UserInstructionView: View {
                 iconName: "desktopcomputer",
                 iconColor: Color(hex: 0x007AFF),
                 iconBackground: Color(hex: 0xE8F4FD),
-                title: "Share from your PC",
-                description: "Right-click any file, image, text or link on your PC and send it to this device. Requires the SnapGet desktop app."
+                title: "PC to Mobile",
+                description: "Right-click any file, image, text or link on your PC and share them using the SnapGet desktop app."
             )
 
             UsageCard(
                 iconName: "iphone",
                 iconColor: Color(hex: 0x34C759),
                 iconBackground: Color(hex: 0xE8FDE8),
-                title: "Share from this device",
-                description: "Select files, photos, or text on your phone and send them to your PC. Requires the SnapGet desktop app."
+                title: "Mobile to PC",
+                description: "Select files, photos, or text on your phone and share them to your PC. Requires the SnapGet desktop app."
             )
         }
     }
@@ -99,7 +99,7 @@ struct UserInstructionView: View {
 
                 SetupStepRow(
                     number: 2,
-                    title: "Install and launch SnapGet on your PC",
+                    title: "Install SnapGet on your PC",
                     detail: "Run the installer and open the app.",
                     isLink: false
                 )
