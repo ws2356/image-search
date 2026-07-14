@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# -- Build AuSearch.app (main-app) or InstantShare.app (instant-share)
-# -- For instant-share, build and embed Share Extension
+# -- Build AuSearch.app (main) or InstantShare.app (instant-share)
+# -- For snapget, build and embed Share Extension
 set -euo pipefail
 
 distpath=""
 build_type="${DTIS_BUILD_TYPE:-prod}"
-product="main-app"
+product="main"
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --build-type) build_type="$2"; shift 2;;
@@ -49,16 +49,16 @@ if [[ -d "$distpath" ]]; then
 fi
 
 case "$product" in
-    main-app)
+    main)
         spec_file="dt_image_search/DTImageSearch_MainApp.spec"
         app_name="AuSearch"
         ;;
-    snap-get)
+    snapget)
         spec_file="dt_image_search/DTImageSearch_InstantShare.spec"
         app_name="SnapGet"
         ;;
     *)
-        echo "Unknown product: $product. Expected 'main-app' or 'snap-get'."
+        echo "Unknown product: $product. Expected 'main' or 'snapget'."
         exit 1
         ;;
 esac
@@ -83,7 +83,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         exit 1
     fi
 
-    if [[ "$product" == "snap-get" ]]; then
+    if [[ "$product" == "snapget" ]]; then
         # Build and embed Share Extension
         echo "==> Building Share Extension..."
         bash "$this_dir/build_share_extension.sh" --app-path "$app_path"

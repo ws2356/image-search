@@ -97,7 +97,7 @@ if [ "$skip_build" == false ] ;  then
     echo "──── Step 1: Export variables like DEVELOPER_ID_IDENTITY, etc from .env"
     . "$this_dir/init_envs.sh"
 
-    echo "──── Step 2: Build the .app"
+    echo "──── Step 2: Build $app_path"
     "$this_dir/build_pyinstaller.sh" \
         --build-type "$build_type" \
         --product "$product"

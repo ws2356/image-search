@@ -7,7 +7,7 @@ set -euo pipefail
 #
 # Usage:
 #   create_github_release.sh \
-#       --product main-app \
+#       --product main \
 #       --tag v1.2.3 \
 #       --title "AuSearch v1.2.3" \
 #       --notes-file ./release-notes.md \
@@ -31,7 +31,7 @@ Create or update a GitHub release, upload a PKG or DMG asset, and track the
 release in releases.json.
 
 Required:
-  --product <main-app|instant-share>
+  --product <main|snapget>
                          Product being released
   --tag <tag>            Release tag (format: <version>-<product>)
   --title <title>        Release title
@@ -75,11 +75,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$PRODUCT" ]]; then
-    echo "Error: --product is required (main-app or instant-share)." >&2
+    echo "Error: --product is required (main or snapget)." >&2
     exit 1
 fi
-if [[ "$PRODUCT" != "main-app" && "$PRODUCT" != "instant-share" ]]; then
-    echo "Error: --product must be 'main-app' or 'instant-share', got '$PRODUCT'." >&2
+if [[ "$PRODUCT" != "main" && "$PRODUCT" != "snapget" ]]; then
+    echo "Error: --product must be 'main' or 'snapget', got '$PRODUCT'." >&2
     exit 1
 fi
 if [[ -z "$TAG" ]]; then
