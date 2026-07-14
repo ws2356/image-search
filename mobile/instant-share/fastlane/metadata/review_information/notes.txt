@@ -1,1 +1,5 @@
-
+Steps to test this app.
+1. Install SnapGet desktop app. Visit - https://www.boldman.net/snapget.html#download (or install the package directly via - https://github.com/ws2356/image-search/releases/download/1.1.1-snapget/SnapGet.pkg).
+2. Enable the SnapGet share extension switch on macOS - `System Settings > General > Login Items & Extensions > Extensions > Sharing`.
+3a. (pc-to-mobile) Ensure pc and iPhone are in the same Wi-Fi. Right click files on macOS and share it with the SnapGet share extension, which shows a QR code. Scan the QR code with the SnapGet in-app camera or system camera app.
+3b. (mobile-to-pc) Ensure pc and iPhone are in the same Wi-Fi. Share image or browser link from iPhone, select SnapGet, then select the discovered PC and following the UX flow to complete the sharing.
