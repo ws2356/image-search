@@ -169,7 +169,7 @@ if [ "$skip_release" = false ]; then
             --title "Release $tag ($product)" --notes "Bug free code" \
             --asset-path "$package_file" --target main
 
-    echo "──── Step 9: Release to Official Side (only for main-app)"
+    echo "──── Step 9: Release to Official Side"
     release_json="$repo_root/releases.json"
     download_main="$(python3 -c "import json; print(json.load(open('$release_json'))['main']['download_url'])")"
     download_is="$(python3 -c "import json; print(json.load(open('$release_json'))['snapget']['download_url'])")"
