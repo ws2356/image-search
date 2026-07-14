@@ -1,1 +1,1 @@
-file,instant,share,drop,transfer,text,photo,video,document,p2p,nearby,qr,private,secure,local,wifi
+instant,drop,text,document,p2p,nearby,qr,private,secure,local,wifi,share,quick,easy,computer,desktop

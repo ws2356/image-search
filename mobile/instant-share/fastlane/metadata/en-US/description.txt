@@ -1,36 +1,24 @@
-Snap Get makes file sharing simple, fast, and private.
-
-Transfer photos, videos, documents, and more between your devices in just a few taps. No account required. No complicated setup.
-
-Whether you're moving files between your phone and computer or sharing with someone nearby, Snap Get helps you transfer files quickly and securely.
+Transfer files between your phone and computer in seconds. Snap Get makes sharing photos, videos, and documents fast, secure, and private—no account needed.
 
 FEATURES
 
-• Fast peer-to-peer file transfers
-
-• Connect instantly by scanning a QR code or by mDNS broadcast
-
-• No account or sign-up required
-
-• Supports photos, videos, documents, and more
-
-• Works across phones, tablets, and computers
-
-• Send large files with ease
-
-• Privacy-first design — your files stay between your devices
+• Lightning-fast peer-to-peer transfers
+• Connect instantly via QR code or automatic discovery
+• No sign-up or account required
+• Send photos, videos, documents, and more
+• Works across iOS, Android, Mac, and Windows
+• Transfer large files without size limits
+• Privacy-first design — Files transfer directly between devices without cloud storage
 
 PERFECT FOR
 
-• Moving photos from your phone to your computer
+• Moving photos from phone to computer
+• Sharing original-quality videos with friends
+• Sending work documents between devices
+• Quick file transfers without cables or cloud
 
-• Sharing original-quality videos
+WHY CHOOSE SNAP GET?
 
-• Sending documents between devices
+Snap Get is built for simplicity and speed. Whether you're at home, in the office, or on the go, transfer files in seconds with a secure, privacy-focused experience. Your files never touch the cloud—they go directly from device to device.
 
-• Quickly transferring files without cables
-
-WHY SNAP GET?
-
-Snap Get is built to make file sharing effortless. Whether you're at home, at work, or on the go, you can transfer files in seconds with a simple, secure, and privacy-focused experience.
-
+Download Snap Get today and experience effortless file sharing.
