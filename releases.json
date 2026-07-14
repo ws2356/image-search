@@ -6,5 +6,9 @@
   "instant-share": {
     "tag": "1.1.0-instant-share",
     "download_url": "https://github.com/ws2356/image-search/releases/download/1.1.0-instant-share/InstantShare.pkg"
+  },
+  "snapget": {
+    "tag": "1.1.1-snapget",
+    "download_url": "https://github.com/ws2356/image-search/releases/download/1.1.1-snapget/SnapGet.pkg"
   }
 }
