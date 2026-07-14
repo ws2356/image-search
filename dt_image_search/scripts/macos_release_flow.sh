@@ -170,16 +170,7 @@ if [ "$skip_release" = false ]; then
             --asset-path "$package_file" --target main
 
     echo "──── Step 9: Release to Official Side"
-    release_json="$repo_root/releases.json"
-    download_main="$(python3 -c "import json; print(json.load(open('$release_json'))['main']['download_url'])")"
-    download_is="$(python3 -c "import json; print(json.load(open('$release_json'))['snapget']['download_url'])")"
-    (cd "$repo_root/web/www" && \
-        # export AUSEARCH_MACOS_DOWNLOAD_URL="$download_main" && \
-        # export INSTANTSHARE_DOWNLOAD_URL="$download_is" && \
-        sed -i '' "s|AUSEARCH_MACOS_DOWNLOAD_URL=.*|AUSEARCH_MACOS_DOWNLOAD_URL=$download_main|" .env && \
-        sed -i '' "s|INSTANTSHARE_MACOS_DOWNLOAD_URL=.*|INSTANTSHARE_MACOS_DOWNLOAD_URL=$download_is|" .env && \
-        npm run build && \
-        npm run sync)
+    (cd "$repo_root/web/www" && pnpm run sync)
 fi
 
 echo "──── Done!"
