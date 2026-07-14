@@ -33,7 +33,7 @@ build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
 if build_type not in {"prod", "dev"}:
     raise ValueError(f"Unsupported DTIS_BUILD_TYPE: {build_type!r}. Expected 'prod' or 'dev'.")
 revision = os.environ.get("DTIS_REVISION", "").strip()
-app_name = "InstantShare" if build_type == "prod" else f"InstantShare-{build_type}"
+app_name = "SnapGet" if build_type == "prod" else f"SnapGet-{build_type}"
 bundle_identifier = "vip.wansong.dtimagesearch.instantshare" if build_type == "prod" else f"vip.wansong.dtimagesearch.instantshare.{build_type}"
 build_vars_dir = Path(tempfile.mkdtemp(prefix=f"dtis_build_vars_{build_type}"))
 build_vars_path = build_vars_dir / "build_vars"

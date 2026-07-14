@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>InstantShare</string>
+	<string>SnapGet</string>
 	<key>CFBundleExecutable</key>
 	<string>ShareExtension</string>
 	<key>CFBundleIdentifier</key>

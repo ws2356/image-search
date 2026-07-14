@@ -17,7 +17,7 @@ class TestInstantShareLifecycleNotifications(unittest.TestCase):
         )
 
         self.assertIsNotNone(notification)
-        self.assertEqual(notification.title, "Instant Share Complete")
+        self.assertEqual(notification.title, "SnapGet Complete")
         self.assertEqual(notification.message, "Shared text is ready in the clipboard.")
         self.assertEqual(notification.severity, "info")
 
@@ -29,7 +29,7 @@ class TestInstantShareLifecycleNotifications(unittest.TestCase):
         )
 
         self.assertIsNotNone(notification)
-        self.assertEqual(notification.title, "Instant Share Failed")
+        self.assertEqual(notification.title, "SnapGet Failed")
         self.assertEqual(notification.message, "Pinned TLS verification failed.")
         self.assertEqual(notification.severity, "error")
 

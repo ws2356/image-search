@@ -7,7 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Applications/InstantShare.app/Contents/MacOS/InstantShare</string>
+        <string>/Applications/SnapGet.app/Contents/MacOS/SnapGet</string>
     </array>
 
     <key>RunAtLoad</key>

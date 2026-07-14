@@ -56,9 +56,9 @@ public struct QRScanTipBuilder {
         Group {
             Text("Wanna receive text or files from your PC?")
                 .font(.system(size: 15, weight: .semibold))
-            Text("1. Download and install AuSearch from https://www.boldman.net/snapget.html#download")
-            Text("2. (Optionally) Enable InstantShare extension: System Settings > General > Login Items & Extensions > Sharing > InstantShare.")
-            Text("3. Right click text or file, then ‘Share > InstantShare’ to show the QR code.")
+            Text("1. Download and install SnapGet desktop from https://www.boldman.net/snapget.html#download")
+            Text("2. Enable SnapGet extension: System Settings > General > Login Items & Extensions > Extensions > Sharing > SnapGet.")
+            Text("3. Right click text or file, then ‘Share > SnapGet’ to show the QR code.")
             Text("4. Scan the QR code.")
         }
     }

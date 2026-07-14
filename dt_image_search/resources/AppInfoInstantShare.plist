@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>InstantShare</string>
+	<string>SnapGet</string>
 	<key>CFBundleExecutable</key>
-	<string>InstantShare</string>
+	<string>SnapGet</string>
 	<key>CFBundleIconFile</key>
 	<string>instantshare</string>
 	<key>CFBundleShortVersionString</key>
@@ -15,12 +15,12 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>InstantShareAgent uses Apple Events for Finder integration, such as revealing selected files.</string>
+	<string>SnapGet uses Apple Events for Finder integration, such as revealing selected files.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_instant-share._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>InstantShareAgent uses your local network to receive photo backups from your iPhone.</string>
+	<string>SnapGet uses your local network to receive photo backups from your iPhone.</string>
 </dict>
 </plist>

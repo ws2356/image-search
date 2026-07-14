@@ -7,8 +7,8 @@ set -euo pipefail
 # installer, creates a GitHub release, and uploads the PKG asset.
 #
 # Supports two products:
-#   --product main-app       AuSearch (image search, no ShareExtension)
-#   --product instant-share  InstantShare (standalone sharing app with ShareExtension)
+#   --product main       AuSearch (image search, no ShareExtension)
+#   --product snapget  SnapGet (standalone sharing app with ShareExtension)
 #
 # The PKG installer includes a LaunchAgent that auto-starts the instant
 # share daemon at login for instant-share builds.  The following permissions
@@ -28,7 +28,7 @@ parent_repo_root="$(dirname "$repo_root")"
 parent_repo="ws2356/ausearch-release"
 
 build_type=prod
-product="main-app"
+product="main"
 skip_release=false
 skip_build=false
 skip_pkg=false
@@ -46,16 +46,16 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 case "$product" in
-    main-app)
+    main)
         app_bundle_name="AuSearch"
         pkg_identifier="vip.wansong.dtimagesearch"
         ;;
-    instant-share)
-        app_bundle_name="InstantShare"
+    snapget)
+        app_bundle_name="SnapGet"
         pkg_identifier="vip.wansong.dtimagesearch.instantshare"
         ;;
     *)
-        echo "Unknown product: $product. Expected 'main-app' or 'instant-share'."
+        echo "Unknown product: $product. Expected 'main' or 'snapgeti'."
         exit 1
         ;;
 esac
@@ -66,10 +66,10 @@ fi
 
 # Get tag from the product-specific plist
 case "$product" in
-    main-app)
+    main)
         app_info_plist="$repo_root/dt_image_search/resources/AppInfo.plist"
         ;;
-    instant-share)
+    snapget)
         app_info_plist="$repo_root/dt_image_search/resources/AppInfoInstantShare.plist"
         ;;
 esac
@@ -114,13 +114,13 @@ if [ "$skip_build" == false ] ;  then
         --identity "$DEVELOPER_ID_IDENTITY"
 
     if [ "$skip_pkg" == false ] ;  then
-        if [ "$product" == "instant-share" ]; then
+        if [ "$product" == "snapget" ]; then
             echo "──── Step 4: Build the PKG distribution"
             "$this_dir/package_pkg.sh" \
                 --app-path "$app_path" \
                 --identity "$DEVELOPER_ID_INSTALLER"
             package_file="${distpath}/${app_bundle_name}.pkg"
-        elif [ "$product" == "main-app" ]; then
+        elif [ "$product" == "main" ]; then
             echo "──── Step 4: Build the DMG distribution"
             "$this_dir/package_dmg.sh" \
                 --app-path "$app_path" \
@@ -128,7 +128,7 @@ if [ "$skip_build" == false ] ;  then
                 --identity "$DEVELOPER_ID_IDENTITY"
             package_file="${distpath}/${app_bundle_name}.dmg"
         else
-            echo "Unknown product: $product. Expected 'main-app' or 'instant-share'."
+            echo "Unknown product: $product. Expected 'main' or 'snapget'."
             exit 1
         fi
 
@@ -149,9 +149,9 @@ if [ "$skip_build" == false ] ;  then
         sudo rm -rf "$app_path"
     fi
 else
-    if [ "$product" == "instant-share" ]; then
+    if [ "$product" == "snapget" ]; then
         package_file="${distpath}/${app_bundle_name}.pkg"
-    elif [ "$product" == "main-app" ]; then
+    elif [ "$product" == "main" ]; then
         package_file="${distpath}/${app_bundle_name}.dmg"
     fi
 fi
@@ -171,8 +171,8 @@ if [ "$skip_release" = false ]; then
 
     echo "──── Step 9: Release to Official Side (only for main-app)"
     release_json="$repo_root/releases.json"
-    download_main="$(python3 -c "import json; print(json.load(open('$release_json'))['main-app']['download_url'])")"
-    download_is="$(python3 -c "import json; print(json.load(open('$release_json'))['instant-share']['download_url'])")"
+    download_main="$(python3 -c "import json; print(json.load(open('$release_json'))['main']['download_url'])")"
+    download_is="$(python3 -c "import json; print(json.load(open('$release_json'))['snapget']['download_url'])")"
     (cd "$repo_root/web/www" && \
         # export AUSEARCH_MACOS_DOWNLOAD_URL="$download_main" && \
         # export INSTANTSHARE_DOWNLOAD_URL="$download_is" && \

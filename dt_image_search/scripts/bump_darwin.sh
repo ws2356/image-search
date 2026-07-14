@@ -4,7 +4,7 @@ set -euo pipefail
 # Bump macOS app version keys in the plist corresponding to a product.
 # Usage:
 #   bump_macos.sh --product main --patch
-#   bump_macos.sh --product agent --minor
+#   bump_macos.sh --product snapget --minor
 #   bump_macos.sh --product ext --major
 #
 # Behavior:
@@ -21,7 +21,7 @@ bump=
 
 declare -A PRODUCT_PLISTS=(
     [main]="$REPO_ROOT/dt_image_search/resources/AppInfo.plist"
-    [agent]="$REPO_ROOT/dt_image_search/resources/AppInfoInstantShare.plist"
+    [snapget]="$REPO_ROOT/dt_image_search/resources/AppInfoInstantShare.plist"
     [ext]="$REPO_ROOT/macos/ShareExtension/Info.plist"
     [ios]="$REPO_ROOT/mobile/ios/App/Info.plist"
 )
@@ -30,12 +30,12 @@ declare -A PRODUCT_PLISTS=(
 
 usage() {
     cat <<'EOF'
-Usage: bump_macos.sh --product <main|agent|ext|ios> [--major | --minor | --patch]
+Usage: bump_macos.sh --product <main|snapget|ext|ios> [--major | --minor | --patch]
 
 Options:
   --product <product>  Select which product's plist to bump:
                        main  - AuSearch (AppInfo.plist)
-                       agent - InstantShare agent (AppInfoInstantShare.plist)
+                       snapget - SnapGet (AppInfoInstantShare.plist)
                        ext   - Share Extension (Info.plist)
                        ios   - iOS App (Info.plist)
   --major              Increase major by 1; reset minor/patch to 0
@@ -85,7 +85,7 @@ fi
 
 plist_path="${PRODUCT_PLISTS[$product]:-}"
 if [[ -z "$plist_path" ]]; then
-    echo "Error: unknown product '$product'. Valid values: main, agent, ext, ios" >&2
+    echo "Error: unknown product '$product'. Valid values: main, snapget, ext, ios" >&2
     usage
     exit 1
 fi

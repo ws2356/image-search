@@ -101,7 +101,7 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setOrganizationDomain("net.boldman")
-    app.setApplicationName("Snap Get")
+    app.setApplicationName("SnapGet")
     app.setQuitOnLastWindowClosed(False)
 
     logging.basicConfig(

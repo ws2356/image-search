@@ -75,7 +75,7 @@ class TransferTextPayload(BaseModel):
 def _deps_from(request: Request) -> _Deps:
     deps: _Deps | None = getattr(request.app.state, "deps", None)
     if deps is None:
-        raise _ServiceUnavailable("Instant share service not initialized")
+        raise _ServiceUnavailable("SnapGet service not initialized")
     return deps
 
 

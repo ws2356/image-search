@@ -14,7 +14,7 @@ POSTINSTALL_LOG="/tmp/instantshare-pkg-postinstall.log"
 echo "--- InstantShare PKG postinstall $(date) ---" >> "$POSTINSTALL_LOG"
 
 
-APP_PATH="/Applications/InstantShare.app"
+APP_PATH="/Applications/SnapGet.app"
 
 if [[ ! -d "$APP_PATH" ]]; then
     echo "Warning: InstantShare.app not found in /Applications." | tee -a "$POSTINSTALL_LOG" >&2

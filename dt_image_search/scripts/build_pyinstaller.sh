@@ -53,12 +53,12 @@ case "$product" in
         spec_file="dt_image_search/DTImageSearch_MainApp.spec"
         app_name="AuSearch"
         ;;
-    instant-share)
+    snap-get)
         spec_file="dt_image_search/DTImageSearch_InstantShare.spec"
-        app_name="InstantShare"
+        app_name="SnapGet"
         ;;
     *)
-        echo "Unknown product: $product. Expected 'main-app' or 'instant-share'."
+        echo "Unknown product: $product. Expected 'main-app' or 'snap-get'."
         exit 1
         ;;
 esac
@@ -83,7 +83,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         exit 1
     fi
 
-    if [[ "$product" == "instant-share" ]]; then
+    if [[ "$product" == "snap-get" ]]; then
         # Build and embed Share Extension
         echo "==> Building Share Extension..."
         bash "$this_dir/build_share_extension.sh" --app-path "$app_path"

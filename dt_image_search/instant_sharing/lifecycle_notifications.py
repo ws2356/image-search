@@ -20,39 +20,39 @@ def build_instant_share_lifecycle_notification(
 
     if state == "queued":
         return InstantShareLifecycleNotification(
-            title="Instant Share Incoming",
+            title="SnapGet Incoming",
             message=f"Preparing to receive {payload_label} from iPhone.",
         )
     if state == "transferring":
         return InstantShareLifecycleNotification(
-            title="Instant Share Receiving",
+            title="SnapGet Receiving",
             message=f"Receiving {payload_label} from iPhone.",
         )
     if state == "delivering":
         return InstantShareLifecycleNotification(
-            title="Instant Share Delivering",
+            title="SnapGet Delivering",
             message=_delivery_message(payload_class),
         )
     if state == "done":
         return InstantShareLifecycleNotification(
-            title="Instant Share Complete",
+            title="SnapGet Complete",
             message=_completion_message(payload_class),
         )
     if state == "timed_out":
         return InstantShareLifecycleNotification(
-            title="Instant Share Timed Out",
+            title="SnapGet Timed Out",
             message=error_message or f"The {payload_label} did not finish in time. Retry from iPhone.",
             severity="warning",
         )
     if state == "aborted":
         return InstantShareLifecycleNotification(
-            title="Instant Share Canceled",
+            title="SnapGet Canceled",
             message=error_message or f"The {payload_label} was canceled before completion.",
             severity="warning",
         )
     if state == "failed":
         return InstantShareLifecycleNotification(
-            title="Instant Share Failed",
+            title="SnapGet Failed",
             message=error_message or f"The {payload_label} could not be completed.",
             severity="error",
         )

@@ -377,7 +377,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
     async def transfer_text(request: Request, payload: TransferTextPayload) -> JSONResponse:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
-            raise _ServiceUnavailable("Instant share service not initialized")
+            raise _ServiceUnavailable("SnapGet service not initialized")
         session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
         await asyncio.to_thread(
             verify_session_signature, peer_device_id, session_id, signature, algorithm,
@@ -407,7 +407,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
     async def transfer_image(request: Request) -> JSONResponse:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
-            raise _ServiceUnavailable("Instant share service not initialized")
+            raise _ServiceUnavailable("SnapGet service not initialized")
         session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
         await asyncio.to_thread(
             verify_session_signature, peer_device_id, session_id, signature, algorithm,
@@ -457,7 +457,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
     async def transfer_manifest(request: Request) -> JSONResponse:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
-            raise _ServiceUnavailable("Instant share service not initialized")
+            raise _ServiceUnavailable("SnapGet service not initialized")
         session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
         await asyncio.to_thread(
             verify_session_signature, peer_device_id, session_id, signature, algorithm,
@@ -478,7 +478,7 @@ def _build_tls_app(deps: _Deps) -> FastAPI:
     async def transfer_download_file(request: Request, file_index: int) -> Response:
         deps_local: _Deps = getattr(request.app.state, "deps", None)
         if deps_local is None:
-            raise _ServiceUnavailable("Instant share service not initialized")
+            raise _ServiceUnavailable("SnapGet service not initialized")
         session_id, peer_device_id, signature, algorithm = _extract_signature_headers(request)
         await asyncio.to_thread(
             verify_session_signature, peer_device_id, session_id, signature, algorithm,
