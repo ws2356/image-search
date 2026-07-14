@@ -27,12 +27,8 @@ final class InstantShareSnapshotTests: XCTestCase {
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let imageURL = tempDir.appendingPathComponent("shared_photo.jpg")
 
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100))
-        let image = renderer.image { ctx in
-            UIColor.systemBlue.setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
-        }
-        try image.jpegData(compressionQuality: 0.8)?.write(to: imageURL)
+        let jpegData = try loadDisneyImageJPEGData()
+        try jpegData.write(to: imageURL)
 
         let result = QRClaimResult.image(fileURL: imageURL, contentType: "image/jpeg", filename: "shared_photo.jpg")
         let delegate = SnapshotISQRDeliverDelegate()
@@ -174,12 +170,8 @@ final class InstantShareSnapshotTests: XCTestCase {
             .appendingPathComponent("snapshot-test-mixed", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let imageURL = tempDir.appendingPathComponent("vacation_photo.jpg")
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100))
-        let image = renderer.image { ctx in
-            UIColor.systemOrange.setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
-        }
-        try image.jpegData(compressionQuality: 0.8)?.write(to: imageURL)
+        let jpegData = try loadDisneyImageJPEGData()
+        try jpegData.write(to: imageURL)
 
         let manifest = MultiFileManifest(
             fileCount: 3,
@@ -239,6 +231,22 @@ final class InstantShareSnapshotTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private func loadDisneyImageJPEGData() throws -> Data {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("disney.HEIC")
+        guard let image = UIImage(contentsOfFile: testFileURL.path) else {
+            throw NSError(domain: "SnapshotTests", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Could not load disney.HEIC at \(testFileURL.path)"])
+        }
+        guard let jpegData = image.jpegData(compressionQuality: 0.8) else {
+            throw NSError(domain: "SnapshotTests", code: -2,
+                          userInfo: [NSLocalizedDescriptionKey: "Could not convert disney.HEIC to JPEG"])
+        }
+        return jpegData
+    }
 
     private func makeHostedPage<Content: View>(
         title: String,
