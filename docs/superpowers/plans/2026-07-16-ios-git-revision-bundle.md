@@ -231,7 +231,7 @@ final class BundleBuildMetadataTests: XCTestCase {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd mobile/ios && swift test --filter BundleBuildMetadataTests` (or `xcodebuild test` with the AlbumTransporterApp scheme, `-only-testing:AlbumTransporterKitTests/BundleBuildMetadataTests`)
+Run: `cd mobile/ios && ./scripts/run_unit_tests.sh -only-testing:AlbumTransporterKitTests/BundleBuildMetadataTests`
 Expected: FAIL — `gitRevision()` / `buildMetadata()` not found (compiler error).
 
 - [ ] **Step 3: Write minimal implementation**
@@ -270,7 +270,7 @@ extension Bundle {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `cd mobile/ios && swift test --filter BundleBuildMetadataTests`
+Run: `cd mobile/ios && ./scripts/run_unit_tests.sh -only-testing:AlbumTransporterKitTests/BundleBuildMetadataTests`
 Expected: PASS (both test cases).
 
 - [ ] **Step 5: Commit**
@@ -314,7 +314,7 @@ final class OpenTelemetryResourceTests: XCTestCase {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd mobile/ios && swift test --filter OpenTelemetryResourceTests`
+Run: `cd mobile/ios && ./scripts/run_unit_tests.sh -only-testing:AlbumTransporterKitTests/OpenTelemetryResourceTests`
 Expected: FAIL — `app.git_revision` attribute absent (or `makeResource` not accessible; it is `private static` — see Step 3 note).
 
 > Note: `makeResource` is currently `private static`. To test it directly, change its visibility to `internal static` (still not part of the public `TelemetryClient` protocol). Apply that change in Step 3.
@@ -337,7 +337,7 @@ And inside `makeResource`, after the `service.version` block (line ~360), before
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `cd mobile/ios && swift test --filter OpenTelemetryResourceTests`
+Run: `cd mobile/ios && ./scripts/run_unit_tests.sh -only-testing:AlbumTransporterKitTests/OpenTelemetryResourceTests`
 Expected: PASS.
 
 - [ ] **Step 5: Run the full iOS test suite to check for regressions**
