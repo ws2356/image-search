@@ -28,7 +28,11 @@ export function planDelivery(entry: ManifestFileEntry, file: FileProgress | null
       log.warn('deliverer: file has no blob yet', { index: entry.index });
       return { kind: 'none' };
     }
-    if (entry.content_type.startsWith('image/') && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    if (entry.content_type.startsWith('image/')
+        && typeof navigator !== 'undefined'
+        && typeof navigator.share === 'function'
+        && typeof window !== 'undefined'
+        && window.isSecureContext) {
       log.info('deliverer: plan save_to_photos', { index: entry.index, filename: file.filename });
       return { kind: 'save_to_photos', blob: file.blob, filename: file.filename ?? 'image' };
     }
@@ -84,12 +88,18 @@ export async function applyDelivery(action: DeliveryAction): Promise<void> {
             try {
               await navigator.share({ files: [file] });
               break;
-            } catch (shareErr) {
-              log.warn('deliverer: navigator.share failed, falling back to download', { filename: action.filename, error: String(shareErr) });
+            } catch (err) {
+              // share() can reject with NotAllowedError even when canShare() returned true
+              // (e.g. non-secure context at call time, missing transient activation, or
+              // permissions policy). Fall back to a plain download instead of surfacing an error.
+              if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
+                log.warn('deliverer: navigator.share rejected, falling back to download', { filename: action.filename, name: err.name });
+              } else {
+                throw err;
+              }
             }
           }
         }
-        log.info('deliverer: save_blob download fallback', { filename: action.filename, size: action.blob.size });
         const url = URL.createObjectURL(action.blob);
         const a = document.createElement('a');
         a.href = url;
