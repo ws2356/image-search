@@ -344,7 +344,7 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         }
     }
 
-    private static func makeResource(serviceName: String, serviceVersion: String?) -> Resource {
+    static func makeResource(serviceName: String, serviceVersion: String?) -> Resource {
         var attributes: [String: AttributeValue] = [
             "service.name": .string(serviceName),
             "service.namespace": .string("AuBackup"),
@@ -358,6 +358,7 @@ actor OpenTelemetryTelemetryClient: TelemetryClient {
         if let serviceVersion, !serviceVersion.isEmpty {
             attributes["service.version"] = .string(serviceVersion)
         }
+        attributes["app.git_revision"] = .string(Bundle.main.gitRevision() ?? "unknown")
         return Resource().merging(other: Resource(attributes: attributes))
     }
 

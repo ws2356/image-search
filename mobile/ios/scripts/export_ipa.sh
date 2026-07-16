@@ -193,6 +193,12 @@ main() {
     fi
 
     echo "IPA exported to ${ipa_path}"
+
+    local app_bundle
+    app_bundle="$(find "${ARCHIVE_PATH}/Products" -name 'AuBackup.app' -type d -print -quit)"
+    if [[ -n "${app_bundle}" ]]; then
+        "${IOS_ROOT}/scripts/verify_build_metadata.sh" "${app_bundle}"
+    fi
 }
 
 main "$@"
