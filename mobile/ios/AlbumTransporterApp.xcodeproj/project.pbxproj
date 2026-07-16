@@ -232,6 +232,7 @@
 				447D9B3CA60BFCE4238E4BE1 /* Resources */,
 				SE0009010000000000000001 /* Embed App Extensions */,
 				3D6AEAC92FE45E7300C3D4E0 /* Embed Frameworks */,
+				EBD000000000000000000001 /* Embed Build Metadata */,
 			);
 			buildRules = (
 			);
@@ -297,6 +298,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		EBD000000000000000000001 /* Embed Build Metadata */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/App/BuildMetadata.template.json",
+			);
+			name = "Embed Build Metadata";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/BuildMetadata.json",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/embed_build_metadata.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4A0E923222111A001730D323 /* Sources */ = {
