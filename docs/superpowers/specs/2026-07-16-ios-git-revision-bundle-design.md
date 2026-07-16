@@ -57,44 +57,42 @@ A new **Run Script** build phase added to the `AlbumTransporterApp` target in
 
 A **template plist is checked into the repository** and used as the prototype:
 
-- Path: `mobile/ios/App/BuildMetadata.template.plist` (or
-  `mobile/ios/Resources/BuildMetadata.template.plist`)
+- Path: `mobile/ios/App/BuildMetadata.template.json` (or
+  `mobile/ios/Resources/BuildMetadata.template.json`)
 - Checked in, version-controlled, and **never mutated in place** at build time.
+- Format is JSON (not plist) so the artifact is portable and reusable by other
+  projects/platforms.
 
 Template contents (v1):
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>GitRevision</key>
-    <string>__GIT_REVISION__</string>
-</dict>
-</plist>
+```json
+{
+  "GitRevision": "__GIT_REVISION__"
+}
 ```
 
 Build phase behavior:
 - Resolve repo root: `git -C "${SRCROOT}" rev-parse --show-toplevel`
 - Compute full hash: `git -C "${REPO_ROOT}" rev-parse HEAD`
 - **Copy** the checked-in template into the app bundle:
-  `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.plist`
+  `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.json`
 - Update the slot value in the copied file: replace `__GIT_REVISION__` with the
-  resolved hash (e.g. via `sed -i ''` on the copied file, or `PlistBuddy` on the
-  copy). The template in the repo is left untouched → repo stays clean.
+  resolved hash (e.g. via `sed -i ''` on the copied file). The template in the
+  repo is left untouched → repo stays clean.
 
-Rationale for separate template file: `BuildMetadata.plist` is generic and
+Rationale for separate template file: `BuildMetadata.json` is generic and
 structured as a dictionary, so future fields (build date, CI run id, pipeline
 id, etc.) can be added by extending the template and the slot-replacement step,
-without generating XML from scratch.
+without generating JSON from scratch. JSON also makes the file trivially
+consumable by non-Apple tooling.
 
 ### 2. Runtime reader
 
 A small helper in `AlbumTransporterKit`, e.g.
 `Sources/AlbumTransporterKit/Utilities/Bundle+BuildMetadata.swift`:
 
-- `Bundle.buildMetadata() -> [String: String]?` loads `BuildMetadata.plist` from
-  `Bundle.main` and returns its dictionary.
+- `Bundle.buildMetadata() -> [String: String]?` loads `BuildMetadata.json` from
+  `Bundle.main` and returns its dictionary (parsed via `JSONSerialization` or
+  `Codable`).
 - Convenience accessor `Bundle.gitRevision() -> String?` returns
   `buildMetadata()?["GitRevision"]`.
 - Returns `nil` when the plist is absent (simulator / test runs where the build

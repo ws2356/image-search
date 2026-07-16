@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Embed the 40-char git revision of the iOS source into the shipped app bundle as `BuildMetadata.plist`, and report it via the `app.git_revision` OpenTelemetry resource attribute on every span and metric.
+**Goal:** Embed the 40-char git revision of the iOS source into the shipped app bundle as `BuildMetadata.json`, and report it via the `app.git_revision` OpenTelemetry resource attribute on every span and metric.
 
-**Architecture:** A checked-in `BuildMetadata.template.plist` (with a `__GIT_REVISION__` slot) is copied into the app bundle by a "Run Script" Xcode build phase placed after "Copy Bundle Resources" and before code signing; the slot in the *copy* is replaced with `git rev-parse HEAD`. At runtime a `Bundle` helper reads the plist, and `OpenTelemetryTelemetryClient.makeResource` adds `app.git_revision` to the OTel Resource so all telemetry carries it. The repository working tree is never mutated.
+**Architecture:** A checked-in `BuildMetadata.template.json` (with a `__GIT_REVISION__` slot) is copied into the app bundle by a "Run Script" Xcode build phase placed after "Copy Bundle Resources" and before code signing; the slot in the *copy* is replaced with `git rev-parse HEAD`. At runtime a `Bundle` helper reads the JSON, and `OpenTelemetryTelemetryClient.makeResource` adds `app.git_revision` to the OTel Resource so all telemetry carries it. The repository working tree is never mutated.
 
 **Tech Stack:** Swift (iOS), Xcode `.xcodeproj` build phases, `bash` Run Script phase, OpenTelemetry Swift SDK (`OpenTelemetryApi`/`OpenTelemetrySdk`), `swift test` / `xcodebuild test`.
 
@@ -24,48 +24,43 @@
 
 ## File Structure
 
-- `mobile/ios/App/BuildMetadata.template.plist` — **Create.** Checked-in template with `__GIT_REVISION__` slot. Source of truth for bundle metadata shape.
+- `mobile/ios/App/BuildMetadata.template.json` — **Create.** Checked-in JSON template with `__GIT_REVISION__` slot. Source of truth for bundle metadata shape. (JSON, not plist, for cross-project reuse.)
 - `mobile/ios/AlbumTransporterApp.xcodeproj/project.pbxproj` — **Modify.** Add "Run Script" build phase "Embed Build Metadata" to the `AlbumTransporterApp` target, ordered after "Copy Bundle Resources" / before signing.
-- `mobile/ios/Sources/AlbumTransporterKit/Utilities/Bundle+BuildMetadata.swift` — **Create.** `Bundle` extension reading `BuildMetadata.plist` from the main bundle.
+- `mobile/ios/Sources/AlbumTransporterKit/Utilities/Bundle+BuildMetadata.swift` — **Create.** `Bundle` extension reading `BuildMetadata.json` from the main bundle.
 - `mobile/ios/Sources/AlbumTransporterKit/Services/OpenTelemetryTelemetryClient.swift` — **Modify** (`makeResource`, ~line 347). Add `app.git_revision` attribute from `Bundle.main.gitRevision()`.
 - `mobile/ios/Tests/AlbumTransporterKitTests/Bundle+BuildMetadataTests.swift` — **Create.** Unit tests for the reader.
-- `mobile/ios/scripts/verify_build_metadata.sh` — **Create.** Smoke check that a built `.app` contains `BuildMetadata.plist` with a 40-char `GitRevision`.
+- `mobile/ios/scripts/verify_build_metadata.sh` — **Create.** Smoke check that a built `.app` contains `BuildMetadata.json` with a 40-char `GitRevision`.
 
 ---
 
 ### Task 1: Checked-in template plist
 
 **Files:**
-- Create: `mobile/ios/App/BuildMetadata.template.plist`
+- Create: `mobile/ios/App/BuildMetadata.template.json`
 
 **Interfaces:**
-- Produces: a file consumed by the build phase in Task 2 (path `$(SRCROOT)/App/BuildMetadata.template.plist`). The build phase expects exactly one key `GitRevision` with placeholder value `__GIT_REVISION__`.
+- Produces: a file consumed by the build phase in Task 2 (path `$(SRCROOT)/App/BuildMetadata.template.json`). The build phase expects exactly one key `GitRevision` with placeholder value `__GIT_REVISION__`.
 
-- [ ] **Step 1: Create the template plist**
+- [ ] **Step 1: Create the template JSON**
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>GitRevision</key>
-	<string>__GIT_REVISION__</string>
-</dict>
-</plist>
+```json
+{
+  "GitRevision": "__GIT_REVISION__"
+}
 ```
 
-Save as `mobile/ios/App/BuildMetadata.template.plist`.
+Save as `mobile/ios/App/BuildMetadata.template.json`.
 
-- [ ] **Step 2: Validate the plist is well-formed**
+- [ ] **Step 2: Validate the JSON is well-formed**
 
-Run: `plutil -lint mobile/ios/App/BuildMetadata.template.plist`
-Expected: `mobile/ios/App/BuildMetadata.template.plist: OK`
+Run: `python3 -c "import json,sys; json.load(open('mobile/ios/App/BuildMetadata.template.json')); print('OK')"`
+Expected: `OK`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add mobile/ios/App/BuildMetadata.template.plist
-git commit -m "build(ios): add BuildMetadata template plist [LLM: opencode/hy3-free]"
+git add mobile/ios/App/BuildMetadata.template.json
+git commit -m "build(ios): add BuildMetadata template json [LLM: opencode/hy3-free]"
 ```
 
 ---
@@ -77,8 +72,8 @@ git commit -m "build(ios): add BuildMetadata template plist [LLM: opencode/hy3-f
 - Test: `mobile/ios/scripts/verify_build_metadata.sh` (created in Task 5; here we add a local dry-run invocation)
 
 **Interfaces:**
-- Consumes: `$(SRCROOT)/App/BuildMetadata.template.plist` (Task 1).
-- Produces: `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.plist` inside the `.app`, with `GitRevision` = 40-char hash. Consumed at runtime by Task 3/4.
+- Consumes: `$(SRCROOT)/App/BuildMetadata.template.json` (Task 1).
+- Produces: `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.json` inside the `.app`, with `GitRevision` = 40-char hash. Consumed at runtime by Task 3/4.
 
 The Run Script phase must be placed **after** the "Copy Bundle Resources" phase and **before** the code-sign phase in the `AlbumTransporterApp` target's `buildPhases` array.
 
@@ -98,8 +93,8 @@ SRCROOT="${SRCROOT:?SRCROOT not set}"
 BUILT_PRODUCTS_DIR="${BUILT_PRODUCTS_DIR:?BUILT_PRODUCTS_DIR not set}"
 CONTENTS_FOLDER_PATH="${CONTENTS_FOLDER_PATH:?CONTENTS_FOLDER_PATH not set}"
 
-TEMPLATE="${SRCROOT}/App/BuildMetadata.template.plist"
-DEST="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.plist"
+TEMPLATE="${SRCROOT}/App/BuildMetadata.template.json"
+DEST="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.json"
 
 if [[ ! -f "${TEMPLATE}" ]]; then
     echo "error: BuildMetadata template not found at ${TEMPLATE}" >&2
@@ -115,14 +110,12 @@ mkdir -p "$(dirname "${DEST}")"
 cp "${TEMPLATE}" "${DEST}"
 
 if [[ "${REVISION}" == "unknown" ]]; then
-    # Leave placeholder unresolved but keep a valid plist with "unknown".
-    /usr/libexec/PlistBuddy -c "Set :GitRevision unknown" "${DEST}" 2>/dev/null || \
-        sed -i '' 's/__GIT_REVISION__/unknown/' "${DEST}"
+    sed -i '' 's/__GIT_REVISION__/unknown/' "${DEST}"
 else
     sed -i '' "s/__GIT_REVISION__/${REVISION}/" "${DEST}"
 fi
 
-plutil -lint "${DEST}" >/dev/null
+python3 -c "import json; json.load(open('${DEST}'))" >/dev/null
 echo "Embedded BuildMetadata revision: ${REVISION}"
 ```
 
@@ -143,11 +136,11 @@ Add a new build-phase object (generate a unique 24-char hex ID, e.g. `EBD0000000
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/App/BuildMetadata.template.plist",
+				"$(SRCROOT)/App/BuildMetadata.template.json",
 			);
 			name = "Embed Build Metadata";
 			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/BuildMetadata.plist",
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/BuildMetadata.json",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -171,9 +164,9 @@ export SRCROOT="$(pwd)"
 export BUILT_PRODUCTS_DIR="$(mktemp -d)"
 export CONTENTS_FOLDER_PATH="AlbumTransporterApp.app"
 ./scripts/embed_build_metadata.sh
-plutil -p "${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.plist"
+python3 -c "import json; print(json.load(open('${BUILT_PRODUCTS_DIR}/AlbumTransporterApp.app/BuildMetadata.json')))"
 ```
-Expected: output shows `GitRevision => <40-char hex string>` (or `unknown` if run outside a git checkout), and `plutil -p` prints the dict without error.
+Expected: output shows `{'GitRevision': '<40-char hex string>'}` (or `'unknown'` if run outside a git checkout).
 
 - [ ] **Step 5: Commit**
 
@@ -191,7 +184,7 @@ git commit -m "build(ios): add Embed Build Metadata run script phase [LLM: openc
 - Test: `mobile/ios/Tests/AlbumTransporterKitTests/Bundle+BuildMetadataTests.swift`
 
 **Interfaces:**
-- Produces: `Bundle.buildMetadata() -> [String: String]?` and `Bundle.gitRevision() -> String?`, both read from `BuildMetadata.plist` in `Bundle.main`. Consumed by Task 4.
+- Produces: `Bundle.buildMetadata() -> [String: String]?` and `Bundle.gitRevision() -> String?`, both read from `BuildMetadata.json` in `Bundle.main`. Consumed by Task 4.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -218,14 +211,10 @@ final class BundleBuildMetadataTests: XCTestCase {
     }
 
     func testGitRevisionReads40CharHash() throws {
-        let plist = tempDir.appendingPathComponent("BuildMetadata.plist")
+        let jsonURL = tempDir.appendingPathComponent("BuildMetadata.json")
         let hash = String(repeating: "a", count: 40)
-        let xml = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0"><dict><key>GitRevision</key><string>\(hash)</string></dict></plist>
-        """
-        try xml.write(to: plist, atomically: true, encoding: .utf8)
+        let json = "{\"GitRevision\":\"\(hash)\"}"
+        try json.write(to: jsonURL, atomically: true, encoding: .utf8)
 
         let bundle = Bundle(url: tempDir)!
         XCTAssertEqual(bundle.gitRevision(), hash)
@@ -250,7 +239,7 @@ Expected: FAIL — `gitRevision()` / `buildMetadata()` not found (compiler error
 Create `mobile/ios/Sources/AlbumTransporterKit/Utilities/Bundle+BuildMetadata.swift`:
 
 ```swift
-// Purpose: Read build-time metadata (git revision, etc.) from BuildMetadata.plist
+// Purpose: Read build-time metadata (git revision, etc.) from BuildMetadata.json
 //          embedded in the app bundle.
 // Author: opencode/hy3-free
 // Date: 2026-07-16
@@ -258,15 +247,15 @@ Create `mobile/ios/Sources/AlbumTransporterKit/Utilities/Bundle+BuildMetadata.sw
 import Foundation
 
 extension Bundle {
-    /// Dictionary of build metadata loaded from `BuildMetadata.plist` in this bundle, or `nil` if absent/malformed.
+    /// Dictionary of build metadata loaded from `BuildMetadata.json` in this bundle, or `nil` if absent/malformed.
     func buildMetadata() -> [String: String]? {
-        guard let url = url(forResource: "BuildMetadata", withExtension: "plist") else {
+        guard let url = url(forResource: "BuildMetadata", withExtension: "json") else {
             return nil
         }
         guard let data = try? Data(contentsOf: url) else {
             return nil
         }
-        guard let raw = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String] else {
+        guard let raw = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
             return nil
         }
         return raw
@@ -372,7 +361,7 @@ git commit -m "feat(ios): add app.git_revision to OTel resource [LLM: opencode/h
 
 **Interfaces:**
 - Consumes: a built `.app` path (from `export_ipa.sh` output or `xcodebuild` DerivedData).
-- Produces: exit 0 if `BuildMetadata.plist` exists with a 40-char hex `GitRevision`; non-zero otherwise.
+- Produces: exit 0 if `BuildMetadata.json` exists with a 40-char hex `GitRevision`; non-zero otherwise.
 
 - [ ] **Step 1: Write the verification script**
 
@@ -382,7 +371,7 @@ Create `mobile/ios/scripts/verify_build_metadata.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Verify that a built .app contains BuildMetadata.plist with a 40-char GitRevision.
+# Verify that a built .app contains BuildMetadata.json with a 40-char GitRevision.
 # Usage: verify_build_metadata.sh <path-to-App.app>
 
 APP_PATH="${1:-}"
@@ -391,19 +380,19 @@ if [[ -z "${APP_PATH}" || ! -d "${APP_PATH}" ]]; then
     exit 2
 fi
 
-PLIST="${APP_PATH}/BuildMetadata.plist"
+PLIST="${APP_PATH}/BuildMetadata.json"
 if [[ ! -f "${PLIST}" ]]; then
-    echo "error: BuildMetadata.plist missing from ${APP_PATH}" >&2
+    echo "error: BuildMetadata.json missing from ${APP_PATH}" >&2
     exit 1
 fi
 
-REVISION="$(/usr/libexec/PlistBuddy -c "Print :GitRevision" "${PLIST}" 2>/dev/null || echo "")"
+REVISION="$(python3 -c "import json,sys; print(json.load(open('${PLIST}')).get('GitRevision',''))" 2>/dev/null || echo "")"
 if [[ ! "${REVISION}" =~ ^[0-9a-f]{40}$ ]] && [[ "${REVISION}" != "unknown" ]]; then
     echo "error: GitRevision is not a 40-char hash or 'unknown': '${REVISION}'" >&2
     exit 1
 fi
 
-echo "OK: BuildMetadata.plist present, GitRevision=${REVISION}"
+echo "OK: BuildMetadata.json present, GitRevision=${REVISION}"
 ```
 
 Make it executable: `chmod +x mobile/ios/scripts/verify_build_metadata.sh`.
@@ -435,6 +424,9 @@ In `mobile/ios/scripts/export_ipa.sh`, after the IPA is exported (around line 19
     fi
 ```
 
+Also update the dry-run in Task 2 Step 4 to point at the JSON copy (already JSON). No further plist references remain.
+```
+
 - [ ] **Step 4: Commit**
 
 ```bash
@@ -447,7 +439,7 @@ git commit -m "test(ios): add build metadata verification script [LLM: opencode/
 ## Self-Review
 
 **1. Spec coverage:**
-- Separate `BuildMetadata.plist` from template → Task 1 + Task 2. ✓
+- Separate `BuildMetadata.json` from template → Task 1 + Task 2. ✓
 - Copied into bundle, slot replaced in copy, repo never mutated → Task 2 (`embed_build_metadata.sh`). ✓
 - Post-build pre-sign ordering → Task 2 (phase placed after Copy Bundle Resources). ✓
 - Full 40-char hash → Task 2 script (`git rev-parse HEAD`), Task 5 validation. ✓
