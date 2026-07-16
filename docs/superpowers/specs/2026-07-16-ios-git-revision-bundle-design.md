@@ -55,13 +55,13 @@ A new **Run Script** build phase added to the `AlbumTransporterApp` target in
 `AlbumTransporterApp.xcodeproj`, placed **after** "Copy Bundle Resources" and
 **before** the implicit code-sign step.
 
-Behavior:
-- Resolve repo root: `git -C "${SRCROOT}" rev-parse --show-toplevel`
-- Compute full hash: `git -C "${REPO_ROOT}" rev-parse HEAD`
-- Write a separate plist into the app bundle:
-  `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.plist`
+A **template plist is checked into the repository** and used as the prototype:
 
-Plist content (v1):
+- Path: `mobile/ios/App/BuildMetadata.template.plist` (or
+  `mobile/ios/Resources/BuildMetadata.template.plist`)
+- Checked in, version-controlled, and **never mutated in place** at build time.
+
+Template contents (v1):
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -69,20 +69,24 @@ Plist content (v1):
 <plist version="1.0">
 <dict>
     <key>GitRevision</key>
-    <string><40-char hash></string>
+    <string>__GIT_REVISION__</string>
 </dict>
 </plist>
 ```
 
-Resilience:
-- If git is unavailable or the checkout is not a git repo, the phase writes
-  `GitRevision` = `"unknown"` (or omits it) so the build never fails.
-- The phase writes **only** into the build output; the repository working tree
-  is never touched.
+Build phase behavior:
+- Resolve repo root: `git -C "${SRCROOT}" rev-parse --show-toplevel`
+- Compute full hash: `git -C "${REPO_ROOT}" rev-parse HEAD`
+- **Copy** the checked-in template into the app bundle:
+  `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/BuildMetadata.plist`
+- Update the slot value in the copied file: replace `__GIT_REVISION__` with the
+  resolved hash (e.g. via `sed -i ''` on the copied file, or `PlistBuddy` on the
+  copy). The template in the repo is left untouched → repo stays clean.
 
-Rationale for separate file: `BuildMetadata.plist` is generic and structured as
-a dictionary, so future fields (build date, CI run id, pipeline id, etc.) can be
-added without touching `Info.plist` or the build phase logic.
+Rationale for separate template file: `BuildMetadata.plist` is generic and
+structured as a dictionary, so future fields (build date, CI run id, pipeline
+id, etc.) can be added by extending the template and the slot-replacement step,
+without generating XML from scratch.
 
 ### 2. Runtime reader
 
@@ -113,7 +117,8 @@ Placing it on the `Resource` guarantees every span and metric carries
 
 | Case | Behavior |
 | :---- | :---- |
-| Git missing / not a repo at build time | Phase writes `"unknown"`; build succeeds |
+| Git missing / not a repo at build time | Phase leaves `__GIT_REVISION__` unresolved (or writes `"unknown"`); build succeeds |
+| Template plist missing from repo | Phase fails the build (template must be present) |
 | Plist absent at runtime (simulator/tests) | Reader returns `nil`; telemetry uses `"unknown"` |
 | Malformed plist at runtime | Reader returns `nil`; telemetry uses `"unknown"` |
 
