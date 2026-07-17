@@ -141,8 +141,7 @@ extension Container {
                 appUpdateChecker: self.appUpdateChecker(),
                 appVersionProvider: self.appVersionProvider(),
                 telemetryService: self.telemetryService(),
-                telemetryContextProvider: self.telemetryContextProvider(),
-                appIdentityProvider: self.appIdentityProvider()
+                telemetryContextProvider: self.telemetryContextProvider()
             )
         }
         .singleton

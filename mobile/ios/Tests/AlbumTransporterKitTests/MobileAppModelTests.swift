@@ -312,8 +312,7 @@ final class MobileAppModelTests: XCTestCase {
             appUpdateChecker: appUpdateChecker,
             appVersionProvider: appVersionProvider,
             telemetryService: resolvedTelemetryService,
-            telemetryContextProvider: resolvedTelemetryContextProvider,
-            appIdentityProvider: KeychainAppIdentityProvider(localDeviceIdentifierProvider: localDeviceIdProvoder, userDefaults: .standard)
+            telemetryContextProvider: resolvedTelemetryContextProvider
         )
     }
 
