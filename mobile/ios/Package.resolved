@@ -1,5 +1,5 @@
 {
-  "originHash" : "55a8eb9aeed6074f4bcf5fc9d758cb1bdd6394aef24d0724b17e8b393d05f47a",
+  "originHash" : "5e551ef327581c51c908c2bf145de0d29af462909b273d852ac2385a547c54f1",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/open-telemetry/opentelemetry-swift-core.git",
       "state" : {
-        "revision" : "84b9e341cbb7b4dd62cd1b89cd9e008995084132",
-        "version" : "2.4.1"
+        "revision" : "06f8a460a66f813758d22f09025d85df45450a63",
+        "version" : "2.5.1"
       }
     },
     {
