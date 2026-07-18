@@ -37,6 +37,7 @@
 		ISBF000000000000000020 /* SampleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000020 /* SampleTests.swift */; };
 		ISBF000000000000000021 /* InstantShareServicesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000022 /* InstantShareServicesTests.swift */; };
 		ISBF000000000000000022 /* InstantShareTrustUploadClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000023 /* InstantShareTrustUploadClientTests.swift */; };
+		ISBF000000000000000050 /* KeychainAppIdentityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000050 /* KeychainAppIdentityProviderTests.swift */; };
 		ISBF000000000000000030 /* SnapshotSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000030 /* SnapshotSupport.swift */; };
 		ISBF000000000000000031 /* InstantShareSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ISFR000000000000000031 /* InstantShareSnapshotTests.swift */; };
 /* End PBXBuildFile section */
@@ -110,6 +111,7 @@
 		ISFR000000000000000021 /* InstantShareTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InstantShareTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		ISFR000000000000000022 /* InstantShareServicesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InstantShareServicesTests.swift; sourceTree = "<group>"; };
 		ISFR000000000000000023 /* InstantShareTrustUploadClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InstantShareTrustUploadClientTests.swift; sourceTree = "<group>"; };
+		ISFR000000000000000050 /* KeychainAppIdentityProviderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeychainAppIdentityProviderTests.swift; sourceTree = "<group>"; };
 		ISFR000000000000000030 /* SnapshotSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnapshotSupport.swift; sourceTree = "<group>"; };
 		ISFR000000000000000031 /* InstantShareSnapshotTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InstantShareSnapshotTests.swift; sourceTree = "<group>"; };
 		ISFR000000000000000032 /* InstantShareSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InstantShareSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -216,6 +218,7 @@
 				ISFR000000000000000020 /* SampleTests.swift */,
 				ISFR000000000000000022 /* InstantShareServicesTests.swift */,
 				ISFR000000000000000023 /* InstantShareTrustUploadClientTests.swift */,
+				ISFR000000000000000050 /* KeychainAppIdentityProviderTests.swift */,
 			);
 			path = InstantShareTests;
 			sourceTree = "<group>";
@@ -405,6 +408,7 @@
 				ISBF000000000000000020 /* SampleTests.swift in Sources */,
 				ISBF000000000000000021 /* InstantShareServicesTests.swift in Sources */,
 				ISBF000000000000000022 /* InstantShareTrustUploadClientTests.swift in Sources */,
+				ISBF000000000000000050 /* KeychainAppIdentityProviderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
