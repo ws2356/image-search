@@ -147,9 +147,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3D61CD4A3002308400049FF8 /* ISFromPC in Frameworks */,
-				3D61CD493002308400049FF8 /* ISFromMobile in Frameworks */,
-				3D61CD483002308400049FF8 /* Common in Frameworks */,
+				3D61CD4C3002308400049FF8 /* ISFromPC in Frameworks */,
+				3D61CD4B3002308400049FF8 /* Common in Frameworks */,
+				3D802F2E2FF7FFC100A02CD7 /* ComposableArchitecture in Frameworks */,
+				3D802F302FF7FFC100A02CD7 /* Dependencies in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -303,6 +304,8 @@
 				ISPD000000000000000010 /* Common */,
 				ISPD000000000000000011 /* ISFromMobile */,
 				ISPD000000000000000012 /* ISFromPC */,
+				ISPD000000000000000006 /* ComposableArchitecture */,
+				ISPD000000000000000007 /* Dependencies */,
 			);
 			productName = InstantShareTests;
 			productReference = ISFR000000000000000021 /* InstantShareTests.xctest */;
