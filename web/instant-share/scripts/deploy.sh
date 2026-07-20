@@ -52,4 +52,4 @@ ssh "${ssh_target}" "sudo mv instant-share-relay.service /etc/systemd/system/ &&
 scp "${this_dir}/../../../dt_image_search/deploy/nginx/dl.boldman.conf" "${ssh_target}:"
 ssh "${ssh_target}" "sudo mv dl.boldman.conf /etc/nginx/conf.d/ && sudo nginx -s reload"
 
-echo "Deploy complete:"
+echo "Deploy completed!"

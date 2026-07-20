@@ -5,7 +5,9 @@ import { useWebRTC } from './hooks/useWebRTC';
 import { useTransfer, type FileProgress } from './hooks/useTransfer';
 import { ConnectingScreen } from './components/ConnectingScreen';
 import { ErrorScreen } from './components/ErrorScreen';
+import { WeChatScreen } from './components/WeChatScreen';
 import { log } from './lib/log';
+import { isWeChatWebview } from './lib/env';
 import { getCachedSession, cleanExpired } from './services/cache';
 import type { ManifestFileEntry } from './lib/protocol';
 
@@ -110,6 +112,11 @@ function AppContent() {
         <ReceiveScreen files={cached.files} manifest={cached.manifest} />
       </Suspense>
     );
+  }
+
+  if (isWeChatWebview()) {
+    log.warn('App: WeChat webview detected, aborting WebRTC flow');
+    return <WeChatScreen />;
   }
 
   return <OnlineFlow sessionId={params.sessionId} optCode={params.optCode} />;
