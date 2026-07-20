@@ -29,7 +29,7 @@ let package = Package(
         .package(url: "https://github.com/hmlongco/Factory.git", from: "2.4.12"),
         .package(url: "https://github.com/pointfreeco/swift-composable-architecture.git", from: "1.17.0"),
         .package(url: "https://github.com/pointfreeco/swift-identified-collections", from: "1.0.0"),
-        .package(url: "https://github.com/pointfreeco/swift-sharing", from: "2.9.0"),
+        .package(url: "https://github.com/pointfreeco/swift-sharing", from: "2.8.0"),
         .package(url: "https://github.com/pointfreeco/swift-case-paths", from: "1.8.0"),
         .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.12.0"),
     ],
