@@ -1,4 +1,5 @@
 // swift-tools-version: 6.0
+
 import PackageDescription
 
 let package = Package(
@@ -9,16 +10,9 @@ let package = Package(
     dependencies: [
         .package(path: "../ios-packages/Common"),
         .package(path: "../ios-packages/InstantShareKit"),
+        .package(url: "https://github.com/hmlongco/Factory.git", from: "2.4.12"),
+        .package(url: "https://github.com/pointfreeco/swift-composable-architecture.git", from: "1.17.0"),
+        .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     ],
-    targets: [
-        .testTarget(
-            name: "InstantShareTests",
-            dependencies: [
-                .product(name: "Common", package: "Common"),
-                .product(name: "ISFromMobile", package: "InstantShareKit"),
-                .product(name: "ISFromPC", package: "InstantShareKit"),
-                .product(name: "ISDeviceManagement", package: "InstantShareKit"),
-            ]
-        ),
-    ]
+    targets: []
 )

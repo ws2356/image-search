@@ -8,14 +8,12 @@
 import SwiftUI
 
 #if os(iOS)
-public struct UserInstructionView: View {
+struct UserInstructionView: View {
     @State private var showCopiedToast = false
-    
-    public init() {}
 
     private let downloadURL = "https://www.boldman.net/snapget.html#download"
 
-    public var body: some View {
+    var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 headerSection

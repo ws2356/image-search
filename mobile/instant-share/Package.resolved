@@ -1,5 +1,5 @@
 {
-  "originHash" : "a575781f343284303508ccf1d7a7db4e3b5828005b97b0fa7c057cf464a52adb",
+  "originHash" : "50f97280b98f4cf191372521e4f11e8c914060e429f8088fc4b35a61f7e46290",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-crypto.git",
       "state" : {
-        "revision" : "47d3869a7291f085c1fb9fb1e6d3b97a793f45c6",
-        "version" : "4.5.1"
+        "revision" : "1b6b2e274e85105bfa155183145a1dcfd63331f1",
+        "version" : "4.5.0"
       }
     },
     {
@@ -141,7 +141,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/swift-navigation",
       "state" : {
-        "revision" : "fad75807c596fecd724b0fc81cd61c94008faad4",
+        "revision" : "fad758011a12e550e4a907ed63e42c62e5649e60",
         "version" : "2.10.3"
       }
     },

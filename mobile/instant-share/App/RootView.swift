@@ -2,19 +2,20 @@ import SwiftUI
 import ISDeviceManagement
 import ISFromPC
 import ISFromMobile
+import ComposableArchitecture
 import Common
 
 @Reducer
-public struct RootFeature: Sendable {
+struct RootFeature: Sendable {
     @ObservableState
-    public struct State: Equatable {
+    struct State: Equatable {
         var deviceManagement: DeviceManagementFeature.State = .init()
         @Presents var sheetContent: ShareSheetContent?
         var hasCompletedSession: Bool = false
     }
 
     @CasePathable
-    public enum Action {
+    enum Action {
         case deviceManagement(DeviceManagementFeature.Action)
         case sheetContent(PresentationAction<Never>)
         case scanButtonTapped
@@ -25,9 +26,7 @@ public struct RootFeature: Sendable {
     @Dependency(\.sharedStorage) var sharedStorage
     @Dependency(\.identityClient) var identityClient
 
-    public init() {}
-
-    public var body: some ReducerOf<Self> {
+    var body: some ReducerOf<Self> {
         Scope(state: \.deviceManagement, action: \.deviceManagement) {
             DeviceManagementFeature()
         }
@@ -59,23 +58,18 @@ public struct RootFeature: Sendable {
     }
 }
 
-public struct QRSheetNavigator: Navigator {
-    public let dismiss: () -> Void
-
-    public init(dismiss: @escaping () -> Void) {
-        self.dismiss = dismiss
-    }
-
-    public func requestExit() {
+struct QRSheetNavigator: Navigator {
+    let dismiss: () -> Void
+    func requestExit() {
         dismiss()
     }
 }
 
-public enum ShareSheetContent: Equatable, Identifiable {
+enum ShareSheetContent: Equatable, Identifiable {
     case scan
     case claim(QRClaimPayload)
 
-    public var id: String {
+    var id: String {
         switch self {
         case .scan: return "scan"
         case .claim(let payload): return payload.id
@@ -83,14 +77,10 @@ public enum ShareSheetContent: Equatable, Identifiable {
     }
 }
 
-public struct RootView: View {
-    public let store: StoreOf<RootFeature>
+struct RootView: View {
+    let store: StoreOf<RootFeature>
 
-    public init(store: StoreOf<RootFeature>) {
-        self.store = store
-    }
-
-    public var body: some View {
+    var body: some View {
         WithPerceptionTracking {
             let sheetObserved = store.sheetContent
             NavigationView {

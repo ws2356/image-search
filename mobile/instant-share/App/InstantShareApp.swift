@@ -1,18 +1,20 @@
-import SwiftUI
 import Common
+import SwiftUI
 import ISFromPC
+import ComposableArchitecture
 
 @main
-struct AppWrapper: App {
-    let store: StoreOf<RootFeature> = Store(initialState: RootFeature.State()) {
-        RootFeature()
-    }
+struct InstantShareApp: App {
+    let store: StoreOf<RootFeature>
 
     init() {
+        self.store = Store(initialState: RootFeature.State()) {
+            RootFeature()
+        }
         FontRegistration.registerCustomFonts()
     }
 
-    public var body: some Scene {
+    var body: some Scene {
         WindowGroup {
             if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
                 Color.clear
