@@ -2,9 +2,36 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+should_clean=false
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --clean)
+            should_clean=true
+            shift
+            ;;
+        --help)
+            echo "Usage: $0 [--clean] [--help]"
+            echo "Runs the unit tests for the Instant Share app."
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+scheme=AlbumTransporterApp
+proj=AlbumTransporterApp.xcodeproj
+
+if [ "$should_clean" == true ] ; then
+    xcodebuild clean -scheme "$scheme" -skipMacroValidation
+fi
+
 xcodebuild test \
-    -project AlbumTransporterApp.xcodeproj \
-    -scheme AlbumTransporterApp \
+    -project "$proj" \
+    -scheme "$scheme" \
     -destination "platform=iOS Simulator,name=iPhone 17 Pro Max" \
     -skip-testing:AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests \
     -skipMacroValidation
