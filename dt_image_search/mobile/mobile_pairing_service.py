@@ -619,7 +619,7 @@ class MobilePairingService:
                     pairing_state=MobileBackupState.PAIRING_STOPPED,
                 )
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             desktop_device_id = get_or_create_desktop_device_id(conn)
             trust_key_b64 = derive_pairing_key_b64(
                 session_id=session_id,
@@ -1286,7 +1286,7 @@ class MobilePairingService:
         session_id: str,
         device_uuid: str | None = None,
     ) -> str | None:
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             if device_uuid is None:
                 transfer_context = get_mobile_transfer_context_by_session_id(
                     conn,

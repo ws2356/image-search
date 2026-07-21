@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 @testable import AlbumTransporterKit
+import Common
 
 final class PairingServiceTests: XCTestCase {
     func test_pairing_decoder_accepts_fractional_second_response_dates() throws {
@@ -79,7 +80,7 @@ final class PairingServiceTests: XCTestCase {
                 )
             ),
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -139,7 +140,7 @@ final class PairingServiceTests: XCTestCase {
                 )
             ),
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -198,7 +199,7 @@ final class PairingServiceTests: XCTestCase {
                 )
             ),
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -235,7 +236,7 @@ final class PairingServiceTests: XCTestCase {
                 )
             ),
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -281,7 +282,7 @@ final class PairingServiceTests: XCTestCase {
                 )
             ),
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -325,7 +326,7 @@ final class PairingServiceTests: XCTestCase {
         let service = DesktopBootstrapPairingService(
             bootstrapClient: bootstrapClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -385,7 +386,7 @@ final class PairingServiceTests: XCTestCase {
             bootstrapClient: lanClient,
             usbBootstrapClient: usbClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -434,7 +435,7 @@ final class PairingServiceTests: XCTestCase {
             bootstrapClient: lanClient,
             usbBootstrapClient: usbClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -493,7 +494,7 @@ final class PairingServiceTests: XCTestCase {
         let service = DesktopBootstrapPairingService(
             bootstrapClient: bootstrapClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -552,7 +553,7 @@ final class PairingServiceTests: XCTestCase {
         let service = DesktopBootstrapPairingService(
             bootstrapClient: bootstrapClient,
             identityProvider: StaticLocalDeviceIdentityProvider(
-                identity: LocalDeviceIdentity(
+                identity: LocalDeviceIdentifier(
                     installID: "install-001",
                     deviceUUID: "ios-device-001",
                     deviceName: "Alice iPhone",
@@ -719,10 +720,10 @@ private struct StaticCapabilityExchangeClient: MobileCapabilityExchangeClient {
     }
 }
 
-private struct StaticLocalDeviceIdentityProvider: LocalDeviceIdentityProviding {
-    let identity: LocalDeviceIdentity
+private struct StaticLocalDeviceIdentityProvider: LocalDeviceIdentifierProviding {
+    let identity: LocalDeviceIdentifier
 
-    func currentIdentity() async -> LocalDeviceIdentity {
+    func currentIdentifier() async -> LocalDeviceIdentifier {
         identity
     }
 }

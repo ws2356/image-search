@@ -3,6 +3,7 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 import XCTest
 @testable import AlbumTransporterKit
+import Common
 
 final class OTLPHTTPSpanExporterTests: XCTestCase {
     override func setUp() {
@@ -200,9 +201,9 @@ private final class SpanCaptureExporter: SpanExporter, @unchecked Sendable {
     }
 }
 
-private struct StaticSpanIdentityProvider: LocalDeviceIdentityProviding {
-    func currentIdentity() async -> LocalDeviceIdentity {
-        LocalDeviceIdentity(
+private struct StaticSpanIdentityProvider: LocalDeviceIdentifierProviding {
+    func currentIdentifier() async -> LocalDeviceIdentifier {
+        LocalDeviceIdentifier(
             installID: "install-001",
             deviceUUID: "ios-device-001",
             deviceName: "Test iPhone",

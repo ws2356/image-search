@@ -74,7 +74,7 @@ class BrowseController(BaseController):
     def on_folder_added(self, folder_path: str):
         log("debug", message=f"BrowseController/on_folder_added: adding folder {folder_path}")
         folder_path = normalized_folder_path(folder_path).replace('\\', '/')
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             parent_folder = match_parent_folder(conn, folder_path)
         if parent_folder and not is_same_folder_path(parent_folder.path, folder_path):
             log("debug", message=f"BrowseController/on_folder_added: found parent folder {parent_folder.path}")
@@ -89,7 +89,7 @@ class BrowseController(BaseController):
 
     def ensure_folder_registered(self, folder_path: str, *, insert_if_missing: bool = False, select_folder: bool = False) -> None:
         folder_path = normalized_folder_path(folder_path).replace('\\', '/')
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             folder = get_folder_by_path(conn, folder_path)
             if folder is None and insert_if_missing:
                 folder = insert_folder(conn, folder_path)
@@ -117,7 +117,7 @@ class BrowseController(BaseController):
             existing_item = self.folder_list_model().find_folder_item(folder_path)
             if existing_item is not None and self.folder_list_model().is_top_level_folder_item(existing_item):
                 return existing_item
-            with create_db_conn(ctx=self.ctx) as conn:
+            with create_db_conn() as conn:
                 folder = get_folder_by_path(conn, folder_path)
             if folder is None:
                 return None
@@ -150,7 +150,7 @@ class BrowseController(BaseController):
 
         containing_root = self.folder_list_model().get_containing_root_folder(folder_path)
         if containing_root is None:
-            with create_db_conn(ctx=self.ctx) as conn:
+            with create_db_conn() as conn:
                 folder = get_folder_by_path(conn, folder_path)
             if folder is None:
                 return None
@@ -206,7 +206,7 @@ class BrowseController(BaseController):
         self._refresh_mobile_transfer_states()
 
     def _load_folders(self) -> list[str]:
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             folders = get_all_folders(conn)
             mobile_folder_paths = set(get_mobile_folder_transfer_states(conn).keys())
             # sort folders asc
@@ -351,7 +351,7 @@ class BrowseController(BaseController):
         self.image_list_model().load_images_from_folder(self._selected_folder_path)
 
     def _refresh_mobile_transfer_states(self) -> None:
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             persisted_states_by_path = get_mobile_folder_transfer_states(conn)
             summaries_by_path = get_mobile_folder_summaries_by_path(conn)
         mobile_folder_paths = {

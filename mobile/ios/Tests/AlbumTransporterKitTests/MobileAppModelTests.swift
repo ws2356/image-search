@@ -1,6 +1,7 @@
 import XCTest
 import Combine
 @testable import AlbumTransporterKit
+import Common
 
 struct LaunchSnapshot: Sendable {
     var backupSession: BackupSession?
@@ -301,6 +302,7 @@ final class MobileAppModelTests: XCTestCase {
             contextProvider: resolvedTelemetryContextProvider
         )
         let backupSessionProvider = AppStateStoreBackedBackupSessionProvider(store: stateStore)
+        let localDeviceIdProvoder = LocalDeviceIdentifierStore(userDefaults: .standard, installIDKey: LocalDeviceIdentifierStore.installIDKey, deviceUUIDKey: LocalDeviceIdentifierStore.deviceUUIDKey)
         return MobileAppModel(
             backupSessionProvider: backupSessionProvider,
             qrCodePayloadDecoder: qrCodePayloadDecoder,
@@ -1324,7 +1326,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
         XCTAssertEqual(model.route, .scan)
 
-        await scanningViewModel.backTapped()
+        await scanningViewModel.onBackTapped()
         XCTAssertEqual(model.route, .home)
     }
 
@@ -1346,7 +1348,7 @@ final class MobileAppModelTests: XCTestCase {
         await model.openScanFlow()
         XCTAssertEqual(model.route, .scan)
 
-        await scanningViewModel.openSettingsTapped()
+        await scanningViewModel.onOpenSettingsTapped()
         XCTAssertEqual(model.route, .home)
     }
 

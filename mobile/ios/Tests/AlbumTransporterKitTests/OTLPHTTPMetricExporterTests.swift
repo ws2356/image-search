@@ -3,6 +3,7 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 import XCTest
 @testable import AlbumTransporterKit
+import Common
 
 final class OTLPHTTPMetricExporterTests: XCTestCase {
     override func setUp() {
@@ -186,9 +187,9 @@ private final class MetricCapturingURLProtocol: URLProtocol {
     }
 }
 
-private struct StaticMetricIdentityProvider: LocalDeviceIdentityProviding {
-    func currentIdentity() async -> LocalDeviceIdentity {
-        LocalDeviceIdentity(
+private struct StaticMetricIdentityProvider: LocalDeviceIdentifierProviding {
+    func currentIdentifier() async -> LocalDeviceIdentifier {
+        LocalDeviceIdentifier(
             installID: "install-001",
             deviceUUID: "ios-device-001",
             deviceName: "Test iPhone",

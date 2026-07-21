@@ -3,11 +3,11 @@ import logging
 import os
 from importlib.resources import files
 from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.bm_context import get_context, BMContext
+from dt_image_search.bm_context import BMContext
 
 def get_config() -> dict:
     config = _read_build_vars_from_resource()
-    config_path = get_app_data_path(get_context()) / "config.json"
+    config_path = get_app_data_path() / "config.json"
     if config_path.exists():
         with open(config_path, "r", encoding="utf-8") as f:
             file_config = json.load(f)
@@ -17,7 +17,7 @@ def get_config() -> dict:
 
 
 def _read_build_vars_from_resource() -> dict:
-    resource_path = files("dt_image_search").joinpath("resources", "build_vars")
+    resource_path = files("dt_image_search.resources").joinpath("build_vars")
     if not resource_path.is_file():
         return {}
     try:
@@ -73,6 +73,22 @@ def is_strict_security_feature_enabled(default: bool = False) -> bool:
     if "strict_security.enabled" in config:
         return _as_bool(config.get("strict_security.enabled"), default)
     return default
+
+
+def is_instant_share_feature_enabled(default: bool = False) -> bool:
+    config = get_config()
+    instant_share_config = config.get("instant_share")
+    if isinstance(instant_share_config, dict) and "enabled" in instant_share_config:
+        return _as_bool(instant_share_config.get("enabled"), default)
+    if "instant_share.enabled" in config:
+        return _as_bool(config.get("instant_share.enabled"), default)
+    return default
+
+
+def get_signal_relay_url() -> str:
+    config = get_config()
+    relay = config.get("signal_relay_url", "").strip()
+    return relay or "wss://dl.boldman.net/relay"
 
 
 def _as_bool(value, default: bool) -> bool:

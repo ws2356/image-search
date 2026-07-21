@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.browse.BrowseController import BrowseController
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_store import (
     MOBILE_BACKUP_SESSION_STATUS_COMPLETED,
     MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,
@@ -50,7 +51,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -59,7 +60,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             folder_path = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
             folder_path.mkdir(parents=True, exist_ok=True)
             updated_at = datetime.now(timezone.utc).isoformat()
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 folder = insert_folder(conn, folder_path.as_posix())
                 self.assertIsNotNone(folder)
                 conn.execute(
@@ -102,14 +103,14 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
     def test_ensure_folder_registered_reveals_mobile_child_under_existing_root(self):
         destination_parent = (Path(self._temp_dir.name) / "Mobile Backups").resolve()
         destination_parent.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             insert_folder(conn, destination_parent.as_posix())
 
         with self._controller_context() as (controller, add_folder_mock, add_index_worker_mock):
             folder_path = (destination_parent / "Alice iPhone").resolve()
             folder_path.mkdir(parents=True, exist_ok=True)
             updated_at = datetime.now(timezone.utc).isoformat()
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 folder = insert_folder(conn, folder_path.as_posix())
                 self.assertIsNotNone(folder)
                 conn.execute(
@@ -155,7 +156,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
         self.assertFalse(folder_path.exists())
 
         updated_at = datetime.now(timezone.utc).isoformat()
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             parent_folder = insert_folder(conn, destination_parent.as_posix())
             self.assertIsNotNone(parent_folder)
             folder = insert_folder(conn, folder_path.as_posix())
@@ -198,7 +199,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
         folder_path.mkdir(parents=True, exist_ok=True)
         updated_at = datetime.now(timezone.utc).isoformat()
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             folder = insert_folder(conn, folder_path.as_posix())
             self.assertIsNotNone(folder)
             conn.execute(
@@ -264,7 +265,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_LAST_BACKUP_AT_ROLE))
 
             completed_at = datetime.now(timezone.utc).isoformat()
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 conn.execute(
                     """
                     UPDATE mobile_folders
@@ -298,7 +299,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
         folder_path.mkdir(parents=True, exist_ok=True)
         updated_at = datetime.now(timezone.utc).isoformat()
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             folder = insert_folder(conn, folder_path.as_posix())
             self.assertIsNotNone(folder)
             conn.execute(
@@ -355,7 +356,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertFalse(controller._mobile_transfer_status_timer.isActive())
             self.assertIsNone(folder_item.data(controller.folder_list_model().MOBILE_TRANSFER_STATE_ROLE))
 
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 conn.execute(
                     """
                     UPDATE mobile_folders
@@ -393,7 +394,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
     def test_folder_tree_is_flat_when_mobile_folder_feature_is_disabled(self):
         root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
 
@@ -411,7 +412,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
         root_folder.mkdir(parents=True, exist_ok=True)
         child_folder = (root_folder / "2026-04").resolve()
         child_folder.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
 
@@ -433,7 +434,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
     def test_folder_tree_forwards_subfolder_insert_and_remove_without_model_reset(self):
         root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
 
@@ -467,7 +468,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
         root_folder.mkdir(parents=True, exist_ok=True)
         child_folder = (root_folder / "2026-04").resolve()
         child_folder.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
 
@@ -487,7 +488,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
     def test_direct_image_changes_reload_image_list_once_per_debounce_window(self):
         root_folder = (Path(self._temp_dir.name) / "Desktop Photos").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
 
@@ -519,7 +520,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             child_folder = (root_folder / month).resolve()
             child_folder.mkdir(parents=True, exist_ok=True)
             child_folders.append(child_folder)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
 
@@ -557,7 +558,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
         (root_folder / ".git").mkdir(parents=True, exist_ok=True)
         for child_name in ("assets", "deployment", "scripts"):
             (root_folder / child_name).mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
 
@@ -578,7 +579,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
     def test_mobile_root_moves_between_sections_without_model_reset(self):
         root_folder = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
             folder_id = int(inserted_folder.id)
@@ -593,7 +594,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             reset_spy = QSignalSpy(model.modelReset)
 
             updated_at = datetime.now(timezone.utc).isoformat()
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 conn.execute(
                     """
                     INSERT INTO mobile_devices (
@@ -621,7 +622,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
             self.assertEqual(reset_spy.count(), 0)
             self.assertEqual(folder_item.parent().text(), "MOBILE")
 
-            with create_db_conn(ctx=self._ctx) as conn:
+            with create_db_conn() as conn:
                 conn.execute("DELETE FROM mobile_folders WHERE folder_id = ?", (folder_id,))
                 conn.execute("DELETE FROM mobile_devices WHERE device_uuid = ?", ("device-move-001",))
                 conn.commit()
@@ -635,7 +636,7 @@ class TestBrowseControllerMobileFolder(unittest.TestCase):
         root_folder = (Path(self._temp_dir.name) / "Alice iPhone").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
         updated_at = datetime.now(timezone.utc).isoformat()
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             inserted_folder = insert_folder(conn, root_folder.as_posix())
             self.assertIsNotNone(inserted_folder)
             conn.execute(

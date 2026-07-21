@@ -35,11 +35,10 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractI
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from dt_image_search.build_flavor import get_build_type
-
-QCoreApplication.setOrganizationName("net.boldman")
 _build_type = get_build_type()
-_app_display_name = "imagesearch-dev" if _build_type == "dev" else "imagesearch"
-QCoreApplication.setApplicationName(_app_display_name)
+from dt_image_search.app_setting import initialize_app_settings
+
+initialize_app_settings(app_name="imagesearch")
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache
@@ -90,7 +89,7 @@ def _crash_support_log(severity: str, error_type: str = "", message: str = "", w
     log(severity, error_type=error_type, message=message, where=where)
 
 
-_crash_recovery = CrashRecoveryManager(get_app_data_path(ctx), _crash_support_log)
+_crash_recovery = CrashRecoveryManager(get_app_data_path(), _crash_support_log)
 
 
 def _load_application_icon() -> QIcon:
@@ -164,7 +163,7 @@ def _activation_server_name(ctx: BMContext) -> str:
 def acquire_single_instance_lock(ctx: BMContext) -> bool:
     global _app_lock
 
-    lock_path = str(get_app_data_path(ctx) / "app_instance.lock")
+    lock_path = str(get_app_data_path() / "app_instance.lock")
     _app_lock = QLockFile(lock_path)
     # Keep stale detection tied to process lifetime for this long-running GUI app.
     _app_lock.setStaleLockTime(0)
@@ -819,6 +818,9 @@ def main():
         threading.excepthook = handle_threading_exception
 
     initialize_feature_flags()
+
+    from dt_image_search.identity import initialize_device_identity
+    initialize_device_identity()
 
     app = QApplication(sys.argv)
     app_icon = _load_application_icon()

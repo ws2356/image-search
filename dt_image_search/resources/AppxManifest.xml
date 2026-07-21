@@ -1,6 +1,15 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10" xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap desktop desktop2 rescap">
-    <Identity Name="WS2356Original.AIImageViewer" Publisher="CN=6B7B4C3A-1C14-4AAB-984C-D80695D0FB64" ProcessorArchitecture="x64" Version="1.2.0.0" />
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap desktop desktop2 rescap">
+    <Identity Name="WS2356Original.AIImageViewer"
+              Publisher="CN=6B7B4C3A-1C14-4AAB-984C-D80695D0FB64"
+              ProcessorArchitecture="x64"
+              Version="1.2.0.0" />
     <Properties>
         <DisplayName>AuSearch</DisplayName>
         <PublisherDisplayName>WS2356 Original</PublisherDisplayName>
@@ -8,21 +17,30 @@
     </Properties>
     <Dependencies>
         <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19045.6332" MaxVersionTested="12.0.0.0" />
-        <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop" MinVersion="14.0.27323.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+        <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop"
+                          MinVersion="14.0.27323.0"
+                          Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
     </Dependencies>
     <Resources>
         <Resource Language="en-US" />
-        <!-- Add others as needed -->
     </Resources>
     <Applications>
         <Application Id="DTImageSearch" Executable="AuSearch\AuSearch.exe" EntryPoint="Windows.FullTrustApplication">
-            <uap:VisualElements DisplayName="AuSearch" Description="Image search application" Square150x150Logo="icon.png" Square44x44Logo="icon.png" BackgroundColor="transparent" />
+            <uap:VisualElements DisplayName="AuSearch"
+                               Description="Image search application"
+                               Square150x150Logo="icon.png"
+                               Square44x44Logo="icon.png"
+                               BackgroundColor="transparent" />
             <Extensions>
                 <desktop:Extension Category="windows.fullTrustProcess" />
             </Extensions>
         </Application>
     </Applications>
     <Extensions>
+        <!--
+          Firewall rule: allows incoming TCP connections on any port, needed by
+          the instant share HTTP bootstrap server for mobile device pairing.
+        -->
         <desktop2:Extension Category="windows.firewallRules">
             <desktop2:FirewallRules Executable="AuSearch\AuSearch.exe">
                 <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="all" />
@@ -30,8 +48,22 @@
         </desktop2:Extension>
     </Extensions>
     <Capabilities>
+        <!--
+          internetClient: outbound HTTP/HTTPS — used by telemetry, model
+          downloads, and app update checking.
+        -->
         <Capability Name="internetClient" />
+
+        <!--
+          privateNetworkClientServer: local network access — used by mDNS
+          service advertising and the HTTP bootstrap server on the LAN.
+        -->
         <Capability Name="privateNetworkClientServer" />
+
+        <!--
+          runFullTrust: required for the PyInstaller-packaged desktop app to
+          run outside the MSIX app container sandbox.
+        -->
         <rescap:Capability Name="runFullTrust" />
     </Capabilities>
 </Package>

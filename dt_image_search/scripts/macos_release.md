@@ -1,6 +1,6 @@
 # macOS Release Guide
 
-End-to-end workflow for building and distributing a signed, notarized AuSearch DMG.
+End-to-end workflow for building and distributing a signed, notarized AuSearch PKG installer.
 
 ---
 
@@ -9,6 +9,7 @@ End-to-end workflow for building and distributing a signed, notarized AuSearch D
 | What | Where / How |
 |---|---|
 | Developer ID Application certificate | Keychain Access — note the exact name, e.g. `Developer ID Application: First Last (TEAMID)` |
+| Developer ID Installer certificate | Keychain Access — note the exact name, e.g. `Developer ID Installer: First Last (TEAMID)` |
 | App-specific password | <https://appleid.apple.com/account/manage> → App-Specific Passwords |
 | Apple Team ID | [developer.apple.com/account](https://developer.apple.com/account) → Membership |
 | Python 3.10 venv | `source /path/to/.venv_python3.10/bin/activate` |
@@ -17,6 +18,7 @@ Export these before running any distribution step:
 
 ```bash
 export DEVELOPER_ID_IDENTITY="Developer ID Application: First Last (TEAMID)"
+export DEVELOPER_ID_INSTALLER="Developer ID Installer: First Last (TEAMID)"
 export APPLE_ID="you@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
 export APPLE_TEAM_ID="ABCDE12345"
@@ -42,21 +44,19 @@ bash dt_image_search/scripts/build_pyinstaller.sh --build-type prod
 
 ## Step 2 — Full distribution pipeline (recommended)
 
-`distribute_macos.sh` runs all remaining steps in order:
-**codesign → package & sign DMG → notarize → staple**.
+`create_distributable_pkg.sh` runs all remaining steps in order:
+**codesign → package & sign PKG → notarize → staple**.
 
 ```bash
-bash dt_image_search/scripts/distribute_macos.sh \
-    --app-path pyinstaller-dist-prod/AuSearch.app \
-    --output   dist/AuSearch-1.2.3.dmg
+bash dt_image_search/scripts/create_distributable_pkg.sh \
+    --app-path pyinstaller-dist-prod/AuSearch.app
 ```
 
 Use `--skip-notarize` to build and sign locally without submitting to Apple:
 
 ```bash
-bash dt_image_search/scripts/distribute_macos.sh \
+bash dt_image_search/scripts/create_distributable_pkg.sh \
     --app-path pyinstaller-dist-prod/AuSearch.app \
-    --output   dist/AuSearch-1.2.3.dmg \
     --skip-notarize
 ```
 
@@ -76,26 +76,24 @@ bash dt_image_search/scripts/codesign_app.sh \
 
 Entitlements: `dt_image_search/scripts/AuSearch.entitlements`
 
-### 2b — Package and sign the DMG
+### 2b — Package and sign the PKG
 
-Creates a compressed DMG (.app + /Applications symlink) and codesigns it.
-**The DMG must be signed before submitting to Apple for notarization.**
+Creates a signed distribution PKG (.app + LaunchAgent postinstall script).
 
 ```bash
-bash dt_image_search/scripts/package_dmg.sh \
-    --app-path pyinstaller-dist-prod/AuSearch.app \
-    --output   dist/AuSearch-1.2.3.dmg
-# identity read from $DEVELOPER_ID_IDENTITY
+bash dt_image_search/scripts/build_pkg.sh \
+    --app-path pyinstaller-dist-prod/AuSearch.app
+# installer identity read from $DEVELOPER_ID_INSTALLER
 ```
 
 ### 2c — Notarize
 
-Submits the **signed** DMG to Apple and waits for an `Accepted` result.
+Submits the **signed** PKG to Apple and waits for an `Accepted` result.
 The Apple rejection log is printed automatically on failure.
 
 ```bash
 bash dt_image_search/scripts/notarize.sh \
-    --dmg-path dist/AuSearch-1.2.3.dmg
+    --pkg-path pyinstaller-dist-prod/AuSearch.pkg
 # requires APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
 ```
 
@@ -106,9 +104,32 @@ Typical turnaround: 1–5 minutes.
 Embeds the notarization ticket so users can verify offline.
 
 ```bash
-bash dt_image_search/scripts/staple_dmg.sh \
-    --dmg-path dist/AuSearch-1.2.3.dmg
+bash dt_image_search/scripts/staple_pkg.sh \
+    --pkg-path pyinstaller-dist-prod/AuSearch.pkg
 ```
+
+---
+
+## What the PKG installer does
+
+When the user runs the PKG:
+
+1. **Copies `AuSearch.app` to `/Applications/`**
+2. **Installs a LaunchAgent** at `~/Library/LaunchAgents/net.boldman.ausearch.instantshare.plist`
+3. **Immediately starts the daemon** for the current console user via `launchctl bootstrap`
+4. **LaunchAgent auto-starts** the instant share daemon at every subsequent login
+
+The LaunchAgent runs `AuSearch --daemon`, which starts the mDNS advertiser,
+bootstrap HTTP server, and Qt mini window factory — with **no visible window**
+until a mobile device connects.
+
+### Requested permissions
+
+| Permission | How it's granted |
+|---|---|
+| Local network access (mDNS + HTTP) | `com.apple.security.network.server` and `com.apple.security.network.multicast` entitlements; `NSLocalNetworkUsageDescription` in Info.plist (system shows a one-time dialog) |
+| Internet access (telemetry) | `com.apple.security.network.client` entitlement |
+| Apple Events (Finder integration) | `com.apple.security.automation.apple-events` entitlement |
 
 ---
 
@@ -140,9 +161,8 @@ bundle without redoing the whole signing + notarization chain.
 3. **Re-run the full distribution pipeline:**
 
    ```bash
-   bash dt_image_search/scripts/distribute_macos.sh \
-       --app-path pyinstaller-dist-prod/AuSearch.app \
-       --output   dist/AuSearch-<version>.dmg
+   bash dt_image_search/scripts/create_distributable_pkg.sh \
+       --app-path pyinstaller-dist-prod/AuSearch.app
    ```
 
 ---
@@ -156,6 +176,7 @@ bundle without redoing the whole signing + notarization chain.
 | `notarize.sh` exits non-zero, prints Apple log | Fix the issues listed in the log (usually unsigned nested binary or missing entitlement), then re-run from step 2a. |
 | `stapler validate` fails | Notarization not yet complete. Re-run `notarize.sh` first. |
 | macOS firewall prompt blocks the server | Users must click **Allow**. Entitlements do not suppress this prompt. |
+| LaunchAgent not loaded after install | Check `~/Library/LaunchAgents/net.boldman.ausearch.instantshare.plist` exists; manually run `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.boldman.ausearch.instantshare.plist` |
 
 ---
 
@@ -166,20 +187,21 @@ bundle without redoing the whole signing + notarization chain.
 - [ ] App launches and connects to iPhone on a clean macOS account
 - [ ] `codesign --verify --deep --strict AuSearch.app` exits 0
 - [ ] `spctl --assess --type execute AuSearch.app` exits 0 (after notarization)
-- [ ] DMG mounts and drag-to-/Applications works on a test machine
+- [ ] PKG installs and LaunchAgent starts on a test machine
+- [ ] Instant share daemon runs without any visible window until mobile connects
 
 ---
 
 ## Create GitHub release via CLI
 
-After you have the final DMG, create (or update) a GitHub release and upload the DMG asset:
+After you have the final PKG, create (or update) a GitHub release and upload the PKG asset:
 
 ```bash
 bash dt_image_search/scripts/create_github_release.sh \
     --tag v1.2.3 \
     --title "AuSearch v1.2.3" \
     --notes-file ./release-notes.md \
-    --dmg-path ./pyinstaller-dist-prod/AuSearch.dmg
+    --pkg-path ./pyinstaller-dist-prod/AuSearch.pkg
 ```
 
 You can also pass release notes inline with `--notes "..."`.

@@ -2,6 +2,7 @@ import SwiftUI
 import Foundation
 import Factory
 import UIKit
+import Common
 
 @MainActor
 public struct AlbumTransporterRootView: View {
@@ -125,8 +126,6 @@ public struct AlbumTransporterRootView: View {
             NavigationStack {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .navigationTitle(model.navigationTitle)
-                    .navigationBarTitleDisplayMode(.inline)
                     .toolbarBackground(.visible, for: .navigationBar)
                     .toolbarBackground(navigationBarBackground, for: .navigationBar)
                     .toolbarColorScheme(.light, for: .navigationBar)
@@ -135,8 +134,6 @@ public struct AlbumTransporterRootView: View {
             NavigationView {
                 currentScreen
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .navigationTitle(model.navigationTitle)
-                    .navigationBarTitleDisplayMode(.inline)
             }
             .navigationViewStyle(.stack)
         }
@@ -153,6 +150,12 @@ public struct AlbumTransporterRootView: View {
                 telemetryService: container.telemetryService()
             )
             ScanningPageView(viewModel: scanningViewModel)
+        case .genericScan:
+            let genericScanViewModel = GenericQRScanPageViewModel(
+                model: model,
+                telemetryService: container.telemetryService()
+            )
+            GenericQRScanView(viewModel: genericScanViewModel)
         case .pair:
             PairingStatusView(viewModel: pairingViewModel)
         case .permissions:
@@ -162,11 +165,13 @@ public struct AlbumTransporterRootView: View {
         case .completed:
             CompletionStateView(viewModel: completionViewModel)
         case .error(_):
-            let errorViewModel = ErrorPageViewModel(
-                model: model,
-                telemetryService: container.telemetryService()
-            )
-            ErrorStateView(viewModel: errorViewModel)
+            let errorViewModelFactory = {
+                BackupErrorPageViewModel(
+                    model: model,
+                    telemetryService: container.telemetryService()
+                )
+            }
+            ErrorStateView(viewModelFactory: errorViewModelFactory)
         }
     }
 

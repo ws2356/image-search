@@ -22,6 +22,7 @@ class TestRuntimeMetadata(unittest.TestCase):
     def test_resolve_service_version_debug_is_empty(self, _mock_is_debug):
         self.assertEqual(runtime_metadata.resolve_service_version(), '')
 
+    @unittest.skipIf(sys.platform != 'win32', 'Windows-only test: requires AppxManifest.xml')
     @patch('dt_image_search.tools.dt_is_debug.is_debug', return_value=False)
     def test_resolve_service_version_from_manifest(self, _mock_is_debug):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -37,6 +38,7 @@ class TestRuntimeMetadata(unittest.TestCase):
             with patch.object(runtime_metadata, '_candidate_manifest_paths', return_value=[manifest_path]):
                 self.assertEqual(runtime_metadata.resolve_service_version(), '2.3.4.5')
 
+    @unittest.skipIf(sys.platform != 'win32', 'Windows-only test: requires AppxManifest.xml')
     @patch('dt_image_search.tools.dt_is_debug.is_debug', return_value=False)
     def test_resolve_service_version_returns_empty_on_parse_failure(self, _mock_is_debug):
         with tempfile.TemporaryDirectory() as tmpdir:

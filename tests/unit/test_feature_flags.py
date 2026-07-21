@@ -153,6 +153,12 @@ class TestFeatureFlags(unittest.TestCase):
         self.assertFalse(feature_flags._extract_strict_security_enabled({"strict_security": {"enabled": "false"}}))
         self.assertIsNone(feature_flags._extract_strict_security_enabled({"other_flag": {"enabled": True}}))
 
+    def test_extract_instant_share_enabled_supports_bool_and_string_values(self):
+        self.assertTrue(feature_flags._extract_instant_share_enabled({"instant_share": {"enabled": True}}))
+        self.assertTrue(feature_flags._extract_instant_share_enabled({"instant_share": {"enabled": "true"}}))
+        self.assertFalse(feature_flags._extract_instant_share_enabled({"instant_share": {"enabled": "false"}}))
+        self.assertIsNone(feature_flags._extract_instant_share_enabled({"other_flag": {"enabled": True}}))
+
     def test_is_encryption_enabled_falls_back_to_config_when_no_cache(self):
         store = feature_flags._FeatureFlagStore()
         with (
@@ -234,6 +240,37 @@ class TestFeatureFlags(unittest.TestCase):
             store._refresh_worker()
 
         self.assertTrue(store.is_strict_security_enabled())
+
+    def test_is_instant_share_enabled_defaults_to_disabled(self):
+        store = feature_flags._FeatureFlagStore()
+        with patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value=None), patch.object(
+            feature_flags, "is_instant_share_feature_enabled", return_value=False
+        ):
+            self.assertFalse(store.is_instant_share_enabled())
+
+    def test_is_instant_share_enabled_prefers_cached_remote_payload(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(feature_flags, "_load_cached_feature_flags_payload", return_value={"instant_share": {"enabled": True}}),
+            patch.object(feature_flags, "is_instant_share_feature_enabled", return_value=False) as config_mock,
+        ):
+            self.assertTrue(store.is_instant_share_enabled())
+
+        config_mock.assert_not_called()
+
+    def test_refresh_worker_updates_instant_share_flag_from_remote_payload(self):
+        store = feature_flags._FeatureFlagStore()
+        with (
+            patch.object(
+                feature_flags,
+                "_fetch_feature_flags_payload",
+                return_value={"instant_share": {"enabled": True}},
+            ),
+            patch.object(feature_flags, "_save_cached_feature_flags_payload"),
+        ):
+            store._refresh_worker()
+
+        self.assertTrue(store.is_instant_share_enabled())
 
     def test_extract_desktop_root_trace_sample_rate_clamps_values(self):
         self.assertEqual(

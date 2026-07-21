@@ -34,7 +34,7 @@ _parent_folder_watch_map: dict[str, int] = {}
 
 def start_watch(ctx: BMContext):
     def _observer_thread():
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             for folder in get_all_folders(conn):
                 add_folder(folder.path)
 

@@ -11,7 +11,6 @@ import sys
 import tempfile
 from typing import Callable
 
-from dt_image_search.bm_context import get_context
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.telemetry.telemetry_client import log
 
@@ -372,7 +371,7 @@ def _create_temp_dir() -> str:
 
 
 def _create_installer_log_path() -> Path:
-    log_dir = get_app_data_path(get_context()) / "logs"
+    log_dir = get_app_data_path() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         prefix="apple-mobile-support-install-",

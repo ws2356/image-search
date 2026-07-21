@@ -1,0 +1,39 @@
+import Common
+
+@MainActor
+class BackupErrorPageViewModel: ErrorPageViewDelegate {
+    private let model: any AppPageModeling
+    private let telemetryService: TelemetryService
+
+    init(model: any AppPageModeling, telemetryService: TelemetryService) {
+        self.model = model
+        self.telemetryService = telemetryService
+    }
+    
+    var title: String {
+        return summary.title
+    }
+    
+    var message: String {
+        return summary.message
+    }
+
+    var summary: ErrorSummary {
+        guard case .error(let summary) = model.route else {
+            return .generic
+        }
+        return summary
+    }
+
+    func retryTapped() async {
+        telemetryService.recordInteraction(name: "retry_tapped", location: "error")
+        let result = ErrorPageResult(result: .success(()))
+        await model.onErrorCompleted(with: result)
+    }
+
+    func cancelTapped() async {
+        telemetryService.recordInteraction(name: "cancel_tapped", location: "error")
+        let result = ErrorPageResult(result: .failure(.unknown))
+        await model.onErrorCompleted(with: result)
+    }
+}

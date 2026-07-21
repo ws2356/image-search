@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Combine
+import Common
 
 @MainActor
 final class MobileAppModel: ObservableObject {
@@ -77,10 +78,35 @@ final class MobileAppModel: ObservableObject {
     
     func onHomeCompleted(with result: HomePageResult) async {
         switch result.result {
-        case .success:
-            await openScanFlow()
+        case .success(let target):
+            switch target {
+            case .backupScan:
+                await openScanFlow()
+            case .genericScan:
+                route = .genericScan
+            }
         case .failure:
             break
+        }
+    }
+
+    func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async {
+        switch result.result {
+        case .success(let qrString):
+            beginBackupSessionTelemetry()
+            await showPairingPage(qrString: qrString)
+        case .failure(.cancel):
+            await returnHome()
+        case .failure(.scannerFailed):
+            presentErrorSummary(
+                title: "Scanner failed",
+                message: "The camera scanner couldn't continue. Try again or return home."
+            )
+        case .failure:
+            presentErrorSummary(
+                title: "Scanner error",
+                message: "An unexpected error occurred. Try again or return home."
+            )
         }
     }
 
@@ -235,31 +261,14 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
-    var navigationTitle: String {
-        switch route {
-        case .home:
-            return "AuBackup"
-        case .scan:
-            return "Scan QR"
-        case .pair:
-            return "Pairing"
-        case .permissions:
-            return "Permissions"
-        case .transfer:
-            return "Backup in Progress"
-        case .completed:
-            return "Backup Complete"
-        case .error(_):
-            return "Backup Error"
-        }
-    }
-
     var routeName: String {
         switch route {
         case .home:
             return "home"
         case .scan:
             return "scan"
+        case .genericScan:
+            return "generic_scan"
         case .pair:
             return "pair"
         case .permissions:
@@ -279,6 +288,7 @@ final class MobileAppModel: ObservableObject {
         }
 
         hasLoaded = true
+        
         await backupSessionProvider.load()
         await permissionService.setRemoveAfterBackupEnabled(false)
         let backupSession = backupSessionProvider.currentBackupSession
@@ -299,7 +309,9 @@ final class MobileAppModel: ObservableObject {
         // Process any universal link that arrived before load completed.
         if let pendingPayload = pendingIncomingUniversalLinkPayload {
             pendingIncomingUniversalLinkPayload = nil
-            await processIncomingUniversalLinkPayload(pendingPayload)
+            if let url = URL(string: pendingPayload) {
+                await handleIncomingUniversalLink(url)
+            }
         }
 
         let pairingService = pairingService
@@ -323,6 +335,8 @@ final class MobileAppModel: ObservableObject {
         guard isSupportedUniversalLink(url) else {
             return
         }
+
+        // Otherwise treat as pairing universal link
         let payload = url.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !payload.isEmpty else {
             return
@@ -964,4 +978,15 @@ final class MobileAppModel: ObservableObject {
         }
     }
 
+    // MARK: - First Launch Detection
+
+    private static let hasLaunchedBeforeKey = "hasLaunchedBefore"
+
+    private func isFirstLaunchAfterInstallation() -> Bool {
+        return !UserDefaults.standard.bool(forKey: Self.hasLaunchedBeforeKey)
+    }
+
+    private func markFirstLaunchCompleted() {
+        UserDefaults.standard.set(true, forKey: Self.hasLaunchedBeforeKey)
+    }
 }

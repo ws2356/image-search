@@ -216,7 +216,7 @@ class TestAppFlow(unittest.TestCase):
 
     def test_app_flow(self):
         # 1. Connect to database
-        with dts_db.create_db_conn(self.ctx) as conn:
+        with dts_db.create_db_conn() as conn:
             # 2. Add a folder to the index
             folder_path = "/path/to/images"
             folder = dts_db.insert_folder(conn, folder_path)
@@ -253,7 +253,7 @@ class TestAppFlow(unittest.TestCase):
         self.mock_model.encode_image.return_value = mock_features
         
         # 5. Build index
-        index_path = dts_index.index_path_for_folder(self.ctx, folder)
+        index_path = dts_index.index_path_for_folder(folder)
         # Patch only dts_index's os.path.exists to avoid recursive global patching in logging internals.
         real_exists = dts_index.os.path.exists
         with patch.object(
@@ -266,7 +266,7 @@ class TestAppFlow(unittest.TestCase):
                 self.assertTrue(progress['batch_result'])
         
         # 6. Verify files are marked as indexed in DB
-        with dts_db.create_db_conn(self.ctx) as conn:
+        with dts_db.create_db_conn() as conn:
             pending_files_after = dts_db.get_pending_files_for_folder(conn, folder.id)
             self.assertEqual(len(pending_files_after), 0)
             

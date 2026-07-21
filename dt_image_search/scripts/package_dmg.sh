@@ -37,6 +37,14 @@ fi
 [[ -z "$APP_PATH"   ]] && { echo "Error: --app-path is required" >&2; exit 1; }
 [[ -d "$APP_PATH"   ]] || { echo "Error: .app not found: $APP_PATH" >&2; exit 1; }
 APP_BUNDLE_NAME="$(basename "$APP_PATH" .app)"
+
+# Check for ShareExtension.appex (present in instant-share builds, absent in main-app)
+SHARE_EXTENSION_PATH="${APP_PATH}/Contents/PlugIns/ShareExtension.appex"
+if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
+    echo "  ShareExtension.appex found at $SHARE_EXTENSION_PATH"
+else
+    echo "  Note: No ShareExtension.appex — this is expected for main-app builds."
+fi
 [[ -z "$VOLUME_NAME" ]] && VOLUME_NAME="$APP_BUNDLE_NAME"
 
 if [[ "$APP_PATH" != /* ]]; then

@@ -1,4 +1,5 @@
 import SwiftUI
+import Common
 
 struct CompletionStateView: View {
     @ObservedObject var viewModel: CompletionPageViewModel
@@ -45,6 +46,7 @@ struct CompletionStateView: View {
         .task {
             await viewModel.reloadSummary()
         }
+        .appNavigationBar(title: "Backup Complete")
     }
 
     private var summary: CompletionViewState {

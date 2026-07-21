@@ -52,7 +52,7 @@ class SearchController(BaseController):
         dispatcher.post(lambda: self.imageListModel.load_images_from_paths([]))
 
         results = []
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             folders = get_all_folders(conn)
             for folder in folders:
                 results_in_folder = self._search_in_folder(folder, query)
@@ -72,7 +72,7 @@ class SearchController(BaseController):
         log("info", message=f"Searching in folder: {folder.path}")
         # Implement the search logic here
         # This could involve querying a database or filtering files in the folder
-        index_path = index_path_for_folder(ctx=self.ctx, folder=folder)
+        index_path = index_path_for_folder(folder=folder)
         if not Path(index_path).exists():
             log("warning", "search", message=f"Index file does not exist for folder: {folder.path}")
             return []

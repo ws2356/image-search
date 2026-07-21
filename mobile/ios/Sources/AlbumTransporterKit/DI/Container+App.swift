@@ -1,4 +1,5 @@
 import Factory
+import Common
 
 extension Container {
     var backupSessionStore: Factory<BackupSessionStore> {
@@ -9,11 +10,6 @@ extension Container {
     @MainActor
     var backupSessionProvider: Factory<BackupSessionProviding> {
         self { @MainActor in DefaultBackupSessionProvider(store: self.backupSessionStore()) }
-            .singleton
-    }
-
-    var localDeviceIdentityProvider: Factory<LocalDeviceIdentityProviding> {
-        self { UserDefaultsLocalDeviceIdentityStore() }
             .singleton
     }
 
@@ -150,4 +146,5 @@ extension Container {
         }
         .singleton
     }
+
 }

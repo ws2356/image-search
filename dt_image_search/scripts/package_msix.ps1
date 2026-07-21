@@ -1,5 +1,29 @@
 #Requires -Version 5.1
 
+<#
+.SYNOPSIS
+    Builds the MSIX package for AuSearch.
+
+.DESCRIPTION
+    Packages the PyInstaller-built AuSearch desktop app into an MSIX
+    installer.  Network capabilities are configured in AppxManifest.xml:
+
+      - internetClient:               outbound telemetry & model downloads
+      - privateNetworkClientServer:   mDNS + HTTP server for instant share
+
+    Daemon auto-start at login:
+      After installation, run the following once to register the instant
+      share daemon to start automatically at login:
+
+          schtasks /create /tn "AuSearch Instant Share" /tr "'<AppPath>\AuSearch.exe' --daemon" /sc onlogon /ru %USERNAME% /f
+
+      Or create a shortcut in the Startup folder pointing to:
+          <AppPath>\AuSearch.exe --daemon
+
+      The AppxManifest capabilities and firewall rule are already
+      configured — no additional permission prompts will appear.
+#>
+
 param(
     [ValidateSet("prod", "dev")]
     [string]$BuildType = "prod",

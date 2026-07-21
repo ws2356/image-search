@@ -5,6 +5,7 @@ import unittest
 import uuid
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.model.dts_db import (
     create_db_conn,
     delete_folders,
@@ -28,7 +29,7 @@ class TestDtsDbFolderPathVariants(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -37,7 +38,7 @@ class TestDtsDbFolderPathVariants(unittest.TestCase):
         child_folder = (root_folder / "nested").resolve()
         child_folder.mkdir(parents=True, exist_ok=True)
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             insert_folder(conn, root_folder.as_posix())
             insert_folder(conn, child_folder.as_posix())
 
@@ -51,7 +52,7 @@ class TestDtsDbFolderPathVariants(unittest.TestCase):
         root_folder = (Path(self._temp_dir.name) / "Mobile Backup Delete").resolve()
         root_folder.mkdir(parents=True, exist_ok=True)
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             insert_folder(conn, root_folder.as_posix())
 
             delete_folders(conn, [normalized_folder_path(root_folder.as_posix())])

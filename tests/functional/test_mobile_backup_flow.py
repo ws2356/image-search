@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService, PairingResultState
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.model.dts_db import create_db_conn
@@ -34,7 +35,7 @@ class TestMobileBackupFlow(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -81,7 +82,7 @@ class TestMobileBackupFlow(unittest.TestCase):
         self.assertEqual(expected_first_path.read_bytes(), sample_assets[0].file_path.read_bytes())
         self.assertEqual(expected_second_path.read_bytes(), sample_assets[1].file_path.read_bytes())
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             session_row = conn.execute(
                 "SELECT status, ended_at FROM mobile_backup_sessions WHERE session_id = ?",
                 (backup_result.pairing.session_id,),

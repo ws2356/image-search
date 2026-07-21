@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 from dt_image_search.model.dts_config import (
     is_encryption_feature_enabled,
+    is_instant_share_feature_enabled,
     is_mobile_folder_feature_enabled,
     is_strict_security_feature_enabled,
 )
@@ -59,6 +60,9 @@ class _FeatureFlagStore:
 
     def is_strict_security_enabled(self) -> bool:
         return bool(self._resolve_value(_STRICT_SECURITY_FEATURE))
+
+    def is_instant_share_enabled(self) -> bool:
+        return bool(self._resolve_value(_INSTANT_SHARE_FEATURE))
 
     def desktop_root_trace_sample_rate(self) -> float:
         return float(self._resolve_value(_DESKTOP_ROOT_TRACE_SAMPLE_RATE_FEATURE))
@@ -224,10 +228,9 @@ def _sleep_before_retry(*, retry_attempt: int, reason: str) -> None:
 
 
 def _feature_flags_cache_path() -> Path:
-    from dt_image_search.bm_context import get_context
     from dt_image_search.model.dts_fs import get_app_data_path
 
-    return get_app_data_path(get_context()) / _FEATURE_FLAGS_CACHE_FILENAME
+    return get_app_data_path() / _FEATURE_FLAGS_CACHE_FILENAME
 
 
 def _load_cached_feature_flags_payload() -> dict | None:
@@ -282,6 +285,15 @@ def _extract_strict_security_enabled(payload: dict) -> bool | None:
     if "enabled" not in strict_security_payload:
         return None
     return _to_bool(strict_security_payload.get("enabled"))
+
+
+def _extract_instant_share_enabled(payload: dict) -> bool | None:
+    instant_share_payload = payload.get("instant_share")
+    if not isinstance(instant_share_payload, dict):
+        return None
+    if "enabled" not in instant_share_payload:
+        return None
+    return _to_bool(instant_share_payload.get("enabled"))
 
 
 def _extract_desktop_root_trace_sample_rate(payload: dict) -> float | None:
@@ -423,6 +435,12 @@ _STRICT_SECURITY_FEATURE = _FeatureDefinition(
     default_factory=lambda: is_strict_security_feature_enabled(),
     remote_log_formatter=lambda value: _format_bool_feature_log("strict_security", value),
 )
+_INSTANT_SHARE_FEATURE = _FeatureDefinition(
+    key="instant_share",
+    extractor=_extract_instant_share_enabled,
+    default_factory=lambda: is_instant_share_feature_enabled(),
+    remote_log_formatter=lambda value: _format_bool_feature_log("instant_share", value),
+)
 _DESKTOP_ROOT_TRACE_SAMPLE_RATE_FEATURE = _FeatureDefinition(
     key="desktop_root_trace_sample_rate",
     extractor=_extract_desktop_root_trace_sample_rate,
@@ -444,6 +462,7 @@ _REMOTE_FEATURE_DEFINITIONS = (
     _MOBILE_FOLDER_FEATURE,
     _ENCRYPTION_FEATURE,
     _STRICT_SECURITY_FEATURE,
+    _INSTANT_SHARE_FEATURE,
     _DESKTOP_ROOT_TRACE_SAMPLE_RATE_FEATURE,
     _VERSION_FEATURE,
 )
@@ -476,6 +495,10 @@ def is_encryption_enabled() -> bool:
 # 1. mobile app remove redundant opt field in capability exchange requests
 def is_strict_security_enabled() -> bool:
     return _feature_flag_store.is_strict_security_enabled()
+
+
+def is_instant_share_enabled() -> bool:
+    return _feature_flag_store.is_instant_share_enabled()
 
 
 def get_desktop_root_trace_sample_rate() -> float:

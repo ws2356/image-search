@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
+from dt_image_search.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64, ensure_mobile_pairing_schema
@@ -64,7 +65,7 @@ class TestMobileTransferService(unittest.TestCase):
             offline_mode=True,
             model_file_info_url="https://example.invalid/model.json",
         )
-        self._data_path_key = f"BM_DATA_PATH_{self._ctx.subfolder}"
+        self._data_path_key = f"BM_DATA_PATH_{get_app_private_name()}"
         os.environ[self._data_path_key] = self._temp_dir.name
         self.addCleanup(os.environ.pop, self._data_path_key, None)
 
@@ -153,7 +154,7 @@ class TestMobileTransferService(unittest.TestCase):
         self.assertEqual(complete_status, 200)
         self.assertEqual(complete_response["status"], "completed")
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             asset_row = conn.execute(
                 """
                 SELECT remote_asset_version, local_relative_path
@@ -412,7 +413,7 @@ class TestMobileTransferService(unittest.TestCase):
         device_uuid = pairing_context["device_uuid"]
         trust_key_b64 = pairing_context["trust_key_b64"]
 
-        with create_db_conn(ctx=self._ctx) as conn:
+        with create_db_conn() as conn:
             conn.execute(
                 """
                 UPDATE mobile_backup_sessions
@@ -519,7 +520,7 @@ class TestMobileTransferService(unittest.TestCase):
         self.assertEqual(complete_response["status"], "completed")
         self.assertIn("marked the transfer session as stopped", complete_response["message"])
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             session_row = conn.execute(
                 "SELECT status, transferred_count FROM mobile_backup_sessions WHERE session_id = ?",
                 (pairing_context["session_id"],),
@@ -595,7 +596,7 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             session_row = conn.execute(
                 "SELECT status, ended_at, failed_count FROM mobile_backup_sessions WHERE session_id = ?",
                 (pairing_context["session_id"],),
@@ -677,7 +678,7 @@ class TestMobileTransferService(unittest.TestCase):
             ],
         )
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             session_row = conn.execute(
                 "SELECT status, ended_at FROM mobile_backup_sessions WHERE session_id = ?",
                 (pairing_context["session_id"],),
@@ -741,7 +742,7 @@ class TestMobileTransferService(unittest.TestCase):
         self.assertEqual(skipped_response["status"], "skipped")
         self.assertEqual(skipped_response["local_relative_path"], stored_response["local_relative_path"])
 
-        with create_db_conn(self._ctx) as conn:
+        with create_db_conn() as conn:
             asset_count_row = conn.execute(
                 "SELECT COUNT(*) AS asset_count FROM mobile_assets WHERE device_uuid = ?",
                 (pairing_context["device_uuid"],),

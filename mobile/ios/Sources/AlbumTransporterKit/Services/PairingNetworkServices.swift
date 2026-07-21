@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import OSLog
+import Common
 
 struct URLSessionPairingBootstrapClient: PairingBootstrapClient {
     let session: URLSession
@@ -179,7 +180,7 @@ struct DesktopBootstrapPairingService: PairingService {
     let usbBootstrapClient: PairingUSBBootstrapClient?
     let capabilityExchangeClient: (any MobileCapabilityExchangeClient)?
     let updatePromptClient: (any MobileUpdatePromptClient)?
-    let identityProvider: LocalDeviceIdentityProviding
+    let identityProvider: LocalDeviceIdentifierProviding
     let trustedDesktopStore: TrustedDesktopStore
 
     init(
@@ -187,7 +188,7 @@ struct DesktopBootstrapPairingService: PairingService {
         usbBootstrapClient: PairingUSBBootstrapClient? = nil,
         capabilityExchangeClient: (any MobileCapabilityExchangeClient)? = nil,
         updatePromptClient: (any MobileUpdatePromptClient)? = nil,
-        identityProvider: LocalDeviceIdentityProviding,
+        identityProvider: LocalDeviceIdentifierProviding,
         trustedDesktopStore: TrustedDesktopStore
     ) {
         self.bootstrapClient = bootstrapClient
@@ -203,7 +204,7 @@ struct DesktopBootstrapPairingService: PairingService {
     }
 
     func startPairing(using payload: PairingQRCodePayload) async -> Result<PairingResponse, PairingError> {
-        let identity = await identityProvider.currentIdentity()
+        let identity = await identityProvider.currentIdentifier()
         let pairingKeyBase64 = derivePairingKeyBase64(
             payload: payload,
             platform: identity.platform

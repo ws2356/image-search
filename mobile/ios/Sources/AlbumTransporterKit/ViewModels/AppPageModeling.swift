@@ -18,7 +18,12 @@ protocol AppPageModeling: AnyObject {
     func onErrorCompleted(with result: ErrorPageResult) async
 }
 
-extension MobileAppModel: AppPageModeling {}
+@MainActor
+protocol GenericQRScanDelegate {
+    func onGenericQRScanCompleted(with result: GenericQRScanPageResult) async
+}
+
+extension MobileAppModel: AppPageModeling, GenericQRScanDelegate {}
 
 @MainActor
 protocol PermissionsPageModeling: AppPageModeling {

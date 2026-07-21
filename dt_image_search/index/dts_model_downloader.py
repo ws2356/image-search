@@ -5,7 +5,6 @@ import threading
 import datetime
 from dt_image_search.telemetry.telemetry_client import with_trace, log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
-from dt_image_search.tools.bm_sys import is_cn
 from dt_image_search.bm_context import BMContext
 
 model_downloaded_event = threading.Event()
@@ -18,7 +17,7 @@ def _download_pretrained_model(ctx: BMContext):
             log("debug", message=f"Model already exists at: {ctx.get_model_cache_path()}")
             return
 
-        log("info", message="Start downloading pretrained model")
+        log("info", message=f"Start downloading pretrained model - {ctx.get_model_download_url()}")
         tmp_path = f"{ctx.get_model_cache_path()}.tmp"
 
         try:
@@ -93,7 +92,7 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
                 log("debug", message=f"Download progress: {percent:.1f}%")
 
 def init(ctx: BMContext):
-    if is_cn():
+    if ctx.offline_mode:
         threading.Thread(target=_download_pretrained_model, args=(ctx,)).start()
     else:
         model_downloaded_event.set()  # Skip download in non-CN regions

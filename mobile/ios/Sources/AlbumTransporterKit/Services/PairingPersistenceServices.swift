@@ -164,47 +164,6 @@ actor UserDefaultsTrustedDesktopStore: TrustedDesktopStore {
     }
 }
 
-actor UserDefaultsLocalDeviceIdentityStore: LocalDeviceIdentityProviding {
-    private let userDefaults: UserDefaults
-    private let installIDKey: String
-    private let deviceUUIDKey: String
-
-    init(
-        userDefaults: UserDefaults = .standard,
-        installIDKey: String = "albumtransporter.install-id",
-        deviceUUIDKey: String = "albumtransporter.device-uuid"
-    ) {
-        self.userDefaults = userDefaults
-        self.installIDKey = installIDKey
-        self.deviceUUIDKey = deviceUUIDKey
-    }
-
-    func currentIdentity() async -> LocalDeviceIdentity {
-        let installID = storedValue(forKey: installIDKey)
-        let deviceUUID = storedValue(forKey: deviceUUIDKey)
-        return LocalDeviceIdentity(
-            installID: installID,
-            deviceUUID: deviceUUID,
-            deviceName: currentDeviceName(),
-            platform: "ios"
-        )
-    }
-
-    private func storedValue(forKey key: String) -> String {
-        if let existingValue = userDefaults.string(forKey: key), !existingValue.isEmpty {
-            return existingValue
-        }
-
-        let generatedValue = UUID().uuidString.lowercased()
-        userDefaults.set(generatedValue, forKey: key)
-        return generatedValue
-    }
-
-    private func currentDeviceName() -> String {
-        UIDevice.current.name
-    }
-}
-
 extension JSONEncoder {
     static let pairingEncoder: JSONEncoder = {
         let encoder = JSONEncoder()

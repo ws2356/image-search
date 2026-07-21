@@ -6,4 +6,5 @@ xcodebuild test \
     -project AlbumTransporterApp.xcodeproj \
     -scheme AlbumTransporterApp \
     -destination "platform=iOS Simulator,name=iPhone 17 Pro Max" \
-    -skip-testing:AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests
+    -skip-testing:AlbumTransporterAppSnapshotTests/AlbumTransporterAppSnapshotTests \
+    -skipMacroValidation

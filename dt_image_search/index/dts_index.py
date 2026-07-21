@@ -4,12 +4,12 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 
-import torch
+# import torch
 import threading
 import time
 import typing
-import open_clip
-from torchvision import transforms
+# import open_clip
+# from torchvision import transforms
 import numpy as np
 import faiss
 import hf_xet
@@ -31,8 +31,8 @@ from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_util import normalized_folder_path
 
 # TODO: refactor multiprocessing code: move all model/preprocess loading to worker processes
-def index_path_for_folder(ctx: BMContext, folder: Folder):
-    return f"{get_app_data_path(ctx)}/{folder.id}.faiss"
+def index_path_for_folder(folder: Folder):
+    return f"{get_app_data_path()}/{folder.id}.faiss"
 
 _supported_image_types = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".heic", ".heif")
 
@@ -46,7 +46,7 @@ def is_image_file(file_path: str) -> bool:
 @with_trace("query_index")
 def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str) -> list:
     # Check if folder exists
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         folder = get_folder_by_id(conn, folder_id)
         if not folder:
             return []
@@ -56,7 +56,7 @@ def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str
     # Dedupe by item[0] which is the file id
     seen_ids = set()
     index_score_pairs = [item for item in index_score_pairs if not (item[0] in seen_ids or seen_ids.add(item[0]))]
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         # Fetch file paths from the database using the indices
         file_paths = get_files_by_clip_indices(conn, folder_id, [item[0] for item in index_score_pairs])
         ret = [(file, pair[1]) for file, pair in zip(file_paths, index_score_pairs) if file is not None]
@@ -64,6 +64,7 @@ def query_index(ctx: BMContext, folder_id: int, index_path: str, query_text: str
         return ret[:TOP_K]
 
 def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
+    import torch
     torch.set_grad_enabled(False)
     with torch.inference_mode():
         try:
@@ -73,7 +74,7 @@ def _query_internal(index_path: str, query_text: str, top_k: int) -> list:
             return []
         _model, _, _tokenizer = _get_model()
         # --- Encode text query ---
-        text_tokens = _tokenizer([query_text]).to(_device)
+        text_tokens = _tokenizer([query_text]).to(_get_device())
         text_features = _model.encode_text(text_tokens)
         text_features = text_features / (text_features.norm(dim=-1, keepdim=True) + 1e-10)
         text_vector = text_features.cpu().numpy().astype(np.float32)
@@ -152,7 +153,7 @@ def _recover_corrupted_index(ctx: BMContext, index_path: str, folder_id: int):
                 log("warning", "index", message=f"Failed to backup corrupted FAISS index before recovery: {exc}")
         _create_empty_index(index_path)
 
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         conn.execute(
             "UPDATE files SET clip_index = NULL, status = 0 WHERE folder_id = ? AND status != 2",
             (folder_id,),
@@ -234,6 +235,7 @@ def _cleanup_process_pool():
 
 @with_trace("_add_to_index")
 def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: typing.List[File]) -> bool:
+    import torch
     model_downloaded_event.wait()  # Wait for the model to be downloaded
 
     result = True
@@ -273,7 +275,7 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
                 with torch.inference_mode():
                     # Move to GPU and process with model (this stays in main process)
                     # log("info", message=f"Getting features from batch {i}")
-                    batch_tensor = batch_tensor.to(_device)
+                    batch_tensor = batch_tensor.to(_get_device())
                     features = model.encode_image(batch_tensor)
                     features = features / features.norm(dim=-1, keepdim=True)
                     
@@ -284,7 +286,7 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
                     all_features.append(features_np)
                     valid_files.extend(batch_valid_files)
             
-            with create_db_conn(ctx=ctx) as conn:
+            with create_db_conn() as conn:
                 mark_files_deleted(conn, [file.id for file in deleted_files])
                 
         except Exception as e:
@@ -307,7 +309,7 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
         index.add_with_ids(features_np, ids)
         _write_index_atomically(index, index_path)
     
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         for file in valid_files:
             update_file(conn, file.id, clip_index=file.id, status=1)
     return result
@@ -335,7 +337,7 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
     batch_start = 0
     batch_end = 0
     while True:
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             if total_files == -1:
                 total_files = count_files_in_folder(conn, folder_id)
             files = get_pending_files_for_folder(conn, folder_id, offset=0, limit=limit)
@@ -398,7 +400,7 @@ def append_to_index(ctx: BMContext, index_path: str, folder_id: int, file_paths:
         batch_files = file_paths[i_slice:i_slice + step]
         log("debug", message=f"Processing batch {i_slice} to {i_slice + step} for appending.")
         batch_file_objs = []
-        with create_db_conn(ctx=ctx) as conn:
+        with create_db_conn() as conn:
             for file_path in batch_files:
                 file_obj = get_file_by_path(conn, file_path)
                 if file_obj and file_obj.status == 0:
@@ -453,7 +455,7 @@ def _load_index(index_path: str):
 
 @with_trace("delete_folder")
 def delete_folder(ctx: BMContext, folder_path: str):
-    with create_db_conn(ctx=ctx) as conn:
+    with create_db_conn() as conn:
         if not folder_path:
             log("warning", "delete", message="No folder path provided for deletion.")
             return
@@ -462,7 +464,7 @@ def delete_folder(ctx: BMContext, folder_path: str):
             if not folder:
                 log("warning", "delete", message=f"Folder {folder_path} does not exist in the database.")
                 return
-            index_path = index_path_for_folder(ctx=ctx, folder=folder)
+            index_path = index_path_for_folder(folder=folder)
             if os.path.exists(index_path):
                 os.remove(index_path)
                 log("info", message=f"Removed index file for folder {folder.path} at {index_path}")
@@ -473,7 +475,14 @@ def delete_folder(ctx: BMContext, folder_path: str):
             delete_files_by_folder_id(conn, folder.id)
 
 
-_device = "cuda" if torch.cuda.is_available() else "cpu"
+_device = None
+def _get_device():
+    import torch
+    global _device
+    if _device is None:
+        _device = "cuda" if torch.cuda.is_available() else "cpu"
+    return _device
+
 _model = None
 _preprocess = None
 _tokenizer = None
@@ -494,6 +503,8 @@ def _get_model():
 
 @with_trace("_preload_model")
 def _preload_model(ctx: BMContext):
+    import torch
+    import open_clip
     """Function to preload the model in background"""
     global _model, _preprocess, _tokenizer
     model_downloaded_event.wait()  # Wait for the model to be downloaded for cn market
@@ -514,7 +525,7 @@ def _preload_model(ctx: BMContext):
             log("info", message=f"Attempt {_attempt + 1} before loading model")
             model, _, preprocess = open_clip.create_model_and_transforms(
                 ctx.model_name,
-                pretrained=ctx.get_pretrained_model_name_or_path(),
+                pretrained=ctx.get_pretrained_model_name(),
                 download_callback=_throttled_progress_callback
                 )
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
@@ -524,7 +535,7 @@ def _preload_model(ctx: BMContext):
             _tokenizer = open_clip.get_tokenizer(ctx.model_name)
             log("info", message=f"Attempt {_attempt + 1} tokenizer init")
 
-            _model = model.to(_device).eval()
+            _model = model.to(_get_device()).eval()
             log("info", message=f"Attempt {_attempt + 1} model eval")
 
             status_bar_messenger.show_status_message.emit("Model inited")
@@ -532,7 +543,7 @@ def _preload_model(ctx: BMContext):
             #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
             break
         except Exception as e:
-            log("error", "model", message=f"Attempt {_attempt + 1}. Pretrained: {ctx.get_pretrained_model_name_or_path()}. offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. model version: {ctx.version}. offline mode: {ctx.offline_mode}. Preloading model failed: {e}")
+            log("error", "model", message=f"Attempt {_attempt + 1}. Pretrained: {ctx.get_pretrained_model_name()}. offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. model version: {ctx.version}. offline mode: {ctx.offline_mode}. Preloading model failed: {e}")
             if _attempt == _MAX_ATTEMPTS - 1:
                 status_bar_messenger.show_status_message.emit("Model load failed")
             else:

@@ -1,10 +1,12 @@
 import hashlib
 import os
 from pathlib import Path
+import requests
 import threading
 import zipfile
+import tarfile
 import dt_image_search.index.bm_model_spec as bm_model_spec
-from dt_image_search.tools.bm_sys import is_cn
+from dt_image_search.tools.bm_sys import is_cn, is_language_en
 
 class BMContext:
     def __init__(self,
@@ -22,46 +24,29 @@ class BMContext:
         self._model_file_info_url = model_file_info_url
         self._model_file_info = None
 
-    def get_pretrained_model_name_or_path(self) -> str:
-        if self.version == 1 and self.is_local_cache_valid():
-            return self.get_model_cache_path()
-        else:
+    def get_pretrained_model_name(self) -> str:
             return self._pretrained_model
 
     def get_model_cache_path(self) -> str:
         from dt_image_search.model.dts_fs import get_app_data_path
-        if self.version == 2:
-            return str(get_app_data_path(ctx=self) / "model_cache")
-        elif self.version == 1:
-            return os.path.join(get_app_data_path(ctx=self), "open_clip_pytorch_model.bin")
-        else:
-            raise ValueError("Unknown BMContext")
+        return str(get_app_data_path() / "model_cache")
 
     def is_local_cache_valid(self) -> bool:
-        if self.version == 1:
-            return os.path.exists(self.get_model_cache_path()) and _check_md5(self.get_model_cache_path(), self._get_cache_file_md5())
-        elif self.version == 2:
-            return os.path.exists(self.get_model_cache_path()) and os.path.isdir(self.get_model_cache_path())
+        if self.offline_mode:
+            return os.path.exists(self.get_model_cache_path())
         else:
-            raise ValueError("Unknown BMContext")
+            return False
 
     def is_downloaded_file_valid(self, file_path) -> bool:
         return _check_md5(file_path, self._get_cache_file_md5())
 
     def process_downloaded_file(self, tmp_file_path):
-        if self.version == 1:
-            final_path = self.get_model_cache_path()
-            os.rename(tmp_file_path, final_path)
-        elif self.version == 2:
-            final_path = self.get_model_cache_path()
-            Path(final_path).mkdir(parents=True, exist_ok=True)
-            # unzip tmp_file_path to final_path
-            import zipfile
-            with zipfile.ZipFile(tmp_file_path, 'r') as zip_ref:
-                zip_ref.extractall(final_path)
-            os.remove(tmp_file_path)
-        else:
-            raise ValueError("Unknown BMContext")
+        final_path = self.get_model_cache_path()
+        Path(final_path).mkdir(parents=True, exist_ok=True)
+        # unzip tmp_file_path to final_path
+        with tarfile.open(tmp_file_path, 'r:gz') as tar_ref:
+            tar_ref.extractall(final_path)
+        os.remove(tmp_file_path)
 
     def get_model_download_url(self) -> str:
         return self._get_model_file_info()["download_url"]
@@ -70,18 +55,21 @@ class BMContext:
         return self._get_model_file_info()["md5"]
     
     def _get_model_file_info(self) -> dict:
+        ret = None
         if self.version == 1:
-            return self._get_model_file_info() or \
-                { "download_url": "https://imagesearch.boldman.net/open_clip_pytorch_model.bin", "md5": "2fc036aea9cd7306f5ce7ce6abb8d0bf" }
+            ret = self._load_model_file_info() or \
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/model-en/models.tar.gz", "md5": "a459f820eece24bf929d49d4ab0d2333" }
         elif self.version == 2:
-            return self._get_model_file_info() or \
-                { "download_url": "https://imagesearch.boldman.net/models/v2.zip", "md5": "92fb01a4fd9ce5e2fb82644aadc81b34" }
+            ret = self._load_model_file_info() or \
+                { "download_url": "https://github.com/ws2356/image-search/releases/download/model-all/models.tar.gz", "md5": "1f9483b31509986f3991cc03ff640cf8" }
         else:
             raise ValueError("Unknown BMContext")
+        from dt_image_search.telemetry.telemetry_client import log
+        log("info", message=f"Model file info for version {self.version}: {ret}")
+        return ret
 
-    def _get_model_file_info(self) -> dict:
+    def _load_model_file_info(self) -> dict:
         if self._model_file_info is None:
-            import requests
             url = self._model_file_info_url
             try:
                 response = requests.get(url, timeout=10, allow_redirects=True)
@@ -121,6 +109,14 @@ _v1 = BMContext(
     offline_mode=False,
     model_file_info_url="https://imagesearch2.boldman.net/models/info_v1.json")
 
+_v1_offline_mode = BMContext(
+    version=1,
+    subfolder="",
+    model_name=bm_model_spec.model_name,
+    pretrained_model=bm_model_spec.pretrained_model,
+    offline_mode=True,
+    model_file_info_url="https://imagesearch2.boldman.net/models/info_v1.json")
+
 _v2 = BMContext(
     version=2,
     subfolder="v2",
@@ -134,29 +130,32 @@ def get_context():
     if _bm_context is None:
         with _lock:
             if _bm_context is None:
-                from dt_image_search.model.dts_db import create_db_conn, has_any_folder
                 _existing_model_version = _get_existing_model_version()
+                _existing_offline_mode = _get_model_offline_mode()
                 if _existing_model_version == 1:
-                    _bm_context = _v1
+                    if _existing_offline_mode:
+                        _bm_context = _v1_offline_mode
+                    else:
+                        _bm_context = _v1
                 elif _existing_model_version == 2:
                     _bm_context = _v2
                 elif not is_cn():
                 # For non-cn users, always use v1 context for better model performance, until later we support model switching.
                     _bm_context = _v1
+                elif is_language_en():
+                    _bm_context = _v1_offline_mode
                 else:
-                    with create_db_conn(_v1) as conn:
-                        # For quickly shipping v2, we don't migrate from v1 to v2.
-                        if has_any_folder(conn):
-                            _bm_context = _v1
-                        else:
-                            _bm_context = _v2
+                    _bm_context = _v2
                 if _get_existing_model_version() is None:
                     _set_existing_model_version(_bm_context.version)
+                if _get_model_offline_mode() is None:
+                    _set_model_offline_mode(_bm_context.offline_mode)
+                
     return _bm_context
 
 def _get_existing_model_version() -> int | None:
     from dt_image_search.model.dts_db import create_db_conn, get_config
-    with create_db_conn(_v1) as conn:
+    with create_db_conn() as conn:
         version_str = get_config(conn, "model_version")
         if version_str is not None:
             try:
@@ -168,5 +167,19 @@ def _get_existing_model_version() -> int | None:
 
 def _set_existing_model_version(version: int):
     from dt_image_search.model.dts_db import create_db_conn, set_config
-    with create_db_conn(_v1) as conn:
+    with create_db_conn() as conn:
         set_config(conn, "model_version", str(version))
+
+def _get_model_offline_mode() -> bool | None:
+    from dt_image_search.model.dts_db import create_db_conn, get_config
+    with create_db_conn() as conn:
+        offline_mode_str = get_config(conn, "model_offline_mode")
+        if offline_mode_str is not None:
+            return offline_mode_str.lower() == "true"
+        else:
+            return None
+
+def _set_model_offline_mode(offline_mode: bool):
+    from dt_image_search.model.dts_db import create_db_conn, set_config
+    with create_db_conn() as conn:
+        set_config(conn, "model_offline_mode", str(offline_mode).lower())

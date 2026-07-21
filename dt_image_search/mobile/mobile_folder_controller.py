@@ -98,7 +98,7 @@ class MobileFolderCoordinator(QObject):
         if self._show_active_backup_in_progress_dialog(parent):
             return None
         normalized_folder_path = Path(selected_folder_path).expanduser().resolve().as_posix()
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             folder_binding = get_mobile_folder_binding_by_path(conn, folder_path=normalized_folder_path)
         if folder_binding is None:
             status_bar_messenger.show_status_message.emit("Mobile folder pairing data is missing for this folder.")
@@ -181,14 +181,14 @@ class MobileFolderCoordinator(QObject):
         return Path.home().resolve().as_posix()
 
     def _last_destination_parent(self) -> str | None:
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             stored_value = get_config(conn, self._LAST_DESTINATION_KEY)
         if not stored_value:
             return None
         return Path(stored_value).expanduser().resolve().as_posix()
 
     def _store_last_destination(self, destination_parent: str) -> None:
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             set_config(conn, self._LAST_DESTINATION_KEY, destination_parent)
 
     def _get_pairing_service(self) -> MobilePairingService:
@@ -197,7 +197,7 @@ class MobileFolderCoordinator(QObject):
         return self._pairing_service
 
     def _show_active_backup_in_progress_dialog(self, parent: QWidget | None = None) -> bool:
-        with create_db_conn(ctx=self.ctx) as conn:
+        with create_db_conn() as conn:
             active_session = get_active_mobile_backup_session(conn)
         if active_session is None:
             return False
@@ -246,7 +246,7 @@ class MobileFolderCoordinator(QObject):
     def _stop_active_backup_session(self, active_session: ActiveMobileBackupSession) -> bool:
         current_time = datetime.now(timezone.utc)
         try:
-            with create_db_conn(ctx=self.ctx) as conn:
+            with create_db_conn() as conn:
                 transfer_context = get_mobile_transfer_context(
                     conn,
                     session_id=active_session.session_id,

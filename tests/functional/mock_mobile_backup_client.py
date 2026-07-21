@@ -121,9 +121,12 @@ class MockMobileBackupClient:
         payload_fields = self._parse_pairing_payload()
         session_id = payload_fields["sid"]
         one_time_passcode = payload_fields["opt"]
+        bootstrap_urls = payload_fields.get("bootstrap_urls", [])
 
         last_error: RuntimeError | None = None
-        for endpoint_url in payload_fields["bootstrap_urls"]:
+        for bootstrap_url in bootstrap_urls:
+            parsed = urlsplit(bootstrap_url)
+            endpoint_url = f"http://{parsed.hostname}:{parsed.port}"
             try:
                 response_payload = self._post_json(
                     endpoint_url=endpoint_url,

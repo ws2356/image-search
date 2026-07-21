@@ -1,0 +1,1 @@
+instant,drop,text,document,p2p,nearby,qr,private,secure,local,wifi,share,quick,easy,computer,desktop
