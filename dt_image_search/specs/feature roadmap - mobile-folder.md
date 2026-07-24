@@ -13,15 +13,14 @@
 - **Phase 3**
   - Encrypted transfer with key exchange and verification on both devices
 - **Phase 4 (GA)**
+  - ETA calculation and display based on transfer speed and remaining data
   - Deep-link onboarding from desktop to mobile app store
 - **Phase 5**
-  - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
   - Android companion app with similar capabilities to iOS version, with platform-specific adjustments as needed
-  - ETA calculation and display based on transfer speed and remaining data
-- **Phase 6**
-  - Service discovery to support backup resume from mobile without needing to scan QR code again
 
 - **Backlog**
+  - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
   - Stronger platform-specific background transfer strategies where policy-compliant
   - File integrity verification with checksums or hashes, with user-friendly error handling and retry options for failed transfers
   - Refactor pc: 1. use asyncio wherever possible
+  - Service discovery to support backup resume from mobile without needing to scan QR code again
