@@ -6,7 +6,6 @@ FEATURES
 • Connect instantly via QR code or automatic discovery
 • No sign-up or account required
 • Send photos, videos, documents, and more
-• Works across iOS, Android, Mac, and Windows
 • Transfer large files without size limits
 • Privacy-first design — Files transfer directly between devices without cloud storage
 
