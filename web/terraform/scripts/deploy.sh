@@ -4,6 +4,21 @@
 #        bash scripts/deploy.sh apply -var="origin_ip=1.2.3.4"
 set -euo pipefail
 
+tfstate_backup_target=
+forwarded_args=()
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --backup-target|-b)
+            tfstate_backup_target=$2
+            shift ; shift
+            ;;
+        *)
+            forwarded_args+=("$1")
+            shift
+            ;;
+    esac
+done
+
 this_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tf_dir="$(cd "$this_dir/.." && pwd)"
 
@@ -37,4 +52,8 @@ if [ ! -d .terraform ]; then
   terraform init
 fi
 
-terraform "$@"
+terraform "${forwarded_args[@]}"
+
+if [ -n "$tfstate_backup_target" ] ; then
+  rsync "$tf_dir/terraform.tfstate" "$tfstate_backup_target"
+fi

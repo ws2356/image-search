@@ -29,8 +29,15 @@ resource "cloudflare_dns_record" "wildcard_cname" {
 }
 
 # ==========================================
-# A 记录 (指向具体 IP)
+# A/AAAA 记录 (指向具体 IP)
 # ==========================================
+resource "cloudflare_dns_record" "home_aaaa" {
+  zone_id = cloudflare_zone.boldman_net.id
+  name    = "home"
+  type    = "AAAA"
+  content = var.home_ip6
+  ttl     = 3600
+}
 
 
 # ==========================================

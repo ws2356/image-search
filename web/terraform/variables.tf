@@ -19,3 +19,8 @@ variable "cf_account_id" {
   description = "Cloudflare account ID"
   type        = string
 }
+
+variable "home_ip6" {
+  description = "Public IPV6 address of the home"
+  type        = string
+}
