@@ -3,18 +3,14 @@
 ## 1. Executive Summary
 
 - **Problem Statement**: The desktop product can already index local folders, but mobile users still face a manual export-and-transfer step before their photos and videos become searchable. That extra step makes first-time setup fragile and makes repeat backups easy to postpone or abandon.
-- **Proposed Solution**: Build a AuBackup app, tentatively named **Album Transporter**, that pairs with the desktop app through QR scanning and performs secure local-only transfer of the phone's eligible media library to the desktop-managed mobile folder. The mobile app should optimize for reliable full-library backup, clear interruption recovery, and transparent communication about permission, battery, or transport limitations.
+- **Proposed Solution**: Build a AuBackup app, tentatively named **AuBackup**, that pairs with the desktop app through QR scanning and performs secure local-only transfer of the phone's eligible media library to the desktop-managed mobile folder. The mobile app should optimize for reliable full-library backup, clear interruption recovery, and transparent communication about permission, battery, or transport limitations.
 - **Success Criteria**:
-  - **Draft KPI**: At least 85% of mobile sessions that complete QR pairing transfer the first eligible item within 2 minutes on USB and within 4 minutes on Wi-Fi LAN.
-  - **Draft KPI**: At least 95% of interrupted sessions that were previously paired can resume through reconnect without requiring a brand-new Add Folder setup.
-  - **Draft KPI**: At least 99% of completed sessions avoid retransferring unchanged media that the desktop already confirmed in a prior successful session.
-  - **Draft KPI**: At least 95% of sessions with limited or partial media permission clearly surface an "incomplete backup" warning before transfer begins.
-  - **Draft KPI**: Crash-free rate during active transfer sessions is at least 99.5%.
+  - **Draft KPI**: Backup completion rate is at least 90%.
 
 ## 2. User Experience & Functionality
 
 - **User Personas**:
-  - **Phone-first organizer**: Keeps most photos and videos on a phone and wants a guided path to make them searchable on desktop without manual export.
+  - **Phone-first organizer**: Keeps most photos and videos on a phone and wants a guided path to back them up to a pc, with semantic queriable as a bonus.
   - **Repeat backup user**: Has already paired once and wants later sessions to pick up only new or changed media with minimal friction.
   - **Reliability-sensitive user**: Cares more about finishing a large backup safely than about advanced organization features or visual polish.
   - **Multi-device desktop curator**: Uses one desktop with multiple phones over time and expects the mobile app to make device identity and reconnect behavior predictable.
@@ -112,11 +108,10 @@
 - **Architecture Overview**:
   - The desktop app remains the session authority: it starts **Add Folder** or **Reconnect**, generates the QR payload, chooses or negotiates transport, resolves the stable desktop destination folder, and runs indexing as files arrive.
   - The mobile app owns onboarding, QR scan entry, device identity generation and persistence, OS permission handling, eligible-media enumeration, secure session establishment, incremental transfer streaming, user-visible progress, stop behavior, battery warning flow, and user-facing recovery guidance.
-  - The mobile app should persist enough local state to recover from app restarts or temporary OS suspension, including device UUID, last paired desktop context if allowed, last-known session state, last error category, and transfer cursor or equivalent resumability marker when platform support makes that feasible.
+  - The mobile app should persist enough local state to inform user about the status of the last backup session if any, including device UUID, last paired desktop context if allowed, last-known session state, last error category.
   - Transfers must be local-only and authenticated end-to-end between the paired mobile app and desktop app.
   - USB should be preferred when available, with Wi-Fi LAN as fallback.
   - The mobile app must treat the desktop as the source of truth for whether a session is new, repeat, mismatched, resumable, or complete.
-  - Device discovery. See [service discovery spec](./%5Bdev%5D%20%5Bpc%5D%20%5Bmobile%5D%20service%20discovery.md) for details.
 - **Integration Points**:
   - OS camera permission and QR scanning APIs
   - OS photo and video library APIs, including limited-permission variants
@@ -130,7 +125,7 @@
 - **Security & Privacy**:
   - The app must not require user accounts, cloud storage, or media upload to third-party services.
   - The QR payload must act as a short-lived bootstrap secret and must expire after 15 minutes or on first successful use.
-  - Session transport keys must be derived from the pairing flow and must expire after 28 days, with reconnect or rekey behavior when the desktop invalidates trust.
+  - Session transport keys must be derived from the pairing flow.
   - Media bytes, filenames, full paths, thumbnails, and album names must remain local and must not be included in telemetry.
   - Camera, media-library, local-notification, battery permissions are requested during the backup flow and just before QR code scanning.
   - The app must clearly disclose when backup is incomplete because of partial permissions, unavailable on-device content, low battery risk, or session interruption.

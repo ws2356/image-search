@@ -63,12 +63,12 @@ MVP on desktop covers:
 
 - Source selection from the existing Add Folder entry point.
 - Parent destination selection for mobile backups.
-- Pairing-intent creation and per-platform QR generation with expiry and refresh.
+- Pairing-intent creation and unified QR generation with expiry and refresh.
 - Minimum-trust pairing handshake.
 - Wi-Fi LAN transfer for the paired session.
 - Stable device-folder creation or reuse after desktop learns device identity.
 - Registration of the resolved device folder as a normal indexed root folder.
-- Background transfer into that folder while the existing incremental indexing pipeline discovers new files.
+- Incremental indexing is kicked off as usual - whenever a new file is detected in the device folder.
 - Transfer-state visibility in the Folder TreeView.
 - Repeat backup for the same device identity by transferring only new or updated assets.
 - Completion, stop, and failure persistence.
@@ -79,51 +79,12 @@ MVP explicitly does not require:
 - Initial USB session establishment or USB transport negotiation.
 - Desktop reconnect action in the tree.
 - Device mismatch decision UI.
-- Automatic discovery without QR.
 - Mid-session transport switching.
 - Strong end-to-end encryption and key rotation.
 
-### 4.2 Phase 2
+### 4.2 Other phases
+See the [feature roadmap](./feature%20roadmap%20-%20mobile-folder.md) for the detailed plan.
 
-High-level additions:
-
-- Initial USB transport adapter support behind the same session-manager interface, with Wi-Fi LAN retained as fallback.
-- Desktop-driven reconnect flow from the Folder TreeView.
-- Device mismatch decision dialog and UUID reassignment flow.
-- Better deep-link and app-install continuity assumptions in the QR flow.
-- Explicit disconnected and resumable states as user-visible actions, not just persisted metadata.
-
-### 4.3 Phase 3
-
-High-level additions:
-
-- Stronger interruption handling and session recovery semantics.
-- Better support for longer-running transfers and mobile-side background constraints.
-- More resilient heartbeat and lease handling between desktop and mobile.
-
-### 4.4 Phase 4
-
-High-level additions:
-
-- Service discovery for reconnect and resume without requiring a fresh QR scan every time.
-- mDNS and dns-sd for LAN discovery, plus USB-assisted discovery paths.
-- QR remains the explicit bootstrap fallback.
-
-### 4.5 Phase 5
-
-High-level additions:
-
-- Stronger transport security beyond the minimum-trust MVP model.
-- Session-key derivation, verification, expiry, and rotation behavior aligned with the trust-model notes.
-- Failure handling for expired or rotated trust material.
-
-### 4.6 Phase 6 (GA)
-
-High-level additions:
-
-- Automatic in-session preference and switchover to USB when supported and available.
-- Transport handoff without restarting the desktop session.
-- Final product polish around transport visibility and recovery.
 
 ## 5. MVP Detailed Design
 
@@ -133,42 +94,15 @@ High-level additions:
 2. The desktop app shows the source-selection dialog with This Machine and Mobile Device.
 3. If This Machine is chosen, the existing folder chooser flow continues unchanged.
 4. If Mobile Device is chosen, the desktop app prompts for a parent destination directory.
-5. The desktop app creates a pairing intent and shows the QR dialog with Android and iOS QR codes.
-6. The mobile app scans the platform-specific code and connects to the desktop bootstrap endpoint.
-7. The desktop validates the token, accepts the pairing, receives device identity plus device metadata, and resolves the stable This Machine folder.
+5. The desktop app creates a pairing intent and shows the QR dialog with a unified QR code that works for both Android and iOS.
+6. The mobile app scans the code and connects to the desktop bootstrap endpoint.
+7. The desktop validates the token, accepts the pairing, receives device identity plus device metadata, and resolves the stable device folder.
 8. The desktop inserts or reuses the resolved folder in the normal root-folder list.
-9. The desktop starts receiving files into that folder in the background while the existing filesystem monitor and index pipeline process arrived files.
+9. The desktop starts receiving files into that folder while the existing filesystem monitor and index pipeline process arrived files.
 10. The Folder TreeView shows transfer state and progress while the rest of the app remains usable.
-11. On later sessions for the same device UUID, the desktop reuses the same folder and skips unchanged assets.
+11. Back-up again flow - On later sessions for the same device UUID, the desktop reuses the same folder and skips unchanged assets.
 
-```mermaid
-graph TD
-    A[Add Folder] --> B{Source selection}
-    B -->|This Machine| C[Existing local-folder flow]
-    B -->|Mobile Device| D[Choose parent destination]
-    D --> E[Create pairing intent and show Android plus iOS QR codes]
-    E --> F[Mobile scans QR and connects over LAN]
-    F --> G[Desktop validates token and receives device identity]
-    G --> H[Resolve or reuse stable device folder]
-    H --> I[Register folder as indexed root]
-    I --> J[Start background transfer]
-    J --> K[Existing monitor and index pipeline discover arrived files]
-    J --> L[Folder TreeView shows transfer state and progress]
-    L --> M[Later sessions reuse same folder and skip unchanged assets]
-```
-
-### 5.2 MVP scope reconciliation
-
-The desktop PRD describes USB preference, reconnect, mismatch handling, and richer recovery as P0 behavior. The roadmap stages those pieces later.
-
-This draft follows the roadmap split:
-
-- MVP uses QR bootstrap plus Wi-Fi LAN transfer only.
-- MVP surfaces transfer state in the tree now.
-- Phase 2 adds initial USB transport support, reconnect actions, and mismatch resolution UI.
-- Later phases add discovery, stronger transport security, and automatic transport handoff.
-
-### 5.3 MVP runtime architecture
+### 5.2 MVP runtime architecture
 
 #### A. UI entry layer
 
@@ -187,11 +121,11 @@ Responsibility:
 New desktop responsibility:
 
 - Keep a pairing intent alive for the currently open QR dialog.
-- Track per-platform tokens, expiry, refresh generation, and whether a token has been consumed.
+- Track qr_token, expiry, refresh generation, and whether a token has been consumed.
 
 The current in-memory `MobilePairingSessionDraft` is a good starting point, but MVP should move ownership out of the dialog and into a coordinator or service so expiry and refresh are not UI-local. Database persistence is not required in MVP because an unaccepted pairing intent can be discarded when the dialog closes or the app exits.
 
-#### C. Session manager layer
+#### C. [Deferred for later refactoring] Session manager layer
 
 New component proposed for MVP:
 
@@ -222,21 +156,7 @@ Responsibility:
 - Deliver a normalized stream of session messages plus file payloads to the session manager.
 - Keep transport details out of UI code and folder/indexing code.
 
-#### E. File-write layer
-
-New component proposed for MVP:
-
-- `MobileTransferWorker`
-
-Responsibility:
-
-- Consume normalized asset-transfer commands.
-- Resolve target path inside the device folder.
-- Stream bytes into a temporary file, then atomically rename into place.
-- Apply timestamps and record transfer metadata.
-- Emit counters and failure reasons.
-
-#### F. Folder/index integration layer
+#### E. Folder/index integration layer
 
 Use the existing indexing stack instead of building a separate mobile indexing path.
 
@@ -354,13 +274,6 @@ The Folder TreeView should support these mobile transfer states immediately:
 - `transfer_completed`
 - `failed`
 
-`disconnected` should be persisted in the schema from day one, but it does not need a user-invokable reconnect action until Phase 2.
-
-Reasoning:
-
-- Persisting the PM-required canonical states now is enough for TreeView status and later reconnect eligibility.
-- Holding back the explicit reconnect UI and USB transport support keeps MVP aligned with the staged roadmap.
-
 ### 5.7 MVP Folder TreeView design
 
 The current tree view uses the default item presentation. That is not sufficient for the provided UI mockup.
@@ -389,8 +302,7 @@ Rendering behavior:
 Context menu behavior in MVP:
 
 - Keep `Remove Folder`.
-- Do not expose `Reconnect` yet.
-- Reserve the role and action wiring for Phase 2.
+- Do not expose `Backup Again` yet.
 
 ### 5.8 MVP pairing and transfer handshake
 
@@ -410,7 +322,7 @@ For the same device UUID:
 
 - Reuse the same row in `mobile_devices`.
 - Reuse the same row in `mobile_folders` and the same indexed root folder on disk.
-- Transfer only assets that are new or whose `remote_asset_version` differs from the last transferred version.
+- Transfer only assets that are new or whose `content_sha1` differs from the last transferred asset.
 
 For MVP, the user may still enter repeat backup through the normal Add Folder -> Mobile Device flow again. That keeps the UI surface smaller while still delivering repeat-backup semantics.
 
@@ -500,51 +412,3 @@ Primary additions:
 - Add `Reconnect` to the mobile-folder context menu.
 - Let a stored `mobile_folders` row reopen a fresh pairing or reconnect dialog without re-adding the folder.
 - Add device mismatch decision handling that updates `mobile_devices` and `mobile_assets` intentionally instead of implicitly.
-- Promote `disconnected` from a persisted internal state to a user-visible resumable state.
-
-## 7. Phase 3 Design Direction
-
-Phase 3 should harden long-running sessions rather than changing the object model.
-
-Primary additions:
-
-- Session heartbeats and timeout recovery.
-- Better interrupted-transfer checkpointing.
-- More resilient status recovery after desktop restart or abnormal exit.
-
-## 8. Phase 4 Design Direction
-
-Phase 4 should add discovery on top of the same session manager and device registry.
-
-Primary additions:
-
-- LAN discovery through mDNS or dns-sd.
-- USB-assisted discovery hooks.
-- QR as fallback rather than as the only path.
-
-## 9. Phase 5 Design Direction
-
-Phase 5 should upgrade transport security without changing the folder/index integration.
-
-Primary additions:
-
-- Verified key exchange.
-- Expiring transport keys.
-- Rekey or trust-reset behavior on reconnect.
-
-## 10. Phase 6 Design Direction
-
-Phase 6 should add automatic in-session transport preference and handoff on top of the Phase 2 adapter set.
-
-Primary additions:
-
-- Detect available USB channel during an active session.
-- Seamlessly prefer or switch to USB when policy allows.
-- Keep session ID and on-disk target stable across handoff.
-
-## 11. Open Questions For Next Iteration
-
-These are the main places where I want explicit feedback before writing the next, lower-level draft:
-
-1. For repeat backups in MVP, is re-entering through Add Folder -> Mobile Device acceptable, or do you want the spec to pull the desktop reconnect action into MVP despite the current roadmap split?
-2. Do you want the next draft to go deeper on the protocol contract between mobile and desktop, or on the file-by-file implementation plan inside the current Python codebase first?

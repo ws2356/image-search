@@ -1,24 +1,24 @@
-- **MVP**
+- [x] **MVP**
   - iOS companion app with PC-first onboarding
   - In-app QR scanning, secure local pairing, Wi-Fi LAN backup, full eligible-library backup, progress UI, Stop action, completion dialog
   - Main-screen pending-item count and **Resume Backup** state after incomplete sessions
   - Exchange device identity and verify as minimum trust signal for backup authorization 
-- **Phase 2**
+- [x] **Phase 2**
   - Initial USB transport support after QR/bootstrap pairing, with Wi-Fi LAN retained as fallback
   - Partial-permission warning, incomplete-backup messaging, and low-battery warning before backup starts
   - Reconnect path that depends on the desktop-driven reconnect workflow
   - Replace immediate post-claim QR dialog dismissal with a pending-transfer state (spinner + waiting message), then dismiss once transfer start is confirmed
   - Device mismatch handling during reconnect flows, with user-friendly error messaging and clear recovery paths
   - Automatic USB preference and in-session handoff when a supported mobile device is connected via USB during backup
-- **Phase 3**
+- [x] **Phase 3**
   - Encrypted transfer with key exchange and verification on both devices
-- **Phase 4 (GA)**
+- [x] **Phase 4 (GA)**
   - ETA calculation and display based on transfer speed and remaining data
   - Deep-link onboarding from desktop to mobile app store
-- **Phase 5**
+- [ ] **Phase 5**
   - Android companion app with similar capabilities to iOS version, with platform-specific adjustments as needed
 
-- **Backlog**
+- [ ] **Backlog**
   - Best-effort background continuation with explicit messaging that transfer may pause when the OS suspends the app
   - Stronger platform-specific background transfer strategies where policy-compliant
   - File integrity verification with checksums or hashes, with user-friendly error handling and retry options for failed transfers
