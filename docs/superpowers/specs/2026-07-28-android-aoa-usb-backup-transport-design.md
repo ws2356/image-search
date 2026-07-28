@@ -17,6 +17,7 @@ Implement end-to-end USB backup transport for the Android AuBackup React Native 
 | Encryption | Match the LAN path: capability exchange, trust-proof signing, and `MobilePayloadEncryption` for JSON envelopes and binary asset chunks. |
 | Transport selection | Automatic prefer-USB with LAN fallback, similar to the iOS `AdaptiveMobileTransferClient`. |
 | Host validation | macOS first. Windows driver work follows once the macOS implementation is stable. |
+| Auth challenge | Computed inside native `AoaClient` using `opt` passed via `prepareBootstrap`; no JavaScript callback or two-round correlation is used. |
 | End-to-end tests | No automated end-to-end tests required. The implementation will be unit-tested and manually smoke-tested on a real Android device. |
 
 ## Architecture
@@ -146,7 +147,7 @@ The encryption is the same `MobilePayloadEncryption` used on LAN; the capability
 - Registers for `UsbManager.ACTION_USB_ACCESSORY_ATTACHED` / `DETACHED`.
 - Requests accessory permission via `UsbManager.requestPermission()`.
 - Opens the accessory `ParcelFileDescriptor` and starts a reader thread plus a writer thread.
-- Handles the incoming `transport.auth.challenge` as a special response path: it validates `sid`, computes the `SHA256(opt + rand)` proof, and sends the auth response envelope back to the desktop. The name `AoaClient` is kept because this class is the mobile-side peer that both sends requests and handles desktop-initiated challenge responses.
+- Handles the incoming `transport.auth.challenge` as a special response path: it validates `sid`, computes the `SHA256(opt + rand)` proof, and sends the auth response envelope back to the desktop. The one-time passcode `opt` is stored in native memory after `prepareBootstrap` and is never exposed to the JavaScript layer, matching the iOS USB implementation. The name `AoaClient` is kept because this class is the mobile-side peer that both sends requests and handles desktop-initiated challenge responses.
 - Correlates request/response envelopes by `request_id` and resolves pending JS promises.
 - Manages streaming asset requests: allows binary chunks to be sent for an active `request_id` until the completion envelope is sent.
 - On detach, rejects all pending promises with `connectionUnavailable`.
