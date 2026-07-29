@@ -2,7 +2,6 @@ package com.ausearch.aubackup.transport.aoa
 
 import android.app.Application
 import android.content.Context
-import android.os.ParcelFileDescriptor
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -16,10 +15,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -38,10 +38,6 @@ class AoaClientTest {
 
     private lateinit var context: Context
     private lateinit var client: AoaClient
-    private lateinit var peerToClientFile: File
-    private lateinit var clientToPeerFile: File
-    private lateinit var peerToClientState: FilePipeState
-    private lateinit var clientToPeerState: FilePipeState
     private lateinit var testInputStream: InputStream
     private lateinit var testOutputStream: OutputStream
 
@@ -60,12 +56,6 @@ class AoaClientTest {
         }
         if (::testOutputStream.isInitialized) {
             closeQuietly(testOutputStream)
-        }
-        if (::peerToClientFile.isInitialized) {
-            peerToClientFile.delete()
-        }
-        if (::clientToPeerFile.isInitialized) {
-            clientToPeerFile.delete()
         }
     }
 
@@ -101,37 +91,15 @@ class AoaClientTest {
     }
 
     private fun openTestPipes() {
-        val tempDir = context.cacheDir ?: File(System.getProperty("java.io.tmpdir") ?: "/tmp")
-        peerToClientFile = File.createTempFile("peer-to-client", ".pipe", tempDir)
-        clientToPeerFile = File.createTempFile("client-to-peer", ".pipe", tempDir)
-        peerToClientState = FilePipeState()
-        clientToPeerState = FilePipeState()
+        val peerToClientOutput = PipedOutputStream()
+        val peerToClientInput = PipedInputStream(peerToClientOutput, PIPE_BUFFER_SIZE)
 
-        val clientInputDescriptor = ParcelFileDescriptor.open(
-            peerToClientFile,
-            ParcelFileDescriptor.MODE_READ_WRITE,
-        )
-        val clientOutputDescriptor = ParcelFileDescriptor.open(
-            clientToPeerFile,
-            ParcelFileDescriptor.MODE_READ_WRITE,
-        )
-        val testInputDescriptor = ParcelFileDescriptor.open(
-            clientToPeerFile,
-            ParcelFileDescriptor.MODE_READ_WRITE,
-        )
-        val testOutputDescriptor = ParcelFileDescriptor.open(
-            peerToClientFile,
-            ParcelFileDescriptor.MODE_READ_WRITE,
-        )
+        val clientToPeerOutput = PipedOutputStream()
+        val clientToPeerInput = PipedInputStream(clientToPeerOutput, PIPE_BUFFER_SIZE)
 
-        testInputStream = AoaClient.BlockingFileInputStream(testInputDescriptor, clientToPeerState)
-        testOutputStream = AoaClient.BlockingFileOutputStream(testOutputDescriptor, peerToClientState)
-        client.openStreamsForTest(
-            clientInputDescriptor,
-            clientOutputDescriptor,
-            peerToClientState,
-            clientToPeerState,
-        )
+        testInputStream = clientToPeerInput
+        testOutputStream = peerToClientOutput
+        client.openStreamsForTest(peerToClientInput, clientToPeerOutput)
     }
 
     @Test
@@ -167,7 +135,10 @@ class AoaClientTest {
 
         val responseFrame = readFrame()
         assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, responseFrame.flags)
-        assertEquals(AUTH_CHALLENGE_REQUEST_ID, responseFrame.requestId.trim())
+        assertEquals(
+            AUTH_CHALLENGE_REQUEST_ID.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '),
+            responseFrame.requestId,
+        )
 
         val responseEnvelope = JSONObject(String(responseFrame.payload, Charsets.UTF_8))
         assertEquals(AoaAuthResponder.MOBILE_TRANSPORT_ENVELOPE_SCHEMA, responseEnvelope.getString("schema"))
@@ -200,7 +171,7 @@ class AoaClientTest {
 
         val outgoingFrame = readFrame()
         assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, outgoingFrame.flags)
-        assertEquals(requestId, outgoingFrame.requestId.trim())
+        assertEquals(requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '), outgoingFrame.requestId)
         assertEquals(requestEnvelope, String(outgoingFrame.payload, Charsets.UTF_8))
 
         val responseEnvelope = """
@@ -228,14 +199,14 @@ class AoaClientTest {
 
         val outgoingRequest = readFrame()
         assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, outgoingRequest.flags)
-        assertEquals(requestId, outgoingRequest.requestId.trim())
+        assertEquals(requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '), outgoingRequest.requestId)
         assertEquals(requestEnvelope, String(outgoingRequest.payload, Charsets.UTF_8))
 
         val chunk1 = byteArrayOf(0x01, 0x02, 0x03)
         client.sendBinaryChunk(requestId, chunk1)
         val outgoingChunk1 = readFrame()
         assertEquals(AoaFrameCodec.FRAME_FLAG_BINARY, outgoingChunk1.flags)
-        assertEquals(requestId, outgoingChunk1.requestId.trim())
+        assertEquals(requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '), outgoingChunk1.requestId)
         assertArrayEquals(chunk1, outgoingChunk1.payload)
 
         val chunk2 = byteArrayOf(0x04, 0x05)
@@ -291,7 +262,7 @@ class AoaClientTest {
 
         // Wait for the outgoing request frame; once it is on the wire the caller is blocked on the response.
         val outgoingFrame = readFrame()
-        assertEquals(requestId, outgoingFrame.requestId.trim())
+        assertEquals(requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '), outgoingFrame.requestId)
 
         // Closing the pipe the client reads from triggers reader EOF → closeConnection → signal queues.
         closeQuietly(testOutputStream)
@@ -384,5 +355,6 @@ class AoaClientTest {
 
     companion object {
         private const val AUTH_CHALLENGE_REQUEST_ID = "auth-challenge"
+        private const val PIPE_BUFFER_SIZE = 64 * 1024
     }
 }
