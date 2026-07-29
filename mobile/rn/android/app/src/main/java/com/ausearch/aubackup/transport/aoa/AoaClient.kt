@@ -12,6 +12,9 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import org.json.JSONObject
+import java.io.FileDescriptor
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -22,6 +25,16 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Shared state for a file-backed test pipe.
+ *
+ * Used by [BlockingFileInputStream] and [BlockingFileOutputStream] to signal when the writer
+ * side has been closed, so the reader can return EOF instead of polling forever.
+ */
+internal class FilePipeState {
+    val writerClosed = AtomicBoolean(false)
+}
 
 /**
  * Listener interface for AOA transport state changes.
@@ -57,10 +70,10 @@ class AoaClient private constructor(private val context: Context) {
     private val state = AtomicReference(AoaTransportState.IDLE)
     private val authResponder = AoaAuthResponder()
     private val outgoingQueue: BlockingQueue<ByteArray> = LinkedBlockingQueue()
-    private val stateListeners = mutableListOf<AoaClientListener>()
+    private val listeners = mutableListOf<AoaClientListener>()
 
     private val pendingResponses = ConcurrentHashMap<String, BlockingQueue<ResponseResult>>()
-    private val streamingRequestIds = ConcurrentHashMap.newKeySet<String>()
+    private val pendingStreamingResponses = ConcurrentHashMap<String, BlockingQueue<ResponseResult>>()
 
     @Volatile
     private var preparedSessionId: String? = null
@@ -75,6 +88,8 @@ class AoaClient private constructor(private val context: Context) {
     private var readerThread: Thread? = null
     private var writerThread: Thread? = null
     private val stopped = AtomicBoolean(true)
+    private var testInputDescriptor: ParcelFileDescriptor? = null
+    private var testOutputDescriptor: ParcelFileDescriptor? = null
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -189,8 +204,7 @@ class AoaClient private constructor(private val context: Context) {
     fun beginStreamingRequest(envelopeJson: String): String {
         ensureConnected()
         val requestId = extractRequestIdOrGenerate(envelopeJson)
-        streamingRequestIds.add(requestId)
-        registerPendingResponse(requestId)
+        registerPendingStreamingResponse(requestId)
         val frame = AoaFrameCodec.encodeFrame(
             padRequestId(requestId),
             envelopeJson.toByteArray(Charsets.UTF_8),
@@ -208,7 +222,7 @@ class AoaClient private constructor(private val context: Context) {
      */
     fun sendBinaryChunk(requestId: String, chunk: ByteArray) {
         ensureConnected()
-        if (!streamingRequestIds.contains(requestId)) {
+        if (!pendingStreamingResponses.containsKey(requestId)) {
             throw AoaTransportError.SendFailed(
                 "Cannot send binary chunk for inactive streaming request $requestId"
             )
@@ -230,15 +244,15 @@ class AoaClient private constructor(private val context: Context) {
      */
     fun finishStreamingRequest(requestId: String): String {
         ensureConnected()
-        if (!streamingRequestIds.contains(requestId)) {
-            throw AoaTransportError.SendFailed(
-                "Cannot finish inactive streaming request $requestId"
-            )
+        val responseQueue = synchronized(this) {
+            if (state.get() != AoaTransportState.CONNECTED) {
+                throw AoaTransportError.ConnectionLost("AOA connection lost")
+            }
+            pendingStreamingResponses[requestId]
+                ?: throw AoaTransportError.SendFailed(
+                    "Cannot finish inactive streaming request $requestId"
+                )
         }
-        val responseQueue = pendingResponses[requestId]
-            ?: throw AoaTransportError.SendFailed(
-                "No pending response queue for streaming request $requestId"
-            )
         try {
             val result = responseQueue.poll(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 ?: throw AoaTransportError.ResponseTimedOut(
@@ -249,8 +263,7 @@ class AoaClient private constructor(private val context: Context) {
                 is ResponseResult.Error -> throw result.error
             }
         } finally {
-            pendingResponses.remove(requestId)
-            streamingRequestIds.remove(requestId)
+            pendingStreamingResponses.remove(requestId)
         }
     }
 
@@ -279,26 +292,20 @@ class AoaClient private constructor(private val context: Context) {
     /**
      * Registers a listener that will be invoked on every AOA transport state change.
      */
-    fun addStateListener(listener: AoaClientListener) {
-        synchronized(stateListeners) {
-            stateListeners.add(listener)
+    fun addListener(listener: AoaClientListener) {
+        synchronized(listeners) {
+            listeners.add(listener)
         }
     }
 
     /**
-     * Unregisters a previously added state listener.
+     * Unregisters a previously added listener.
      */
-    fun removeStateListener(listener: AoaClientListener) {
-        synchronized(stateListeners) {
-            stateListeners.remove(listener)
+    fun removeListener(listener: AoaClientListener) {
+        synchronized(listeners) {
+            listeners.remove(listener)
         }
     }
-
-    /**
-     * Returns the current AOA transport state. Safe to call from any thread.
-     */
-    val currentState: AoaTransportState
-        get() = state.get()
 
     @VisibleForTesting
     internal fun getPreparedSessionIdForTest(): String? = preparedSessionId
@@ -344,6 +351,12 @@ class AoaClient private constructor(private val context: Context) {
     private fun registerPendingResponse(requestId: String): BlockingQueue<ResponseResult> {
         val queue = LinkedBlockingQueue<ResponseResult>(1)
         pendingResponses[requestId] = queue
+        return queue
+    }
+
+    private fun registerPendingStreamingResponse(requestId: String): BlockingQueue<ResponseResult> {
+        val queue = LinkedBlockingQueue<ResponseResult>(1)
+        pendingStreamingResponses[requestId] = queue
         return queue
     }
 
@@ -427,12 +440,22 @@ class AoaClient private constructor(private val context: Context) {
     }
 
     @VisibleForTesting
-    internal fun openStreamsForTest(inputStream: InputStream, outputStream: OutputStream) {
+    internal fun openStreamsForTest(
+        inputDescriptor: ParcelFileDescriptor,
+        outputDescriptor: ParcelFileDescriptor,
+        inputState: FilePipeState,
+        outputState: FilePipeState,
+    ) {
         synchronized(this) {
             closeConnection()
             openedDescriptor = null
+            testInputDescriptor = inputDescriptor
+            testOutputDescriptor = outputDescriptor
             stopped.set(false)
-            startReaderWriter(inputStream, outputStream)
+            startReaderWriter(
+                BlockingFileInputStream(inputDescriptor, inputState),
+                BlockingFileOutputStream(outputDescriptor, outputState),
+            )
             transitionTo(AoaTransportState.AUTHENTICATING)
         }
     }
@@ -461,13 +484,28 @@ class AoaClient private constructor(private val context: Context) {
             // Ignore close errors during cleanup.
         }
         openedDescriptor = null
+        try {
+            testInputDescriptor?.close()
+        } catch (_: IOException) {
+            // Ignore close errors during cleanup.
+        }
+        testInputDescriptor = null
+        try {
+            testOutputDescriptor?.close()
+        } catch (_: IOException) {
+            // Ignore close errors during cleanup.
+        }
+        testOutputDescriptor = null
         outgoingQueue.clear()
         val connectionLostError = AoaTransportError.ConnectionLost("AOA connection lost")
         pendingResponses.values.forEach { queue ->
             queue.offer(ResponseResult.Error(connectionLostError))
         }
-        streamingRequestIds.clear()
+        pendingStreamingResponses.values.forEach { queue ->
+            queue.offer(ResponseResult.Error(connectionLostError))
+        }
         pendingResponses.clear()
+        pendingStreamingResponses.clear()
         if (!stopped.get()) {
             transitionTo(AoaTransportState.DISCONNECTED)
         }
@@ -569,7 +607,7 @@ class AoaClient private constructor(private val context: Context) {
             return
         }
         val requestId = envelope.optString("request_id")
-        val queue = pendingResponses[requestId]
+        val queue = pendingResponses[requestId] ?: pendingStreamingResponses[requestId]
         if (queue != null) {
             queue.offer(ResponseResult.Success(payload))
         } else {
@@ -602,8 +640,8 @@ class AoaClient private constructor(private val context: Context) {
     }
 
     private fun notifyStateListeners(newState: AoaTransportState, errorMessage: String?) {
-        val listeners = synchronized(stateListeners) { stateListeners.toList() }
-        listeners.forEach { listener ->
+        val snapshot = synchronized(listeners) { listeners.toList() }
+        snapshot.forEach { listener ->
             try {
                 listener.onStateChanged(newState, errorMessage)
             } catch (e: Exception) {
@@ -635,11 +673,91 @@ class AoaClient private constructor(private val context: Context) {
             && first.version == second.version
     }
 
+    /**
+     * Blocking file-backed input stream used only by the test harness.
+     *
+     * Regular files opened through [ParcelFileDescriptor.open] return EOF immediately when no
+     * data has been written yet. This wrapper polls the underlying file size and blocks until
+     * new bytes are available, allowing two threads to use temp files as unidirectional pipes.
+     */
+    @VisibleForTesting
+    internal class BlockingFileInputStream(
+        private val descriptor: ParcelFileDescriptor,
+        private val state: FilePipeState,
+    ) : InputStream() {
+        private val input = FileInputStream(descriptor.fileDescriptor)
+        private val channel = input.channel
+        @Volatile
+        private var closed = false
+
+        override fun read(): Int {
+            val buffer = ByteArray(1)
+            val read = read(buffer, 0, 1)
+            return if (read < 0) -1 else buffer[0].toInt() and 0xFF
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            while (!closed) {
+                val available = channel.size() - channel.position()
+                if (available > 0) {
+                    val toRead = minOf(len.toLong(), available).toInt()
+                    val read = input.read(b, off, toRead)
+                    if (read > 0) return read
+                }
+                if (state.writerClosed.get()) {
+                    return -1
+                }
+                Thread.sleep(POLL_INTERVAL_MS)
+            }
+            return -1
+        }
+
+        override fun close() {
+            closed = true
+            input.close()
+            descriptor.close()
+        }
+    }
+
+    /**
+     * Blocking file-backed output stream used only by the test harness.
+     *
+     * Writes are flushed immediately so that the peer thread sees the new bytes.
+     */
+    @VisibleForTesting
+    internal class BlockingFileOutputStream(
+        private val descriptor: ParcelFileDescriptor,
+        private val state: FilePipeState,
+    ) : OutputStream() {
+        private val output = FileOutputStream(descriptor.fileDescriptor)
+
+        override fun write(b: Int) {
+            output.write(b)
+            output.flush()
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            output.write(b, off, len)
+            output.flush()
+        }
+
+        override fun flush() {
+            output.flush()
+        }
+
+        override fun close() {
+            state.writerClosed.set(true)
+            output.close()
+            descriptor.close()
+        }
+    }
+
     companion object {
         private const val LOG_TAG = "AoaClient"
         private const val READ_BUFFER_SIZE = 16 * 1024
         private const val RESPONSE_TIMEOUT_MS = 10_000L
-        const val ACTION_USB_PERMISSION = "com.ausearch.aubackup.USB_ACCESSORY_PERMISSION"
+        private const val POLL_INTERVAL_MS = 5L
+        private const val ACTION_USB_PERMISSION = "com.ausearch.aubackup.USB_ACCESSORY_PERMISSION"
 
         @Volatile
         private var instance: AoaClient? = null

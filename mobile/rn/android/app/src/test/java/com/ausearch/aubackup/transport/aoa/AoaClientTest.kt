@@ -2,6 +2,7 @@ package com.ausearch.aubackup.transport.aoa
 
 import android.app.Application
 import android.content.Context
+import android.os.ParcelFileDescriptor
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -15,15 +16,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -36,10 +38,10 @@ class AoaClientTest {
 
     private lateinit var context: Context
     private lateinit var client: AoaClient
-    private lateinit var testToClientInput: PipedInputStream
-    private lateinit var testToClientOutput: PipedOutputStream
-    private lateinit var clientToTestInput: PipedInputStream
-    private lateinit var clientToTestOutput: PipedOutputStream
+    private lateinit var peerToClientFile: File
+    private lateinit var clientToPeerFile: File
+    private lateinit var peerToClientState: FilePipeState
+    private lateinit var clientToPeerState: FilePipeState
     private lateinit var testInputStream: InputStream
     private lateinit var testOutputStream: OutputStream
 
@@ -59,22 +61,84 @@ class AoaClientTest {
         if (::testOutputStream.isInitialized) {
             closeQuietly(testOutputStream)
         }
+        if (::peerToClientFile.isInitialized) {
+            peerToClientFile.delete()
+        }
+        if (::clientToPeerFile.isInitialized) {
+            clientToPeerFile.delete()
+        }
+    }
+
+    private fun stateObserver(): StateObserver = StateObserver(client)
+
+    private class StateObserver(private val client: AoaClient) {
+        private val states = mutableListOf<AoaTransportState>()
+        private val latches = ConcurrentHashMap<AoaTransportState, CountDownLatch>()
+        private val listener = object : AoaClientListener {
+            override fun onStateChanged(state: AoaTransportState, errorMessage: String?) {
+                synchronized(states) {
+                    states.add(state)
+                }
+                latches[state]?.countDown()
+            }
+        }
+
+        init {
+            client.addListener(listener)
+        }
+
+        fun hasSeen(state: AoaTransportState): Boolean {
+            synchronized(states) { return states.contains(state) }
+        }
+
+        fun waitFor(state: AoaTransportState, timeoutMs: Long = 5000): Boolean {
+            if (hasSeen(state)) {
+                return true
+            }
+            val latch = latches.getOrPut(state) { CountDownLatch(1) }
+            return latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+        }
     }
 
     private fun openTestPipes() {
-        testToClientInput = PipedInputStream()
-        testToClientOutput = PipedOutputStream(testToClientInput)
-        clientToTestInput = PipedInputStream()
-        clientToTestOutput = PipedOutputStream(clientToTestInput)
-        testInputStream = clientToTestInput
-        testOutputStream = testToClientOutput
-        client.openStreamsForTest(testToClientInput, clientToTestOutput)
+        val tempDir = context.cacheDir ?: File(System.getProperty("java.io.tmpdir") ?: "/tmp")
+        peerToClientFile = File.createTempFile("peer-to-client", ".pipe", tempDir)
+        clientToPeerFile = File.createTempFile("client-to-peer", ".pipe", tempDir)
+        peerToClientState = FilePipeState()
+        clientToPeerState = FilePipeState()
+
+        val clientInputDescriptor = ParcelFileDescriptor.open(
+            peerToClientFile,
+            ParcelFileDescriptor.MODE_READ_WRITE,
+        )
+        val clientOutputDescriptor = ParcelFileDescriptor.open(
+            clientToPeerFile,
+            ParcelFileDescriptor.MODE_READ_WRITE,
+        )
+        val testInputDescriptor = ParcelFileDescriptor.open(
+            clientToPeerFile,
+            ParcelFileDescriptor.MODE_READ_WRITE,
+        )
+        val testOutputDescriptor = ParcelFileDescriptor.open(
+            peerToClientFile,
+            ParcelFileDescriptor.MODE_READ_WRITE,
+        )
+
+        testInputStream = AoaClient.BlockingFileInputStream(testInputDescriptor, clientToPeerState)
+        testOutputStream = AoaClient.BlockingFileOutputStream(testOutputDescriptor, peerToClientState)
+        client.openStreamsForTest(
+            clientInputDescriptor,
+            clientOutputDescriptor,
+            peerToClientState,
+            clientToPeerState,
+        )
     }
 
     @Test
     fun `prepareBootstrap stores sessionId oneTimePasscode and suggestedPort`() {
+        val observer = stateObserver()
         client.prepareBootstrap("sid-001", "123456", 8080)
-        assertEquals(AoaTransportState.PREPARING, client.currentState)
+        assertTrue(observer.hasSeen(AoaTransportState.PREPARING))
         assertEquals("sid-001", client.getPreparedSessionIdForTest())
         assertEquals(8080, client.getPreparedSuggestedPortForTest())
     }
@@ -91,10 +155,11 @@ class AoaClientTest {
 
     @Test
     fun `auth challenge handshake transitions to connected and echoes proof`() {
+        val observer = stateObserver()
         client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
 
-        assertEquals(AoaTransportState.AUTHENTICATING, client.currentState)
+        assertTrue(observer.hasSeen(AoaTransportState.AUTHENTICATING))
 
         val rand = "aabbccddeeff00112233445566778899"
         val challengeEnvelope = buildAuthChallengeEnvelope(rand)
@@ -116,7 +181,7 @@ class AoaClientTest {
         val expectedProof = sha256Hex("123456$rand")
         assertEquals(expectedProof, responseBody.getString("proof"))
 
-        assertEquals(AoaTransportState.CONNECTED, client.currentState)
+        assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
         assertTrue(client.isConnected())
     }
 
@@ -198,7 +263,7 @@ class AoaClientTest {
                 observedStates.add(state)
             }
         }
-        client.addStateListener(listener)
+        client.addListener(listener)
 
         client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
@@ -208,7 +273,7 @@ class AoaClientTest {
         assertTrue(observedStates.contains(AoaTransportState.AUTHENTICATING))
         assertTrue(observedStates.contains(AoaTransportState.CONNECTED))
 
-        client.removeStateListener(listener)
+        client.removeListener(listener)
     }
 
     @Test
@@ -241,13 +306,14 @@ class AoaClientTest {
 
     @Test
     fun `reset stops client and clears bootstrap state`() {
+        val observer = stateObserver()
         client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
         performAuthHandshake()
 
         client.reset()
 
-        assertEquals(AoaTransportState.IDLE, client.currentState)
+        assertTrue(observer.waitFor(AoaTransportState.IDLE))
         assertFalse(client.isConnected())
         assertEquals(null, client.getPreparedSessionIdForTest())
         assertEquals(-1, client.getPreparedSuggestedPortForTest())
