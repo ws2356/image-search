@@ -315,27 +315,6 @@ class UsbWebSocketTransportAdapter:
         expected_digest = self.build_auth_digest(rand)
         return hmac.compare_digest(expected_digest, provided_digest)
 
-    def dispatch_text_envelope(
-        self,
-        raw_message: str,
-        *,
-        remote_address: str | None = None,
-    ) -> MobileTransportResponse:
-        _, response = self._dispatch_envelope_request(
-            raw_message,
-            remote_address=remote_address,
-        )
-        if response is None:
-            return MobileTransportResponse(
-                status_code=202,
-                payload={
-                    "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
-                    "status": "accepted",
-                    "message": "Desktop accepted the transfer asset stream metadata.",
-                },
-            )
-        return response
-
     def _run_transport_loop(self) -> None:
         while not self._stop_event.is_set():
             config = self.bootstrap_config
