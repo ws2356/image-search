@@ -8,6 +8,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,6 +24,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -49,7 +51,7 @@ class AoaClientTest {
 
     @After
     fun tearDown() {
-        client.stop()
+        client.reset()
         executor.shutdownNow()
         if (::testInputStream.isInitialized) {
             closeQuietly(testInputStream)
@@ -192,7 +194,7 @@ class AoaClientTest {
     fun `state listeners are notified on state changes`() {
         val observedStates = mutableListOf<AoaTransportState>()
         val listener = object : AoaClientListener {
-            override fun onStateChanged(state: AoaTransportState) {
+            override fun onStateChanged(state: AoaTransportState, errorMessage: String?) {
                 observedStates.add(state)
             }
         }
@@ -207,6 +209,34 @@ class AoaClientTest {
         assertTrue(observedStates.contains(AoaTransportState.CONNECTED))
 
         client.removeStateListener(listener)
+    }
+
+    @Test
+    fun `connection drop wakes blocked sendRequest with ConnectionLost`() {
+        client.prepareBootstrap("sid-001", "123456", 8080)
+        openTestPipes()
+        performAuthHandshake()
+
+        val requestId = UUID.randomUUID().toString()
+        val requestEnvelope = """
+            {"operation":"test.echo","request_id":"$requestId","body":{}}
+        """.trimIndent().trim()
+
+        val future = executor.submit<String> { client.sendRequest(requestEnvelope) }
+
+        // Wait for the outgoing request frame; once it is on the wire the caller is blocked on the response.
+        val outgoingFrame = readFrame()
+        assertEquals(requestId, outgoingFrame.requestId.trim())
+
+        // Closing the pipe the client reads from triggers reader EOF → closeConnection → signal queues.
+        closeQuietly(testOutputStream)
+
+        try {
+            future.get(2, TimeUnit.SECONDS)
+            fail("Expected ConnectionLost")
+        } catch (e: ExecutionException) {
+            assertTrue(e.cause is AoaTransportError.ConnectionLost)
+        }
     }
 
     @Test

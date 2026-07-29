@@ -29,7 +29,16 @@ import java.util.concurrent.atomic.AtomicReference
  * Implementations are invoked on the thread that triggered the state change.
  */
 interface AoaClientListener {
-    fun onStateChanged(state: AoaTransportState)
+    fun onStateChanged(state: AoaTransportState, errorMessage: String?)
+}
+
+/**
+ * Internal result type for correlated request/response queues.
+ * Allows a dropped connection to wake blocked callers with an error instead of a timeout.
+ */
+private sealed class ResponseResult {
+    data class Success(val payload: String) : ResponseResult()
+    data class Error(val error: AoaTransportError) : ResponseResult()
 }
 
 /**
@@ -50,7 +59,7 @@ class AoaClient private constructor(private val context: Context) {
     private val outgoingQueue: BlockingQueue<ByteArray> = LinkedBlockingQueue()
     private val stateListeners = mutableListOf<AoaClientListener>()
 
-    private val pendingResponses = ConcurrentHashMap<String, BlockingQueue<String>>()
+    private val pendingResponses = ConcurrentHashMap<String, BlockingQueue<ResponseResult>>()
     private val streamingRequestIds = ConcurrentHashMap.newKeySet<String>()
 
     @Volatile
@@ -114,6 +123,7 @@ class AoaClient private constructor(private val context: Context) {
         preparedSuggestedPort = suggestedPort
         bootstrapPrepared = true
         transitionTo(AoaTransportState.PREPARING)
+        startInternal()
         probeAttachedAccessories()
     }
 
@@ -153,10 +163,14 @@ class AoaClient private constructor(private val context: Context) {
                 AoaFrameCodec.FRAME_FLAG_TEXT,
             )
             outgoingQueue.put(frame)
-            return responseQueue.poll(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val result = responseQueue.poll(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 ?: throw AoaTransportError.ResponseTimedOut(
                     "No response received for request $requestId within ${RESPONSE_TIMEOUT_MS}ms"
                 )
+            return when (result) {
+                is ResponseResult.Success -> result.payload
+                is ResponseResult.Error -> throw result.error
+            }
         } finally {
             pendingResponses.remove(requestId)
         }
@@ -226,10 +240,14 @@ class AoaClient private constructor(private val context: Context) {
                 "No pending response queue for streaming request $requestId"
             )
         try {
-            return responseQueue.poll(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val result = responseQueue.poll(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                 ?: throw AoaTransportError.ResponseTimedOut(
                     "No final response received for streaming request $requestId within ${RESPONSE_TIMEOUT_MS}ms"
                 )
+            return when (result) {
+                is ResponseResult.Success -> result.payload
+                is ResponseResult.Error -> throw result.error
+            }
         } finally {
             pendingResponses.remove(requestId)
             streamingRequestIds.remove(requestId)
@@ -240,11 +258,12 @@ class AoaClient private constructor(private val context: Context) {
      * Starts listening for USB accessory attach/detach events.
      * Safe to call multiple times; subsequent calls are ignored.
      *
+     * This is an internal lifecycle step automatically invoked by [prepareBootstrap].
      * The client does not open an accessory until [prepareBootstrap] has been called,
      * matching the pairing flow where the QR code supplies the one-time passcode.
      */
     @Synchronized
-    fun start() {
+    private fun startInternal() {
         if (!stopped.getAndSet(false)) {
             return
         }
@@ -255,15 +274,6 @@ class AoaClient private constructor(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
         registerReceiver()
-    }
-
-    /**
-     * Stops the client, closes the accessory connection, and clears state.
-     */
-    @Synchronized
-    fun stop() {
-        stopInternal()
-        transitionTo(AoaTransportState.IDLE)
     }
 
     /**
@@ -331,8 +341,8 @@ class AoaClient private constructor(private val context: Context) {
         return requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' ')
     }
 
-    private fun registerPendingResponse(requestId: String): BlockingQueue<String> {
-        val queue = LinkedBlockingQueue<String>(1)
+    private fun registerPendingResponse(requestId: String): BlockingQueue<ResponseResult> {
+        val queue = LinkedBlockingQueue<ResponseResult>(1)
         pendingResponses[requestId] = queue
         return queue
     }
@@ -452,8 +462,12 @@ class AoaClient private constructor(private val context: Context) {
         }
         openedDescriptor = null
         outgoingQueue.clear()
-        pendingResponses.clear()
+        val connectionLostError = AoaTransportError.ConnectionLost("AOA connection lost")
+        pendingResponses.values.forEach { queue ->
+            queue.offer(ResponseResult.Error(connectionLostError))
+        }
         streamingRequestIds.clear()
+        pendingResponses.clear()
         if (!stopped.get()) {
             transitionTo(AoaTransportState.DISCONNECTED)
         }
@@ -463,19 +477,17 @@ class AoaClient private constructor(private val context: Context) {
         val buffer = ByteArray(READ_BUFFER_SIZE)
         val decoder = AoaFrameCodec.StreamDecoder()
         try {
-            inputStream.use { input ->
-                while (!stopped.get() && !Thread.currentThread().isInterrupted) {
-                    val readBytes = input.read(buffer)
-                    if (readBytes < 0) {
-                        break
-                    }
-                    if (readBytes == 0) {
-                        continue
-                    }
-                    val frames = decoder.feed(buffer.copyOfRange(0, readBytes))
-                    for (frame in frames) {
-                        handleFrame(frame)
-                    }
+            while (!stopped.get() && !Thread.currentThread().isInterrupted) {
+                val readBytes = inputStream.read(buffer)
+                if (readBytes < 0) {
+                    break
+                }
+                if (readBytes == 0) {
+                    continue
+                }
+                val frames = decoder.feed(buffer.copyOfRange(0, readBytes))
+                for (frame in frames) {
+                    handleFrame(frame)
                 }
             }
         } catch (e: IOException) {
@@ -540,7 +552,7 @@ class AoaClient private constructor(private val context: Context) {
             )
         } catch (e: AoaTransportError) {
             Log.w(LOG_TAG, "Auth challenge rejected: ${e.message}")
-            transitionTo(AoaTransportState.FAILED)
+            transitionTo(AoaTransportState.FAILED, e.message)
             return
         }
         val responseFrame = AoaFrameCodec.encodeFrame(
@@ -559,7 +571,7 @@ class AoaClient private constructor(private val context: Context) {
         val requestId = envelope.optString("request_id")
         val queue = pendingResponses[requestId]
         if (queue != null) {
-            queue.offer(payload)
+            queue.offer(ResponseResult.Success(payload))
         } else {
             Log.w(LOG_TAG, "Received response for unknown request_id: $requestId")
         }
@@ -567,12 +579,10 @@ class AoaClient private constructor(private val context: Context) {
 
     private fun runWriter(outputStream: OutputStream) {
         try {
-            outputStream.use { output ->
-                while (!stopped.get() && !Thread.currentThread().isInterrupted) {
-                    val frame = outgoingQueue.take()
-                    output.write(frame)
-                    output.flush()
-                }
+            while (!stopped.get() && !Thread.currentThread().isInterrupted) {
+                val frame = outgoingQueue.take()
+                outputStream.write(frame)
+                outputStream.flush()
             }
         } catch (e: IOException) {
             Log.w(LOG_TAG, "Writer stopped with I/O error: ${e.message}")
@@ -583,19 +593,19 @@ class AoaClient private constructor(private val context: Context) {
         }
     }
 
-    private fun transitionTo(newState: AoaTransportState) {
+    private fun transitionTo(newState: AoaTransportState, errorMessage: String? = null) {
         val previous = state.getAndSet(newState)
         if (previous != newState) {
             Log.d(LOG_TAG, "State $previous -> $newState")
-            notifyStateListeners(newState)
+            notifyStateListeners(newState, errorMessage)
         }
     }
 
-    private fun notifyStateListeners(newState: AoaTransportState) {
+    private fun notifyStateListeners(newState: AoaTransportState, errorMessage: String?) {
         val listeners = synchronized(stateListeners) { stateListeners.toList() }
         listeners.forEach { listener ->
             try {
-                listener.onStateChanged(newState)
+                listener.onStateChanged(newState, errorMessage)
             } catch (e: Exception) {
                 Log.w(LOG_TAG, "State listener threw: ${e.message}")
             }
@@ -603,8 +613,12 @@ class AoaClient private constructor(private val context: Context) {
     }
 
     private fun extractAccessory(intent: Intent): UsbAccessory? {
-        @Suppress("DEPRECATION")
-        return intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+        }
     }
 
     private fun currentAccessory(): UsbAccessory? {
@@ -646,7 +660,7 @@ class AoaClient private constructor(private val context: Context) {
         @VisibleForTesting
         @JvmStatic
         fun resetInstance() {
-            instance?.stop()
+            instance?.reset()
             instance = null
         }
 
