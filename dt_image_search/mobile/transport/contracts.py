@@ -17,6 +17,7 @@ TRANSFER_COMPLETE_OPERATION = "transfer.complete"
 class MobileTransportKind(str, Enum):
     LAN_HTTP = "lan_http"
     USB_WEBSOCKET = "usb_websocket"
+    AOA_USB = "aoa_usb"
 
 
 @dataclass(frozen=True)

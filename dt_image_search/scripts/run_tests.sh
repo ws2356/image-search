@@ -74,6 +74,7 @@ unit_and_functional_tests=(
   tests/unit/test_mobile_transport_router.py
   tests/unit/test_mobile_usb_tunnel.py
   tests/unit/test_mobile_usb_ws_adapter.py
+  dt_image_search/tests/unit/transport/test_usb_aoa_adapter.py
   tests/unit/test_android_aoa_poc_contract.py
   tests/unit/test_android_aoa_poc_summary_cli.py
   tests/unit/test_android_aoa_poc_gate_cli.py
