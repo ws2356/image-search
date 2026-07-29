@@ -14,7 +14,8 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
 import com.ausearch.aubackup.transfer.BackupTransferServicePackage
-import com.ausearch.aubackup.usb.poc.AoaPocAccessoryRuntime
+import com.ausearch.aubackup.transport.aoa.AoaClient
+import com.ausearch.aubackup.transport.aoa.AoaTransportPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -24,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(BackupTransferServicePackage())
+          add(AoaTransportPackage())
         }
     )
   }
@@ -37,11 +39,10 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
-    AoaPocAccessoryRuntime.start(this)
+    AoaClient.getInstance(this)
   }
 
   override fun onTerminate() {
-    AoaPocAccessoryRuntime.stop()
     super.onTerminate()
   }
 
