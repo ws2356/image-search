@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Target Android API 24+ (use `ContextCompat` for receiver registration).
-- Use the same AOA frame header as the desktop side: version 1, request_id 36 ASCII bytes, length big-endian, 1 reserved flags byte.
+- Use the same AOA frame header as the desktop side: version 1, request_id 36 ASCII bytes, length big-endian, 1 flags byte (`0x00` text, `0x01` binary).
 - The native runtime must reuse the existing `dtis.mobile-transport.v1` envelope schema and auth handshake from the iOS USB implementation.
 - `opt` is stored in native memory only after `prepareBootstrap`; it is not logged or exposed to JavaScript.
 - Tests must run without a physical device using fake `ParcelFileDescriptor` pipes.
@@ -28,7 +28,7 @@
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `AoaFrameCodec.encodeFrame(requestId: String, payload: ByteArray): ByteArray`, `AoaFrameCodec.decodeFrame(frame: ByteArray): Pair<String, ByteArray>`, `AoaFrameStreamDecoder`, `AoaTransportError`, `AoaTransportState`.
+- Produces: `AoaFrameCodec.encodeFrame(requestId: String, payload: ByteArray, flags: Byte = FRAME_FLAG_TEXT): ByteArray`, `AoaFrameCodec.decodeFrame(frame: ByteArray): AoaFrame`, `AoaFrameStreamDecoder`, `AoaTransportError`, `AoaTransportState`, and `AoaFrame(requestId: String, flags: Byte, payload: ByteArray)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -45,9 +45,18 @@ class AoaFrameCodecTest {
         val payload = "hello".toByteArray(Charsets.UTF_8)
         val frame = AoaFrameCodec.encodeFrame(requestId, payload)
         assertEquals(1 + 36 + 4 + 1 + payload.size, frame.size)
-        val (decodedId, decodedPayload) = AoaFrameCodec.decodeFrame(frame)
-        assertEquals(requestId, decodedId)
-        assertEquals("hello", decodedPayload.toString(Charsets.UTF_8))
+        val decoded = AoaFrameCodec.decodeFrame(frame)
+        assertEquals(requestId, decoded.requestId)
+        assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, decoded.flags)
+        assertEquals("hello", decoded.payload.toString(Charsets.UTF_8))
+
+        val binaryFrame = AoaFrameCodec.encodeFrame(
+            requestId,
+            payload,
+            flags = AoaFrameCodec.FRAME_FLAG_BINARY,
+        )
+        val decodedBinary = AoaFrameCodec.decodeFrame(binaryFrame)
+        assertEquals(AoaFrameCodec.FRAME_FLAG_BINARY, decodedBinary.flags)
     }
 
     @Test
@@ -59,7 +68,8 @@ class AoaFrameCodecTest {
         assertEquals(0, first.size)
         val second = decoder.feed(frame.copyOfRange(10, frame.size))
         assertEquals(1, second.size)
-        assertEquals(requestId, second[0].first)
+        assertEquals(requestId, second[0].requestId)
+        assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, second[0].flags)
     }
 }
 ```
@@ -105,26 +115,50 @@ package com.ausearch.aubackup.transport.aoa
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
+data class AoaFrame(
+    val requestId: String,
+    val flags: Byte,
+    val payload: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is AoaFrame) return false
+        return requestId == other.requestId && flags == other.flags && payload.contentEquals(other.payload)
+    }
+
+    override fun hashCode(): Int {
+        var result = requestId.hashCode()
+        result = 31 * result + flags
+        result = 31 * result + payload.contentHashCode()
+        return result
+    }
+}
+
 object AoaFrameCodec {
     const val FRAME_VERSION: Byte = 1
     const val REQUEST_ID_LENGTH: Int = 36
     const val HEADER_LENGTH: Int = 1 + REQUEST_ID_LENGTH + 4 + 1
+    const val FRAME_FLAG_TEXT: Byte = 0x00
+    const val FRAME_FLAG_BINARY: Byte = 0x01
 
-    fun encodeFrame(requestId: String, payload: ByteArray): ByteArray {
+    fun encodeFrame(requestId: String, payload: ByteArray, flags: Byte = FRAME_FLAG_TEXT): ByteArray {
         val requestIdBytes = requestId.toByteArray(StandardCharsets.US_ASCII)
         require(requestIdBytes.size == REQUEST_ID_LENGTH) {
             "requestId must be exactly $REQUEST_ID_LENGTH ASCII bytes"
+        }
+        require(flags == FRAME_FLAG_TEXT || flags == FRAME_FLAG_BINARY) {
+            "Unsupported AOA frame flags: $flags"
         }
         val buffer = ByteBuffer.allocate(HEADER_LENGTH + payload.size)
         buffer.put(FRAME_VERSION)
         buffer.put(requestIdBytes)
         buffer.putInt(payload.size)
-        buffer.put(0)
+        buffer.put(flags)
         buffer.put(payload)
         return buffer.array()
     }
 
-    fun decodeFrame(frame: ByteArray): Pair<String, ByteArray> {
+    fun decodeFrame(frame: ByteArray): AoaFrame {
         require(frame.size >= HEADER_LENGTH) { "AOA frame is too short" }
         val buffer = ByteBuffer.wrap(frame)
         val version = buffer.get()
@@ -134,23 +168,31 @@ object AoaFrameCodec {
         val requestId = String(requestIdBytes, StandardCharsets.US_ASCII).trim()
         require(requestId.isNotEmpty()) { "AOA frame requestId is empty" }
         val payloadLength = buffer.int
+        val flags = buffer.get()
+        require(flags == FRAME_FLAG_TEXT || flags == FRAME_FLAG_BINARY) {
+            "Unsupported AOA frame flags: $flags"
+        }
         val payload = ByteArray(payloadLength)
         buffer.get(payload)
         require(payload.size == payloadLength) { "AOA frame payload length mismatch" }
-        return requestId to payload
+        return AoaFrame(requestId, flags, payload)
     }
 
     class StreamDecoder {
         private val buffer = mutableListOf<Byte>()
 
-        fun feed(data: ByteArray): List<Pair<String, ByteArray>> {
+        fun feed(data: ByteArray): List<AoaFrame> {
             data.forEach { buffer.add(it) }
-            val frames = mutableListOf<Pair<String, ByteArray>>()
+            val frames = mutableListOf<AoaFrame>()
             while (true) {
                 if (buffer.size < HEADER_LENGTH) break
                 val version = buffer[0]
                 if (version != FRAME_VERSION) {
                     throw IllegalStateException("Unsupported AOA frame version: $version")
+                }
+                val flags = buffer[1 + REQUEST_ID_LENGTH + 4]
+                if (flags != FRAME_FLAG_TEXT && flags != FRAME_FLAG_BINARY) {
+                    throw IllegalStateException("Unsupported AOA frame flags: $flags")
                 }
                 val payloadLength = ByteBuffer.wrap(
                     buffer.toByteArray(),
@@ -401,7 +443,7 @@ class AoaClient(private val context: Context) {
         if (!activeStreamingRequestIds.containsKey(requestId)) {
             throw AoaTransportError.InvalidEnvelope("No active streaming request for $requestId")
         }
-        writeFrame(requestId, chunk)
+        writeFrame(requestId, chunk, flags = AoaFrameCodec.FRAME_FLAG_BINARY)
     }
 
     fun finishStreamingRequest(requestId: String): String {
@@ -416,8 +458,12 @@ class AoaClient(private val context: Context) {
         return latch.response ?: throw AoaTransportError.InvalidEnvelope("Empty response")
     }
 
-    private fun writeFrame(requestId: String, payload: ByteArray) {
-        val frame = AoaFrameCodec.encodeFrame(requestId, payload)
+    private fun writeFrame(
+        requestId: String,
+        payload: ByteArray,
+        flags: Byte = AoaFrameCodec.FRAME_FLAG_TEXT,
+    ) {
+        val frame = AoaFrameCodec.encodeFrame(requestId, payload, flags)
         writeQueue.put(WriteTask(requestId, frame))
     }
 
@@ -493,17 +539,17 @@ class AoaClient(private val context: Context) {
 
     private fun processReadData(data: ByteArray) {
         val frames = decoder.feed(data)
-        for ((requestId, payload) in frames) {
-            if (payload.isEmpty()) continue
-            if (payload[0] != '{'.code.toByte()) {
-                // binary chunk
+        for (frame in frames) {
+            if (frame.payload.isEmpty()) continue
+            if (frame.flags == AoaFrameCodec.FRAME_FLAG_BINARY) {
+                // binary chunk: mobile reader ignores incoming binary frames
                 continue
             }
-            val json = payload.toString(Charsets.UTF_8)
+            val json = frame.payload.toString(Charsets.UTF_8)
             if (isAuthChallenge(json)) {
                 handleAuthChallenge(json)
             } else {
-                pendingResponses[requestId]?.let { latch ->
+                pendingResponses[frame.requestId]?.let { latch ->
                     latch.response = json
                     latch.latch.countDown()
                 }

@@ -52,13 +52,15 @@ Every message sent over the AOA bulk endpoints is wrapped in a length-prefixed b
 - `version` (1 byte): `0x01`.
 - `request_id` (36 bytes): exactly 36 ASCII bytes. For text envelopes the frame `request_id` may be zero-filled because the envelope carries its own `request_id`; for binary asset-chunk frames it must be the active streaming request UUID.
 - `length` (4 bytes, big-endian): length of the payload that follows.
-- `flags` (1 byte): reserved, set to `0x00`.
+- `flags` (1 byte): frame type.
+  - `0x00` — text envelope.
+  - `0x01` — binary asset chunk.
 - `payload`: the enclosed message.
 
 Two payload types travel over this frame:
 
-1. **Text envelope** — payload is a UTF-8 JSON string containing a `dtis.mobile-transport.v1` envelope.
-2. **Binary chunk** — payload is raw bytes of an encrypted asset chunk. The binary chunk is also preceded by the same frame header; the `request_id` ties the chunk to the active streaming request.
+1. **Text envelope** — `flags = 0x00`; payload is a UTF-8 JSON string containing a `dtis.mobile-transport.v1` envelope.
+2. **Binary chunk** — `flags = 0x01`; payload is raw bytes of an encrypted asset chunk. The `request_id` ties the chunk to the active streaming request.
 
 ### Auth handshake
 
@@ -297,7 +299,7 @@ All of these cause the adaptive strategy to fall back to LAN. `connectionUnavail
 
 - `opt` never leaves the mobile device; only `SHA256(opt + rand)` is sent back to the desktop.
 - Large asset bytes are encrypted via the existing trust key when the capability exchange enables it.
-- The AOA frame header contains only length and `request_id`; no filenames or metadata leak into framing.
+- The AOA frame header contains only `length`, `request_id`, and `flags`; no filenames or metadata leak into framing.
 - The accessory filter XML is kept restrictive; only the AuSearch desktop host can negotiate the AOA accessory mode.
 
 ## Testing
@@ -341,6 +343,8 @@ All of these cause the adaptive strategy to fall back to LAN. `connectionUnavail
 - Frame version: `1`
 - Request ID length: `36` bytes
 - Frame header size: `42` bytes
+- Frame flag text: `0x00`
+- Frame flag binary: `0x01`
 - Envelope schema: `dtis.mobile-transport.v1`
 - Auth body schema: `dtis.mobile-pairing.v1`
 - Auth operation: `transport.auth.challenge`

@@ -70,11 +70,6 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
 )
 from dt_image_search.telemetry.telemetry_client import log
 
-# AOA binary asset chunks reuse the same header layout as the outer frame.
-USB_TRANSFER_BINARY_FRAME_VERSION = 1
-USB_TRANSFER_BINARY_REQUEST_ID_LENGTH = 36
-USB_TRANSFER_BINARY_HEADER_SIZE = 42
-
 AOA_AUTH_CHALLENGE_REQUEST_ID = USB_AUTH_CHALLENGE_REQUEST_ID.ljust(
     AOA_REQUEST_ID_LENGTH,
     "0",
@@ -426,7 +421,10 @@ class UsbAoaTransportAdapter:
             frames = decoder.feed(chunk)
             for request_id, flags, payload in frames:
                 if flags == AOA_FRAME_FLAG_BINARY:
-                    self._append_pending_asset_chunk(payload)
+                    self._append_aoa_binary_chunk(
+                        request_id=request_id,
+                        payload=payload,
+                    )
                     continue
 
                 try:
@@ -601,25 +599,36 @@ class UsbAoaTransportAdapter:
                 encryption_trust_key_b64=encryption_trust_key_b64,
             )
 
-    def _append_pending_asset_chunk(self, chunk: bytes) -> None:
-        framed_request_id, frame_payload = self._decode_transfer_asset_binary_frame(chunk)
+    def _append_aoa_binary_chunk(
+        self,
+        *,
+        request_id: str,
+        payload: bytes,
+    ) -> None:
+        """Append a raw binary asset chunk tied to the active streaming request.
+
+        The AOA frame already carries the request_id and flags, so the chunk bytes
+        are used directly without an additional inner binary frame header.
+        """
         with self._lock:
             encrypted_chunk_trust_key = self._asset_upload_stream.encryption_trust_key(
-                request_id=framed_request_id,
+                request_id=request_id,
             )
+        frame_payload = payload
         if encrypted_chunk_trust_key is not None:
             try:
                 frame_payload = decrypt_mobile_binary_chunk(
-                    encrypted_chunk=frame_payload,
+                    encrypted_chunk=payload,
                     trust_key_b64=encrypted_chunk_trust_key,
                 )
             except MobilePayloadEncryptionError as exc:
                 raise RuntimeError(str(exc)) from exc
+
         append_error: str | None = None
         with self._lock:
             append_error = self._asset_upload_stream.append_chunk(
                 chunk=frame_payload,
-                request_id=framed_request_id,
+                request_id=request_id,
             )
             active_request_id = self._asset_upload_stream.active_request_id
         if append_error is None:
@@ -632,54 +641,12 @@ class UsbAoaTransportAdapter:
             self._safe_log(
                 "warning",
                 message=(
-                    "UsbAoaTransportAdapter/_append_pending_asset_chunk: "
+                    "UsbAoaTransportAdapter/_append_aoa_binary_chunk: "
                     "ignoring binary frame without a matching transfer asset start envelope."
                 ),
             )
             return
         raise RuntimeError(append_error)
-
-    def _decode_transfer_asset_binary_frame(self, frame: bytes) -> tuple[str, bytes]:
-        if len(frame) < USB_TRANSFER_BINARY_HEADER_SIZE:
-            raise RuntimeError(
-                "Desktop rejected transfer asset stream chunk because binary frame header is incomplete."
-            )
-
-        frame_version = frame[0]
-        if frame_version != USB_TRANSFER_BINARY_FRAME_VERSION:
-            raise RuntimeError(
-                "Desktop rejected transfer asset stream chunk because binary frame version is unsupported."
-            )
-
-        request_id_bytes = frame[1 : 1 + USB_TRANSFER_BINARY_REQUEST_ID_LENGTH]
-        try:
-            request_id = request_id_bytes.decode("ascii").strip()
-        except UnicodeDecodeError as exc:
-            raise RuntimeError(
-                "Desktop rejected transfer asset stream chunk because the request id is invalid."
-            ) from exc
-        if not request_id:
-            raise RuntimeError(
-                "Desktop rejected transfer asset stream chunk because the request id is missing."
-            )
-        if len(request_id) != USB_TRANSFER_BINARY_REQUEST_ID_LENGTH:
-            raise RuntimeError(
-                "Desktop rejected transfer asset stream chunk because the request id length is invalid."
-            )
-
-        payload_length_start = 1 + USB_TRANSFER_BINARY_REQUEST_ID_LENGTH
-        payload_length_end = payload_length_start + 4
-        declared_payload_length = int.from_bytes(
-            frame[payload_length_start:payload_length_end],
-            byteorder="big",
-            signed=False,
-        )
-        frame_payload = frame[USB_TRANSFER_BINARY_HEADER_SIZE:]
-        if declared_payload_length != len(frame_payload):
-            raise RuntimeError(
-                "Desktop rejected transfer asset stream chunk because binary frame length does not match the header."
-            )
-        return request_id, frame_payload
 
     def _decrypt_transfer_asset_stream_metadata(
         self,

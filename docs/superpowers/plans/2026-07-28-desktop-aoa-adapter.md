@@ -28,21 +28,32 @@
 
 **Interfaces:**
 - Consumes: nothing (pure bytes).
-- Produces: `encode_aoa_frame(request_id: str, payload: bytes) -> bytes`, `decode_aoa_frame(data: bytes) -> tuple[str, bytes]`, `AoaFrameDecoder` incremental parser.
+- Produces: `encode_aoa_frame(request_id: str, payload: bytes, flags: int = AOA_FRAME_FLAG_TEXT) -> bytes`, `decode_aoa_frame(data: bytes) -> tuple[str, int, bytes]`, `AoaFrameDecoder` incremental parser.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 def test_encode_and_decode_aoa_frame():
-    from dt_image_search.mobile.transport.aoa_frame_codec import encode_aoa_frame, decode_aoa_frame
+    from dt_image_search.mobile.transport.aoa_frame_codec import (
+        AOA_FRAME_FLAG_BINARY,
+        AOA_FRAME_FLAG_TEXT,
+        encode_aoa_frame,
+        decode_aoa_frame,
+    )
 
     request_id = "12345678-1234-1234-1234-123456789012"
     payload = b"hello"
-    frame = encode_aoa_frame(request_id, payload)
-    assert len(frame) == 1 + 36 + 4 + 1 + 5
-    decoded_request_id, decoded_payload = decode_aoa_frame(frame)
+
+    text_frame = encode_aoa_frame(request_id, payload)
+    assert len(text_frame) == 1 + 36 + 4 + 1 + 5
+    decoded_request_id, decoded_flags, decoded_payload = decode_aoa_frame(text_frame)
     assert decoded_request_id == request_id
+    assert decoded_flags == AOA_FRAME_FLAG_TEXT
     assert decoded_payload == payload
+
+    binary_frame = encode_aoa_frame(request_id, payload, flags=AOA_FRAME_FLAG_BINARY)
+    _, binary_flags, _ = decode_aoa_frame(binary_frame)
+    assert binary_flags == AOA_FRAME_FLAG_BINARY
 ```
 
 - [ ] **Step 2: Run the test and confirm it fails**
@@ -58,15 +69,17 @@ from __future__ import annotations
 AOA_FRAME_VERSION = 1
 AOA_REQUEST_ID_LENGTH = 36
 AOA_FRAME_HEADER_LENGTH = 1 + AOA_REQUEST_ID_LENGTH + 4 + 1
+AOA_FRAME_FLAG_TEXT = 0x00
+AOA_FRAME_FLAG_BINARY = 0x01
 
 
 class AoaFrameDecoder:
     def __init__(self) -> None:
         self._buffer = bytearray()
 
-    def feed(self, data: bytes) -> list[tuple[str, bytes]]:
+    def feed(self, data: bytes) -> list[tuple[str, int, bytes]]:
         self._buffer.extend(data)
-        frames: list[tuple[str, bytes]] = []
+        frames: list[tuple[str, int, bytes]] = []
         while True:
             if len(self._buffer) < AOA_FRAME_HEADER_LENGTH:
                 break
@@ -85,28 +98,34 @@ class AoaFrameDecoder:
                 byteorder="big",
                 signed=False,
             )
+            flags_offset = payload_length_end
+            flags = self._buffer[flags_offset]
+            if flags not in (AOA_FRAME_FLAG_TEXT, AOA_FRAME_FLAG_BINARY):
+                raise ValueError(f"Unsupported AOA frame flags: {flags}")
             frame_length = AOA_FRAME_HEADER_LENGTH + payload_length
             if len(self._buffer) < frame_length:
                 break
             payload = self._buffer[AOA_FRAME_HEADER_LENGTH:frame_length]
-            frames.append((request_id, bytes(payload)))
+            frames.append((request_id, flags, bytes(payload)))
             del self._buffer[:frame_length]
         return frames
 
 
-def encode_aoa_frame(request_id: str, payload: bytes) -> bytes:
+def encode_aoa_frame(request_id: str, payload: bytes, flags: int = AOA_FRAME_FLAG_TEXT) -> bytes:
     request_id_bytes = request_id.encode("ascii")
     if len(request_id_bytes) != AOA_REQUEST_ID_LENGTH:
         raise ValueError(f"request_id must be exactly {AOA_REQUEST_ID_LENGTH} ASCII bytes")
+    if flags not in (AOA_FRAME_FLAG_TEXT, AOA_FRAME_FLAG_BINARY):
+        raise ValueError(f"Unsupported AOA frame flags: {flags}")
     header = bytearray()
     header.append(AOA_FRAME_VERSION)
     header.extend(request_id_bytes)
     header.extend(len(payload).to_bytes(4, byteorder="big", signed=False))
-    header.append(0)
+    header.append(flags)
     return bytes(header) + payload
 
 
-def decode_aoa_frame(data: bytes) -> tuple[str, bytes]:
+def decode_aoa_frame(data: bytes) -> tuple[str, int, bytes]:
     if len(data) < AOA_FRAME_HEADER_LENGTH:
         raise ValueError("AOA frame is too short")
     version = data[0]
@@ -120,26 +139,35 @@ def decode_aoa_frame(data: bytes) -> tuple[str, bytes]:
         byteorder="big",
         signed=False,
     )
+    flags = data[payload_length_end]
+    if flags not in (AOA_FRAME_FLAG_TEXT, AOA_FRAME_FLAG_BINARY):
+        raise ValueError(f"Unsupported AOA frame flags: {flags}")
     frame_length = AOA_FRAME_HEADER_LENGTH + payload_length
     if len(data) < frame_length:
         raise ValueError("AOA frame payload is incomplete")
     payload = data[AOA_FRAME_HEADER_LENGTH:frame_length]
     if len(payload) != payload_length:
         raise ValueError("AOA frame payload length mismatch")
-    return request_id, payload
+    return request_id, flags, payload
 ```
 
 - [ ] **Step 4: Add incremental decoder tests**
 
 ```python
 def test_decoder_recovers_from_partial_reads():
-    from dt_image_search.mobile.transport.aoa_frame_codec import encode_aoa_frame, AoaFrameDecoder
+    from dt_image_search.mobile.transport.aoa_frame_codec import (
+        AOA_FRAME_FLAG_TEXT,
+        encode_aoa_frame,
+        AoaFrameDecoder,
+    )
 
     decoder = AoaFrameDecoder()
     frame = encode_aoa_frame("12345678-1234-1234-1234-123456789012", b"payload")
     assert decoder.feed(frame[:10]) == []
     assert decoder.feed(frame[10:25]) == []
-    assert decoder.feed(frame[25:]) == [("12345678-1234-1234-1234-123456789012", b"payload")]
+    assert decoder.feed(frame[25:]) == [
+        ("12345678-1234-1234-1234-123456789012", AOA_FRAME_FLAG_TEXT, b"payload")
+    ]
 ```
 
 - [ ] **Step 5: Run tests and confirm they pass**
@@ -646,7 +674,7 @@ def test_aoa_adapter_authenticates_and_routes_pairing_claim():
         frame = hooks.read_frame(timeout=0.1)
         if frame:
             from dt_image_search.mobile.transport.aoa_frame_codec import decode_aoa_frame
-            _, payload = decode_aoa_frame(frame)
+            _, _, payload = decode_aoa_frame(frame)
             response = json.loads(payload)
             if response.get("request_id") == "claim-001":
                 break
@@ -687,7 +715,12 @@ import threading
 import time
 from typing import Any, BinaryIO, Callable
 
-from dt_image_search.mobile.transport.aoa_frame_codec import AoaFrameDecoder, encode_aoa_frame
+from dt_image_search.mobile.transport.aoa_frame_codec import (
+    AOA_FRAME_FLAG_BINARY,
+    AOA_FRAME_FLAG_TEXT,
+    AoaFrameDecoder,
+    encode_aoa_frame,
+)
 from dt_image_search.mobile.transport.aoa_host_driver import AoaHostDriver, AoaHostState
 from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
@@ -850,18 +883,20 @@ class UsbAoaTransportAdapter:
         while time.monotonic() < deadline:
             data = read_stream.read(8192)
             if data:
-                for request_id, payload in decoder.feed(data):
-                    if request_id != USB_AUTH_CHALLENGE_REQUEST_ID:
-                        continue
-                    response = json.loads(payload)
-                    if response.get("status_code") not in range(200, 300):
-                        raise RuntimeError("AOA auth challenge rejected")
-                    body = response.get("body", {})
-                    provided = body.get("proof", "")
-                    expected = hashlib.sha256(f"{config.one_time_passcode}{rand}".encode("utf-8")).hexdigest()
-                    if provided != expected:
-                        raise RuntimeError("AOA auth challenge proof mismatch")
-                    return
+            for request_id, flags, payload in decoder.feed(data):
+                if request_id != USB_AUTH_CHALLENGE_REQUEST_ID:
+                    continue
+                if flags != AOA_FRAME_FLAG_TEXT:
+                    continue
+                response = json.loads(payload)
+                if response.get("status_code") not in range(200, 300):
+                    raise RuntimeError("AOA auth challenge rejected")
+                body = response.get("body", {})
+                provided = body.get("proof", "")
+                expected = hashlib.sha256(f"{config.one_time_passcode}{rand}".encode("utf-8")).hexdigest()
+                if provided != expected:
+                    raise RuntimeError("AOA auth challenge proof mismatch")
+                return
             else:
                 time.sleep(0.01)
         raise RuntimeError("AOA auth challenge timed out")
@@ -877,30 +912,51 @@ class UsbAoaTransportAdapter:
             if not data:
                 time.sleep(0.01)
                 continue
-            for request_id, payload in decoder.feed(data):
-                if isinstance(payload, bytes) and not payload.startswith(b"{"):
-                    self._append_pending_asset_chunk(payload)
+            for request_id, flags, payload in decoder.feed(data):
+                if flags == AOA_FRAME_FLAG_BINARY:
+                    self._append_aoa_binary_chunk(
+                        request_id=request_id,
+                        payload=payload,
+                    )
                     continue
                 request_id_out, response = self._dispatch_envelope_request(payload)
                 if response is not None and request_id_out is not None:
-                    self._send_frame(write_stream, request_id_out, json.dumps({
-                        "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
-                        "request_id": request_id_out,
-                        "status_code": response.status_code,
-                        "body": response.payload,
-                    }, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+                    self._send_frame(
+                        write_stream,
+                        request_id_out,
+                        json.dumps({
+                            "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                            "request_id": request_id_out,
+                            "status_code": response.status_code,
+                            "body": response.payload,
+                        }, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+                    )
 
-    def _send_frame(self, write_stream: BinaryIO, request_id: str, payload: bytes) -> None:
-        frame = encode_aoa_frame(request_id, payload)
+    def _send_frame(
+        self,
+        write_stream: BinaryIO,
+        request_id: str,
+        payload: bytes,
+        flags: int = AOA_FRAME_FLAG_TEXT,
+    ) -> None:
+        frame = encode_aoa_frame(request_id, payload, flags=flags)
         write_stream.write(frame)
 
     def _dispatch_envelope_request(self, raw_payload: bytes) -> tuple[str | None, MobileTransportResponse | None]:
         # Copy the dispatch and transfer-asset logic from usb_ws_adapter.py,
         # substituting the websocket send path with in-memory response returns.
+        # For binary asset responses, call _send_frame with flags=AOA_FRAME_FLAG_BINARY.
         ...
 
-    def _append_pending_asset_chunk(self, chunk: bytes) -> None:
-        # Copy from usb_ws_adapter.py _append_pending_asset_chunk.
+    def _append_aoa_binary_chunk(
+        self,
+        *,
+        request_id: str,
+        payload: bytes,
+    ) -> None:
+        # Append raw chunk bytes for the active streaming request_id.
+        # Decrypt with the trust key returned by _asset_upload_stream.encryption_trust_key.
+        # Reuse the AssetUploadStream logic from usb_ws_adapter.py.
         ...
 
     def _require_bootstrap_config(self) -> UsbBootstrapConfig:
@@ -941,7 +997,7 @@ class UsbAoaTransportAdapter:
             pass
 ```
 
-Complete the `_dispatch_envelope_request` and `_append_pending_asset_chunk` methods by copying the equivalent sections from `usb_ws_adapter.py` and adapting the `websocket_connection.send` calls to return the response instead of sending.
+Complete the `_dispatch_envelope_request` and `_append_aoa_binary_chunk` methods by copying the equivalent sections from `usb_ws_adapter.py` and adapting the `websocket_connection.send` calls to return the response instead of sending. Note that AOA binary chunks carry no inner frame header; use the request_id/flags from the outer AOA frame and pass the raw payload bytes directly.
 
 - [ ] **Step 4: Run tests and confirm they pass**
 
