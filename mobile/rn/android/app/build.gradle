@@ -130,6 +130,11 @@ android {
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
@@ -180,4 +185,7 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.11.1")
 }
