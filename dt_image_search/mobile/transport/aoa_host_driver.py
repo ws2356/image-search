@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Host-side hooks for Android Open Accessory (AOA) USB transport.
+"""Host-side driver for Android Open Accessory (AOA) USB transport.
 
 Provides an abstract interface, a PyUSB implementation for real devices, and an
 in-memory simulated implementation for unit tests.
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-import io
 import queue
 import threading
 import time
@@ -63,7 +62,7 @@ class AoaDetectedDevice:
 
 
 class AoaReadStream(Protocol):
-    """Readable stream returned by AOA host hooks."""
+    """Readable stream returned by the AOA host driver."""
 
     def read(self, size: int = -1, timeout: float | None = None) -> bytes: ...
 
@@ -71,14 +70,14 @@ class AoaReadStream(Protocol):
 
 
 class AoaWriteStream(Protocol):
-    """Writable stream returned by AOA host hooks."""
+    """Writable stream returned by the AOA host driver."""
 
     def write(self, data: bytes) -> int: ...
 
     def close(self) -> None: ...
 
 
-class AoaHostHooks(Protocol):
+class AoaHostDriver(Protocol):
     """Platform-agnostic interface for AOA host operations."""
 
     def start(self) -> None: ...
@@ -155,8 +154,8 @@ class _SimulatedAoaStream:
             self._queue.put(None)
 
 
-class SimulatedAoaHostHooks:
-    """In-memory AOA hooks for unit tests."""
+class SimulatedAoaHostDriver:
+    """In-memory AOA driver for unit tests."""
 
     def __init__(
         self,
@@ -220,8 +219,8 @@ class SimulatedAoaHostHooks:
         return item
 
 
-class PyUsbAoaHostHooks:
-    """PyUSB-based AOA host hooks for macOS/Windows production use."""
+class PyUsbAoaHostDriver:
+    """PyUSB-based AOA host driver for macOS/Windows production use."""
 
     def __init__(self) -> None:
         self._usb_core = _usb_core
@@ -256,7 +255,7 @@ class PyUsbAoaHostHooks:
         usb_core = self._usb_core
         if usb_core is None:
             raise RuntimeError(
-                "AOA host hooks were not initialized with a USB core module."
+                "AOA host driver were not initialized with a USB core module."
             )
         raw_devices = list(usb_core.find(find_all=True) or [])
         detected: list[AoaDetectedDevice] = []
@@ -290,7 +289,7 @@ class PyUsbAoaHostHooks:
         self._require_pyusb()
         usb_util = self._usb_util
         if usb_util is None:
-            raise RuntimeError("AOA host hooks were not initialized with a USB utility module.")
+            raise RuntimeError("AOA host driver were not initialized with a USB utility module.")
 
         device_handle = self._find_device_handle(device)
         if device_handle is None:
@@ -355,7 +354,7 @@ class PyUsbAoaHostHooks:
         self._require_pyusb()
         usb_util = self._usb_util
         if usb_util is None:
-            raise RuntimeError("AOA host hooks were not initialized with a USB utility module.")
+            raise RuntimeError("AOA host driver were not initialized with a USB utility module.")
 
         device_handle = self._find_device_handle(device)
         if device_handle is None:
@@ -410,14 +409,14 @@ class PyUsbAoaHostHooks:
     def _require_pyusb(self) -> None:
         if self._usb_core is None or self._usb_util is None:
             raise RuntimeError(
-                "AOA host hooks require pyusb (install with `python -m pip install pyusb`)."
+                "AOA host driver require pyusb (install with `python -m pip install pyusb`)."
             )
 
     def _find_device_handle(self, device: AoaDetectedDevice) -> Any | None:
         self._require_pyusb()
         usb_core = self._usb_core
         if usb_core is None:
-            raise RuntimeError("AOA host hooks were not initialized with a USB core module.")
+            raise RuntimeError("AOA host driver were not initialized with a USB core module.")
         found = usb_core.find(
             idVendor=device.vendor_id,
             idProduct=device.product_id,

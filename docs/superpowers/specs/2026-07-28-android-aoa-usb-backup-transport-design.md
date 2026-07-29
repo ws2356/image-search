@@ -267,9 +267,9 @@ Existing hooks (`useTransferScreenController`, `startTransfer`) are updated to a
 7. For `transfer.asset`, reuses `TransferAssetUploadStream` to accumulate binary chunks, decrypts if needed, computes SHA1, and routes the payload to the existing transfer handler.
 8. Writes response envelopes back as text frames.
 
-### Simulated host hooks
+### Simulated host driver
 
-The existing `AoaHostHooks` Protocol from `android_aoa_poc.py` is extracted into a reusable interface. A `SimulatedAoaHostHooks` implementation creates a local in-memory AOA endpoint for unit tests, so `UsbAoaTransportAdapter` can be tested without a real device.
+The existing `AoaHostDriver` Protocol from `android_aoa_poc.py` is extracted into a reusable interface. A `SimulatedAoaHostDriver` implementation creates a local in-memory AOA endpoint for unit tests, so `UsbAoaTransportAdapter` can be tested without a real device.
 
 ## Update prompt for old desktop versions
 
@@ -304,7 +304,7 @@ All of these cause the adaptive strategy to fall back to LAN. `connectionUnavail
 
 ### Desktop
 
-- Unit tests for `UsbAoaTransportAdapter` using `SimulatedAoaHostHooks`.
+- Unit tests for `UsbAoaTransportAdapter` using `SimulatedAoaHostDriver`.
 - Tests cover: auth handshake, request/response correlation, `transfer.asset` streaming, decryption, error envelopes, and stop/cleanup.
 
 ### Mobile native

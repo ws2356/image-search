@@ -17,7 +17,7 @@ from dt_image_search.mobile.transport import (
     MobileTransportRequest,
     MobileTransportResponse,
     MobileTransportRouter,
-    SimulatedAoaHostHooks,
+    SimulatedAoaHostDriver,
     UsbAoaTransportAdapter,
     decode_aoa_frame,
     encode_aoa_frame,
@@ -69,10 +69,10 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
             serial_number="abc",
             is_accessory_mode=True,
         )
-        hooks = SimulatedAoaHostHooks([device])
+        driver = SimulatedAoaHostDriver([device])
         adapter = UsbAoaTransportAdapter(
             router=router,
-            hooks=hooks,
+            driver=driver,
             probe_interval_seconds=0.05,
             response_poll_timeout_seconds=0.05,
         )
@@ -87,7 +87,7 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
 
         try:
             # Wait for and answer the auth challenge.
-            challenge_frame = hooks.read_frame(timeout=2.0)
+            challenge_frame = driver.read_frame(timeout=2.0)
             self.assertIsNotNone(challenge_frame)
             request_id, flags, payload = decode_aoa_frame(challenge_frame)
             self.assertEqual(request_id, AOA_AUTH_CHALLENGE_REQUEST_ID)
@@ -96,7 +96,7 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
             self.assertEqual(challenge["operation"], "transport.auth.challenge")
             rand = challenge["body"]["rand"]
 
-            hooks.inject_frame(
+            driver.inject_frame(
                 encode_aoa_frame(
                     AOA_AUTH_CHALLENGE_REQUEST_ID,
                     _build_auth_response(rand, "123456", AOA_AUTH_CHALLENGE_REQUEST_ID),
@@ -128,7 +128,7 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
                 separators=(",", ":"),
                 sort_keys=True,
             ).encode("utf-8")
-            hooks.inject_frame(
+            driver.inject_frame(
                 encode_aoa_frame(
                     CLAIM_REQUEST_ID,
                     claim_payload,
@@ -138,7 +138,7 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
 
             response: dict[str, object] | None = None
             for _ in range(300):
-                response_frame = hooks.read_frame(timeout=0.01)
+                response_frame = driver.read_frame(timeout=0.01)
                 if response_frame:
                     response_request_id, response_flags, response_payload = decode_aoa_frame(
                         response_frame
@@ -167,10 +167,10 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
             serial_number="abc",
             is_accessory_mode=True,
         )
-        hooks = SimulatedAoaHostHooks([device])
+        driver = SimulatedAoaHostDriver([device])
         adapter = UsbAoaTransportAdapter(
             router=router,
-            hooks=hooks,
+            driver=driver,
             probe_interval_seconds=0.05,
             response_poll_timeout_seconds=0.05,
         )
@@ -184,7 +184,7 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
         adapter.start()
 
         try:
-            challenge_frame = hooks.read_frame(timeout=2.0)
+            challenge_frame = driver.read_frame(timeout=2.0)
             self.assertIsNotNone(challenge_frame)
             request_id, _, payload = decode_aoa_frame(challenge_frame)
             self.assertEqual(request_id, AOA_AUTH_CHALLENGE_REQUEST_ID)
@@ -203,7 +203,7 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
                     "proof": bad_proof,
                 },
             }
-            hooks.inject_frame(
+            driver.inject_frame(
                 encode_aoa_frame(
                     AOA_AUTH_CHALLENGE_REQUEST_ID,
                     json.dumps(bad_response, separators=(",", ":"), sort_keys=True).encode(

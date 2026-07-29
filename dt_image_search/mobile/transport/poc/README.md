@@ -171,6 +171,6 @@ powershell -File dt_image_search/scripts/poc_aoa_pipeline_windows.ps1 host dt_im
 
 ## Notes
 
-- `host` mode uses real host hooks and may fail thresholds if prerequisites are not ready.
+- `host` mode uses real host driver and may fail thresholds if prerequisites are not ready.
 - `simulate` mode is deterministic and useful for wiring verification and script smoke tests.
 - Readiness diagnostics are embedded in `metrics.json.host_readiness` (pyusb/libusb/enumeration checks plus remediation hints).

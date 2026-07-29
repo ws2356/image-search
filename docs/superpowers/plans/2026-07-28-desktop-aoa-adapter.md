@@ -156,24 +156,24 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: AOA frame codec"
 
 ---
 
-## Task 2: AOA host hooks protocol + simulated implementation
+## Task 2: AOA host driver protocol + simulated implementation
 
 **Files:**
-- Create: `dt_image_search/mobile/transport/aoa_host_hooks.py`
-- Test: `dt_image_search/tests/unit/transport/test_aoa_host_hooks.py`
+- Create: `dt_image_search/mobile/transport/aoa_host_driver.py`
+- Test: `dt_image_search/tests/unit/transport/test_aoa_host_driver.py`
 
 **Interfaces:**
 - Consumes: `AoaFrameCodec` for message framing.
-- Produces: `AoaHostHooks` Protocol, `SimulatedAoaHostHooks`, `PyUsbAoaHostHooks`.
+- Produces: `AoaHostDriver` Protocol, `SimulatedAoaHostDriver`, `PyUsbAoaHostDriver`.
 
 - [ ] **Step 1: Write the failing test for simulated hooks**
 
 ```python
 def test_simulated_hooks_exchanges_a_roundtrip_frame():
-    from dt_image_search.mobile.transport.aoa_host_hooks import SimulatedAoaHostHooks
+    from dt_image_search.mobile.transport.aoa_host_driver import SimulatedAoaHostDriver
     from dt_image_search.mobile.transport.aoa_frame_codec import encode_aoa_frame
 
-    hooks = SimulatedAoaHostHooks()
+    hooks = SimulatedAoaHostDriver()
     hooks.start()
     frame = encode_aoa_frame("12345678-1234-1234-1234-123456789012", b"ping")
     hooks.write_frame(frame)
@@ -182,10 +182,10 @@ def test_simulated_hooks_exchanges_a_roundtrip_frame():
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `python -m pytest dt_image_search/tests/unit/transport/test_aoa_host_hooks.py -v`
+Run: `python -m pytest dt_image_search/tests/unit/transport/test_aoa_host_driver.py -v`
 Expected: `ImportError`.
 
-- [ ] **Step 3: Implement `aoa_host_hooks.py`**
+- [ ] **Step 3: Implement `aoa_host_driver.py`**
 
 ```python
 from __future__ import annotations
@@ -234,7 +234,7 @@ class AoaStream(Protocol):
         ...
 
 
-class AoaHostHooks(Protocol):
+class AoaHostDriver(Protocol):
     def detect_devices(self) -> tuple[AoaDetectedDevice, ...]:
         raise NotImplementedError
 
@@ -252,7 +252,7 @@ class AoaHostHooks(Protocol):
         raise NotImplementedError
 
 
-class SimulatedAoaHostHooks:
+class SimulatedAoaHostDriver:
     def __init__(self) -> None:
         self._state = AoaHostState.IDLE
         self._read_queue: queue.Queue[bytes] = queue.Queue()
@@ -358,7 +358,7 @@ class _UsbAoaEndpointStream:
             pass
 
 
-class PyUsbAoaHostHooks:
+class PyUsbAoaHostDriver:
     AOA_GET_PROTOCOL_REQUEST = 51
     AOA_SEND_STRING_REQUEST = 52
     AOA_START_ACCESSORY_REQUEST = 53
@@ -562,14 +562,14 @@ class PyUsbAoaHostHooks:
 
 - [ ] **Step 5: Run tests**
 
-Run: `python -m pytest dt_image_search/tests/unit/transport/test_aoa_host_hooks.py -v`
+Run: `python -m pytest dt_image_search/tests/unit/transport/test_aoa_host_driver.py -v`
 Expected: all pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add dt_image_search/mobile/transport/aoa_host_hooks.py dt_image_search/tests/unit/transport/test_aoa_host_hooks.py
-git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: AOA host hooks protocol and simulated hooks"
+git add dt_image_search/mobile/transport/aoa_host_driver.py dt_image_search/tests/unit/transport/test_aoa_host_driver.py
+git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: AOA host driver protocol and simulated hooks"
 ```
 
 ---
@@ -581,7 +581,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: AOA host hooks protocol a
 - Test: `dt_image_search/tests/unit/transport/test_usb_aoa_adapter.py`
 
 **Interfaces:**
-- Consumes: `MobileTransportRouter`, `AoaHostHooks`, `AoaFrameCodec`, `TransferAssetUploadStream`, `MobilePayloadEncryption`.
+- Consumes: `MobileTransportRouter`, `AoaHostDriver`, `AoaFrameCodec`, `TransferAssetUploadStream`, `MobilePayloadEncryption`.
 - Produces: `UsbAoaTransportAdapter` with `configure_bootstrap`, `start`, `stop`, `state`, `bootstrap_config`, `last_probe_error`.
 
 - [ ] **Step 1: Write a failing test for adapter bootstrap and auth**
@@ -589,7 +589,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: AOA host hooks protocol a
 ```python
 def test_aoa_adapter_authenticates_and_routes_pairing_claim():
     from dt_image_search.mobile.transport.contracts import MobileTransportRouter
-    from dt_image_search.mobile.transport.aoa_host_hooks import SimulatedAoaHostHooks
+    from dt_image_search.mobile.transport.aoa_host_driver import SimulatedAoaHostDriver
     from dt_image_search.mobile.transport.usb_aoa_adapter import UsbAoaTransportAdapter
     from dt_image_search.mobile.transport.contracts import MobileTransportRequest, MobileTransportResponse
 
@@ -598,7 +598,7 @@ def test_aoa_adapter_authenticates_and_routes_pairing_claim():
         return MobileTransportResponse(status_code=200, payload={"status": "accepted"})
     router.register("pairing.claim", handle_claim)
 
-    hooks = SimulatedAoaHostHooks()
+    hooks = SimulatedAoaHostDriver()
     hooks.start()
     adapter = UsbAoaTransportAdapter(router=router, tunnel_provider=hooks)
     adapter.configure_bootstrap(
@@ -688,7 +688,7 @@ import time
 from typing import Any, BinaryIO, Callable
 
 from dt_image_search.mobile.transport.aoa_frame_codec import AoaFrameDecoder, encode_aoa_frame
-from dt_image_search.mobile.transport.aoa_host_hooks import AoaHostHooks, AoaHostState
+from dt_image_search.mobile.transport.aoa_host_driver import AoaHostDriver, AoaHostState
 from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
     TRANSFER_ASSET_STREAM_STATE_COMPLETE,
@@ -726,7 +726,7 @@ class UsbAoaTransportAdapter:
         self,
         *,
         router: MobileTransportRouter,
-        tunnel_provider: AoaHostHooks,
+        tunnel_provider: AoaHostDriver,
         probe_interval_seconds: float = 0.6,
         response_poll_timeout_seconds: float = 0.6,
         log_handler: Callable[..., None] | None = None,
@@ -1033,12 +1033,12 @@ from dt_image_search.mobile.transport.aoa_frame_codec import (
     decode_aoa_frame,
     encode_aoa_frame,
 )
-from dt_image_search.mobile.transport.aoa_host_hooks import (
+from dt_image_search.mobile.transport.aoa_host_driver import (
     AoaDetectedDevice,
-    AoaHostHooks,
+    AoaHostDriver,
     AoaHostState,
-    PyUsbAoaHostHooks,
-    SimulatedAoaHostHooks,
+    PyUsbAoaHostDriver,
+    SimulatedAoaHostDriver,
 )
 from dt_image_search.mobile.transport.usb_aoa_adapter import UsbAoaTransportAdapter
 
@@ -1074,10 +1074,10 @@ __all__ = [
     "decode_aoa_frame",
     "encode_aoa_frame",
     "AoaDetectedDevice",
-    "AoaHostHooks",
+    "AoaHostDriver",
     "AoaHostState",
-    "PyUsbAoaHostHooks",
-    "SimulatedAoaHostHooks",
+    "PyUsbAoaHostDriver",
+    "SimulatedAoaHostDriver",
     "UsbAoaTransportAdapter",
 ]
 ```
@@ -1087,11 +1087,11 @@ __all__ = [
 ```python
 def test_transport_manager_starts_and_stops_aoa():
     from dt_image_search.mobile.transport.transport_manager import MobileTransportManager
-    from dt_image_search.mobile.transport.aoa_host_hooks import SimulatedAoaHostHooks
+    from dt_image_search.mobile.transport.aoa_host_driver import SimulatedAoaHostDriver
     from dt_image_search.mobile.transport.usb_aoa_adapter import UsbAoaTransportAdapter
     from dt_image_search.mobile.transport.router import MobileTransportRouter
 
-    hooks = SimulatedAoaHostHooks()
+    hooks = SimulatedAoaHostDriver()
     hooks.start()
     aoa = UsbAoaTransportAdapter(router=MobileTransportRouter(), tunnel_provider=hooks)
     manager = MobileTransportManager(

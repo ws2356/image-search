@@ -80,7 +80,7 @@ class AoaDetectedDevice:
     is_accessory_mode: bool
 
 
-class AoaHostHooks(Protocol):
+class AoaHostDriver(Protocol):
     def detect_devices(self) -> tuple[AoaDetectedDevice, ...]:
         ...
 
@@ -141,7 +141,7 @@ class AoaPocHostStateMachine:
         self._state = AoaPocHostState.FAILED
 
 
-class PyUsbAoaHostHooks:
+class PyUsbAoaHostDriver:
     def __init__(self) -> None:
         self._usb_core = _usb_core
         self._usb_util = _usb_util
@@ -642,7 +642,7 @@ def run_host_probe_aoa_poc(
     host_os: str,
     output_root: Path,
     thresholds: AoaPocThresholds | None = None,
-    hooks: AoaHostHooks | None = None,
+    hooks: AoaHostDriver | None = None,
 ) -> Path:
     normalized_host_os = host_os.strip().lower()
     if normalized_host_os not in ("macos", "windows"):
@@ -650,8 +650,8 @@ def run_host_probe_aoa_poc(
     if thresholds is None:
         thresholds = AoaPocThresholds()
     if hooks is None:
-        hooks = PyUsbAoaHostHooks()
-    uses_default_pyusb_hooks = isinstance(hooks, PyUsbAoaHostHooks)
+        hooks = PyUsbAoaHostDriver()
+    uses_default_pyusb_hooks = isinstance(hooks, PyUsbAoaHostDriver)
 
     state_machine = AoaPocHostStateMachine()
     errors: list[dict[str, str]] = []
@@ -827,7 +827,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--mode",
         default="host",
         choices=("host", "simulate"),
-        help="POC run mode. 'host' performs real host hooks, 'simulate' writes deterministic fixture metrics.",
+        help="POC run mode. 'host' performs real host driver, 'simulate' writes deterministic fixture metrics.",
     )
     return parser
 

@@ -43,12 +43,14 @@ from dt_image_search.mobile.transport.aoa_frame_codec import (
     decode_aoa_frame,
     encode_aoa_frame,
 )
-from dt_image_search.mobile.transport.aoa_host_hooks import (
+from dt_image_search.mobile.transport.aoa_host_driver import (
     AoaDetectedDevice,
-    AoaHostHooks,
+    AoaHostDriver,
     AoaHostState,
-    PyUsbAoaHostHooks,
-    SimulatedAoaHostHooks,
+    AoaReadStream,
+    AoaWriteStream,
+    PyUsbAoaHostDriver,
+    SimulatedAoaHostDriver,
 )
 from dt_image_search.mobile.transport.usb_aoa_adapter import UsbAoaTransportAdapter
 
@@ -89,9 +91,11 @@ __all__ = [
     "decode_aoa_frame",
     "encode_aoa_frame",
     "AoaDetectedDevice",
-    "AoaHostHooks",
+    "AoaHostDriver",
     "AoaHostState",
-    "PyUsbAoaHostHooks",
-    "SimulatedAoaHostHooks",
+    "AoaReadStream",
+    "AoaWriteStream",
+    "PyUsbAoaHostDriver",
+    "SimulatedAoaHostDriver",
     "UsbAoaTransportAdapter",
 ]

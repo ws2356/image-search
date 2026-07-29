@@ -25,12 +25,14 @@ from dt_image_search.mobile.transport.aoa_frame_codec import (
     AoaFrameError,
     encode_aoa_frame,
 )
-from dt_image_search.mobile.transport.aoa_host_hooks import (
+from dt_image_search.mobile.transport.aoa_host_driver import (
     AoaDetectedDevice,
-    AoaHostHooks,
+    AoaHostDriver,
     AoaHostState,
-    PyUsbAoaHostHooks,
-    SimulatedAoaHostHooks,
+    AoaReadStream,
+    AoaWriteStream,
+    PyUsbAoaHostDriver,
+    SimulatedAoaHostDriver,
 )
 from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
@@ -90,7 +92,7 @@ class UsbAoaTransportAdapter:
         self,
         *,
         router: MobileTransportRouter,
-        hooks: AoaHostHooks | None = None,
+        driver: AoaHostDriver | None = None,
         probe_interval_seconds: float = 1.0,
         response_poll_timeout_seconds: float = 0.5,
         auth_challenge_timeout_seconds: float = 2.0,
@@ -108,7 +110,7 @@ class UsbAoaTransportAdapter:
             )
 
         self._router = router
-        self._hooks = hooks or PyUsbAoaHostHooks()
+        self._driver = driver or PyUsbAoaHostDriver()
         self._probe_interval_seconds = probe_interval_seconds
         self._response_poll_timeout_seconds = response_poll_timeout_seconds
         self._auth_challenge_timeout_seconds = auth_challenge_timeout_seconds
@@ -121,8 +123,8 @@ class UsbAoaTransportAdapter:
         self._state = UsbTransportState.STOPPED
         self._bootstrap_config: UsbBootstrapConfig | None = None
         self._last_probe_error: str | None = None
-        self._active_read_stream: AoaHostHooks | None = None
-        self._active_write_stream: AoaHostHooks | None = None
+        self._active_read_stream: AoaReadStream | None = None
+        self._active_write_stream: AoaWriteStream | None = None
 
     @property
     def state(self) -> UsbTransportState:
@@ -186,7 +188,7 @@ class UsbAoaTransportAdapter:
             self._close_active_stream_locked()
             self._state = UsbTransportState.STOPPED
             self._last_probe_error = None
-        self._hooks.stop()
+        self._driver.stop()
         if worker_thread is not None and worker_thread.is_alive():
             worker_thread.join(timeout=2.0)
 
@@ -270,21 +272,21 @@ class UsbAoaTransportAdapter:
     def _probe(
         self,
         config: UsbBootstrapConfig,
-    ) -> tuple[AoaDetectedDevice, AoaHostHooks, AoaHostHooks] | None:
+    ) -> tuple[AoaDetectedDevice, AoaReadStream, AoaWriteStream] | None:
         # config is currently unused but kept for future capability matching.
         _ = config
-        self._hooks.start()
+        self._driver.start()
 
-        devices = self._hooks.detect_devices()
+        devices = self._driver.detect_devices()
         if not devices:
             return None
 
         for device in devices:
             target_device = device
             if not device.is_accessory_mode:
-                if not self._hooks.ensure_accessory_mode(device):
+                if not self._driver.ensure_accessory_mode(device):
                     continue
-                post_devices = self._hooks.detect_devices()
+                post_devices = self._driver.detect_devices()
                 accessory = next(
                     (candidate for candidate in post_devices if candidate.is_accessory_mode),
                     None,
@@ -294,7 +296,7 @@ class UsbAoaTransportAdapter:
                 target_device = accessory
 
             try:
-                read_stream, write_stream = self._hooks.open_stream(target_device)
+                read_stream, write_stream = self._driver.open_stream(target_device)
             except RuntimeError as exc:
                 self._safe_log(
                     "debug",
@@ -315,8 +317,8 @@ class UsbAoaTransportAdapter:
     def _auth_challenge(
         self,
         *,
-        read_stream: AoaHostHooks,
-        write_stream: AoaHostHooks,
+        read_stream: AoaReadStream,
+        write_stream: AoaWriteStream,
         config: UsbBootstrapConfig,
     ) -> None:
         challenge_rand = secrets.token_hex(16)
@@ -408,8 +410,8 @@ class UsbAoaTransportAdapter:
         self,
         *,
         device: AoaDetectedDevice,
-        read_stream: AoaHostHooks,
-        write_stream: AoaHostHooks,
+        read_stream: AoaReadStream,
+        write_stream: AoaWriteStream,
     ) -> None:
         remote_address = f"aoa://{device.device_id}"
         decoder = AoaFrameDecoder()
@@ -466,7 +468,7 @@ class UsbAoaTransportAdapter:
 
     def _send_frame(
         self,
-        write_stream: AoaHostHooks,
+        write_stream: AoaWriteStream,
         request_id: str,
         payload: bytes,
         flags: int = AOA_FRAME_FLAG_TEXT,

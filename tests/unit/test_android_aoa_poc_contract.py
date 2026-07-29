@@ -11,7 +11,7 @@ from dt_image_search.mobile.transport.poc.android_aoa_poc import (
     AOA_POC_METRICS_SCHEMA,
     AOA_POC_REQUEST_ID_LENGTH,
     AoaDetectedDevice,
-    AoaHostHooks,
+    AoaHostDriver,
     AoaPocHostState,
     AoaPocHostStateMachine,
     AoaPocMeasurements,
@@ -24,7 +24,7 @@ from dt_image_search.mobile.transport.poc.android_aoa_poc import (
 )
 
 
-class _FakeHostHooks(AoaHostHooks):
+class _FakeHostDriver(AoaHostDriver):
     def __init__(
         self,
         *,
@@ -142,7 +142,7 @@ class TestAndroidAoaPocContract(unittest.TestCase):
             metrics_path = run_host_probe_aoa_poc(
                 host_os="windows",
                 output_root=output_root,
-                hooks=_FakeHostHooks(),
+                hooks=_FakeHostDriver(),
             )
 
             payload = json.loads(metrics_path.read_text(encoding="utf-8"))
@@ -160,7 +160,7 @@ class TestAndroidAoaPocContract(unittest.TestCase):
             metrics_path = run_host_probe_aoa_poc(
                 host_os="macos",
                 output_root=output_root,
-                hooks=_FakeHostHooks(accessory_ready=False, throughput_bytes_per_second=None, reconnect_success=0, reconnect_total=20),
+                hooks=_FakeHostDriver(accessory_ready=False, throughput_bytes_per_second=None, reconnect_success=0, reconnect_total=20),
             )
 
             payload = json.loads(metrics_path.read_text(encoding="utf-8"))
