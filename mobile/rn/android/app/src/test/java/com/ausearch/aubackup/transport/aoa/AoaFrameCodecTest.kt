@@ -1,7 +1,10 @@
 package com.ausearch.aubackup.transport.aoa
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 class AoaFrameCodecTest {
     @Test
@@ -35,5 +38,42 @@ class AoaFrameCodecTest {
         assertEquals(1, second.size)
         assertEquals(requestId, second[0].requestId)
         assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, second[0].flags)
+    }
+
+    @Test
+    fun `decode preserves raw requestId without trimming`() {
+        val paddedRequestId = "12345678-1234-1234-1234-1234567890  "
+        assertEquals(36, paddedRequestId.length)
+        val frame = AoaFrameCodec.encodeFrame(paddedRequestId, "hello".toByteArray(Charsets.UTF_8))
+        val decoded = AoaFrameCodec.decodeFrame(frame)
+        assertEquals(paddedRequestId, decoded.requestId)
+    }
+
+    @Test(expected = AoaFrameCodecException::class)
+    fun `encode rejects non-ASCII requestId`() {
+        val requestId = "12345678-1234-1234-1234-1234567890éé"
+        assertEquals(36, requestId.length)
+        AoaFrameCodec.encodeFrame(requestId, "hello".toByteArray(Charsets.UTF_8))
+    }
+
+    @Test
+    fun `decode throws on payload length mismatch`() {
+        val requestId = "12345678-1234-1234-1234-123456789012"
+        val header = ByteArray(AoaFrameCodec.HEADER_LENGTH)
+        val buffer = ByteBuffer.wrap(header)
+        buffer.put(AoaFrameCodec.FRAME_VERSION)
+        buffer.put(requestId.toByteArray(StandardCharsets.US_ASCII))
+        buffer.putInt(100)
+        buffer.put(AoaFrameCodec.FRAME_FLAG_TEXT)
+        val frame = header + "hello".toByteArray(Charsets.UTF_8)
+        try {
+            AoaFrameCodec.decodeFrame(frame)
+            throw AssertionError("Expected AoaFrameCodecException")
+        } catch (e: AoaFrameCodecException) {
+            assertTrue(
+                "Expected payload length mismatch message, got: ${e.message}",
+                e.message!!.contains("payload length mismatch")
+            )
+        }
     }
 }

@@ -31,11 +31,16 @@ object AoaFrameCodec {
 
     fun encodeFrame(requestId: String, payload: ByteArray, flags: Byte = FRAME_FLAG_TEXT): ByteArray {
         val requestIdBytes = requestId.toByteArray(StandardCharsets.US_ASCII)
-        require(requestIdBytes.size == REQUEST_ID_LENGTH) {
-            "requestId must be exactly $REQUEST_ID_LENGTH ASCII bytes"
+        if (requestIdBytes.size != REQUEST_ID_LENGTH) {
+            throw AoaFrameCodecException(
+                "requestId must be exactly $REQUEST_ID_LENGTH ASCII bytes, got ${requestIdBytes.size}"
+            )
         }
-        require(flags == FRAME_FLAG_TEXT || flags == FRAME_FLAG_BINARY) {
-            "Unsupported AOA frame flags: $flags"
+        if (requestId.any { it.code > 0x7F }) {
+            throw AoaFrameCodecException("requestId must contain only ASCII characters")
+        }
+        if (flags != FRAME_FLAG_TEXT && flags != FRAME_FLAG_BINARY) {
+            throw AoaFrameCodecException("Unsupported AOA frame flags: $flags")
         }
         val buffer = ByteBuffer.allocate(HEADER_LENGTH + payload.size)
         buffer.put(FRAME_VERSION)
@@ -47,56 +52,75 @@ object AoaFrameCodec {
     }
 
     fun decodeFrame(frame: ByteArray): AoaFrame {
-        require(frame.size >= HEADER_LENGTH) { "AOA frame is too short" }
+        if (frame.size < HEADER_LENGTH) {
+            throw AoaFrameCodecException(
+                "AOA frame is too short for header (${frame.size} < $HEADER_LENGTH)"
+            )
+        }
         val buffer = ByteBuffer.wrap(frame)
         val version = buffer.get()
-        require(version == FRAME_VERSION) { "Unsupported AOA frame version: $version" }
+        if (version != FRAME_VERSION) {
+            throw AoaFrameCodecException("Unsupported AOA frame version: $version")
+        }
         val requestIdBytes = ByteArray(REQUEST_ID_LENGTH)
         buffer.get(requestIdBytes)
-        val requestId = String(requestIdBytes, StandardCharsets.US_ASCII).trim()
-        require(requestId.isNotEmpty()) { "AOA frame requestId is empty" }
+        val requestId = String(requestIdBytes, StandardCharsets.US_ASCII)
+        if (requestId.isEmpty()) {
+            throw AoaFrameCodecException("AOA frame requestId is empty")
+        }
         val payloadLength = buffer.int
         val flags = buffer.get()
-        require(flags == FRAME_FLAG_TEXT || flags == FRAME_FLAG_BINARY) {
-            "Unsupported AOA frame flags: $flags"
+        if (flags != FRAME_FLAG_TEXT && flags != FRAME_FLAG_BINARY) {
+            throw AoaFrameCodecException("Unsupported AOA frame flags: $flags")
+        }
+        if (buffer.remaining() < payloadLength) {
+            throw AoaFrameCodecException(
+                "AOA frame payload length mismatch: declared $payloadLength, " +
+                    "remaining ${buffer.remaining()}"
+            )
         }
         val payload = ByteArray(payloadLength)
         buffer.get(payload)
-        require(payload.size == payloadLength) { "AOA frame payload length mismatch" }
         return AoaFrame(requestId, flags, payload)
     }
 
     class StreamDecoder {
-        private val buffer = mutableListOf<Byte>()
+        private var buffer = ByteArray(0)
 
         fun feed(data: ByteArray): List<AoaFrame> {
-            data.forEach { buffer.add(it) }
+            if (data.isEmpty()) return emptyList()
+            buffer += data
             val frames = mutableListOf<AoaFrame>()
+            var offset = 0
             while (true) {
-                if (buffer.size < HEADER_LENGTH) break
-                val version = buffer[0]
+                if (buffer.size - offset < HEADER_LENGTH) break
+                val version = buffer[offset]
                 if (version != FRAME_VERSION) {
-                    throw IllegalStateException("Unsupported AOA frame version: $version")
+                    throw AoaFrameCodecException("Unsupported AOA frame version: $version")
                 }
-                val flags = buffer[1 + REQUEST_ID_LENGTH + 4]
+                val flags = buffer[offset + REQUEST_ID_LENGTH + 4 + 1]
                 if (flags != FRAME_FLAG_TEXT && flags != FRAME_FLAG_BINARY) {
-                    throw IllegalStateException("Unsupported AOA frame flags: $flags")
+                    throw AoaFrameCodecException("Unsupported AOA frame flags: $flags")
                 }
-                val payloadLength = ByteBuffer.wrap(
-                    buffer.toByteArray(),
-                    1 + REQUEST_ID_LENGTH,
-                    4
-                ).int
+                val payloadLength = readPayloadLength(buffer, offset)
                 val frameLength = HEADER_LENGTH + payloadLength
-                if (buffer.size < frameLength) break
-                val frame = buffer.subList(0, frameLength).toByteArray()
-                buffer.subList(0, frameLength).clear()
+                if (buffer.size - offset < frameLength) break
+                val frame = buffer.copyOfRange(offset, offset + frameLength)
+                offset += frameLength
                 frames.add(decodeFrame(frame))
             }
+            buffer = buffer.copyOfRange(offset, buffer.size)
             return frames
         }
 
-        private fun List<Byte>.toByteArray(): ByteArray =
-            ByteArray(size) { this[it] }
+        private fun readPayloadLength(buffer: ByteArray, offset: Int): Int {
+            val base = offset + 1 + REQUEST_ID_LENGTH
+            return (
+                ((buffer[base].toInt() and 0xFF) shl 24) or
+                    ((buffer[base + 1].toInt() and 0xFF) shl 16) or
+                    ((buffer[base + 2].toInt() and 0xFF) shl 8) or
+                    (buffer[base + 3].toInt() and 0xFF)
+            )
+        }
     }
 }
