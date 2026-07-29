@@ -2,7 +2,7 @@
 <resources>
   <usb-accessory
     manufacturer="AuSearch"
-    model="AuBackup AOA POC"
+    model="AuBackup AOA"
     version="1.0" />
 </resources>
 
