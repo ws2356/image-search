@@ -9,6 +9,8 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * React Native bridge for the AOA transport client.
@@ -18,7 +20,7 @@ import java.util.concurrent.Executors
  * and the module. Blocking request methods are executed on a background thread
  * so the JS/UI thread is never blocked.
  */
-class AoaTransportModule(
+open class AoaTransportModule(
     private val reactContext: ReactApplicationContext,
     private val aoaClient: AoaClient = AoaClient.getInstance(reactContext.applicationContext),
 ) : ReactContextBaseJavaModule(reactContext) {
@@ -27,12 +29,33 @@ class AoaTransportModule(
         Thread(runnable, "AoaTransportModule-Worker").apply { isDaemon = true }
     }
 
+    private val invalidated = AtomicBoolean(false)
+
+    private val stateListener = object : AoaClientListener {
+        override fun onStateChanged(state: AoaTransportState, errorMessage: String?) {
+            emitStateChanged(state.name, errorMessage)
+        }
+    }
+
     init {
-        aoaClient.addListener(object : AoaClientListener {
-            override fun onStateChanged(state: AoaTransportState, errorMessage: String?) {
-                emitStateChanged(state.name.lowercase(), errorMessage)
+        aoaClient.addListener(stateListener)
+    }
+
+    override fun invalidate() {
+        if (invalidated.getAndSet(true)) {
+            return
+        }
+        aoaClient.removeListener(stateListener)
+        executor.shutdown()
+        try {
+            if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+                executor.shutdownNow()
             }
-        })
+        } catch (e: InterruptedException) {
+            executor.shutdownNow()
+            Thread.currentThread().interrupt()
+        }
+        super.invalidate()
     }
 
     override fun getName(): String = "AoaTransportModule"
@@ -115,7 +138,10 @@ class AoaTransportModule(
         // Required for RN EventEmitter.
     }
 
-    private fun emitStateChanged(state: String, errorMessage: String?) {
+    protected open fun emitStateChanged(state: String, errorMessage: String?) {
+        if (invalidated.get()) {
+            return
+        }
         if (!reactContext.hasActiveReactInstance()) {
             return
         }
