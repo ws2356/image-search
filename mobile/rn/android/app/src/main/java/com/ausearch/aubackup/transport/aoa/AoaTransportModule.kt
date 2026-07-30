@@ -9,6 +9,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -19,6 +20,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  * instance survives React Native reloads and is shared between the application
  * and the module. Blocking request methods are executed on a background thread
  * so the JS/UI thread is never blocked.
+ *
+ * The class is open so unit tests can subclass it to observe [emitStateChanged]
+ * without initializing React Native's native loader (required by
+ * [Arguments.createMap]).
  */
 open class AoaTransportModule(
     private val reactContext: ReactApplicationContext,
@@ -85,13 +90,21 @@ open class AoaTransportModule(
 
     @ReactMethod
     fun sendRequest(envelopeJson: String, promise: Promise) {
-        executor.execute {
-            try {
-                val response = aoaClient.sendRequest(envelopeJson)
-                promise.resolve(response)
-            } catch (e: Throwable) {
-                promise.reject("AOA_SEND_REQUEST_FAILED", e.message, e)
+        if (invalidated.get()) {
+            promise.reject("AOA_MODULE_INVALIDATED", "AoaTransportModule has been invalidated")
+            return
+        }
+        try {
+            executor.execute {
+                try {
+                    val response = aoaClient.sendRequest(envelopeJson)
+                    promise.resolve(response)
+                } catch (e: Throwable) {
+                    promise.reject("AOA_SEND_REQUEST_FAILED", e.message, e)
+                }
             }
+        } catch (e: RejectedExecutionException) {
+            promise.reject("AOA_EXECUTOR_REJECTED", e.message, e)
         }
     }
 
@@ -118,13 +131,21 @@ open class AoaTransportModule(
 
     @ReactMethod
     fun finishStreamingRequest(requestId: String, promise: Promise) {
-        executor.execute {
-            try {
-                val response = aoaClient.finishStreamingRequest(requestId)
-                promise.resolve(response)
-            } catch (e: Throwable) {
-                promise.reject("AOA_FINISH_STREAM_FAILED", e.message, e)
+        if (invalidated.get()) {
+            promise.reject("AOA_MODULE_INVALIDATED", "AoaTransportModule has been invalidated")
+            return
+        }
+        try {
+            executor.execute {
+                try {
+                    val response = aoaClient.finishStreamingRequest(requestId)
+                    promise.resolve(response)
+                } catch (e: Throwable) {
+                    promise.reject("AOA_FINISH_STREAM_FAILED", e.message, e)
+                }
             }
+        } catch (e: RejectedExecutionException) {
+            promise.reject("AOA_EXECUTOR_REJECTED", e.message, e)
         }
     }
 

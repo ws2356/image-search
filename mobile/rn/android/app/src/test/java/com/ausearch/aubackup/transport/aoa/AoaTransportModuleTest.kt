@@ -38,7 +38,6 @@ import java.io.PipedOutputStream
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
@@ -47,7 +46,6 @@ class AoaTransportModuleTest {
 
     private lateinit var reactContext: TestReactApplicationContext
     private lateinit var module: AoaTransportModule
-    private val testExecutor = Executors.newSingleThreadExecutor()
     private var testInputStream: InputStream? = null
     private var testOutputStream: OutputStream? = null
 
@@ -62,7 +60,7 @@ class AoaTransportModuleTest {
     fun tearDown() {
         closeQuietly(testInputStream)
         closeQuietly(testOutputStream)
-        testExecutor.shutdownNow()
+        module.invalidate()
         AoaClient.resetInstance()
     }
 
@@ -221,7 +219,7 @@ class AoaTransportModuleTest {
     }
 
     @Test
-    fun `AoaTransportStateChanged event is emitted with pascal case state`() {
+    fun `AoaTransportStateChanged event is emitted with uppercase state name`() {
         module.invalidate()
         val observingModule = TestAoaTransportModule(reactContext)
 
