@@ -18,6 +18,7 @@ import java.io.OutputStream
 import java.util.UUID
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -70,8 +71,11 @@ class AoaClient private constructor(private val context: Context) {
     private var preparedSuggestedPort: Int = -1
     @Volatile
     private var bootstrapPrepared = false
+    @Volatile
+    private var responseTimeoutMs: Long = RESPONSE_TIMEOUT_MS
     private var permissionPendingIntent: PendingIntent? = null
     private var openedDescriptor: ParcelFileDescriptor? = null
+    private var openedAccessory: UsbAccessory? = null
     private var readerThread: Thread? = null
     private var writerThread: Thread? = null
     private val stopped = AtomicBoolean(true)
@@ -86,11 +90,18 @@ class AoaClient private constructor(private val context: Context) {
                         return
                     }
                     val accessory = extractAccessory(intent) ?: return probeAttachedAccessories()
+                    if (!isMatchingAccessory(accessory)) {
+                        Log.d(
+                            LOG_TAG,
+                            "Ignoring attached accessory ${accessory.manufacturer}/${accessory.model}/${accessory.version}"
+                        )
+                        return
+                    }
                     requestAccessoryPermission(accessory)
                 }
                 UsbManager.ACTION_USB_ACCESSORY_DETACHED -> {
                     val detached = extractAccessory(intent)
-                    if (detached == null || isSameAccessory(detached, currentAccessory())) {
+                    if (detached == null || isSameAccessory(detached, openedAccessory)) {
                         closeConnection()
                     }
                 }
@@ -171,9 +182,10 @@ class AoaClient private constructor(private val context: Context) {
                 AoaFrameCodec.FRAME_FLAG_TEXT,
             )
             outgoingQueue.put(frame)
-            val result = responseQueue.poll(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val timeoutMs = responseTimeoutMs
+            val result = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS)
                 ?: throw AoaTransportError.ResponseTimedOut(
-                    "No response received for request $requestId within ${RESPONSE_TIMEOUT_MS}ms"
+                    "No response received for request $requestId within ${timeoutMs}ms"
                 )
             return when (result) {
                 is ResponseResult.Success -> result.payload
@@ -195,9 +207,15 @@ class AoaClient private constructor(private val context: Context) {
      * @throws AoaTransportError.InvalidEnvelope if the envelope is not valid JSON.
      */
     fun beginStreamingRequest(envelopeJson: String): String {
-        ensureConnected()
         val requestId = extractRequestIdOrGenerate(envelopeJson)
-        registerPendingStreamingResponse(requestId)
+        synchronized(this) {
+            if (state.get() != AoaTransportState.CONNECTED) {
+                throw AoaTransportError.ConnectionUnavailable(
+                    "AOA client is not connected (state=${state.get()})"
+                )
+            }
+            registerPendingStreamingResponse(requestId)
+        }
         val frame = AoaFrameCodec.encodeFrame(
             padRequestId(requestId),
             envelopeJson.toByteArray(Charsets.UTF_8),
@@ -214,8 +232,15 @@ class AoaClient private constructor(private val context: Context) {
      * @throws AoaTransportError.SendFailed if [requestId] is not an active streaming request.
      */
     fun sendBinaryChunk(requestId: String, chunk: ByteArray) {
-        ensureConnected()
-        if (!pendingStreamingResponses.containsKey(requestId)) {
+        val responseQueue = synchronized(this) {
+            if (state.get() != AoaTransportState.CONNECTED) {
+                throw AoaTransportError.ConnectionUnavailable(
+                    "AOA client is not connected (state=${state.get()})"
+                )
+            }
+            pendingStreamingResponses[requestId]
+        }
+        if (responseQueue == null) {
             throw AoaTransportError.SendFailed(
                 "Cannot send binary chunk for inactive streaming request $requestId"
             )
@@ -248,9 +273,10 @@ class AoaClient private constructor(private val context: Context) {
                 )
         }
         try {
-            val result = responseQueue.poll(RESPONSE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            val timeoutMs = responseTimeoutMs
+            val result = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS)
                 ?: throw AoaTransportError.ResponseTimedOut(
-                    "No final response received for streaming request $requestId within ${RESPONSE_TIMEOUT_MS}ms"
+                    "No final response received for streaming request $requestId within ${timeoutMs}ms"
                 )
             return when (result) {
                 is ResponseResult.Success -> result.payload
@@ -306,6 +332,11 @@ class AoaClient private constructor(private val context: Context) {
 
     @VisibleForTesting
     internal fun getPreparedSuggestedPortForTest(): Int = preparedSuggestedPort
+
+    @VisibleForTesting
+    internal fun setResponseTimeoutMsForTest(timeoutMs: Long) {
+        responseTimeoutMs = timeoutMs
+    }
 
     private fun ensureConnected() {
         if (state.get() != AoaTransportState.CONNECTED) {
@@ -397,7 +428,7 @@ class AoaClient private constructor(private val context: Context) {
 
     private fun probeAttachedAccessories() {
         val accessories = usbManager.accessoryList ?: return
-        val accessory = accessories.firstOrNull() ?: return
+        val accessory = accessories.firstOrNull { isMatchingAccessory(it) } ?: return
         requestAccessoryPermission(accessory)
     }
 
@@ -425,6 +456,7 @@ class AoaClient private constructor(private val context: Context) {
             return
         }
         openedDescriptor = descriptor
+        openedAccessory = accessory
         transitionTo(AoaTransportState.AUTHENTICATING)
         startReaderWriter(
             ParcelFileDescriptor.AutoCloseInputStream(descriptor),
@@ -485,6 +517,7 @@ class AoaClient private constructor(private val context: Context) {
             // Ignore close errors during cleanup.
         }
         openedDescriptor = null
+        openedAccessory = null
         outgoingQueue.clear()
         val connectionLostError = AoaTransportError.ConnectionLost("AOA connection lost")
         pendingResponses.values.forEach { queue ->
@@ -648,9 +681,10 @@ class AoaClient private constructor(private val context: Context) {
         }
     }
 
-    private fun currentAccessory(): UsbAccessory? {
-        val accessories = usbManager.accessoryList ?: return null
-        return accessories.firstOrNull()
+    private fun isMatchingAccessory(accessory: UsbAccessory): Boolean {
+        return accessory.manufacturer == "AuSearch"
+            && accessory.model == "AuBackup AOA"
+            && accessory.version == "1.0"
     }
 
     private fun isSameAccessory(first: UsbAccessory?, second: UsbAccessory?): Boolean {

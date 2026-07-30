@@ -44,6 +44,7 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onTerminate() {
     super.onTerminate()
+    AoaClient.getInstance(this).reset()
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {

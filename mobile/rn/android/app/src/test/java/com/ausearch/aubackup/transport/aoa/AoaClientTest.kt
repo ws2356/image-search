@@ -28,13 +28,16 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.FutureTask
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class AoaClientTest {
 
-    private val executor = Executors.newSingleThreadExecutor()
+    private val executor = Executors.newCachedThreadPool()
 
     private lateinit var context: Context
     private lateinit var client: AoaClient
@@ -45,6 +48,7 @@ class AoaClientTest {
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
         client = AoaClient.createForTest(context)
+        client.setResponseTimeoutMsForTest(500)
     }
 
     @After
@@ -91,15 +95,72 @@ class AoaClientTest {
     }
 
     private fun openTestPipes() {
-        val peerToClientOutput = PipedOutputStream()
-        val peerToClientInput = PipedInputStream(peerToClientOutput, PIPE_BUFFER_SIZE)
+        val clientToTestQueue = FrameQueue()
+        val testToClientQueue = FrameQueue()
 
-        val clientToPeerOutput = PipedOutputStream()
-        val clientToPeerInput = PipedInputStream(clientToPeerOutput, PIPE_BUFFER_SIZE)
+        testInputStream = FrameQueueInputStream(clientToTestQueue)
+        testOutputStream = FrameQueueOutputStream(testToClientQueue)
+        client.openStreamsForTest(
+            FrameQueueInputStream(testToClientQueue),
+            FrameQueueOutputStream(clientToTestQueue),
+        )
+    }
 
-        testInputStream = clientToPeerInput
-        testOutputStream = peerToClientOutput
-        client.openStreamsForTest(peerToClientInput, clientToPeerOutput)
+    /**
+     * Thread-safe queue of byte chunks used to build deterministic test streams.
+     */
+    private class FrameQueue {
+        private val chunks = LinkedBlockingQueue<ByteArray>()
+
+        fun offer(chunk: ByteArray) {
+            chunks.offer(chunk)
+        }
+
+        fun poll(timeoutMs: Long): ByteArray? = chunks.poll(timeoutMs, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * OutputStream that queues each write as a discrete chunk.
+     */
+    private class FrameQueueOutputStream(private val queue: FrameQueue) : OutputStream() {
+        override fun write(b: Int) {
+            queue.offer(byteArrayOf(b.toByte()))
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            queue.offer(b.copyOfRange(off, off + len))
+        }
+    }
+
+    /**
+     * InputStream fed by discrete byte chunks queued by the test peer.
+     */
+    private class FrameQueueInputStream(private val queue: FrameQueue) : InputStream() {
+        private var current: ByteArray? = null
+        private var offset = 0
+
+        override fun read(): Int {
+            val buffer = ByteArray(1)
+            val read = read(buffer)
+            return if (read < 0) -1 else buffer[0].toInt() and 0xFF
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            while (current == null || offset >= current!!.size) {
+                current = try {
+                    queue.poll(100)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return -1
+                } ?: return -1
+                offset = 0
+            }
+            val available = current!!.size - offset
+            val toRead = minOf(len, available)
+            System.arraycopy(current!!, offset, b, off, toRead)
+            offset += toRead
+            return toRead
+        }
     }
 
     @Test
@@ -167,19 +228,22 @@ class AoaClientTest {
             {"operation":"test.echo","request_id":"$requestId","body":{"message":"hello"}}
         """.trimIndent().trim()
 
-        val future = executor.submit<String> { client.sendRequest(requestEnvelope) }
-
-        val outgoingFrame = readFrame()
-        assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, outgoingFrame.flags)
-        assertEquals(requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '), outgoingFrame.requestId)
-        assertEquals(requestEnvelope, String(outgoingFrame.payload, Charsets.UTF_8))
-
         val responseEnvelope = """
             {"request_id":"$requestId","body":{"echo":"hello"}}
         """.trimIndent().trim()
-        writeFrame(requestId, responseEnvelope.toByteArray(Charsets.UTF_8))
 
-        val result = future.get(5, TimeUnit.SECONDS)
+        val peer = FutureTask<Unit> {
+            val outgoingFrame = readFrame()
+            assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, outgoingFrame.flags)
+            assertEquals(requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '), outgoingFrame.requestId)
+            assertEquals(requestEnvelope, String(outgoingFrame.payload, Charsets.UTF_8))
+            writeFrame(requestId, responseEnvelope.toByteArray(Charsets.UTF_8))
+        }
+        executor.execute(peer)
+
+        val result = client.sendRequest(requestEnvelope)
+
+        peer.get(2, TimeUnit.SECONDS)
         assertEquals(responseEnvelope, result)
     }
 

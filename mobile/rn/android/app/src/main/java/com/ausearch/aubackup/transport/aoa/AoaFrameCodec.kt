@@ -1,5 +1,6 @@
 package com.ausearch.aubackup.transport.aoa
 
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
@@ -85,31 +86,33 @@ object AoaFrameCodec {
     }
 
     class StreamDecoder {
-        private var buffer = ByteArray(0)
+        private val buffer = ByteArrayOutputStream()
 
         fun feed(data: ByteArray): List<AoaFrame> {
             if (data.isEmpty()) return emptyList()
-            buffer += data
+            buffer.write(data)
+            val bytes = buffer.toByteArray()
             val frames = mutableListOf<AoaFrame>()
             var offset = 0
             while (true) {
-                if (buffer.size - offset < HEADER_LENGTH) break
-                val version = buffer[offset]
+                if (bytes.size - offset < HEADER_LENGTH) break
+                val version = bytes[offset]
                 if (version != FRAME_VERSION) {
                     throw AoaFrameCodecException("Unsupported AOA frame version: $version")
                 }
-                val flags = buffer[offset + REQUEST_ID_LENGTH + 4 + 1]
+                val flags = bytes[offset + REQUEST_ID_LENGTH + 4 + 1]
                 if (flags != FRAME_FLAG_TEXT && flags != FRAME_FLAG_BINARY) {
                     throw AoaFrameCodecException("Unsupported AOA frame flags: $flags")
                 }
-                val payloadLength = readPayloadLength(buffer, offset)
+                val payloadLength = readPayloadLength(bytes, offset)
                 val frameLength = HEADER_LENGTH + payloadLength
-                if (buffer.size - offset < frameLength) break
-                val frame = buffer.copyOfRange(offset, offset + frameLength)
+                if (bytes.size - offset < frameLength) break
+                val frame = bytes.copyOfRange(offset, offset + frameLength)
                 offset += frameLength
                 frames.add(decodeFrame(frame))
             }
-            buffer = buffer.copyOfRange(offset, buffer.size)
+            buffer.reset()
+            buffer.write(bytes, offset, bytes.size - offset)
             return frames
         }
 

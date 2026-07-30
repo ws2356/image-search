@@ -1,5 +1,6 @@
 package com.ausearch.aubackup.transport.aoa
 
+import org.json.JSONObject
 import java.security.MessageDigest
 
 /**
@@ -64,9 +65,16 @@ class AoaAuthResponder {
     }
 
     private fun buildResponseEnvelope(proof: String): String {
-        return """
-            {"body":{"schema":"$MOBILE_PAIRING_SCHEMA","status":"$AUTH_STATUS_ACCEPTED","proof":"$proof"},"request_id":"$AUTH_REQUEST_ID","schema":"$MOBILE_TRANSPORT_ENVELOPE_SCHEMA","status_code":200}
-        """.trimIndent().trim()
+        return JSONObject().apply {
+            put("body", JSONObject().apply {
+                put("schema", MOBILE_PAIRING_SCHEMA)
+                put("status", AUTH_STATUS_ACCEPTED)
+                put("proof", proof)
+            })
+            put("request_id", AUTH_REQUEST_ID)
+            put("schema", MOBILE_TRANSPORT_ENVELOPE_SCHEMA)
+            put("status_code", 200)
+        }.toString()
     }
 
     companion object {

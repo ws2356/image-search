@@ -121,7 +121,19 @@ open class AoaTransportModule(
     @ReactMethod
     fun sendBinaryChunk(requestId: String, chunk: ReadableArray, promise: Promise) {
         try {
-            val bytes = ByteArray(chunk.size()) { chunk.getInt(it).toByte() }
+            val size = chunk.size()
+            val bytes = ByteArray(size)
+            for (i in 0 until size) {
+                val value = chunk.getInt(i)
+                if (value !in 0..255) {
+                    promise.reject(
+                        "AOA_INVALID_CHUNK",
+                        "Chunk value at index $i is out of byte range: $value"
+                    )
+                    return
+                }
+                bytes[i] = value.toByte()
+            }
             aoaClient.sendBinaryChunk(requestId, bytes)
             promise.resolve(null)
         } catch (e: Throwable) {
