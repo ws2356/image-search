@@ -219,6 +219,29 @@ class AoaTransportModuleTest {
     }
 
     @Test
+    fun `sendBinaryChunk rejects values outside byte range`() {
+        client().prepareBootstrap("sid-001", "123456", 8080)
+        openTestPipes()
+        performAuthHandshake()
+
+        val requestId = UUID.randomUUID().toString()
+        val requestEnvelope = """
+            {"operation":"asset.upload","request_id":"$requestId","body":{"total_bytes":1024}}
+        """.trimIndent().trim()
+        val beginPromise = TestPromise()
+        module.beginStreamingRequest(requestEnvelope, beginPromise)
+        assertTrue(beginPromise.await())
+        assertEquals(requestId, beginPromise.resolvedValue)
+
+        val chunkPromise = TestPromise()
+        module.sendBinaryChunk(requestId, TestReadableArray(listOf(0, 128, 256, -1)), chunkPromise)
+
+        assertTrue("sendBinaryChunk should reject", chunkPromise.await())
+        assertTrue(chunkPromise.isRejected)
+        assertEquals("AOA_INVALID_CHUNK", chunkPromise.rejectedCode)
+    }
+
+    @Test
     fun `AoaTransportStateChanged event is emitted with uppercase state name`() {
         module.invalidate()
         val observingModule = TestAoaTransportModule(reactContext)

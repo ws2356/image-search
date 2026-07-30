@@ -262,7 +262,6 @@ class AoaClient private constructor(private val context: Context) {
      * @throws AoaTransportError.ResponseTimedOut if the final response does not arrive in time.
      */
     fun finishStreamingRequest(requestId: String): String {
-        ensureConnected()
         val responseQueue = synchronized(this) {
             if (state.get() != AoaTransportState.CONNECTED) {
                 throw AoaTransportError.ConnectionLost("AOA connection lost")
@@ -272,6 +271,19 @@ class AoaClient private constructor(private val context: Context) {
                     "Cannot finish inactive streaming request $requestId"
                 )
         }
+        val completionEnvelope = JSONObject().apply {
+            put("request_id", requestId)
+            put("schema", AoaAuthResponder.MOBILE_TRANSPORT_ENVELOPE_SCHEMA)
+            put("body", JSONObject().apply {
+                put("stream_state", "complete")
+            })
+        }.toString()
+        val completionFrame = AoaFrameCodec.encodeFrame(
+            padRequestId(requestId),
+            completionEnvelope.toByteArray(Charsets.UTF_8),
+            AoaFrameCodec.FRAME_FLAG_TEXT,
+        )
+        outgoingQueue.put(completionFrame)
         try {
             val timeoutMs = responseTimeoutMs
             val result = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS)
@@ -552,6 +564,10 @@ class AoaClient private constructor(private val context: Context) {
             }
         } catch (e: IOException) {
             Log.w(LOG_TAG, "Reader stopped with I/O error: ${e.message}")
+        } catch (e: AoaFrameCodecException) {
+            Log.w(LOG_TAG, "Reader stopped with malformed frame: ${e.message}")
+        } catch (e: RuntimeException) {
+            Log.w(LOG_TAG, "Reader stopped unexpectedly: ${e.message}")
         } finally {
             closeConnection()
         }

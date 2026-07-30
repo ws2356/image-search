@@ -76,4 +76,25 @@ class AoaFrameCodecTest {
             )
         }
     }
+
+    @Test
+    fun `decoder rejects payload length exceeding maximum`() {
+        val decoder = AoaFrameCodec.StreamDecoder()
+        val requestId = "12345678-1234-1234-1234-123456789012"
+        val header = ByteArray(AoaFrameCodec.HEADER_LENGTH)
+        val buffer = ByteBuffer.wrap(header)
+        buffer.put(AoaFrameCodec.FRAME_VERSION)
+        buffer.put(requestId.toByteArray(StandardCharsets.US_ASCII))
+        buffer.putInt(AoaFrameCodec.MAX_PAYLOAD_LENGTH + 1)
+        buffer.put(AoaFrameCodec.FRAME_FLAG_TEXT)
+        try {
+            decoder.feed(header)
+            throw AssertionError("Expected AoaFrameCodecException")
+        } catch (e: AoaFrameCodecException) {
+            assertTrue(
+                "Expected payload length validation message, got: ${e.message}",
+                e.message!!.contains("payload length")
+            )
+        }
+    }
 }

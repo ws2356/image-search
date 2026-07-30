@@ -29,6 +29,7 @@ object AoaFrameCodec {
     const val HEADER_LENGTH: Int = 1 + REQUEST_ID_LENGTH + 4 + 1
     const val FRAME_FLAG_TEXT: Byte = 0x00
     const val FRAME_FLAG_BINARY: Byte = 0x01
+    const val MAX_PAYLOAD_LENGTH: Int = 16 * 1024 * 1024
 
     fun encodeFrame(requestId: String, payload: ByteArray, flags: Byte = FRAME_FLAG_TEXT): ByteArray {
         val requestIdBytes = requestId.toByteArray(StandardCharsets.US_ASCII)
@@ -105,10 +106,16 @@ object AoaFrameCodec {
                     throw AoaFrameCodecException("Unsupported AOA frame flags: $flags")
                 }
                 val payloadLength = readPayloadLength(bytes, offset)
-                val frameLength = HEADER_LENGTH + payloadLength
+                if (payloadLength < 0 || payloadLength > MAX_PAYLOAD_LENGTH) {
+                    throw AoaFrameCodecException(
+                        "AOA frame payload length $payloadLength exceeds maximum allowed $MAX_PAYLOAD_LENGTH"
+                    )
+                }
+                val frameLength = HEADER_LENGTH.toLong() + payloadLength
                 if (bytes.size - offset < frameLength) break
-                val frame = bytes.copyOfRange(offset, offset + frameLength)
-                offset += frameLength
+                val frameEnd = offset + frameLength.toInt()
+                val frame = bytes.copyOfRange(offset, frameEnd)
+                offset = frameEnd
                 frames.add(decodeFrame(frame))
             }
             buffer.reset()

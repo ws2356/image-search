@@ -18,8 +18,6 @@ import org.robolectric.annotation.Config
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -279,11 +277,20 @@ class AoaClientTest {
         assertEquals(AoaFrameCodec.FRAME_FLAG_BINARY, outgoingChunk2.flags)
         assertArrayEquals(chunk2, outgoingChunk2.payload)
 
+        val future = executor.submit<String> { client.finishStreamingRequest(requestId) }
+
+        val completionFrame = readFrame()
+        assertEquals(AoaFrameCodec.FRAME_FLAG_TEXT, completionFrame.flags)
+        assertEquals(requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' '), completionFrame.requestId)
+        val completionEnvelope = JSONObject(String(completionFrame.payload, Charsets.UTF_8))
+        assertEquals(requestId, completionEnvelope.getString("request_id"))
+        assertEquals(AoaAuthResponder.MOBILE_TRANSPORT_ENVELOPE_SCHEMA, completionEnvelope.getString("schema"))
+        val completionBody = completionEnvelope.getJSONObject("body")
+        assertEquals("complete", completionBody.getString("stream_state"))
+
         val finalResponse = """
             {"request_id":"$requestId","body":{"status":"ok","received":5}}
         """.trimIndent().trim()
-
-        val future = executor.submit<String> { client.finishStreamingRequest(requestId) }
         writeFrame(requestId, finalResponse.toByteArray(Charsets.UTF_8))
 
         val result = future.get(5, TimeUnit.SECONDS)
@@ -419,6 +426,5 @@ class AoaClientTest {
 
     companion object {
         private const val AUTH_CHALLENGE_REQUEST_ID = "auth-challenge"
-        private const val PIPE_BUFFER_SIZE = 64 * 1024
     }
 }
