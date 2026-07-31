@@ -27,7 +27,7 @@ export class FakeAoaBridge implements AoaBridge {
       schema: 'dtis.mobile-transport.v1',
       request_id: JSON.parse(envelopeJson).request_id,
       status_code: 200,
-      body: { status: 'accepted' },
+      body: { status: 'accepted', backup_state: 'pairing_completed', message: 'ok' },
     });
   }
 
