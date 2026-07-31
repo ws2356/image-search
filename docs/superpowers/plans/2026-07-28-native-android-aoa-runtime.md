@@ -14,22 +14,23 @@
 - The native runtime must reuse the existing `dtis.mobile-transport.v1` envelope schema and auth handshake from the iOS USB implementation.
 - `opt` is stored in native memory only after `prepareBootstrap`; it is not logged or exposed to JavaScript.
 - Tests must run without a physical device using fake `ParcelFileDescriptor` pipes.
+  - Note: the unit tests use `PipedInputStream`/`PipedOutputStream` as the in-process fake stream pair because `ParcelFileDescriptor.createPipe()` does not work across threads under Robolectric 4.14. The production path still uses real `ParcelFileDescriptor` streams from `UsbManager.openAccessory`.
 
 ---
 
 ## Task 1: AOA frame codec and constants
 
 **Files:**
-- Create: `android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodec.kt`
-- Create: `android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportError.kt`
-- Create: `android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportState.kt`
-- Test: `android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodecTest.kt`
+- Create: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodec.kt`
+- Create: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportError.kt`
+- Create: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportState.kt`
+- Test: `mobile/rn/android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodecTest.kt`
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: `AoaFrameCodec.encodeFrame(requestId: String, payload: ByteArray, flags: Byte = FRAME_FLAG_TEXT): ByteArray`, `AoaFrameCodec.decodeFrame(frame: ByteArray): AoaFrame`, `AoaFrameStreamDecoder`, `AoaTransportError`, `AoaTransportState`, and `AoaFrame(requestId: String, flags: Byte, payload: ByteArray)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -73,12 +74,12 @@ class AoaFrameCodecTest {
 }
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run: `./gradlew :app:testDebugUnitTest --tests "com.ausearch.aubackup.transport.aoa.AoaFrameCodecTest"`
 Expected: `ClassNotFoundException` or `Unresolved reference` for `AoaFrameCodec`.
 
-- [ ] **Step 3: Implement `AoaTransportState.kt` and `AoaTransportError.kt`**
+- [x] **Step 3: Implement `AoaTransportState.kt` and `AoaTransportError.kt`**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -106,7 +107,7 @@ sealed class AoaTransportError(message: String) : Exception(message) {
 }
 ```
 
-- [ ] **Step 4: Implement `AoaFrameCodec.kt`**
+- [x] **Step 4: Implement `AoaFrameCodec.kt`**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -213,18 +214,18 @@ object AoaFrameCodec {
 }
 ```
 
-- [ ] **Step 5: Run tests and confirm they pass**
+- [x] **Step 5: Run tests and confirm they pass**
 
 Run: `./gradlew :app:testDebugUnitTest --tests "com.ausearch.aubackup.transport.aoa.AoaFrameCodecTest"`
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
-git add android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodec.kt \
-        android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportError.kt \
-        android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportState.kt \
-        android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodecTest.kt
+git add mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodec.kt \
+        mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportError.kt \
+        mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportState.kt \
+        mobile/rn/android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaFrameCodecTest.kt
 git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: Android AOA frame codec and state"
 ```
 
@@ -233,14 +234,15 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: Android AOA frame codec a
 ## Task 2: `AoaClient` core implementation
 
 **Files:**
-- Create: `android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaClient.kt`
-- Test: `android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaClientTest.kt`
+- Create: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaClient.kt`
+- Create: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaAuthResponder.kt`
+- Test: `mobile/rn/android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaClientTest.kt`
 
 **Interfaces:**
 - Consumes: `AoaFrameCodec`, `AoaTransportError`, `AoaTransportState`.
 - Produces: `AoaClient` with `prepareBootstrap(sessionId, opt, suggestedPort)`, `reset()`, `isConnected()`, `sendRequest(envelopeJson)`, `beginStreamingRequest(envelopeJson)`, `sendBinaryChunk(requestId, chunk)`, `finishStreamingRequest(requestId)`, and an `AoaClientListener` interface.
 
-- [ ] **Step 1: Write a failing test for request/response correlation**
+- [x] **Step 1: Write a failing test for request/response correlation**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -277,12 +279,12 @@ class AoaClientTest {
 }
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run: `./gradlew :app:testDebugUnitTest --tests "com.ausearch.aubackup.transport.aoa.AoaClientTest"`
 Expected: `ClassNotFoundException`.
 
-- [ ] **Step 3: Implement `AoaClient.kt`**
+- [x] **Step 3: Implement `AoaClient.kt`**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -665,16 +667,17 @@ class AoaClient(private val context: Context) {
 }
 ```
 
-- [ ] **Step 4: Run tests and confirm they pass**
+- [x] **Step 4: Run tests and confirm they pass**
 
 Run: `./gradlew :app:testDebugUnitTest --tests "com.ausearch.aubackup.transport.aoa.AoaClientTest"`
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaClient.kt \
-        android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaClientTest.kt
+git add mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaClient.kt \
+        mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaAuthResponder.kt \
+        mobile/rn/android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaClientTest.kt
 git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: Android AOA client runtime"
 ```
 
@@ -683,16 +686,16 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: Android AOA client runtim
 ## Task 3: React Native bridge module
 
 **Files:**
-- Create: `android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportModule.kt`
-- Create: `android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportPackage.kt`
-- Modify: `android/app/src/main/java/com/ausearch/aubackup/MainApplication.kt`
-- Test: `android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaTransportModuleTest.kt`
+- Create: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportModule.kt`
+- Create: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportPackage.kt`
+- Modify: `mobile/rn/android/app/src/main/java/com/ausearch/aubackup/MainApplication.kt`
+- Test: `mobile/rn/android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaTransportModuleTest.kt`
 
 **Interfaces:**
 - Consumes: `AoaClient`.
 - Produces: `NativeModules.AoaTransportModule` with methods `prepareBootstrap`, `reset`, `isConnected`, `sendRequest`, `beginStreamingRequest`, `sendBinaryChunk`, `finishStreamingRequest`, and event `AoaTransportStateChanged`.
 
-- [ ] **Step 1: Implement `AoaTransportModule.kt`**
+- [x] **Step 1: Implement `AoaTransportModule.kt`**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -802,7 +805,7 @@ class AoaTransportModule(
 }
 ```
 
-- [ ] **Step 2: Implement `AoaTransportPackage.kt`**
+- [x] **Step 2: Implement `AoaTransportPackage.kt`**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -823,7 +826,7 @@ class AoaTransportPackage : ReactPackage {
 }
 ```
 
-- [ ] **Step 3: Register package in `MainApplication.kt`**
+- [x] **Step 3: Register package in `MainApplication.kt`**
 
 Modify the `PackageList` block:
 
@@ -854,7 +857,7 @@ override fun onTerminate() {
 }
 ```
 
-- [ ] **Step 4: Write a bridge test**
+- [x] **Step 4: Write a bridge test**
 
 ```kotlin
 package com.ausearch.aubackup.transport.aoa
@@ -876,18 +879,19 @@ class AoaTransportModuleTest {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `./gradlew :app:testDebugUnitTest --tests "com.ausearch.aubackup.transport.aoa.*"`
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
-git add android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportModule.kt \
-        android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportPackage.kt \
-        android/app/src/main/java/com/ausearch/aubackup/MainApplication.kt \
-        android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaTransportModuleTest.kt
+git add mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportModule.kt \
+        mobile/rn/android/app/src/main/java/com/ausearch/aubackup/transport/aoa/AoaTransportPackage.kt \
+        mobile/rn/android/app/src/main/java/com/ausearch/aubackup/MainApplication.kt \
+        mobile/rn/android/app/src/main/res/xml/aoa_accessory_filter.xml \
+        mobile/rn/android/app/src/test/java/com/ausearch/aubackup/transport/aoa/AoaTransportModuleTest.kt
 git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: RN AOA transport bridge module"
 ```
 
@@ -895,11 +899,23 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: RN AOA transport bridge m
 
 ## Task 4: Self-review
 
-- [ ] Confirm every method in the spec's native bridge API is implemented.
-- [ ] Confirm `opt` is never logged or returned to JS.
-- [ ] Confirm the AOA frame header constants match the spec (version 1, request_id 36 bytes, header 42 bytes).
-- [ ] Confirm auth proof uses `SHA256(opt + rand)`.
-- [ ] Search for `TODO`, `TBD`, or `implement later` in the new files and tests.
-- [ ] Confirm Robolectric test dependencies are present in `android/app/build.gradle`.
+- [x] Confirm every method in the spec's native bridge API is implemented.
+- [x] Confirm `opt` is never logged or returned to JS.
+- [x] Confirm the AOA frame header constants match the spec (version 1, request_id 36 bytes, header 42 bytes).
+- [x] Confirm auth proof uses `SHA256(opt + rand)`.
+- [x] Search for `TODO`, `TBD`, or `implement later` in the new files and tests.
+- [x] Confirm Robolectric test dependencies are present in `mobile/rn/android/app/build.gradle`.
 
 If any gaps are found, fix them before marking the plan complete.
+
+## Completion Notes
+
+All tasks above have been implemented and reviewed. Implementation differs from the original sketches in the following ways:
+
+- `AoaClient` uses a production singleton (`AoaClient.getInstance(context)`) plus a `createForTest(context)` factory for unit tests, rather than a public constructor.
+- `AoaClient.prepareBootstrap` is a synchronous void method; the RN module wraps it in a `Promise`.
+- `AoaClient` tracks the opened accessory in an `openedAccessory` field and only opens accessories matching `manufacturer="AuSearch"`, `model="AuBackup AOA"`, `version="1.0"`.
+- `finishStreamingRequest` sends a completion envelope with `stream_state: "complete"` before waiting for the final response.
+- `AoaFrameCodec.StreamDecoder` caps payload length to `MAX_PAYLOAD_LENGTH` and uses a `ByteArrayOutputStream` accumulator.
+- The unit-test harness uses `PipedInputStream`/`PipedOutputStream` because Robolectric cannot use `ParcelFileDescriptor.createPipe()` across threads.
+- Final implementation commit: `ce2319e4`.
