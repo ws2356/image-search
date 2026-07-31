@@ -14,6 +14,7 @@ import { finishTransfer } from '@/features/backup/use-cases/finish-transfer';
 import { returnHome } from '@/features/backup/use-cases/return-home';
 import { startTransfer } from '@/features/backup/use-cases/start-transfer';
 import { stopTransfer } from '@/features/backup/use-cases/stop-transfer';
+import { useAppServices } from '@/infrastructure/di/app-services-provider';
 import {
   add_android_transfer_session_listener,
   clear_android_transfer_session_state,
@@ -39,6 +40,7 @@ const TRANSFER_SCREEN_SNAPSHOT_INTERVAL_MS = 1000;
 
 export function useTransferScreenController(): TransferScreenController {
   const router = useRouter();
+  const { transport_strategy } = useAppServices();
   const app_awake_policy = useMemo(create_default_app_awake_policy, []);
   const is_incomplete_library = useBackupSessionStore(
     (state) => state.session.permissionSummary.mediaScope !== PermissionScope.Full
@@ -283,7 +285,7 @@ export function useTransferScreenController(): TransferScreenController {
     transfer_abort_controller_ref.current = transfer_abort_controller;
     void (async () => {
       try {
-        await startTransfer({ abort_controller: transfer_abort_controller });
+        await startTransfer({ abort_controller: transfer_abort_controller }, { transport_strategy });
         set_running(false);
         navigate_without_exit_prompt(() => {
           router.replace('/completed');

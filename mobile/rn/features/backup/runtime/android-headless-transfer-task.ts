@@ -4,7 +4,6 @@ import { useBackupSessionStore } from '@/features/backup/store/backup-session-st
 import { is_transfer_abort_error } from '@/features/backup/transfer/transfer-abort';
 import { startTransfer } from '@/features/backup/use-cases/start-transfer';
 import { stopTransfer } from '@/features/backup/use-cases/stop-transfer';
-import { HttpCapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
 import { DefaultTransferAssetSource } from '@/features/backup/services/transfer-asset-source';
 import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import {
@@ -65,7 +64,6 @@ export async function run_android_headless_transfer_task(
       {
         apply_command: apply_headless_transfer_command,
         trust_proof_signer: new DefaultTrustProofSigner(),
-        capability_exchange_service: new HttpCapabilityExchangeService(),
         transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
         transfer_asset_source: new DefaultTransferAssetSource(),
       }

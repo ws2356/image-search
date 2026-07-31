@@ -1,8 +1,7 @@
 import QuickCrypto from 'react-native-quick-crypto';
 import { assert_transfer_not_live_in_phase4 } from '@/features/backup/services/phase-scope';
 import { TransferService } from '@/features/backup/services/transfer-service';
-import type { CapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
-import { HttpCapabilityExchangeService } from '@/features/backup/services/capability-exchange-service';
+import type { CapabilityExchangeResponse } from '@/features/backup/services/capability-exchange-service';
 import {
   DefaultTransferAssetSource,
   type NormalizedTransferAsset,
@@ -22,6 +21,8 @@ import {
 } from '@/features/backup/transfer/transfer-abort';
 import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
+import { LanTransportStrategy } from '@/infrastructure/transport/lan/lan-transport-strategy';
+import type { TransportStrategy } from '@/infrastructure/transport/transport-strategy';
 import {
   begin_transfer_runtime_session,
   end_transfer_runtime_session,
@@ -32,7 +33,7 @@ import {
 export interface StartTransferDeps {
   apply_command: typeof apply_backup_command;
   trust_proof_signer: TrustProofSigner;
-  capability_exchange_service: CapabilityExchangeService;
+  transport_strategy?: TransportStrategy;
   transfer_runtime_wiring: TransferRuntimeWiring;
   transfer_asset_source: TransferAssetSource;
 }
@@ -183,19 +184,20 @@ async function compute_asset_sha1(
 
 export async function startTransfer(
   options: StartTransferOptions,
-  deps: StartTransferDeps = {
-    apply_command: apply_backup_command,
-    trust_proof_signer: new DefaultTrustProofSigner(),
-    capability_exchange_service: new HttpCapabilityExchangeService(),
-    transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
-    transfer_asset_source: new DefaultTransferAssetSource(),
-  }
+  deps: Partial<StartTransferDeps> = {}
 ): Promise<void> {
+  const resolved_deps: StartTransferDeps = {
+    apply_command: deps.apply_command ?? apply_backup_command,
+    trust_proof_signer: deps.trust_proof_signer ?? new DefaultTrustProofSigner(),
+    transfer_runtime_wiring: deps.transfer_runtime_wiring ?? get_default_transfer_runtime_wiring(),
+    transfer_asset_source: deps.transfer_asset_source ?? new DefaultTransferAssetSource(),
+  };
+  const { apply_command, transfer_asset_source, transfer_runtime_wiring, trust_proof_signer } = resolved_deps;
   assert_transfer_not_live_in_phase4('startTransfer');
   const session = useBackupSessionStore.getState().session;
   const pairing_session = session.pairingSession;
   if (!pairing_session?.sessionId || !pairing_session.endpointBaseUrl) {
-    await deps.apply_command({
+    await apply_command({
       type: 'transferResolved',
       result: {
         kind: 'failure',
@@ -212,7 +214,7 @@ export async function startTransfer(
   const device_uuid = session.localDeviceIdentity?.deviceUuid;
   const trust_key_b64 = pairing_session.trustKeyB64;
   if (!device_uuid || !trust_key_b64) {
-    await deps.apply_command({
+    await apply_command({
       type: 'transferResolved',
       result: {
         kind: 'failure',
@@ -243,7 +245,7 @@ export async function startTransfer(
   };
 
   try {
-    await deps.apply_command({
+    await apply_command({
       type: 'transferSnapshotUpdated',
       snapshot: build_snapshot({
         stage: TransferPipelineStage.Enumerating,
@@ -259,20 +261,21 @@ export async function startTransfer(
       }),
     });
     throw_if_transfer_stopped();
-    const trust_proof = await deps.trust_proof_signer.derive_trust_proof({
+    const trust_proof = await trust_proof_signer.derive_trust_proof({
       purpose: 'capabilities.exchange',
       schema: 'dtis.mobile-capabilities.v1',
       session_id,
       device_uuid,
       trust_key_b64,
     });
+    const transport_strategy = deps.transport_strategy ?? new LanTransportStrategy(endpoint_base_url);
     let exchange_attempt = 0;
-    let exchange: Awaited<ReturnType<CapabilityExchangeService['exchange']>> | null = null;
+    let exchange: CapabilityExchangeResponse | null = null;
     let capability_exchange_error: Error | null = null;
     while (exchange == null && exchange_attempt < CAPABILITY_EXCHANGE_MAX_ATTEMPTS) {
       exchange_attempt += 1;
       try {
-        exchange = await deps.capability_exchange_service.exchange({
+        exchange = await transport_strategy.exchange_capabilities({
           endpoint_base_url,
           session_id,
           device_uuid,
@@ -306,23 +309,35 @@ export async function startTransfer(
     });
     throw_if_transfer_stopped();
 
-    const transfer_service = new TransferService({
-      endpoint_base_url,
-      session_id,
-      device_uuid,
-      trust_key_b64,
-      encryption_enabled: supports_transfer_encryption,
-    });
-    const assets = await deps.transfer_asset_source.enumerate_normalized(5000);
+    const transfer_service = new TransferService(
+      {
+        endpoint_base_url,
+        session_id,
+        device_uuid,
+        trust_key_b64,
+        encryption_enabled: supports_transfer_encryption,
+      },
+      {
+        transfer_client: transport_strategy.create_transfer_client({
+          endpoint_base_url,
+          session_id,
+          device_uuid,
+          trust_key_b64,
+          encryption_enabled: supports_transfer_encryption,
+        }),
+        trust_proof_signer: deps.trust_proof_signer,
+      }
+    );
+    const assets = await transfer_asset_source.enumerate_normalized(5000);
     throw_if_transfer_stopped();
     const total_assets = assets.length;
     await transfer_service.start(total_assets, transfer_abort_signal);
     throw_if_transfer_stopped();
-    await begin_transfer_runtime_session(deps.transfer_runtime_wiring);
+    await begin_transfer_runtime_session(transfer_runtime_wiring);
     runtime_started = true;
-    await deps.apply_command({ type: 'startTransfer' });
+    await apply_command({ type: 'startTransfer' });
 
-    await deps.apply_command({
+    await apply_command({
       type: 'transferSnapshotUpdated',
       snapshot: build_snapshot({
         stage: TransferPipelineStage.Enumerating,
@@ -349,7 +364,7 @@ export async function startTransfer(
       stage: TransferPipelineStage,
       active_asset_id: string | null
     ): Promise<void> => {
-      await deps.apply_command({
+      await apply_command({
         type: 'transferSnapshotUpdated',
         snapshot: build_snapshot({
           stage,
@@ -375,7 +390,7 @@ export async function startTransfer(
         const sha1_started_at_ms = Date.now();
         content_sha1 = await compute_asset_sha1(
           asset.asset_id,
-          deps.transfer_asset_source,
+          transfer_asset_source,
           throw_if_transfer_stopped
         );
         sha1_elapsed_ms += Math.max(0, Date.now() - sha1_started_at_ms);
@@ -405,7 +420,7 @@ export async function startTransfer(
       throw_if_transfer_stopped();
       await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
       try {
-        const chunk_reader = await deps.transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
+        const chunk_reader = await transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
         let asset_bytes_uploaded = 0;
         let upload_response;
         try {
@@ -563,7 +578,7 @@ export async function startTransfer(
       throw pipeline_error;
     }
 
-    await deps.apply_command({
+    await apply_command({
       type: 'transferSnapshotUpdated',
       snapshot: build_snapshot({
         stage: TransferPipelineStage.Completing,
@@ -581,17 +596,17 @@ export async function startTransfer(
 
     await transfer_service.complete(transferred_assets, failed_assets, transfer_abort_signal);
     throw_if_transfer_stopped();
-    await end_transfer_runtime_session(deps.transfer_runtime_wiring);
+    await end_transfer_runtime_session(transfer_runtime_wiring);
     runtime_started = false;
   } catch (error) {
     if (runtime_started) {
-      await end_transfer_runtime_session(deps.transfer_runtime_wiring);
+      await end_transfer_runtime_session(transfer_runtime_wiring);
     }
     if (!aborted_by_pipeline_error && (transfer_abort_signal.aborted || is_transfer_abort_error(error))) {
       throw create_transfer_abort_error();
     }
     const message = error instanceof Error ? error.message : 'Transfer failed unexpectedly.';
-    await deps.apply_command({
+    await apply_command({
       type: 'transferResolved',
       result: {
         kind: 'failure',

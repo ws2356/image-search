@@ -1,9 +1,7 @@
+import { PAIRING_PROTOCOL_SCHEMA } from '@/features/backup/protocols/pairing';
 import type { PairingQRCodePayload } from '@/features/backup/pairing/models';
 import type { PairingResponse } from '@/features/backup/protocols/pairing';
-import type { HttpPairingBootstrapClient } from '@/infrastructure/transport/lan/http-pairing-bootstrap-client';
-import { DefaultHttpPairingBootstrapClient } from '@/infrastructure/transport/lan/http-pairing-bootstrap-client';
-import type { HttpPairingStateClient } from '@/infrastructure/transport/lan/http-pairing-state-client';
-import { DefaultHttpPairingStateClient } from '@/infrastructure/transport/lan/http-pairing-state-client';
+import type { TransportStrategy } from '@/infrastructure/transport/transport-strategy';
 
 export interface PairingDeviceIdentity {
   device_uuid: string;
@@ -12,8 +10,7 @@ export interface PairingDeviceIdentity {
 }
 
 export interface PairingServiceDeps {
-  bootstrap_client: HttpPairingBootstrapClient;
-  state_client: HttpPairingStateClient;
+  transport_strategy: TransportStrategy;
 }
 
 function default_client_nonce(): string {
@@ -24,11 +21,8 @@ function default_client_nonce(): string {
 export class PairingService {
   private readonly deps: PairingServiceDeps;
 
-  constructor(endpoint_base_url: string, deps?: Partial<PairingServiceDeps>) {
-    this.deps = {
-      bootstrap_client: deps?.bootstrap_client ?? new DefaultHttpPairingBootstrapClient(endpoint_base_url),
-      state_client: deps?.state_client ?? new DefaultHttpPairingStateClient(endpoint_base_url),
-    };
+  constructor(deps: PairingServiceDeps) {
+    this.deps = deps;
   }
 
   async claim_pairing(
@@ -36,7 +30,8 @@ export class PairingService {
     identity: PairingDeviceIdentity,
     capabilities: Record<string, 0 | 1> = {}
   ): Promise<PairingResponse> {
-    return this.deps.bootstrap_client.claim({
+    return this.deps.transport_strategy.claim_pairing({
+      schema: PAIRING_PROTOCOL_SCHEMA,
       sid: payload.sessionId,
       opt: payload.oneTimePasscode,
       platform: identity.platform,
@@ -48,7 +43,8 @@ export class PairingService {
   }
 
   async get_pairing_state(session_id: string, device_uuid: string): Promise<PairingResponse> {
-    return this.deps.state_client.state({
+    return this.deps.transport_strategy.get_pairing_state({
+      schema: PAIRING_PROTOCOL_SCHEMA,
       session_id,
       device_uuid,
     });

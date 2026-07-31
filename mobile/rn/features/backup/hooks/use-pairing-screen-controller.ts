@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 
 import { DefaultPairingKeyDeriver } from '@/infrastructure/crypto/pairing-key-deriver';
+import { useAppServices, createAoaTransportStrategyForQr } from '@/infrastructure/di/app-services-provider';
+import { AdaptiveTransportStrategy } from '@/infrastructure/transport/adaptive-transport-strategy';
+import { LanTransportStrategy } from '@/infrastructure/transport/lan/lan-transport-strategy';
 import type { PairingQRCodePayload } from '@/features/backup/pairing/models';
 import { useBackupExitGuard } from '@/features/backup/hooks/use-backup-exit-guard';
 import { PairingService } from '@/features/backup/services/pairing-service';
@@ -23,6 +26,7 @@ export interface PairingScreenController {
 
 export function usePairingScreenController(): PairingScreenController {
   const router = useRouter();
+  const { aoa_bridge } = useAppServices();
   const params = useLocalSearchParams<{
     qr_payload?: string;
   }>();
@@ -168,9 +172,15 @@ export function usePairingScreenController(): PairingScreenController {
         return;
       }
 
-      const pairing_service = new PairingService(endpoint_base_url);
+      const pairing_service = new PairingService({
+        transport_strategy: new AdaptiveTransportStrategy(
+          createAoaTransportStrategyForQr(aoa_bridge, payload),
+          new LanTransportStrategy(endpoint_base_url),
+          () => aoa_bridge.isConnected()
+        ),
+      });
       const session_id = payload.sessionId;
-      const claim_platform: LocalDeviceIdentitySummary['platform'] = 'ios';
+      const claim_platform: LocalDeviceIdentitySummary['platform'] = 'android';
       const resolved_trust_key_b64 = await pairing_key_deriver.derive_pairing_key_b64({
         session_id: payload.sessionId,
         one_time_passcode: payload.oneTimePasscode,
@@ -274,7 +284,7 @@ export function usePairingScreenController(): PairingScreenController {
       cancelled = true;
       finish();
     };
-  }, [live_pairing_enabled, navigate_without_exit_prompt, qr_payload, resolve_identity, router]);
+  }, [aoa_bridge, live_pairing_enabled, navigate_without_exit_prompt, qr_payload, resolve_identity, router]);
 
   return {
     pairing_status_label,
