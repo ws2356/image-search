@@ -10,6 +10,7 @@ import {
   type TransferResponse,
   type TransferSessionRequest,
 } from '@/features/backup/protocols/transfer';
+import type { TransferClient } from '@/features/backup/services/transfer-client';
 import type { PayloadCipher } from '@/infrastructure/crypto/payload-cipher';
 import { NoopPayloadCipher } from '@/infrastructure/crypto/payload-cipher';
 
@@ -33,7 +34,7 @@ export interface HttpTransferClient {
   complete(request: Omit<TransferCompleteRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse>;
 }
 
-export class DefaultHttpTransferClient implements HttpTransferClient {
+export class DefaultHttpTransferClient implements HttpTransferClient, TransferClient {
   private readonly base_url: string;
   private readonly fetch_impl: FetchLike;
   private readonly payload_cipher: PayloadCipher;

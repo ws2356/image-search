@@ -10,7 +10,7 @@ import type {
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import { NoopPayloadCipher, TransferPayloadCipher } from '@/infrastructure/crypto/payload-cipher';
-import type { HttpTransferClient } from '@/infrastructure/transport/lan/http-transfer-client';
+import type { TransferClient } from '@/features/backup/services/transfer-client';
 import { DefaultHttpTransferClient } from '@/infrastructure/transport/lan/http-transfer-client';
 
 export interface TransferServiceContext {
@@ -22,7 +22,7 @@ export interface TransferServiceContext {
 }
 
 export interface TransferServiceDeps {
-  transfer_client: HttpTransferClient;
+  transfer_client: TransferClient;
   trust_proof_signer: TrustProofSigner;
 }
 
@@ -34,13 +34,17 @@ export class TransferService {
 
   constructor(context: TransferServiceContext, deps?: Partial<TransferServiceDeps>) {
     this.context = context;
-    const payload_cipher = context.encryption_enabled
-      ? new TransferPayloadCipher(context.trust_key_b64)
-      : new NoopPayloadCipher();
     this.deps = {
-      transfer_client: deps?.transfer_client ?? new DefaultHttpTransferClient(context.endpoint_base_url, fetch, payload_cipher),
+      transfer_client: deps?.transfer_client ?? this._build_default_http_client(),
       trust_proof_signer: deps?.trust_proof_signer ?? new DefaultTrustProofSigner(),
     };
+  }
+
+  private _build_default_http_client(): TransferClient {
+    const payload_cipher = this.context.encryption_enabled
+      ? new TransferPayloadCipher(this.context.trust_key_b64)
+      : new NoopPayloadCipher();
+    return new DefaultHttpTransferClient(this.context.endpoint_base_url, fetch, payload_cipher);
   }
 
   async start(total_assets: number, abort_signal?: AbortSignal): Promise<TransferResponse> {
