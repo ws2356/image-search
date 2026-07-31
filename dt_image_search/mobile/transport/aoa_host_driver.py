@@ -310,7 +310,7 @@ class PyUsbAoaHostDriver:
                 "AuBackup AOA",
                 "Android AOA backup transport",
                 "1.0",
-                "https://boldman.net",
+                "https://www.boldman.net",
                 "aubackup-aoa",
             )
             for string_index, string_value in enumerate(strings):

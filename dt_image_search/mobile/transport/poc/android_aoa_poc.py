@@ -203,7 +203,7 @@ class PyUsbAoaHostDriver:
                     "AuBackup AOA POC",
                     "AOA transport negotiation test",
                     "1.0",
-                    "https://boldman.net",
+                    "https://www.boldman.net",
                     "poc",
                 )
             ):

@@ -461,7 +461,7 @@ class PyUsbAoaHostDriver:
                     "AuBackup AOA",
                     "AOA backup transport",
                     "1.0",
-                    "https://boldman.net",
+                    "https://www.boldman.net",
                     "aubackup",
                 )
             ):
