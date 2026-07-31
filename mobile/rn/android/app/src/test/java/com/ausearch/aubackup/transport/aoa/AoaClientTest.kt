@@ -2,6 +2,11 @@ package com.ausearch.aubackup.transport.aoa
 
 import android.app.Application
 import android.content.Context
+import android.hardware.usb.UsbAccessory
+import android.hardware.usb.UsbManager
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -14,19 +19,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import java.util.concurrent.FutureTask
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -39,14 +43,15 @@ class AoaClientTest {
 
     private lateinit var context: Context
     private lateinit var client: AoaClient
+    private lateinit var streamOpener: AoaStreamOpener
     private lateinit var testInputStream: InputStream
     private lateinit var testOutputStream: OutputStream
 
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
-        client = AoaClient.createForTest(context)
-        client.setResponseTimeoutMsForTest(500)
+        streamOpener = mockk()
+        client = AoaClient(context, streamOpener, RESPONSE_TIMEOUT_MS_FOR_TESTS)
     }
 
     @After
@@ -92,16 +97,36 @@ class AoaClientTest {
         }
     }
 
+    /**
+     * Simulates an attached, permission-granted matching accessory and stubs the
+     * stream opener with deterministic test streams. Must be called before
+     * [AoaClient.prepareBootstrap] so the attach probe finds the accessory.
+     */
     private fun openTestPipes() {
         val clientToTestQueue = FrameQueue()
         val testToClientQueue = FrameQueue()
 
         testInputStream = FrameQueueInputStream(clientToTestQueue)
         testOutputStream = FrameQueueOutputStream(testToClientQueue)
-        client.openStreamsForTest(
-            FrameQueueInputStream(testToClientQueue),
-            FrameQueueOutputStream(clientToTestQueue),
+
+        every { streamOpener.open(any()) } returns OpenedStreams(
+            descriptor = null,
+            inputStream = FrameQueueInputStream(testToClientQueue),
+            outputStream = FrameQueueOutputStream(clientToTestQueue),
         )
+
+        attachMatchingAccessory()
+    }
+
+    private fun attachMatchingAccessory() {
+        val accessory = mockk<UsbAccessory>().apply {
+            every { manufacturer } returns AoaClient.AOA_MANUFACTURER
+            every { model } returns AoaClient.AOA_MODEL
+            every { version } returns AoaClient.AOA_VERSION
+        }
+        val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+        shadowOf(usbManager).setAttachedUsbAccessory(accessory)
+        shadowOf(usbManager).grantPermission(accessory)
     }
 
     /**
@@ -162,12 +187,10 @@ class AoaClientTest {
     }
 
     @Test
-    fun `prepareBootstrap stores sessionId oneTimePasscode and suggestedPort`() {
+    fun `prepareBootstrap transitions to preparing`() {
         val observer = stateObserver()
         client.prepareBootstrap("sid-001", "123456", 8080)
         assertTrue(observer.hasSeen(AoaTransportState.PREPARING))
-        assertEquals("sid-001", client.getPreparedSessionIdForTest())
-        assertEquals(8080, client.getPreparedSuggestedPortForTest())
     }
 
     @Test(expected = AoaTransportError.InvalidBootstrap::class)
@@ -183,8 +206,8 @@ class AoaClientTest {
     @Test
     fun `auth challenge handshake transitions to connected and echoes proof`() {
         val observer = stateObserver()
-        client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
 
         assertTrue(observer.hasSeen(AoaTransportState.AUTHENTICATING))
 
@@ -211,14 +234,17 @@ class AoaClientTest {
         val expectedProof = sha256Hex("123456$rand")
         assertEquals(expectedProof, responseBody.getString("proof"))
 
+        // The real attach flow (probe → permission → open) must have gone through the opener.
+        verify { streamOpener.open(any()) }
+
         assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
         assertTrue(client.isConnected())
     }
 
     @Test
     fun `request response round trip correlates by request_id`() {
-        client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -247,8 +273,8 @@ class AoaClientTest {
 
     @Test
     fun `streaming request lifecycle sends chunks and returns final response`() {
-        client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -307,8 +333,8 @@ class AoaClientTest {
         }
         client.addListener(listener)
 
-        client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         assertTrue(observedStates.contains(AoaTransportState.PREPARING))
@@ -320,8 +346,8 @@ class AoaClientTest {
 
     @Test
     fun `connection drop wakes blocked sendRequest with ConnectionLost`() {
-        client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -349,16 +375,47 @@ class AoaClientTest {
     @Test
     fun `reset stops client and clears bootstrap state`() {
         val observer = stateObserver()
-        client.prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         client.reset()
 
         assertTrue(observer.waitFor(AoaTransportState.IDLE))
         assertFalse(client.isConnected())
-        assertEquals(null, client.getPreparedSessionIdForTest())
-        assertEquals(-1, client.getPreparedSuggestedPortForTest())
+
+        // A fresh pairing after reset must not reuse the previous bootstrap values:
+        // the auth challenge for the new session must be answered with the new proof.
+        openTestPipes()
+        client.prepareBootstrap("sid-002", "654321", 9090)
+
+        val rand = "00112233445566778899aabbccddeeff"
+        writeFrame(
+            AUTH_CHALLENGE_REQUEST_ID,
+            buildAuthChallengeEnvelope(rand, sid = "sid-002").toByteArray(Charsets.UTF_8),
+        )
+        val responseEnvelope = JSONObject(String(readFrame().payload, Charsets.UTF_8))
+        assertEquals(sha256Hex("654321$rand"), responseEnvelope.getJSONObject("body").getString("proof"))
+
+        assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
+    }
+
+    @Test
+    fun `non matching accessory is ignored and not opened`() {
+        val observer = stateObserver()
+        val foreignAccessory = mockk<UsbAccessory>().apply {
+            every { manufacturer } returns "OtherVendor"
+            every { model } returns "OtherModel"
+            every { version } returns "2.0"
+        }
+        val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+        shadowOf(usbManager).setAttachedUsbAccessory(foreignAccessory)
+
+        client.prepareBootstrap("sid-001", "123456", 8080)
+
+        assertTrue(observer.hasSeen(AoaTransportState.PREPARING))
+        assertFalse(observer.hasSeen(AoaTransportState.AUTHENTICATING))
+        verify(exactly = 0) { streamOpener.open(any()) }
     }
 
     private fun performAuthHandshake() {
@@ -368,9 +425,9 @@ class AoaClientTest {
         readFrame()
     }
 
-    private fun buildAuthChallengeEnvelope(rand: String): String {
+    private fun buildAuthChallengeEnvelope(rand: String, sid: String = "sid-001"): String {
         return """
-            {"body":{"schema":"${AoaAuthResponder.MOBILE_PAIRING_SCHEMA}","sid":"sid-001","rand":"$rand"},"body_schema":"${AoaAuthResponder.MOBILE_PAIRING_SCHEMA}","operation":"${AoaAuthResponder.AUTH_OPERATION}","request_id":"${AoaAuthResponder.AUTH_REQUEST_ID}","schema":"${AoaAuthResponder.MOBILE_TRANSPORT_ENVELOPE_SCHEMA}"}
+            {"body":{"schema":"${AoaAuthResponder.MOBILE_PAIRING_SCHEMA}","sid":"$sid","rand":"$rand"},"body_schema":"${AoaAuthResponder.MOBILE_PAIRING_SCHEMA}","operation":"${AoaAuthResponder.AUTH_OPERATION}","request_id":"${AoaAuthResponder.AUTH_REQUEST_ID}","schema":"${AoaAuthResponder.MOBILE_TRANSPORT_ENVELOPE_SCHEMA}"}
         """.trimIndent().trim()
     }
 
@@ -426,5 +483,6 @@ class AoaClientTest {
 
     companion object {
         private const val AUTH_CHALLENGE_REQUEST_ID = "auth-challenge"
+        private const val RESPONSE_TIMEOUT_MS_FOR_TESTS = 500L
     }
 }

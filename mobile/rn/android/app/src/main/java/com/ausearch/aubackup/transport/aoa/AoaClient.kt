@@ -10,7 +10,6 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import androidx.annotation.VisibleForTesting
 import org.json.JSONObject
 import java.io.IOException
 import java.io.InputStream
@@ -34,6 +33,39 @@ interface AoaClientListener {
 }
 
 /**
+ * Opens the raw bulk streams of an attached USB accessory.
+ *
+ * The production implementation ([UsbStreamOpener]) reads from
+ * [UsbManager.openAccessory]; tests inject fakes to run the client without
+ * physical USB hardware.
+ */
+internal fun interface AoaStreamOpener {
+    fun open(accessory: UsbAccessory): OpenedStreams?
+}
+
+/**
+ * The streams of an opened accessory, plus the underlying file descriptor when
+ * one exists (production opens). Tests pass null for [descriptor] and provide
+ * their own streams.
+ */
+internal class OpenedStreams(
+    val descriptor: ParcelFileDescriptor?,
+    val inputStream: InputStream,
+    val outputStream: OutputStream,
+)
+
+private class UsbStreamOpener(private val usbManager: UsbManager) : AoaStreamOpener {
+    override fun open(accessory: UsbAccessory): OpenedStreams? {
+        val descriptor = usbManager.openAccessory(accessory) ?: return null
+        return OpenedStreams(
+            descriptor = descriptor,
+            inputStream = ParcelFileDescriptor.AutoCloseInputStream(descriptor),
+            outputStream = ParcelFileDescriptor.AutoCloseOutputStream(descriptor),
+        )
+    }
+}
+
+/**
  * Internal result type for correlated request/response queues.
  * Allows a dropped connection to wake blocked callers with an error instead of a timeout.
  */
@@ -52,7 +84,13 @@ private sealed class ResponseResult {
  *
  * Use [getInstance] to obtain the production singleton.
  */
-class AoaClient private constructor(private val context: Context) {
+class AoaClient internal constructor(
+    private val context: Context,
+    private val streamOpener: AoaStreamOpener = UsbStreamOpener(
+        context.getSystemService(Context.USB_SERVICE) as UsbManager
+    ),
+    private val responseTimeoutMs: Long = RESPONSE_TIMEOUT_MS,
+) {
 
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
     private val state = AtomicReference(AoaTransportState.IDLE)
@@ -71,8 +109,6 @@ class AoaClient private constructor(private val context: Context) {
     private var preparedSuggestedPort: Int = -1
     @Volatile
     private var bootstrapPrepared = false
-    @Volatile
-    private var responseTimeoutMs: Long = RESPONSE_TIMEOUT_MS
     private var permissionPendingIntent: PendingIntent? = null
     private var openedDescriptor: ParcelFileDescriptor? = null
     private var openedAccessory: UsbAccessory? = null
@@ -340,17 +376,6 @@ class AoaClient private constructor(private val context: Context) {
         }
     }
 
-    @VisibleForTesting
-    internal fun getPreparedSessionIdForTest(): String? = preparedSessionId
-
-    @VisibleForTesting
-    internal fun getPreparedSuggestedPortForTest(): Int = preparedSuggestedPort
-
-    @VisibleForTesting
-    internal fun setResponseTimeoutMsForTest(timeoutMs: Long) {
-        responseTimeoutMs = timeoutMs
-    }
-
     private fun ensureConnected() {
         if (state.get() != AoaTransportState.CONNECTED) {
             throw AoaTransportError.ConnectionUnavailable(
@@ -457,39 +482,22 @@ class AoaClient private constructor(private val context: Context) {
     @Synchronized
     private fun openAccessory(accessory: UsbAccessory) {
         closeConnection()
-        val descriptor = try {
-            usbManager.openAccessory(accessory)
+        val opened = try {
+            streamOpener.open(accessory)
         } catch (e: SecurityException) {
             Log.w(LOG_TAG, "openAccessory failed with security exception: ${e.message}")
             transitionTo(AoaTransportState.FAILED)
             return
         }
-        if (descriptor == null) {
+        if (opened == null) {
             Log.w(LOG_TAG, "openAccessory returned null.")
             return
         }
-        openedDescriptor = descriptor
+        openedDescriptor = opened.descriptor
         openedAccessory = accessory
         transitionTo(AoaTransportState.AUTHENTICATING)
-        startReaderWriter(
-            ParcelFileDescriptor.AutoCloseInputStream(descriptor),
-            ParcelFileDescriptor.AutoCloseOutputStream(descriptor),
-        )
+        startReaderWriter(opened.inputStream, opened.outputStream)
         Log.i(LOG_TAG, "Accessory stream opened; authenticating.")
-    }
-
-    @VisibleForTesting
-    internal fun openStreamsForTest(
-        inputStream: InputStream,
-        outputStream: OutputStream,
-    ) {
-        synchronized(this) {
-            closeConnection()
-            openedDescriptor = null
-            stopped.set(false)
-            startReaderWriter(inputStream, outputStream)
-            transitionTo(AoaTransportState.AUTHENTICATING)
-        }
     }
 
     @Synchronized
@@ -699,9 +707,9 @@ class AoaClient private constructor(private val context: Context) {
     }
 
     private fun isMatchingAccessory(accessory: UsbAccessory): Boolean {
-        return accessory.manufacturer == "AuSearch"
-            && accessory.model == "AuBackup AOA"
-            && accessory.version == "1.0"
+        return accessory.manufacturer == AOA_MANUFACTURER
+            && accessory.model == AOA_MODEL
+            && accessory.version == AOA_VERSION
     }
 
     private fun isSameAccessory(first: UsbAccessory?, second: UsbAccessory?): Boolean {
@@ -719,6 +727,13 @@ class AoaClient private constructor(private val context: Context) {
         private const val RESPONSE_TIMEOUT_MS = 10_000L
         private const val ACTION_USB_PERMISSION = "com.ausearch.aubackup.USB_ACCESSORY_PERMISSION"
 
+        /**
+         * Identity of the accessory produced by the AuBackup PC pairing flow.
+         */
+        internal const val AOA_MANUFACTURER = "AuSearch"
+        internal const val AOA_MODEL = "AuBackup AOA"
+        internal const val AOA_VERSION = "1.0"
+
         @Volatile
         private var instance: AoaClient? = null
 
@@ -731,22 +746,5 @@ class AoaClient private constructor(private val context: Context) {
                 instance ?: AoaClient(context.applicationContext).also { instance = it }
             }
         }
-
-        /**
-         * Resets the production singleton. Intended for tests.
-         */
-        @VisibleForTesting
-        @JvmStatic
-        fun resetInstance() {
-            instance?.reset()
-            instance = null
-        }
-
-        /**
-         * Creates a fresh client instance for tests. The caller owns its lifecycle.
-         */
-        @VisibleForTesting
-        @JvmStatic
-        fun createForTest(context: Context): AoaClient = AoaClient(context)
     }
 }

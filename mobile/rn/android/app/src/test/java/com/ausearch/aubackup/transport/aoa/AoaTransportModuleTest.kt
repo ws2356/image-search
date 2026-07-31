@@ -4,6 +4,8 @@ package com.ausearch.aubackup.transport.aoa
 
 import android.app.Application
 import android.content.Context
+import android.hardware.usb.UsbAccessory
+import android.hardware.usb.UsbManager
 import com.facebook.react.bridge.Callback
 import com.facebook.react.bridge.CatalystInstance
 import com.facebook.react.bridge.Dynamic
@@ -18,6 +20,8 @@ import com.facebook.react.bridge.UIManager
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.turbomodule.core.interfaces.CallInvokerHolder
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -29,6 +33,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.IOException
 import java.io.InputStream
@@ -46,14 +51,18 @@ class AoaTransportModuleTest {
 
     private lateinit var reactContext: TestReactApplicationContext
     private lateinit var module: AoaTransportModule
+    private lateinit var client: AoaClient
+    private lateinit var streamOpener: AoaStreamOpener
     private var testInputStream: InputStream? = null
     private var testOutputStream: OutputStream? = null
 
     @Before
     fun setUp() {
-        AoaClient.resetInstance()
-        reactContext = TestReactApplicationContext(RuntimeEnvironment.getApplication())
-        module = AoaTransportModule(reactContext)
+        val appContext = RuntimeEnvironment.getApplication()
+        streamOpener = mockk()
+        client = AoaClient(appContext, streamOpener, RESPONSE_TIMEOUT_MS_FOR_TESTS)
+        reactContext = TestReactApplicationContext(appContext)
+        module = AoaTransportModule(reactContext, client)
     }
 
     @After
@@ -61,7 +70,7 @@ class AoaTransportModuleTest {
         closeQuietly(testInputStream)
         closeQuietly(testOutputStream)
         module.invalidate()
-        AoaClient.resetInstance()
+        client.reset()
     }
 
     @Test
@@ -80,8 +89,8 @@ class AoaTransportModuleTest {
     @Test
     fun `isConnected reflects client state`() {
         assertFalse(module.isConnected())
-        client().prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client().prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
         assertTrue(module.isConnected())
         client().reset()
@@ -99,8 +108,8 @@ class AoaTransportModuleTest {
             }
         })
 
-        client().prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client().prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
         assertTrue(module.isConnected())
 
@@ -111,14 +120,12 @@ class AoaTransportModuleTest {
         assertTrue(promise.isResolved)
         assertTrue("client should transition to IDLE", idleLatch.await(5, TimeUnit.SECONDS))
         assertFalse(module.isConnected())
-        assertNull(client().getPreparedSessionIdForTest())
-        assertEquals(-1, client().getPreparedSuggestedPortForTest())
     }
 
     @Test
     fun `sendRequest resolves with response envelope`() {
-        client().prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client().prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -143,8 +150,8 @@ class AoaTransportModuleTest {
 
     @Test
     fun `beginStreamingRequest returns the request id`() {
-        client().prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client().prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -161,8 +168,8 @@ class AoaTransportModuleTest {
 
     @Test
     fun `sendBinaryChunk resolves when chunk is queued`() {
-        client().prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client().prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -192,8 +199,8 @@ class AoaTransportModuleTest {
 
     @Test
     fun `finishStreamingRequest resolves with final response`() {
-        client().prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client().prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -220,8 +227,8 @@ class AoaTransportModuleTest {
 
     @Test
     fun `sendBinaryChunk rejects values outside byte range`() {
-        client().prepareBootstrap("sid-001", "123456", 8080)
         openTestPipes()
+        client().prepareBootstrap("sid-001", "123456", 8080)
         performAuthHandshake()
 
         val requestId = UUID.randomUUID().toString()
@@ -244,7 +251,7 @@ class AoaTransportModuleTest {
     @Test
     fun `AoaTransportStateChanged event is emitted with uppercase state name`() {
         module.invalidate()
-        val observingModule = TestAoaTransportModule(reactContext)
+        val observingModule = TestAoaTransportModule(reactContext, client)
 
         client().prepareBootstrap("sid-001", "123456", 8080)
 
@@ -254,7 +261,7 @@ class AoaTransportModuleTest {
 
     @Test
     fun `invalidate removes listener and prevents further state events`() {
-        val observingModule = TestAoaTransportModule(reactContext)
+        val observingModule = TestAoaTransportModule(reactContext, client)
 
         observingModule.invalidate()
         client().prepareBootstrap("sid-001", "123456", 8080)
@@ -262,7 +269,7 @@ class AoaTransportModuleTest {
         assertNull(observingModule.lastEmittedState)
     }
 
-    private fun client(): AoaClient = AoaClient.getInstance(reactContext.applicationContext)
+    private fun client(): AoaClient = client
 
     private fun openTestPipes() {
         val peerToClientOutput = PipedOutputStream()
@@ -273,7 +280,20 @@ class AoaTransportModuleTest {
 
         testInputStream = clientToPeerInput
         testOutputStream = peerToClientOutput
-        client().openStreamsForTest(peerToClientInput, clientToPeerOutput)
+
+        val accessory = mockk<UsbAccessory>().apply {
+            every { manufacturer } returns AoaClient.AOA_MANUFACTURER
+            every { model } returns AoaClient.AOA_MODEL
+            every { version } returns AoaClient.AOA_VERSION
+        }
+        every { streamOpener.open(any()) } returns OpenedStreams(
+            descriptor = null,
+            inputStream = peerToClientInput,
+            outputStream = clientToPeerOutput,
+        )
+        val usbManager = reactContext.getSystemService(Context.USB_SERVICE) as UsbManager
+        shadowOf(usbManager).setAttachedUsbAccessory(accessory)
+        shadowOf(usbManager).grantPermission(accessory)
     }
 
     private fun performAuthHandshake() {
@@ -388,7 +408,10 @@ class AoaTransportModuleTest {
         override fun registerSegment(segmentId: Int, path: String, callback: Callback) {}
     }
 
-    private class TestAoaTransportModule(context: ReactApplicationContext) : AoaTransportModule(context) {
+    private class TestAoaTransportModule(
+        context: ReactApplicationContext,
+        aoaClient: AoaClient,
+    ) : AoaTransportModule(context, aoaClient) {
         var lastEmittedState: String? = null
             private set
         var lastEmittedError: String? = null
@@ -491,5 +514,6 @@ class AoaTransportModuleTest {
     companion object {
         private const val AUTH_CHALLENGE_REQUEST_ID = "auth-challenge"
         private const val PIPE_BUFFER_SIZE = 64 * 1024
+        private const val RESPONSE_TIMEOUT_MS_FOR_TESTS = 500L
     }
 }
