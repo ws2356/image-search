@@ -1,6 +1,5 @@
 # TypeScript Transport Strategy + Adaptive Selection + DI Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wire the native AOA bridge into the React Native backup flow through a `TransportStrategy` abstraction, an adaptive strategy that prefers AOA and falls back to LAN, and a DI composition root.
 

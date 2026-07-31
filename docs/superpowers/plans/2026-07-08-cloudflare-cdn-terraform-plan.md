@@ -1,6 +1,5 @@
 # Cloudflare CDN Terraform Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Create a Terraform project at `web/terraform/` that manages Cloudflare DNS and SSL settings for `boldman.net`, with shell scripts for Terraform invocation and certificate management.
 

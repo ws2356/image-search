@@ -1,6 +1,5 @@
 # Native Android AOA Runtime + RN Bridge Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the native Android AOA runtime (`AoaClient`), a React Native bridge module (`AoaTransportModule`), and register them so the TypeScript layer can prepare a bootstrap, send requests, stream asset chunks, and observe connection state.
 

@@ -1,6 +1,5 @@
 # iOS File Card Receive UI Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the current row-based file list in `MultiFileReceiveView` with type-specific cards (text, HTML, image, generic file, web link), route every receive result through `MultiFileReceiveView`, and switch the bulk action from Save All to Share All.
 

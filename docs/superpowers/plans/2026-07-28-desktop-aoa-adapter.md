@@ -1,6 +1,5 @@
 # Desktop AOA Adapter Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the production desktop AOA adapter (`UsbAoaTransportAdapter`) that detects Android devices in AOA mode, authenticates them, and routes `dtis.mobile-transport.v1` envelopes through the existing `MobileTransportRouter`.
 

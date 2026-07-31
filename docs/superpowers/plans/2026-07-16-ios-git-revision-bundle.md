@@ -1,6 +1,5 @@
 # iOS Git Revision Bundle Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Embed the 40-char git revision of the iOS source into the shipped app bundle as `BuildMetadata.json`, and report it via the `app.git_revision` OpenTelemetry resource attribute on every span and metric.
 
