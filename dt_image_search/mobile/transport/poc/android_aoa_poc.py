@@ -33,13 +33,8 @@ AOA_ACCESSORY_PRODUCT_IDS = {
     0x2D05,  # accessory + audio + adb
 }
 
-
-try:
-    import usb.core as _usb_core
-    import usb.util as _usb_util
-except ImportError:  # pragma: no cover - optional dependency.
-    _usb_core = None
-    _usb_util = None
+import usb.core as _usb_core
+import usb.util as _usb_util
 
 
 class AoaPocHostState(str, Enum):

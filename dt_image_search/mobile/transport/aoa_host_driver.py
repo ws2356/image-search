@@ -15,12 +15,8 @@ import threading
 import time
 from typing import Any, Protocol
 
-try:
-    import usb.core as _usb_core
-    import usb.util as _usb_util
-except ImportError:  # pragma: no cover - optional dependency.
-    _usb_core = None
-    _usb_util = None
+import usb.core as _usb_core
+import usb.util as _usb_util
 
 AOA_GET_PROTOCOL_REQUEST = 51
 AOA_SEND_STRING_REQUEST = 52

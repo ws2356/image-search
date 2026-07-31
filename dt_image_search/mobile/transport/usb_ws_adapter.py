@@ -60,13 +60,8 @@ USB_TRANSFER_BINARY_HEADER_SIZE = (
     + 1
 )
 
-try:
-    from websockets.exceptions import ConnectionClosed, WebSocketException
-    from websockets.sync.client import connect as websocket_connect
-except ImportError:  # pragma: no cover - exercised in environments without websockets.
-    ConnectionClosed = RuntimeError  # type: ignore[assignment]
-    WebSocketException = RuntimeError  # type: ignore[assignment]
-    websocket_connect = None
+from websockets.exceptions import ConnectionClosed, WebSocketException
+from websockets.sync.client import connect as websocket_connect
 
 
 class UsbTransportState(str, Enum):
