@@ -5,6 +5,8 @@ import {
   type CapabilityExchangeResponse,
 } from '@/features/backup/protocols/capabilities';
 
+export type { CapabilityExchangeResponse } from '@/features/backup/protocols/capabilities';
+
 type FetchLike = typeof fetch;
 
 function join_base_and_path(base_url: string, path: string): string {
