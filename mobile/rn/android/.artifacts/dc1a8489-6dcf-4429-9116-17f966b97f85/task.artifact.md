@@ -1,0 +1,5 @@
+- [x] Add `nodeExecutable` detection to `settings.gradle`
+- [x] Update `settings.gradle` to use `nodeExecutable`
+- [x] Update `app/build.gradle` to use `nodeExecutable`
+- [x] Update `gradlew` to include common node paths in `PATH`
+- [x] Verify build sync (Daemon restart might be required)

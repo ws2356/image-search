@@ -160,6 +160,7 @@ class AoaClient private constructor(private val context: Context) {
      *
      * The [envelopeJson] must contain a `request_id` field. The returned string is the
      * JSON payload of the matching response envelope.
+     * TODO: songwan, avoid fucking blocking io
      *
      * @throws AoaTransportError.ConnectionUnavailable if the client is not connected.
      * @throws AoaTransportError.InvalidEnvelope if the envelope is not valid JSON or lacks a request_id.
