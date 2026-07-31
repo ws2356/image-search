@@ -76,6 +76,7 @@ from dt_image_search.mobile.transport.lan_http_adapter import (
 )
 from dt_image_search.mobile.transport.router import MobileTransportRouter
 from dt_image_search.mobile.transport.transport_manager import MobileTransportManager
+from dt_image_search.mobile.transport.usb_aoa_adapter import UsbAoaTransportAdapter
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbBootstrapConfig,
     UsbTransportState,
@@ -1338,9 +1339,14 @@ class MobilePairingService:
             is_desktop_foreground_fn=self._is_desktop_foreground,
             resolve_transfer_trust_key=self._resolve_transfer_trust_key,
         )
+        aoa_transport = UsbAoaTransportAdapter(
+            router=self._transport_router,
+            resolve_transfer_trust_key=self._resolve_transfer_trust_key,
+        )
         return MobileTransportManager(
             lan_transport=lan_transport,
             usb_transport=usb_transport,
+            aoa_transport=aoa_transport,
         )
 
     def _configure_usb_bootstrap_for_session(self, session: MobilePairingSessionDraft) -> None:

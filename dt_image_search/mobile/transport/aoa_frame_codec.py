@@ -42,7 +42,10 @@ def encode_aoa_frame(
     """
     if not isinstance(request_id, str):
         raise AoaFrameError("request_id must be a string.")
-    encoded_id = request_id.encode("ascii")
+    try:
+        encoded_id = request_id.encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise AoaFrameError("AOA frame request_id is not valid ASCII.") from exc
     if len(encoded_id) != AOA_REQUEST_ID_LENGTH:
         raise AoaFrameError(
             f"AOA frame request_id must be {AOA_REQUEST_ID_LENGTH} ASCII bytes, "
