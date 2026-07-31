@@ -1,8 +1,10 @@
 pluginManagement {
+  def nodeExecutable = System.getenv("NODE_BINARY") ?: ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"].find { new File(it).exists() } ?: "node"
+
   def reactNativeGradlePlugin = new File(
     providers.exec {
       workingDir(rootDir)
-      commandLine("node", "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
+      commandLine(nodeExecutable, "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
     }.standardOutput.asText.get().trim()
   ).getParentFile().absolutePath
   includeBuild(reactNativeGradlePlugin)
@@ -10,7 +12,7 @@ pluginManagement {
   def expoModulesAutolinkingDir = new File(
     providers.exec {
       workingDir(rootDir)
-      commandLine("node", "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
+      commandLine(nodeExecutable, "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
     }.standardOutput.asText.get().trim()
   ).getParentFile()
   def expoPluginsPath = new File(expoModulesAutolinkingDir, "android/expo-gradle-plugin").absolutePath
@@ -19,7 +21,7 @@ pluginManagement {
   def expoModulesCoreDir = new File(
     providers.exec {
       workingDir(rootDir)
-      commandLine("node", "--print", "require.resolve('expo-modules-core/package.json', { paths: [require.resolve('expo/package.json')] })")
+      commandLine(nodeExecutable, "--print", "require.resolve('expo-modules-core/package.json', { paths: [require.resolve('expo/package.json')] })")
     }.standardOutput.asText.get().trim()
   ).getParentFile()
   def expoModulePluginPath = new File(expoModulesCoreDir, "expo-module-gradle-plugin").absolutePath
@@ -47,10 +49,12 @@ expoAutolinking.useExpoVersionCatalog()
 include ':app'
 includeBuild(expoAutolinking.reactNativeGradlePlugin)
 
+def nodeExecutable = System.getenv("NODE_BINARY") ?: ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"].find { new File(it).exists() } ?: "node"
+
 def expoModulesCoreDir = new File(
   providers.exec {
     workingDir(rootDir)
-    commandLine("node", "--print", "require.resolve('expo-modules-core/package.json', { paths: [require.resolve('expo/package.json')] })")
+    commandLine(nodeExecutable, "--print", "require.resolve('expo-modules-core/package.json', { paths: [require.resolve('expo/package.json')] })")
   }.standardOutput.asText.get().trim()
 ).getParentFile()
 includeBuild(new File(expoModulesCoreDir, "expo-module-gradle-plugin"))
