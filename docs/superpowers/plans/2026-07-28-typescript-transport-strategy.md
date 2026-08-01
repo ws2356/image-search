@@ -30,7 +30,7 @@
 - Consumes: `TransferAssetMetadata`, `TransferAssetSignature`, `TransferResponse`, `TransferSessionRequest`, `TransferAssetExistenceRequest`, `TransferCompleteRequest`.
 - Produces: `TransferClient` interface; `TransferService` depends on it.
 
-- [ ] **Step 1: Create `transfer-client.ts`**
+- [x] **Step 1: Create `transfer-client.ts`**
 
 ```typescript
 import type {
@@ -58,7 +58,7 @@ export interface TransferClient {
 }
 ```
 
-- [ ] **Step 2: Make `DefaultHttpTransferClient` implement `TransferClient`**
+- [x] **Step 2: Make `DefaultHttpTransferClient` implement `TransferClient`**
 
 Add `implements TransferClient` to `DefaultHttpTransferClient` in `infrastructure/transport/lan/http-transfer-client.ts`.
 
@@ -70,7 +70,7 @@ export class DefaultHttpTransferClient implements HttpTransferClient, TransferCl
 }
 ```
 
-- [ ] **Step 3: Refactor `TransferService` to accept `TransferClient`**
+- [x] **Step 3: Refactor `TransferService` to accept `TransferClient`**
 
 Change `TransferServiceDeps`:
 
@@ -102,7 +102,7 @@ private _build_default_http_client(): TransferClient {
 
 Remove direct `HttpTransferClient` import dependency where possible.
 
-- [ ] **Step 4: Write a test that `TransferService` works with a fake `TransferClient`**
+- [x] **Step 4: Write a test that `TransferService` works with a fake `TransferClient`**
 
 ```typescript
 import { TransferService } from '@/features/backup/services/transfer-service';
@@ -126,12 +126,12 @@ test('TransferService uses injected TransferClient', async () => {
 });
 ```
 
-- [ ] **Step 5: Run tests and confirm they pass**
+- [x] **Step 5: Run tests and confirm they pass**
 
 Run: `cd mobile/rn && npm test -- transfer-service.test.ts`
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/rn/features/backup/services/transfer-client.ts \
@@ -155,7 +155,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] refactor: TransferService depen
 - Consumes: `PairingClaimRequest`, `PairingStateRequest`, `PairingResponse`, `CapabilityExchangeServiceInput`, `CapabilityExchangeResponse`, `TransferServiceContext`, `TransferClient`.
 - Produces: `TransportStrategy` with `claim_pairing`, `get_pairing_state`, `exchange_capabilities`, `create_transfer_client`.
 
-- [ ] **Step 1: Update `transport-strategy.ts`**
+- [x] **Step 1: Update `transport-strategy.ts`**
 
 ```typescript
 import type {
@@ -180,7 +180,7 @@ export interface TransportStrategy {
 }
 ```
 
-- [ ] **Step 2: Implement `LanTransportStrategy`**
+- [x] **Step 2: Implement `LanTransportStrategy`**
 
 ```typescript
 import {
@@ -231,7 +231,7 @@ export class LanTransportStrategy implements TransportStrategy {
 }
 ```
 
-- [ ] **Step 3: Write tests for `LanTransportStrategy`**
+- [x] **Step 3: Write tests for `LanTransportStrategy`**
 
 ```typescript
 import { LanTransportStrategy } from '@/infrastructure/transport/lan/lan-transport-strategy';
@@ -259,12 +259,12 @@ test('LanTransportStrategy claim_pairing forwards to HTTP client', async () => {
 });
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cd mobile/rn && npm test -- lan-transport-strategy.test.ts`
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add mobile/rn/infrastructure/transport/transport-strategy.ts \
@@ -286,7 +286,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: LAN transport strategy an
 - Consumes: `NativeModules.AoaTransportModule`.
 - Produces: `AoaBridge` with `prepareBootstrap`, `reset`, `isConnected`, `sendRequest`, `beginStreamingRequest`, `sendBinaryChunk`, `finishStreamingRequest`, `addStateListener`, `removeStateListener`.
 
-- [ ] **Step 1: Create `aoa-bridge.ts`**
+- [x] **Step 1: Create `aoa-bridge.ts`**
 
 ```typescript
 import { NativeEventEmitter, NativeModules } from 'react-native';
@@ -357,7 +357,7 @@ export class NativeAoaBridge implements AoaBridge {
 }
 ```
 
-- [ ] **Step 2: Write tests with a mock bridge**
+- [x] **Step 2: Write tests with a mock bridge**
 
 ```typescript
 import type { AoaBridge, AoaBridgeStateEvent } from '@/infrastructure/transport/aoa/aoa-bridge';
@@ -385,12 +385,12 @@ export class FakeAoaBridge implements AoaBridge {
 }
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd mobile/rn && npm test -- aoa-bridge.test.ts`
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mobile/rn/infrastructure/transport/aoa/aoa-bridge.ts \
@@ -410,7 +410,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: typed AOA bridge wrapper"
 - Consumes: `AoaBridge`, `PayloadCipher`, `TrustProofSigner`, `TransferServiceContext`.
 - Produces: `AoaTransferClient implements TransferClient`.
 
-- [ ] **Step 1: Implement `AoaTransferClient`**
+- [x] **Step 1: Implement `AoaTransferClient`**
 
 ```typescript
 import {
@@ -525,7 +525,7 @@ export class AoaTransferClient implements TransferClient {
 }
 ```
 
-- [ ] **Step 2: Write tests**
+- [x] **Step 2: Write tests**
 
 ```typescript
 import { AoaTransferClient } from '@/infrastructure/transport/aoa/aoa-transfer-client';
@@ -546,12 +546,12 @@ test('AoaTransferClient starts a transfer session', async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd mobile/rn && npm test -- aoa-transfer-client.test.ts`
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mobile/rn/infrastructure/transport/aoa/aoa-transfer-client.ts \
@@ -571,7 +571,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: AOA transfer client"
 - Consumes: `AoaBridge`, `TransportStrategy`, `PairingClaimRequest`, `PairingStateRequest`, `CapabilityExchangeServiceInput`, `TransferServiceContext`, `TransferClient`.
 - Produces: `AoaTransportStrategy implements TransportStrategy`.
 
-- [ ] **Step 1: Implement `AoaTransportStrategy`**
+- [x] **Step 1: Implement `AoaTransportStrategy`**
 
 ```typescript
 import {
@@ -669,7 +669,7 @@ export class AoaTransportStrategy implements TransportStrategy {
 }
 ```
 
-- [ ] **Step 2: Write tests**
+- [x] **Step 2: Write tests**
 
 ```typescript
 import { AoaTransportStrategy } from '@/infrastructure/transport/aoa/aoa-transport-strategy';
@@ -696,12 +696,12 @@ test('AoaTransportStrategy claims pairing', async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd mobile/rn && npm test -- aoa-transport-strategy.test.ts`
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mobile/rn/infrastructure/transport/aoa/aoa-transport-strategy.ts \
@@ -721,7 +721,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: AOA transport strategy"
 - Consumes: `TransportStrategy` (LAN and AOA), `PairingClaimRequest`, `PairingStateRequest`, `CapabilityExchangeServiceInput`, `TransferServiceContext`, `TransferClient`.
 - Produces: `AdaptiveTransportStrategy implements TransportStrategy`.
 
-- [ ] **Step 1: Implement `AdaptiveTransportStrategy`**
+- [x] **Step 1: Implement `AdaptiveTransportStrategy`**
 
 ```typescript
 import {
@@ -813,7 +813,7 @@ export class AdaptiveTransportStrategy implements TransportStrategy {
 }
 ```
 
-- [ ] **Step 2: Write tests**
+- [x] **Step 2: Write tests**
 
 ```typescript
 import { AdaptiveTransportStrategy } from '@/infrastructure/transport/adaptive-transport-strategy';
@@ -842,12 +842,12 @@ test('prefers AOA when connected', async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cd mobile/rn && npm test -- adaptive-transport-strategy.test.ts`
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add mobile/rn/infrastructure/transport/adaptive-transport-strategy.ts \
@@ -868,7 +868,7 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: adaptive USB/LAN transpor
 - Consumes: `TransportStrategy`.
 - Produces: `PairingService` uses a `TransportStrategy` instead of HTTP clients.
 
-- [ ] **Step 1: Update `PairingService`**
+- [x] **Step 1: Update `PairingService`**
 
 ```typescript
 import type { PairingQRCodePayload } from '@/features/backup/pairing/models';
@@ -913,7 +913,7 @@ export class PairingService {
 }
 ```
 
-- [ ] **Step 2: Update `AppServicesProvider`**
+- [x] **Step 2: Update `AppServicesProvider`**
 
 ```typescript
 import { LanTransportStrategy } from '@/infrastructure/transport/lan/lan-transport-strategy';
@@ -951,7 +951,7 @@ export function createAoaTransportStrategyForQr(aoa_bridge: NativeAoaBridge, pay
 
 Note: the adaptive strategy needs to be recreated after QR scan with the concrete AOA strategy. Add a method on `AdaptiveTransportStrategy` to update the AOA strategy, or recreate it in the pairing hook.
 
-- [ ] **Step 3: Update `use-pairing-screen-controller.ts`**
+- [x] **Step 3: Update `use-pairing-screen-controller.ts`**
 
 Replace `new PairingService(endpoint_base_url)` with:
 
@@ -964,7 +964,7 @@ const pairing_service = new PairingService({ transport_strategy: adaptive_strate
 
 Also set `claim_platform` to `'android'` instead of `'ios'`.
 
-- [ ] **Step 4: Update `startTransfer` use-case**
+- [x] **Step 4: Update `startTransfer` use-case**
 
 In `features/backup/use-cases/start-transfer.ts`, inject `transport_strategy` into `StartTransferDeps`. Use `transport_strategy.exchange_capabilities(...)` instead of `HttpCapabilityExchangeService`. Use `transport_strategy.create_transfer_client(context)` instead of constructing `TransferService` with default HTTP client.
 
@@ -1015,11 +1015,11 @@ const transfer_service = new TransferService({
 }, { transfer_client, trust_proof_signer: deps.trust_proof_signer });
 ```
 
-- [ ] **Step 5: Update `use-transfer-screen-controller.ts`**
+- [x] **Step 5: Update `use-transfer-screen-controller.ts`**
 
 Pass the transport strategy from `useAppServices` into `startTransfer` deps.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add mobile/rn/features/backup/services/pairing-service.ts \
@@ -1034,11 +1034,11 @@ git commit -m "[LLM: opencode-go/kimi-k2.7-code] feat: wire adaptive transport s
 
 ## Task 8: Self-review
 
-- [ ] Confirm `TransportStrategy` no longer contains the old `start_transfer`, `check_transfer_existence`, `upload_transfer_asset`, `complete_transfer` methods.
-- [ ] Confirm every public function has type hints.
-- [ ] Confirm `opt` is not stored in React state or JS logs.
-- [ ] Search for `TODO`, `TBD`, or `implement later` in new files.
-- [ ] Confirm Jest can run the new tests: `cd mobile/rn && npm test`.
-- [ ] Confirm TypeScript compiles: `cd mobile/rn && npx tsc --noEmit`.
+- [x] Confirm `TransportStrategy` no longer contains the old `start_transfer`, `check_transfer_existence`, `upload_transfer_asset`, `complete_transfer` methods.
+- [x] Confirm every public function has type hints.
+- [x] Confirm `opt` is not stored in React state or JS logs.
+- [x] Search for `TODO`, `TBD`, or `implement later` in new files.
+- [x] Confirm Jest can run the new tests: `cd mobile/rn && npm test`.
+- [x] Confirm TypeScript compiles: `cd mobile/rn && npx tsc --noEmit`.
 
 If gaps are found, fix them before marking the plan complete.
