@@ -41,14 +41,28 @@ export class HttpCapabilityExchangeService implements CapabilityExchangeService 
       trust_proof: input.trust_proof,
       capabilities: input.capabilities,
     };
-    const response = await this.fetch_impl(join_base_and_path(input.endpoint_base_url, CAPABILITY_EXCHANGE_PATH), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(request_payload),
-    });
+    const url = join_base_and_path(input.endpoint_base_url, CAPABILITY_EXCHANGE_PATH);
+    console.log(
+      `[CapabilityExchange] POST ${url} session_id=${input.session_id} device_uuid=${input.device_uuid}`
+    );
+    let response: Response;
+    try {
+      response = await this.fetch_impl(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(request_payload),
+      });
+    } catch (error) {
+      const cause = error instanceof Error && error.cause instanceof Error
+        ? ` (cause: ${error.cause.message})`
+        : '';
+      console.warn(`[CapabilityExchange] POST ${url} failed: ${error instanceof Error ? error.message : String(error)}${cause}`);
+      throw error;
+    }
     const payload = (await response.json()) as CapabilityExchangeResponse;
+    console.log(`[CapabilityExchange] POST ${url} -> status=${response.status} message=${payload.message}`);
     if (!response.ok) {
       throw new Error(payload.message || `Capability exchange failed with status ${response.status}.`);
     }

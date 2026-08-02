@@ -253,6 +253,10 @@ export function useTransferScreenController(): TransferScreenController {
     if (is_android_headless_transfer_supported()) {
       void (async () => {
         const session = useBackupSessionStore.getState().session;
+        console.log(
+          `[TransferScreen] starting headless transfer session_id=${session.pairingSession?.sessionId} ` +
+          `endpoint=${session.pairingSession?.endpointBaseUrl}`
+        );
         const current_state = await get_current_android_transfer_session_state();
         if (current_state?.status === 'running') {
           await handle_android_transfer_state(current_state, navigate_without_exit_prompt);
@@ -265,6 +269,7 @@ export function useTransferScreenController(): TransferScreenController {
         if (!session.pairingSession || !session.localDeviceIdentity) {
           set_running(false);
           set_last_error('Transfer unavailable. Pair a desktop first.');
+          console.warn('[TransferScreen] headless transfer unavailable: no pairing session or device identity.');
           return;
         }
 
@@ -276,6 +281,7 @@ export function useTransferScreenController(): TransferScreenController {
         const message = error instanceof Error ? error.message : 'Failed to start transfer.';
         set_running(false);
         set_last_error(message);
+        console.warn(`[TransferScreen] headless transfer start failed: ${message}`);
       });
 
       return;
@@ -285,6 +291,11 @@ export function useTransferScreenController(): TransferScreenController {
     transfer_abort_controller_ref.current = transfer_abort_controller;
     void (async () => {
       try {
+        const session = useBackupSessionStore.getState().session;
+        console.log(
+          `[TransferScreen] starting JS transfer session_id=${session.pairingSession?.sessionId} ` +
+          `endpoint=${session.pairingSession?.endpointBaseUrl}`
+        );
         await startTransfer({ abort_controller: transfer_abort_controller }, { transport_strategy });
         set_running(false);
         navigate_without_exit_prompt(() => {
@@ -298,6 +309,7 @@ export function useTransferScreenController(): TransferScreenController {
         const message = error instanceof Error ? error.message : 'Failed to start transfer.';
         set_running(false);
         set_last_error(message);
+        console.warn(`[TransferScreen] JS transfer failed: ${message}`);
       } finally {
         clear_transfer_abort_controller(transfer_abort_controller);
       }

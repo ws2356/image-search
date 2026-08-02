@@ -21,6 +21,14 @@ function join_base_and_path(base_url: string, path: string): string {
   return `${trimmed_base}${path}`;
 }
 
+function describe_network_error(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = error.cause instanceof Error ? ` (cause: ${error.cause.message})` : '';
+    return `[TransferHttp] ${error.message}${cause}`;
+  }
+  return `[TransferHttp] ${String(error)}`;
+}
+
 export interface HttpTransferClient {
   start(request: Omit<TransferSessionRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse>;
   existence(request: Omit<TransferAssetExistenceRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse>;
@@ -59,12 +67,21 @@ export class DefaultHttpTransferClient implements HttpTransferClient, TransferCl
       schema: MOBILE_TRANSFER_SCHEMA,
       ...request,
     } satisfies TransferSessionRequest);
-    const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_START_PATH), {
-      method: 'POST',
-      signal: abort_signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const url = join_base_and_path(this.base_url, MOBILE_TRANSFER_START_PATH);
+    console.log(`[TransferHttp] POST ${url}`);
+    let response: Response;
+    try {
+      response = await this.fetch_impl(url, {
+        method: 'POST',
+        signal: abort_signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.warn(describe_network_error(error), url);
+      throw error;
+    }
+    console.log(`[TransferHttp] POST ${url} -> status=${response.status}`);
     return this.parse_response(response, 'Transfer start request failed.');
   }
 
@@ -76,12 +93,21 @@ export class DefaultHttpTransferClient implements HttpTransferClient, TransferCl
       schema: MOBILE_TRANSFER_SCHEMA,
       ...request,
     } satisfies TransferAssetExistenceRequest);
-    const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_EXISTENCE_PATH), {
-      method: 'POST',
-      signal: abort_signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const url = join_base_and_path(this.base_url, MOBILE_TRANSFER_EXISTENCE_PATH);
+    console.log(`[TransferHttp] POST ${url}`);
+    let response: Response;
+    try {
+      response = await this.fetch_impl(url, {
+        method: 'POST',
+        signal: abort_signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.warn(describe_network_error(error), url);
+      throw error;
+    }
+    console.log(`[TransferHttp] POST ${url} -> status=${response.status}`);
     return this.parse_response(response, 'Transfer existence request failed.');
   }
 
@@ -110,16 +136,24 @@ export class DefaultHttpTransferClient implements HttpTransferClient, TransferCl
       stream_state,
       request_id,
     });
-    const response = await this.fetch_impl(
-      url.toString(),
-      {
-        method: 'POST',
-        signal: abort_signal,
-        headers: { 'content-type': 'application/json' },
-        body:
-          JSON.stringify(payload),
-      }
-    );
+    console.log(`[TransferHttp] POST ${url.toString()}`);
+    let response: Response;
+    try {
+      response = await this.fetch_impl(
+        url.toString(),
+        {
+          method: 'POST',
+          signal: abort_signal,
+          headers: { 'content-type': 'application/json' },
+          body:
+            JSON.stringify(payload),
+        }
+      );
+    } catch (error) {
+      console.warn(describe_network_error(error), url.toString());
+      throw error;
+    }
+    console.log(`[TransferHttp] POST ${url.toString()} -> status=${response.status}`);
     return this.parse_response(response, 'Transfer asset request failed.');
   }
 
@@ -151,6 +185,7 @@ export class DefaultHttpTransferClient implements HttpTransferClient, TransferCl
         try {
           parsed_payload = JSON.parse(raw_response) as object;
         } catch {
+          console.warn(`[TransferHttp] chunk POST ${url} failed: status=${request.status} raw=${raw_response.slice(0, 200)}`);
           reject(new Error(`Transfer asset request failed. Status=${request.status}. Raw=${raw_response}`));
           return;
         }
@@ -160,14 +195,17 @@ export class DefaultHttpTransferClient implements HttpTransferClient, TransferCl
             resolve(payload);
             return;
           }
+          console.warn(`[TransferHttp] chunk POST ${url} failed: status=${request.status} message=${payload.message}`);
           reject(new Error(payload.message || `Transfer asset request failed. Status=${request.status}.`));
         }).catch((error) => {
           const message = error instanceof Error ? error.message : 'Transfer asset request failed: response decode error.';
+          console.warn(`[TransferHttp] chunk POST ${url} decode failed: ${message}`);
           reject(new Error(message));
         });
       };
       request.onerror = () => {
         abort_signal?.removeEventListener('abort', on_abort);
+        console.warn(`[TransferHttp] chunk POST ${url} failed: network transport error`);
         reject(new Error('Transfer asset request failed due to a network transport error.'));
       };
       request.send(content as unknown as BodyInit);
@@ -179,12 +217,21 @@ export class DefaultHttpTransferClient implements HttpTransferClient, TransferCl
       schema: MOBILE_TRANSFER_SCHEMA,
       ...request,
     } satisfies TransferCompleteRequest);
-    const response = await this.fetch_impl(join_base_and_path(this.base_url, MOBILE_TRANSFER_COMPLETE_PATH), {
-      method: 'POST',
-      signal: abort_signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const url = join_base_and_path(this.base_url, MOBILE_TRANSFER_COMPLETE_PATH);
+    console.log(`[TransferHttp] POST ${url}`);
+    let response: Response;
+    try {
+      response = await this.fetch_impl(url, {
+        method: 'POST',
+        signal: abort_signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.warn(describe_network_error(error), url);
+      throw error;
+    }
+    console.log(`[TransferHttp] POST ${url} -> status=${response.status}`);
     return this.parse_response(response, 'Transfer complete request failed.');
   }
 

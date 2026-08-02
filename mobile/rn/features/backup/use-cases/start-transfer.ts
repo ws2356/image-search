@@ -231,6 +231,11 @@ export async function startTransfer(
   const session_id = pairing_session.sessionId;
   const endpoint_base_url = pairing_session.endpointBaseUrl;
   const strict_security_enabled = pairing_session.strictSecurityEnabled === true;
+  const transport_strategy = deps.transport_strategy ?? new LanTransportStrategy(endpoint_base_url);
+  console.log(
+    `[Transfer] start session_id=${session_id} endpoint=${endpoint_base_url} ` +
+    `strategy=${transport_strategy.constructor.name} strict_security=${strict_security_enabled}`
+  );
   const started_at_ms = Date.now();
   let runtime_started = false;
   let aborted_by_pipeline_error = false;
@@ -286,6 +291,9 @@ export async function startTransfer(
         });
       } catch (error) {
         capability_exchange_error = error instanceof Error ? error : new Error('Capability exchange failed.');
+        console.warn(
+          `[Transfer] capability exchange attempt ${exchange_attempt}/${CAPABILITY_EXCHANGE_MAX_ATTEMPTS} failed: ${capability_exchange_error.message}`
+        );
         if (exchange_attempt < CAPABILITY_EXCHANGE_MAX_ATTEMPTS) {
           throw_if_transfer_stopped();
           await delay(CAPABILITY_EXCHANGE_RETRY_DELAY_MS);
@@ -606,6 +614,7 @@ export async function startTransfer(
       throw create_transfer_abort_error();
     }
     const message = error instanceof Error ? error.message : 'Transfer failed unexpectedly.';
+    console.warn(`[Transfer] failed: ${message}`);
     await apply_command({
       type: 'transferResolved',
       result: {

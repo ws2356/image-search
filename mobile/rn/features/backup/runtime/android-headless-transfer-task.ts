@@ -37,6 +37,11 @@ export async function run_android_headless_transfer_task(
     throw new Error('Android headless transfer task is missing its payload.');
   }
   const task_payload = JSON.parse(task_payload_json) as AndroidHeadlessTransferTaskPayload;
+  console.log(
+    `[HeadlessTransfer] task started session_id=${task_payload.pairingSession.sessionId} ` +
+    `endpoint=${task_payload.pairingSession.endpointBaseUrl} ` +
+    `device_uuid=${task_payload.localDeviceIdentity.deviceUuid}`
+  );
   hydrate_headless_transfer_session(task_payload);
   await clear_android_transfer_stop_request();
   await publish_android_transfer_state({ status: 'running' });
@@ -76,6 +81,7 @@ export async function run_android_headless_transfer_task(
       return;
     }
     const message = error instanceof Error ? error.message : 'Transfer failed unexpectedly.';
+    console.warn(`[HeadlessTransfer] task failed: ${message}`);
     await publish_android_transfer_state({ status: 'failed', errorMessage: message });
     throw error;
   } finally {
