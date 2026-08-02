@@ -133,11 +133,16 @@ class AoaClient internal constructor(
                         )
                         return
                     }
+                    Log.i(
+                        LOG_TAG,
+                        "Matching accessory attached ${accessory.manufacturer}/${accessory.model}/${accessory.version}; requesting permission."
+                    )
                     requestAccessoryPermission(accessory)
                 }
                 UsbManager.ACTION_USB_ACCESSORY_DETACHED -> {
                     val detached = extractAccessory(intent)
                     if (detached == null || isSameAccessory(detached, openedAccessory)) {
+                        Log.i(LOG_TAG, "Accessory detached; closing connection.")
                         closeConnection()
                     }
                 }
@@ -148,6 +153,7 @@ class AoaClient internal constructor(
                         Log.w(LOG_TAG, "USB accessory permission denied.")
                         return
                     }
+                    Log.i(LOG_TAG, "USB accessory permission granted; opening.")
                     openAccessory(accessory)
                 }
             }
@@ -167,6 +173,7 @@ class AoaClient internal constructor(
                 "suggestedPort must be in 1..65535, got $suggestedPort"
             )
         }
+        Log.i(LOG_TAG, "prepareBootstrap sessionId=$sessionId suggestedPort=$suggestedPort")
         preparedSessionId = sessionId
         preparedOneTimePasscode = oneTimePasscode
         preparedSuggestedPort = suggestedPort
@@ -465,17 +472,27 @@ class AoaClient internal constructor(
     }
 
     private fun probeAttachedAccessories() {
-        val accessories = usbManager.accessoryList ?: return
-        val accessory = accessories.firstOrNull { isMatchingAccessory(it) } ?: return
+        val accessories = usbManager.accessoryList ?: run {
+            Log.i(LOG_TAG, "probeAttachedAccessories: no attached accessories.")
+            return
+        }
+        val accessory = accessories.firstOrNull { isMatchingAccessory(it) }
+        if (accessory == null) {
+            Log.i(LOG_TAG, "probeAttachedAccessories: no matching accessory among ${accessories.size} attached.")
+            return
+        }
+        Log.i(LOG_TAG, "probeAttachedAccessories: matching accessory ${accessory.manufacturer}/${accessory.model}/${accessory.version}; requesting permission.")
         requestAccessoryPermission(accessory)
     }
 
     private fun requestAccessoryPermission(accessory: UsbAccessory) {
         val intent = permissionPendingIntent ?: return
         if (usbManager.hasPermission(accessory)) {
+            Log.i(LOG_TAG, "Accessory permission already granted; opening.")
             openAccessory(accessory)
             return
         }
+        Log.i(LOG_TAG, "Requesting USB accessory permission.")
         usbManager.requestPermission(accessory, intent)
     }
 
@@ -497,7 +514,11 @@ class AoaClient internal constructor(
         openedAccessory = accessory
         transitionTo(AoaTransportState.AUTHENTICATING)
         startReaderWriter(opened.inputStream, opened.outputStream)
-        Log.i(LOG_TAG, "Accessory stream opened; authenticating.")
+        Log.i(
+            LOG_TAG,
+            "Accessory stream opened; authenticating. " +
+                "accessory=${accessory.manufacturer}/${accessory.model}/${accessory.version}"
+        )
     }
 
     @Synchronized
@@ -561,6 +582,7 @@ class AoaClient internal constructor(
             while (!stopped.get() && !Thread.currentThread().isInterrupted) {
                 val readBytes = inputStream.read(buffer)
                 if (readBytes < 0) {
+                    Log.i(LOG_TAG, "Reader: accessory stream closed by host.")
                     break
                 }
                 if (readBytes == 0) {
@@ -621,13 +643,20 @@ class AoaClient internal constructor(
             Log.w(LOG_TAG, "Auth challenge envelope missing body.")
             return
         }
+        val challengeSessionId = body.optString("sid")
+        val challengeRand = body.optString("rand")
+        Log.d(
+            LOG_TAG,
+            "Auth challenge received frameRequestId=$frameRequestId " +
+                "sid_match=${challengeSessionId == sessionId} rand_len=${challengeRand.length}"
+        )
         val input = AuthChallengeInput(
             frameRequestId = frameRequestId,
             envelopeSchema = envelope.optString("schema"),
             operation = envelope.optString("operation"),
             bodySchema = envelope.optString("body_schema"),
-            sid = body.optString("sid"),
-            rand = body.optString("rand"),
+            sid = challengeSessionId,
+            rand = challengeRand,
         )
         val response = try {
             authResponder.respond(
@@ -646,6 +675,10 @@ class AoaClient internal constructor(
             AoaFrameCodec.FRAME_FLAG_TEXT,
         )
         outgoingQueue.put(responseFrame)
+        Log.d(
+            LOG_TAG,
+            "Auth challenge response sent requestId=${response.responseFrameRequestId}"
+        )
         transitionTo(AoaTransportState.CONNECTED)
     }
 

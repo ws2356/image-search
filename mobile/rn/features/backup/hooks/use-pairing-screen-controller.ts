@@ -166,6 +166,18 @@ export function usePairingScreenController(): PairingScreenController {
           ? endpoint_target
           : `http://${endpoint_target}`;
 
+      // Start the native AOA client immediately so it can open an already-attached
+      // accessory in the background. Failure is non-fatal: pairing falls back to LAN.
+      try {
+        await aoa_bridge.prepareBootstrap(
+          payload.sessionId,
+          payload.oneTimePasscode,
+          payload.suggestedUsbPort ?? 45000
+        );
+      } catch {
+        // AOA may be unavailable; the adaptive strategy will fall back to LAN.
+      }
+
       const identity = resolve_identity();
       const pairing_key_deriver = new DefaultPairingKeyDeriver();
       if (cancelled || has_finished) {

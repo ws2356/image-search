@@ -1371,12 +1371,17 @@ class MobilePairingService:
         usb_state = self._transport_manager.start_usb()
         probe_error = self._transport_manager.usb_last_probe_error
         probe_error_message = probe_error or "none"
+        self._transport_manager.configure_aoa_bootstrap(bootstrap_config)
+        aoa_state = self._transport_manager.start_aoa()
+        aoa_probe_error = self._transport_manager.aoa_last_probe_error
+        aoa_probe_error_message = aoa_probe_error or "none"
         _log(
             "info",
             message=(
                 "MobilePairingService/_configure_usb_bootstrap_for_token: "
                 f"session_id={session_id} suggested_port={token.suggested_usb_port} "
-                f"state={usb_state.value} probe_error={probe_error_message}"
+                f"state={usb_state.value} probe_error={probe_error_message} "
+                f"aoa_state={aoa_state.value} aoa_probe_error={aoa_probe_error_message}"
             ),
             attributes=_pairing_telemetry_attributes(
                 session_id=session_id,

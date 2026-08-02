@@ -18,6 +18,28 @@ from typing import Any, Protocol
 import usb.core as _usb_core
 import usb.util as _usb_util
 
+from dt_image_search.telemetry.telemetry_client import log
+
+
+def _safe_log(
+    severity: str,
+    *,
+    message: str,
+    error_type: str = "",
+    where: str = "",
+    attributes: dict[str, object] | None = None,
+) -> None:
+    try:
+        log(
+            severity,
+            error_type=error_type,
+            where=where or "AoaHostDriver",
+            message=message,
+            attributes=attributes,
+        )
+    except Exception:
+        return
+
 AOA_GET_PROTOCOL_REQUEST = 51
 AOA_SEND_STRING_REQUEST = 52
 AOA_START_ACCESSORY_REQUEST = 53
@@ -277,6 +299,21 @@ class PyUsbAoaHostDriver:
                     is_accessory_mode=is_accessory,
                 )
             )
+            _safe_log(
+                "debug",
+                message=(
+                    "PyUsbAoaHostDriver/detect_devices: found AOA device "
+                    f"device_id={device_id} vendor_id=0x{id_vendor:04x} "
+                    f"product_id=0x{id_product:04x} accessory_mode={is_accessory}"
+                ),
+            )
+        _safe_log(
+            "debug",
+            message=(
+                "PyUsbAoaHostDriver/detect_devices: scanned "
+                f"{len(raw_devices)} USB devices; AOA candidates={len(detected)}"
+            ),
+        )
         return detected
 
     def ensure_accessory_mode(self, device: AoaDetectedDevice) -> bool:
@@ -330,7 +367,22 @@ class PyUsbAoaHostDriver:
                 b"",
                 timeout=1500,
             )
+            _safe_log(
+                "debug",
+                message=(
+                    "PyUsbAoaHostDriver/ensure_accessory_mode: AOA negotiation sent "
+                    f"device={device.device_id} protocol_version={protocol_version} "
+                    f"strings={len(strings)}"
+                ),
+            )
         except self._usb_error_type as exc:
+            _safe_log(
+                "warning",
+                message=(
+                    "PyUsbAoaHostDriver/ensure_accessory_mode: AOA negotiation failed "
+                    f"device={device.device_id}: {exc}"
+                ),
+            )
             raise RuntimeError(f"AOA negotiation failed: {exc}") from exc
         finally:
             usb_util.dispose_resources(device_handle)
@@ -339,8 +391,23 @@ class PyUsbAoaHostDriver:
         while time.monotonic() < accessory_deadline:
             for detected_device in self.detect_devices():
                 if detected_device.is_accessory_mode:
+                    _safe_log(
+                        "debug",
+                        message=(
+                            "PyUsbAoaHostDriver/ensure_accessory_mode: device "
+                            f"{detected_device.device_id} re-enumerated in accessory mode "
+                            f"product_id=0x{detected_device.product_id:04x}"
+                        ),
+                    )
                     return True
             time.sleep(0.3)
+        _safe_log(
+            "warning",
+            message=(
+                "PyUsbAoaHostDriver/ensure_accessory_mode: device did not re-enumerate "
+                f"in accessory mode within 8s device={device.device_id}"
+            ),
+        )
         return False
 
     def open_stream(
@@ -389,6 +456,15 @@ class PyUsbAoaHostDriver:
         self._active_device = device
         self._active_handle = device_handle
         self._state = AoaHostState.CONNECTED
+        _safe_log(
+            "debug",
+            message=(
+                "PyUsbAoaHostDriver/open_stream: AOA bulk streams opened "
+                f"device={device.device_id} endpoint_in=0x{endpoint_in.bEndpointAddress:02x} "
+                f"endpoint_out=0x{endpoint_out.bEndpointAddress:02x} "
+                f"max_packet_size={endpoint_in.wMaxPacketSize}"
+            ),
+        )
         return (
             _PyUsbAoaReadStream(
                 device_handle=device_handle,

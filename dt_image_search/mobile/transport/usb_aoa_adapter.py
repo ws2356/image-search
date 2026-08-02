@@ -274,12 +274,33 @@ class UsbAoaTransportAdapter:
 
         devices = self._driver.detect_devices()
         if not devices:
+            self._safe_log(
+                "debug",
+                message=(
+                    "UsbAoaTransportAdapter/_probe: no AOA-capable USB devices detected."
+                ),
+            )
             return None
 
         for device in devices:
             target_device = device
             if not device.is_accessory_mode:
+                self._safe_log(
+                    "debug",
+                    message=(
+                        "UsbAoaTransportAdapter/_probe: negotiating accessory mode for "
+                        f"device={device.device_id} vendor_id=0x{device.vendor_id:04x} "
+                        f"product_id=0x{device.product_id:04x}"
+                    ),
+                )
                 if not self._driver.ensure_accessory_mode(device):
+                    self._safe_log(
+                        "warning",
+                        message=(
+                            "UsbAoaTransportAdapter/_probe: accessory mode negotiation "
+                            f"failed for device={device.device_id}"
+                        ),
+                    )
                     continue
                 post_devices = self._driver.detect_devices()
                 accessory = next(
@@ -287,8 +308,22 @@ class UsbAoaTransportAdapter:
                     None,
                 )
                 if accessory is None:
+                    self._safe_log(
+                        "warning",
+                        message=(
+                            "UsbAoaTransportAdapter/_probe: device did not re-enumerate in "
+                            f"accessory mode after negotiation device={device.device_id}"
+                        ),
+                    )
                     continue
                 target_device = accessory
+                self._safe_log(
+                    "info",
+                    message=(
+                        "UsbAoaTransportAdapter/_probe: device entered accessory mode "
+                        f"device={accessory.device_id} product_id=0x{accessory.product_id:04x}"
+                    ),
+                )
 
             try:
                 read_stream, write_stream = self._driver.open_stream(target_device)
@@ -302,6 +337,13 @@ class UsbAoaTransportAdapter:
                 )
                 continue
 
+            self._safe_log(
+                "info",
+                message=(
+                    "UsbAoaTransportAdapter/_probe: opened AOA bulk streams for "
+                    f"device={target_device.device_id}"
+                ),
+            )
             with self._lock:
                 self._active_read_stream = read_stream
                 self._active_write_stream = write_stream
@@ -337,6 +379,13 @@ class UsbAoaTransportAdapter:
                 sort_keys=True,
             ).encode("utf-8"),
         )
+        self._safe_log(
+            "debug",
+            message=(
+                "UsbAoaTransportAdapter/_auth_challenge: sent AOA auth challenge "
+                f"session_id={config.session_id} rand_len={len(challenge_rand)}"
+            ),
+        )
 
         decoder = AoaFrameDecoder()
         deadline = time.monotonic() + self._auth_challenge_timeout_seconds
@@ -352,8 +401,22 @@ class UsbAoaTransportAdapter:
 
             for request_id, flags, payload in decoder.feed(chunk):
                 if request_id != AOA_AUTH_CHALLENGE_REQUEST_ID:
+                    self._safe_log(
+                        "debug",
+                        message=(
+                            "UsbAoaTransportAdapter/_auth_challenge: ignored frame with "
+                            f"unrelated request_id={request_id!r} flags={flags}"
+                        ),
+                    )
                     continue
                 if flags != AOA_FRAME_FLAG_TEXT:
+                    self._safe_log(
+                        "debug",
+                        message=(
+                            "UsbAoaTransportAdapter/_auth_challenge: ignored non-text "
+                            f"auth frame flags={flags}"
+                        ),
+                    )
                     continue
                 try:
                     challenge_response = json.loads(payload.decode("utf-8"))
@@ -395,6 +458,13 @@ class UsbAoaTransportAdapter:
                     raise RuntimeError(
                         "Desktop AOA auth challenge proof digest verification failed."
                     )
+                self._safe_log(
+                    "debug",
+                    message=(
+                        "UsbAoaTransportAdapter/_auth_challenge: mobile authenticated "
+                        f"session_id={config.session_id} status_code={status_code}"
+                    ),
+                )
                 return
 
         if self._stop_event.is_set():
@@ -455,6 +525,14 @@ class UsbAoaTransportAdapter:
                     )
                     continue
 
+                self._safe_log(
+                    "debug",
+                    message=(
+                        "UsbAoaTransportAdapter/_session_loop: dispatched AOA request "
+                        f"request_id={response_request_id} "
+                        f"status_code={response.status_code}"
+                    ),
+                )
                 self._send_frame(
                     write_stream=write_stream,
                     request_id=response_request_id,

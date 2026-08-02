@@ -67,6 +67,8 @@ class _StubTransportManager:
         self.configure_usb_calls: list[UsbBootstrapConfig] = []
         self.start_usb_calls = 0
         self.stop_usb_calls = 0
+        self.configure_aoa_calls: list[UsbBootstrapConfig] = []
+        self.start_aoa_calls = 0
         self.stop_all_calls = 0
 
     def start_lan(self) -> LanHttpEndpointInfo:
@@ -87,6 +89,16 @@ class _StubTransportManager:
         self.stop_usb_calls += 1
         self._usb_state = UsbTransportState.STOPPED
 
+    def configure_aoa_bootstrap(self, config: UsbBootstrapConfig) -> None:
+        self.configure_aoa_calls.append(config)
+        self._usb_bootstrap_config = config
+        self._usb_state = UsbTransportState.CONFIGURED
+
+    def start_aoa(self) -> UsbTransportState:
+        self.start_aoa_calls += 1
+        self._usb_state = self._usb_state_after_start
+        return self._usb_state
+
     def stop_all(self) -> None:
         self.stop_all_calls += 1
         self._usb_state = UsbTransportState.STOPPED
@@ -102,6 +114,10 @@ class _StubTransportManager:
     @property
     def usb_bootstrap_config(self) -> UsbBootstrapConfig | None:
         return self._usb_bootstrap_config
+
+    @property
+    def aoa_last_probe_error(self) -> str | None:
+        return self._usb_last_probe_error
 
 
 class TestMobilePairingService(unittest.TestCase):
@@ -701,6 +717,9 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(bootstrap_config.suggested_port, ios_token.suggested_usb_port)
         self.assertEqual(bootstrap_config.fallback_port_window, 20)
         self.assertEqual(transport_manager.start_usb_calls, 1)
+        self.assertEqual(len(transport_manager.configure_aoa_calls), 1)
+        self.assertIs(transport_manager.configure_aoa_calls[0], bootstrap_config)
+        self.assertEqual(transport_manager.start_aoa_calls, 1)
 
     def test_refresh_ios_token_reconfigures_usb_bootstrap(self):
         pairing_service = MobilePairingService(
@@ -725,6 +744,9 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(refreshed_config.one_time_passcode, refreshed_ios_token.one_time_passcode)
         self.assertEqual(refreshed_config.suggested_port, refreshed_ios_token.suggested_usb_port)
         self.assertEqual(transport_manager.start_usb_calls, 2)
+        self.assertEqual(len(transport_manager.configure_aoa_calls), 2)
+        self.assertIs(transport_manager.configure_aoa_calls[1], refreshed_config)
+        self.assertEqual(transport_manager.start_aoa_calls, 2)
 
     def test_handle_pairing_request_prefers_usb_transport_when_connected(self):
         pairing_service = MobilePairingService(
