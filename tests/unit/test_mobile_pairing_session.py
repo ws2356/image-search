@@ -33,7 +33,11 @@ class TestMobilePairingSession(unittest.TestCase):
         android_token = session.token_for(MobilePlatform.ANDROID)
         ios_token = session.token_for(MobilePlatform.IOS)
 
-        self.assertNotEqual(android_token.one_time_passcode, ios_token.one_time_passcode)
+        # Both platforms share one token so a single QR code works for either client.
+        self.assertIs(android_token, ios_token)
+        self.assertEqual(android_token.one_time_passcode, ios_token.one_time_passcode)
+        self.assertEqual(android_token.suggested_usb_port, ios_token.suggested_usb_port)
+        self.assertEqual(android_token.payload, ios_token.payload)
         self.assertEqual(android_token.endpoint_targets, ("192.168.50.12:38933", "10.0.0.5:38933"))
         self.assertEqual(android_token.expires_at, now + timedelta(minutes=15))
 
@@ -50,8 +54,6 @@ class TestMobilePairingSession(unittest.TestCase):
         self.assertNotIn("sec", payload_query)
         self.assertGreaterEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MIN)
         self.assertLessEqual(android_token.suggested_usb_port, USB_SUGGESTED_PORT_MAX)
-        self.assertGreaterEqual(ios_token.suggested_usb_port, USB_SUGGESTED_PORT_MIN)
-        self.assertLessEqual(ios_token.suggested_usb_port, USB_SUGGESTED_PORT_MAX)
 
     def test_create_adds_strict_security_flag_to_qr_payload_when_enabled(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -65,7 +67,7 @@ class TestMobilePairingSession(unittest.TestCase):
 
         self.assertEqual(payload_query["sec"][0], "1")
 
-    def test_refresh_replaces_only_requested_platform_token(self):
+    def test_refresh_rotates_shared_token_for_both_platforms(self):
         now = datetime(2026, 4, 9, 12, 0, tzinfo=timezone.utc)
         with tempfile.TemporaryDirectory() as temp_dir:
             session = MobilePairingSessionDraft.create(
@@ -81,7 +83,10 @@ class TestMobilePairingSession(unittest.TestCase):
 
         self.assertNotEqual(refreshed_android.one_time_passcode, original_android.one_time_passcode)
         self.assertEqual(refreshed_android.refresh_generation, 1)
-        self.assertEqual(session.token_for(MobilePlatform.IOS).one_time_passcode, original_ios.one_time_passcode)
+        # The refresh rotates the single shared token seen by both platforms.
+        self.assertIs(session.token_for(MobilePlatform.IOS), refreshed_android)
+        self.assertEqual(session.token_for(MobilePlatform.IOS).one_time_passcode, refreshed_android.one_time_passcode)
+        self.assertNotEqual(session.token_for(MobilePlatform.IOS).one_time_passcode, original_ios.one_time_passcode)
 
     def test_update_destination_parent_normalizes_path(self):
         with tempfile.TemporaryDirectory() as temp_dir:

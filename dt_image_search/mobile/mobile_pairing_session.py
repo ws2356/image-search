@@ -55,7 +55,13 @@ def _normalize_directory_path(directory_path: str) -> str:
 
 @dataclass(frozen=True)
 class MobilePairingToken:
-    platform: MobilePlatform
+    """A single pairing token shared by both mobile platforms.
+
+    The token is platform-agnostic: the QR payload, one-time passcode and
+    suggested USB port are identical for iOS and Android clients so one QR
+    code can be scanned by either platform.
+    """
+
     one_time_passcode: str
     suggested_usb_port: int
     payload: str
@@ -63,8 +69,6 @@ class MobilePairingToken:
     strict_security_enabled: bool
     expires_at: datetime
     refresh_generation: int
-    deep_link_url: str
-    store_url: str
 
     @property
     def endpoint_target(self) -> str:
@@ -99,6 +103,12 @@ class MobilePairingSessionDraft:
         strict_security_enabled: bool = False,
         now: datetime | None = None,
     ) -> "MobilePairingSessionDraft":
+        """Create a session with a single token shared by both mobile platforms.
+
+        The same QR payload, one-time passcode and suggested USB port are
+        returned for iOS and Android so desktop can display one QR code that
+        clients of either platform can scan.
+        """
         current_time = _utc_now(now)
         normalized_endpoint_urls = _normalize_endpoint_urls(
             desktop_endpoint_url=desktop_endpoint_url,
@@ -110,31 +120,37 @@ class MobilePairingSessionDraft:
             session_id=uuid.uuid4().hex,
             created_at=current_time,
         )
+        shared_token = _new_pairing_token(
+            session_id=session.session_id,
+            desktop_endpoint_urls=session.desktop_endpoint_urls,
+            strict_security_enabled=strict_security_enabled,
+            refresh_generation=0,
+            now=current_time,
+        )
         for platform in MobilePlatform:
-            session.tokens[platform] = _new_pairing_token(
-                session_id=session.session_id,
-                desktop_endpoint_urls=session.desktop_endpoint_urls,
-                platform=platform,
-                strict_security_enabled=strict_security_enabled,
-                refresh_generation=0,
-                now=current_time,
-            )
+            session.tokens[platform] = shared_token
         return session
 
     def token_for(self, platform: MobilePlatform) -> MobilePairingToken:
         return self.tokens[platform]
 
     def refresh_token(self, platform: MobilePlatform, now: datetime | None = None) -> MobilePairingToken:
+        """Rotate the shared token; both platform entries point to the refreshed token.
+
+        The ``platform`` argument is kept for API compatibility: the caller
+        identifies the platform key that triggered the refresh, but since both
+        platforms share one token, the rotation applies to both.
+        """
         current_token = self.tokens[platform]
         refreshed_token = _new_pairing_token(
             session_id=self.session_id,
             desktop_endpoint_urls=self.desktop_endpoint_urls,
-            platform=platform,
             strict_security_enabled=current_token.strict_security_enabled,
             refresh_generation=current_token.refresh_generation + 1,
             now=now,
         )
-        self.tokens[platform] = refreshed_token
+        for key in MobilePlatform:
+            self.tokens[key] = refreshed_token
         return refreshed_token
 
     def set_destination_parent(self, destination_parent: str) -> None:
@@ -144,13 +160,11 @@ class MobilePairingSessionDraft:
 def _new_pairing_token(
     session_id: str,
     desktop_endpoint_urls: tuple[str, ...],
-    platform: MobilePlatform,
     strict_security_enabled: bool,
     refresh_generation: int,
     now: datetime | None = None,
 ) -> MobilePairingToken:
     current_time = _utc_now(now)
-    metadata = _PLATFORM_METADATA[platform]
     endpoint_targets = tuple(_endpoint_target_from_url(endpoint_url) for endpoint_url in desktop_endpoint_urls)
     one_time_passcode = f"{secrets.randbelow(1_000_000):06d}"
     suggested_usb_port = USB_SUGGESTED_PORT_MIN + secrets.randbelow(
@@ -169,7 +183,6 @@ def _new_pairing_token(
     payload_query = urlencode(payload_fields)
     payload = urlunsplit(("https", PAIRING_QR_HOST, "", payload_query, ""))
     return MobilePairingToken(
-        platform=platform,
         one_time_passcode=one_time_passcode,
         suggested_usb_port=suggested_usb_port,
         payload=payload,
@@ -177,8 +190,6 @@ def _new_pairing_token(
         strict_security_enabled=strict_security_enabled,
         expires_at=expires_at,
         refresh_generation=refresh_generation,
-        deep_link_url=metadata["deep_link_url"],
-        store_url=metadata["store_url"],
     )
 
 
