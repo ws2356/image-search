@@ -14,6 +14,9 @@ import {
   type AndroidHeadlessTransferTaskPayload,
 } from '@/infrastructure/platform/android-transfer-service';
 import { get_default_transfer_runtime_wiring } from '@/infrastructure/platform/transfer-runtime-wiring';
+import {
+  build_headless_transfer_transport_strategy,
+} from '@/features/backup/runtime/headless-transfer-transport';
 
 async function apply_headless_transfer_command(command: BackupCommand): Promise<void> {
   await apply_backup_command(command);
@@ -46,6 +49,8 @@ export async function run_android_headless_transfer_task(
   await clear_android_transfer_stop_request();
   await publish_android_transfer_state({ status: 'running' });
 
+  const transport_strategy = build_headless_transfer_transport_strategy(task_payload.pairingSession);
+
   const abort_controller = new AbortController();
   let stop_watch_timer: ReturnType<typeof setInterval> | null = null;
   const clear_stop_watch_timer = () => {
@@ -71,6 +76,7 @@ export async function run_android_headless_transfer_task(
         trust_proof_signer: new DefaultTrustProofSigner(),
         transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
         transfer_asset_source: new DefaultTransferAssetSource(),
+        transport_strategy,
       }
     );
     await publish_android_transfer_state({ status: 'completed' });

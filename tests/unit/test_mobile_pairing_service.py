@@ -475,7 +475,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(exchange_payload["status"], "accepted")
         self.assertEqual(exchange_payload["session_id"], session.session_id)
         self.assertEqual(exchange_payload["device_uuid"], device_uuid)
-        self.assertEqual(exchange_payload["capabilities"], {"encryption": 1})
+        self.assertEqual(exchange_payload["capabilities"], {"encryption": 1, "aoa_transfer": 1})
 
     def test_live_capability_exchange_http_endpoint_rejects_invalid_trust_key(self):
         now = datetime.now(timezone.utc)

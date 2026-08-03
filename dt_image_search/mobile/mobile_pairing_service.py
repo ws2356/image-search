@@ -93,6 +93,7 @@ PAIRING_STATE_PATH = "/api/mobile/pairing/state"
 PAIRING_TRANSPORT_LAN = "lan"
 PAIRING_TRANSPORT_USB = "usb"
 MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT = "mobile_app_foreground_state_changed"
+MOBILE_AOA_TRANSFER_CAPABILITY = "aoa_transfer"
 
 
 class PairingResultState(str, Enum):
@@ -183,7 +184,12 @@ class MobilePairingService:
         self._transfer_service = MobileTransferService(ctx)
         self._capability_exchange_service = MobileCapabilityExchangeService(
             ctx,
-            desktop_capability_flags={MOBILE_ENCRYPTION_CAPABILITY: 1} if is_encryption_enabled() else {},
+            desktop_capability_flags={
+                MOBILE_ENCRYPTION_CAPABILITY: 1,
+                MOBILE_AOA_TRANSFER_CAPABILITY: 1,
+            }
+            if is_encryption_enabled()
+            else {MOBILE_AOA_TRANSFER_CAPABILITY: 1},
         )
         self._update_prompt_service = MobileUpdatePromptService(ctx)
         self._pairing_result = MobilePairingResult(

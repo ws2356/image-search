@@ -76,6 +76,20 @@ AOA_AUTH_CHALLENGE_REQUEST_ID = USB_AUTH_CHALLENGE_REQUEST_ID.ljust(
 )
 
 
+def _is_access_denied_error(exc: BaseException) -> bool:
+    """Detect USB permission denials (e.g. macOS TCC 'USB' privacy denial).
+
+    libusb reports these as LIBUSB_ERROR_ACCESS, which pyusb surfaces as
+    ``[Errno 13] Access denied (insufficient permissions)``.
+    """
+    error_message = str(exc).lower()
+    return (
+        "access denied" in error_message
+        or "insufficient permissions" in error_message
+        or getattr(exc, "errno", None) == 13
+    )
+
+
 class UsbAoaTransportAdapter:
     """Desktop-side AOA transport adapter.
 
@@ -91,6 +105,8 @@ class UsbAoaTransportAdapter:
         probe_interval_seconds: float = 1.0,
         response_poll_timeout_seconds: float = 0.5,
         auth_challenge_timeout_seconds: float = 2.0,
+        open_retry_attempts: int = 3,
+        open_retry_delay_seconds: float = 0.25,
         resolve_transfer_trust_key: Callable[..., str | None] | None = None,
     ) -> None:
         if probe_interval_seconds <= 0:
@@ -103,12 +119,18 @@ class UsbAoaTransportAdapter:
             raise ValueError(
                 "AOA auth_challenge_timeout_seconds must be greater than zero."
             )
+        if open_retry_attempts <= 0:
+            raise ValueError("AOA open_retry_attempts must be greater than zero.")
+        if open_retry_delay_seconds < 0:
+            raise ValueError("AOA open_retry_delay_seconds must not be negative.")
 
         self._router = router
         self._driver = driver or PyUsbAoaHostDriver()
         self._probe_interval_seconds = probe_interval_seconds
         self._response_poll_timeout_seconds = response_poll_timeout_seconds
         self._auth_challenge_timeout_seconds = auth_challenge_timeout_seconds
+        self._open_retry_attempts = open_retry_attempts
+        self._open_retry_delay_seconds = open_retry_delay_seconds
         self._resolve_transfer_trust_key = resolve_transfer_trust_key
 
         self._lock = threading.RLock()
@@ -326,7 +348,7 @@ class UsbAoaTransportAdapter:
                 )
 
             try:
-                read_stream, write_stream = self._driver.open_stream(target_device)
+                read_stream, write_stream = self._open_accessory_stream(target_device)
             except RuntimeError as exc:
                 self._safe_log(
                     "debug",
@@ -350,6 +372,64 @@ class UsbAoaTransportAdapter:
             return target_device, read_stream, write_stream
 
         return None
+
+    def _open_accessory_stream(
+        self,
+        device: AoaDetectedDevice,
+    ) -> tuple[AoaReadStream, AoaWriteStream]:
+        """Open the accessory bulk streams, tolerating the re-enumeration window.
+
+        Right after AOA negotiation the accessory device can drop off the bus for a
+        few hundred milliseconds. A single failed open must not abort the probe pass:
+        re-detect so the driver re-finds the device at its current bus/address and
+        retry until the device is stable. Access-denied errors are not transient and
+        are surfaced immediately with remediation guidance instead of being retried.
+        """
+        last_error: RuntimeError | None = None
+        target_device = device
+        for _ in range(self._open_retry_attempts):
+            if self._stop_event.is_set():
+                break
+            try:
+                return self._driver.open_stream(target_device)
+            except RuntimeError as exc:
+                last_error = exc
+                if _is_access_denied_error(exc):
+                    self._safe_log(
+                        "warning",
+                        message=(
+                            "UsbAoaTransportAdapter/_open_accessory_stream: macOS denied "
+                            f"USB access to the AOA accessory device "
+                            f"device={target_device.device_id}: {exc}. "
+                            "Grant the app (or the terminal/IDE that launched it) USB "
+                            "permission in System Settings > Privacy & Security > USB, "
+                            "then reconnect the phone."
+                        ),
+                    )
+                    break
+                self._safe_log(
+                    "debug",
+                    message=(
+                        "UsbAoaTransportAdapter/_open_accessory_stream: retrying AOA "
+                        f"stream open for device={target_device.device_id}: {exc}"
+                    ),
+                )
+                re_detected = self._driver.detect_devices()
+                fresh_accessory = next(
+                    (
+                        candidate
+                        for candidate in re_detected
+                        if candidate.is_accessory_mode
+                    ),
+                    None,
+                )
+                if fresh_accessory is not None:
+                    target_device = fresh_accessory
+                if self._stop_event.wait(timeout=self._open_retry_delay_seconds):
+                    break
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("AOA host stopped while opening the accessory stream.")
 
     def _auth_challenge(
         self,

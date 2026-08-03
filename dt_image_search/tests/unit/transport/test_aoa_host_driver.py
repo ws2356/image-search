@@ -350,6 +350,33 @@ class TestPyUsbAoaHostDriverStreams(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 driver.open_stream(_ACCESSORY_DEVICE)
 
+    def test_open_stream_reads_active_configuration_without_setting(self) -> None:
+        driver = PyUsbAoaHostDriver()
+        handle = mock.Mock()
+        handle.serial_number = "serial-001"
+        handle.get_active_configuration.return_value = _FakeConfiguration(
+            [_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        )
+        with mock.patch.object(usb_core, "find", return_value=handle), mock.patch.object(
+            usb_util, "find_descriptor", side_effect=[_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        ), mock.patch.object(usb_util, "claim_interface"):
+            driver.open_stream(_ACCESSORY_DEVICE)
+        handle.set_configuration.assert_not_called()
+
+    def test_open_stream_sets_configuration_when_active_configuration_missing(self) -> None:
+        driver = PyUsbAoaHostDriver()
+        handle = mock.Mock()
+        handle.serial_number = "serial-001"
+        handle.get_active_configuration.side_effect = [
+            usb_core.USBError("configuration not set"),
+            _FakeConfiguration([_FakeEndpoint(0x01), _FakeEndpoint(0x81)]),
+        ]
+        with mock.patch.object(usb_core, "find", return_value=handle), mock.patch.object(
+            usb_util, "find_descriptor", side_effect=[_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        ), mock.patch.object(usb_util, "claim_interface"):
+            driver.open_stream(_ACCESSORY_DEVICE)
+        handle.set_configuration.assert_called_once()
+
     def test_stop_releases_active_handle(self) -> None:
         driver = PyUsbAoaHostDriver()
         handle = mock.Mock()

@@ -332,6 +332,15 @@ All of these cause the adaptive strategy to fall back to LAN. `connectionUnavail
 - Windows-specific driver configuration (Zadig / WinUSB) is documented and tested once the macOS path is stable.
 - The `UsbAoaTransportAdapter` is written so that the Windows-specific differences are isolated to the PyUSB backend interaction and do not affect the message framing or routing logic.
 
+### macOS USB permission requirement
+
+macOS gates USB device access behind a privacy (TCC) permission. Without it the accessory interface open fails with `LIBUSB_ERROR_ACCESS` (`[Errno 13] Access denied (insufficient permissions)`).
+
+- When running from source, grant USB access to the terminal/IDE that launches `python dt_image_search/main.py`.
+- When running the packaged `.app`, grant USB access to `AuSearch` (and add `com.apple.security.device.usb` if the app is ever sandboxed).
+- Grant under **System Settings → Privacy & Security → USB** (or approve the one-time prompt on first USB access).
+- The desktop `UsbAoaTransportAdapter` detects this error and logs a warning with this remediation instead of retrying, since the denial is not transient.
+
 ## Risks
 
 - AOA bulk endpoint performance depends on the Android device and host driver. The implementation should keep chunk sizes configurable.

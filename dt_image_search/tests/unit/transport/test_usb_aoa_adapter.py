@@ -44,6 +44,50 @@ def _build_auth_response(rand: str, opt: str, request_id: str) -> bytes:
     return json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
+class _StubAoaStream:
+    def read(self, size: int = -1, timeout: float | None = None) -> bytes:
+        return b""
+
+    def write(self, data: bytes) -> int:
+        return len(data)
+
+    def close(self) -> None:
+        return None
+
+
+class _FlakyOpenAoaDriver(SimulatedAoaHostDriver):
+    """Simulated driver whose open_stream fails a fixed number of times."""
+
+    def __init__(self, *, failures_before_success: int, accessory_device: AoaDetectedDevice) -> None:
+        super().__init__([accessory_device])
+        self._failures_before_success = failures_before_success
+        self._accessory_device = accessory_device
+        self.open_attempts = 0
+
+    def open_stream(self, device: AoaDetectedDevice):
+        self.open_attempts += 1
+        if self.open_attempts <= self._failures_before_success:
+            raise RuntimeError(
+                "AOA stream setup failed: [Errno 19] No such device (it may have been disconnected)"
+            )
+        return _StubAoaStream(), _StubAoaStream()
+
+
+class _AccessDeniedAoaDriver(SimulatedAoaHostDriver):
+    """Simulated driver whose open_stream always fails with an access-denied error."""
+
+    def __init__(self, *, accessory_device: AoaDetectedDevice) -> None:
+        super().__init__([accessory_device])
+        self._accessory_device = accessory_device
+        self.open_attempts = 0
+
+    def open_stream(self, device: AoaDetectedDevice):
+        self.open_attempts += 1
+        raise RuntimeError(
+            "AOA stream setup failed at claim_interface: [Errno 13] Access denied (insufficient permissions)"
+        )
+
+
 class TestUsbAoaTransportAdapter(unittest.TestCase):
     def test_pairing_claim_round_trip(self) -> None:
         router = MobileTransportRouter()
@@ -226,6 +270,104 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
             self.assertIsNotNone(adapter.last_probe_error)
         finally:
             adapter.stop()
+
+    def test_open_accessory_stream_retries_after_transient_disconnect(self) -> None:
+        accessory = AoaDetectedDevice(
+            device_id="dev-retry",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = _FlakyOpenAoaDriver(failures_before_success=2, accessory_device=accessory)
+        adapter = UsbAoaTransportAdapter(
+            router=MobileTransportRouter(),
+            driver=driver,
+            open_retry_attempts=3,
+            open_retry_delay_seconds=0.0,
+        )
+
+        read_stream, write_stream = adapter._open_accessory_stream(accessory)
+
+        self.assertEqual(driver.open_attempts, 3)
+        self.assertIsInstance(read_stream, _StubAoaStream)
+        self.assertIsInstance(write_stream, _StubAoaStream)
+
+    def test_open_accessory_stream_raises_after_all_retries_fail(self) -> None:
+        accessory = AoaDetectedDevice(
+            device_id="dev-fail",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = _FlakyOpenAoaDriver(failures_before_success=99, accessory_device=accessory)
+        adapter = UsbAoaTransportAdapter(
+            router=MobileTransportRouter(),
+            driver=driver,
+            open_retry_attempts=3,
+            open_retry_delay_seconds=0.0,
+        )
+
+        with self.assertRaises(RuntimeError):
+            adapter._open_accessory_stream(accessory)
+
+        self.assertEqual(driver.open_attempts, 3)
+
+    def test_open_accessory_stream_succeeds_without_retry(self) -> None:
+        accessory = AoaDetectedDevice(
+            device_id="dev-ok",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = _FlakyOpenAoaDriver(failures_before_success=0, accessory_device=accessory)
+        adapter = UsbAoaTransportAdapter(
+            router=MobileTransportRouter(),
+            driver=driver,
+            open_retry_attempts=3,
+            open_retry_delay_seconds=0.0,
+        )
+
+        read_stream, write_stream = adapter._open_accessory_stream(accessory)
+
+        self.assertEqual(driver.open_attempts, 1)
+        self.assertIsInstance(read_stream, _StubAoaStream)
+        self.assertIsInstance(write_stream, _StubAoaStream)
+
+    def test_open_accessory_stream_fails_fast_on_access_denied(self) -> None:
+        accessory = AoaDetectedDevice(
+            device_id="dev-perm",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = _AccessDeniedAoaDriver(accessory_device=accessory)
+        adapter = UsbAoaTransportAdapter(
+            router=MobileTransportRouter(),
+            driver=driver,
+            open_retry_attempts=3,
+            open_retry_delay_seconds=0.0,
+        )
+
+        with self.assertRaises(RuntimeError) as error_context:
+            adapter._open_accessory_stream(accessory)
+
+        self.assertEqual(driver.open_attempts, 1)
+        self.assertIn("Access denied", str(error_context.exception))
+
+    def test_is_access_denied_error_detects_permission_denials(self) -> None:
+        from dt_image_search.mobile.transport.usb_aoa_adapter import _is_access_denied_error
+
+        self.assertTrue(
+            _is_access_denied_error(
+                RuntimeError("AOA stream setup failed at claim_interface: [Errno 13] Access denied (insufficient permissions)")
+            )
+        )
+        self.assertTrue(_is_access_denied_error(RuntimeError("insufficient permissions")))
+        self.assertFalse(_is_access_denied_error(RuntimeError("No such device (it may have been disconnected)")))
 
 
 if __name__ == "__main__":

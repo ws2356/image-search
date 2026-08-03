@@ -423,12 +423,33 @@ class PyUsbAoaHostDriver:
         if device_handle is None:
             raise RuntimeError("AOA host could not find the selected USB device handle.")
 
+        setup_step = "find_device_handle"
         try:
-            device_handle.set_configuration()
-            configuration = device_handle.get_active_configuration()
+            # The accessory device re-enumerates immediately after negotiation and is
+            # briefly unstable on the bus. Reading the active configuration (a read-only
+            # query) is far more tolerant than issuing a redundant SET_CONFIGURATION
+            # write, which can fail with LIBUSB_ERROR_NO_DEVICE on macOS during the
+            # settling window. Mirror the validated POC: only set the configuration
+            # when it is not already active.
+            setup_step = "get_active_configuration"
+            try:
+                configuration = device_handle.get_active_configuration()
+            except self._usb_error_type:
+                _safe_log(
+                    "debug",
+                    message=(
+                        "PyUsbAoaHostDriver/open_stream: active configuration is unset; "
+                        f"setting configuration device={device.device_id}"
+                    ),
+                )
+                setup_step = "set_configuration"
+                device_handle.set_configuration()
+                configuration = device_handle.get_active_configuration()
+            setup_step = "claim_interface"
             interface = configuration[(0, 0)]
             usb_util.claim_interface(device_handle, interface.bInterfaceNumber)
 
+            setup_step = "find_endpoints"
             endpoint_out = usb_util.find_descriptor(
                 interface,
                 custom_match=lambda endpoint: (
@@ -451,7 +472,7 @@ class PyUsbAoaHostDriver:
                 )
         except self._usb_error_type as exc:
             usb_util.dispose_resources(device_handle)
-            raise RuntimeError(f"AOA stream setup failed: {exc}") from exc
+            raise RuntimeError(f"AOA stream setup failed at {setup_step}: {exc}") from exc
 
         self._active_device = device
         self._active_handle = device_handle
