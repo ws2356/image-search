@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import errno
 import queue
 import threading
 import time
@@ -419,6 +420,12 @@ class PyUsbAoaHostDriver:
         if usb_util is None:
             raise RuntimeError("AOA host driver were not initialized with a USB utility module.")
 
+        # Release any previously-held device handle first. macOS keeps the claimed
+        # interface open for the process, so a second claim without releasing would
+        # fail with LIBUSB_ERROR_ACCESS even though the error reads like a permission
+        # problem. The adapter may retry open_stream without an intermediate stop.
+        self._release_active_handle()
+
         device_handle = self._find_device_handle(device)
         if device_handle is None:
             raise RuntimeError("AOA host could not find the selected USB device handle.")
@@ -601,6 +608,11 @@ class _PyUsbAoaReadStream:
                 )
             )
         except self._usb_error_type as exc:
+            # pyusb surfaces LIBUSB_ERROR_TIMEOUT as USBError(errno=ETIMEDOUT).
+            # Callers treat Python's TimeoutError as a benign "no data yet", so
+            # translate it instead of failing the whole session.
+            if getattr(exc, "errno", None) == errno.ETIMEDOUT:
+                raise TimeoutError("AOA stream read timed out.") from exc
             raise RuntimeError(f"AOA stream read failed: {exc}") from exc
 
     def close(self) -> None:

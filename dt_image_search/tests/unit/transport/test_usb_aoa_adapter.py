@@ -88,6 +88,19 @@ class _AccessDeniedAoaDriver(SimulatedAoaHostDriver):
         )
 
 
+class _TrackingStopDriver(SimulatedAoaHostDriver):
+    """Simulated driver that records every stop()/release call."""
+
+    def __init__(self, *, accessory_device: AoaDetectedDevice) -> None:
+        super().__init__([accessory_device])
+        self._accessory_device = accessory_device
+        self.stop_calls = 0
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+        super().stop()
+
+
 class TestUsbAoaTransportAdapter(unittest.TestCase):
     def test_pairing_claim_round_trip(self) -> None:
         router = MobileTransportRouter()
@@ -199,6 +212,114 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
             self.assertIsInstance(response_body, dict)
             assert isinstance(response_body, dict)
             self.assertEqual(response_body["status"], "accepted")
+        finally:
+            adapter.stop()
+
+    def test_claim_round_trip_with_unpadded_envelope_request_id(self) -> None:
+        # The mobile frames requests with the request_id padded to 36 bytes while
+        # the envelope keeps the unpadded id. The desktop must echo the 36-byte
+        # frame id in the response frame and keep the unpadded id in the envelope.
+        router = MobileTransportRouter()
+
+        def handle_claim(request: MobileTransportRequest) -> MobileTransportResponse:
+            payload = request.payload
+            self.assertEqual(payload.get("sid"), "sid-001")
+            return MobileTransportResponse(
+                status_code=200,
+                payload={
+                    "schema": "dtis.mobile-pairing.v1",
+                    "status": "accepted",
+                },
+            )
+
+        router.register(PAIRING_CLAIM_OPERATION, handle_claim)
+
+        device = AoaDetectedDevice(
+            device_id="sim-device",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = SimulatedAoaHostDriver([device])
+        adapter = UsbAoaTransportAdapter(
+            router=router,
+            driver=driver,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="sid-001",
+                one_time_passcode="123456",
+                suggested_port=45000,
+            )
+        )
+        adapter.start()
+
+        try:
+            challenge_frame = driver.read_frame(timeout=2.0)
+            self.assertIsNotNone(challenge_frame)
+            request_id, _, payload = decode_aoa_frame(challenge_frame)
+            challenge = json.loads(payload.decode("utf-8"))
+            driver.inject_frame(
+                encode_aoa_frame(
+                    request_id,
+                    _build_auth_response(challenge["body"]["rand"], "123456", request_id),
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+            for _ in range(200):
+                if adapter.state.value == "connected":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(adapter.state.value, "connected")
+
+            envelope_request_id = "claim-002"
+            claim_request = {
+                "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                "operation": PAIRING_CLAIM_OPERATION,
+                "request_id": envelope_request_id,
+                "body_schema": "dtis.mobile-pairing.v1",
+                "body": {
+                    "schema": "dtis.mobile-pairing.v1",
+                    "sid": "sid-001",
+                    "opt": "123456",
+                },
+            }
+            claim_payload = json.dumps(
+                claim_request,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            driver.inject_frame(
+                encode_aoa_frame(
+                    envelope_request_id.ljust(36, " "),
+                    claim_payload,
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+
+            response: dict[str, object] | None = None
+            for _ in range(300):
+                response_frame = driver.read_frame(timeout=0.01)
+                if response_frame:
+                    response_frame_request_id, response_flags, response_payload = decode_aoa_frame(
+                        response_frame
+                    )
+                    if response_flags != AOA_FRAME_FLAG_TEXT:
+                        continue
+                    parsed = json.loads(response_payload.decode("utf-8"))
+                    if parsed.get("request_id") == envelope_request_id:
+                        self.assertEqual(len(response_frame_request_id), 36)
+                        response = parsed
+                        break
+                time.sleep(0.01)
+
+            self.assertIsNotNone(response)
+            assert response is not None
+            self.assertEqual(response["status_code"], 200)
+            self.assertEqual(response["request_id"], envelope_request_id)
         finally:
             adapter.stop()
 
@@ -368,6 +489,67 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
         )
         self.assertTrue(_is_access_denied_error(RuntimeError("insufficient permissions")))
         self.assertFalse(_is_access_denied_error(RuntimeError("No such device (it may have been disconnected)")))
+
+    def test_driver_handle_is_released_after_session_ends(self) -> None:
+        router = MobileTransportRouter()
+        device = AoaDetectedDevice(
+            device_id="sim-device",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = _TrackingStopDriver(accessory_device=device)
+        adapter = UsbAoaTransportAdapter(
+            router=router,
+            driver=driver,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+            auth_challenge_timeout_seconds=0.2,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="sid-001",
+                one_time_passcode="123456",
+                suggested_port=45000,
+            )
+        )
+        adapter.start()
+
+        try:
+            # Answer the auth challenge with a wrong proof so the session fails and
+            # the loop's finally block must release the driver handle.
+            challenge_frame = driver.read_frame(timeout=2.0)
+            self.assertIsNotNone(challenge_frame)
+            request_id, _, payload = decode_aoa_frame(challenge_frame)
+            challenge = json.loads(payload.decode("utf-8"))
+            bad_response = {
+                "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                "request_id": request_id,
+                "status_code": 200,
+                "body": {
+                    "schema": "dtis.mobile-pairing.v1",
+                    "status": "accepted",
+                    "proof": hashlib.sha256(b"wrong").hexdigest(),
+                },
+            }
+            driver.inject_frame(
+                encode_aoa_frame(
+                    request_id,
+                    json.dumps(bad_response, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+
+            stop_seen = False
+            for _ in range(200):
+                if driver.stop_calls > 0:
+                    stop_seen = True
+                    break
+                time.sleep(0.02)
+            self.assertTrue(stop_seen, "driver.stop() was not called after the session ended")
+        finally:
+            adapter.stop()
 
 
 if __name__ == "__main__":

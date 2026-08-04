@@ -478,7 +478,14 @@ class AoaClient internal constructor(
         }
         val accessory = accessories.firstOrNull { isMatchingAccessory(it) }
         if (accessory == null) {
-            Log.i(LOG_TAG, "probeAttachedAccessories: no matching accessory among ${accessories.size} attached.")
+            val identities = accessories.joinToString { acc ->
+                "${acc.manufacturer}/${acc.model}/${acc.version}"
+            }
+            Log.i(
+                LOG_TAG,
+                "probeAttachedAccessories: no matching accessory among " +
+                    "${accessories.size} attached (identities=$identities)."
+            )
             return
         }
         Log.i(LOG_TAG, "probeAttachedAccessories: matching accessory ${accessory.manufacturer}/${accessory.model}/${accessory.version}; requesting permission.")
@@ -740,9 +747,18 @@ class AoaClient internal constructor(
     }
 
     private fun isMatchingAccessory(accessory: UsbAccessory): Boolean {
-        return accessory.manufacturer == AOA_MANUFACTURER
+        // The AuSearch desktop sets the accessory identity strings during AOA
+        // negotiation, but on macOS those string descriptors are not always
+        // delivered reliably: the phone can sit in accessory mode with the
+        // framework defaults (manufacturer=model="Android") instead. Accept the
+        // default-string accessory too — the auth challenge (SHA256(opt + rand))
+        // still authenticates the host before any data is exchanged.
+        val isAuSearchAccessory = accessory.manufacturer == AOA_MANUFACTURER
             && accessory.model == AOA_MODEL
             && accessory.version == AOA_VERSION
+        val hasFrameworkDefaultStrings = accessory.manufacturer == "Android"
+            && accessory.model == "Android"
+        return isAuSearchAccessory || hasFrameworkDefaultStrings
     }
 
     private fun isSameAccessory(first: UsbAccessory?, second: UsbAccessory?): Boolean {

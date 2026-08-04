@@ -3,6 +3,7 @@ jest.mock('react-native-quick-crypto', () => {
   const { webcrypto } = require('node:crypto');
   const crypto = require('node:crypto');
   return {
+    __esModule: true,
     default: {
       Buffer,
       randomBytes: crypto.randomBytes,

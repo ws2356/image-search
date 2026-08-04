@@ -334,12 +334,18 @@ All of these cause the adaptive strategy to fall back to LAN. `connectionUnavail
 
 ### macOS USB permission requirement
 
-macOS gates USB device access behind a privacy (TCC) permission. Without it the accessory interface open fails with `LIBUSB_ERROR_ACCESS` (`[Errno 13] Access denied (insufficient permissions)`).
+macOS gates USB device access behind a privacy (TCC) permission; when it is missing, `IOUSBHostInterfaceOpen` returns `kIOReturnNotPermitted`, which libusb reports as `LIBUSB_ERROR_ACCESS` (`[Errno 13] Access denied (insufficient permissions)`).
 
 - When running from source, grant USB access to the terminal/IDE that launches `python dt_image_search/main.py`.
 - When running the packaged `.app`, grant USB access to `AuSearch` (and add `com.apple.security.device.usb` if the app is ever sandboxed).
 - Grant under **System Settings → Privacy & Security → USB** (or approve the one-time prompt on first USB access).
-- The desktop `UsbAoaTransportAdapter` detects this error and logs a warning with this remediation instead of retrying, since the denial is not transient.
+
+### macOS misleading `LIBUSB_ERROR_ACCESS` on re-claim
+
+**Do not assume `LIBUSB_ERROR_ACCESS` means a TCC permission denial.** libusb on macOS also maps `kIOReturnExclusiveAccess` (the interface is already held by this same process) to `LIBUSB_ERROR_ACCESS`. The probe loop used to leak the claimed interface: after a session ended it closed the streams but never released the interface or disposed the device handle, so the next probe pass failed at `claim_interface` with this misleading "Access denied" error. Fixes:
+
+- `PyUsbAoaHostDriver.open_stream` releases any previously-held device handle before opening a new one.
+- `UsbAoaTransportAdapter._run_transport_loop` calls `driver.stop()` in the session teardown `finally` to release the interface after every session.
 
 ## Risks
 

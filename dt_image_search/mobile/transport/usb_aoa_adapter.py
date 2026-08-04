@@ -282,6 +282,16 @@ class UsbAoaTransportAdapter:
                 )
             finally:
                 self._close_active_stream_locked()
+                try:
+                    self._driver.stop()
+                except Exception as release_exc:  # noqa: BLE001
+                    self._safe_log(
+                        "debug",
+                        message=(
+                            "UsbAoaTransportAdapter/_run_transport_loop: AOA driver "
+                            f"release failed for device={device.device_id}: {release_exc}"
+                        ),
+                    )
                 self._set_ready_state()
 
             self._wait_for_retry_interval()
@@ -569,10 +579,10 @@ class UsbAoaTransportAdapter:
                 raise RuntimeError("AOA stream closed by mobile runtime.")
 
             frames = decoder.feed(chunk)
-            for request_id, flags, payload in frames:
+            for frame_request_id, flags, payload in frames:
                 if flags == AOA_FRAME_FLAG_BINARY:
                     self._append_aoa_binary_chunk(
-                        request_id=request_id,
+                        request_id=frame_request_id,
                         payload=payload,
                     )
                     continue
@@ -589,13 +599,13 @@ class UsbAoaTransportAdapter:
                     )
                     continue
 
-                response_request_id, response = self._dispatch_envelope_request(
+                envelope_request_id, response = self._dispatch_envelope_request(
                     raw_message,
                     remote_address=remote_address,
                 )
                 if response is None:
                     continue
-                if response_request_id is None:
+                if envelope_request_id is None:
                     self._safe_log(
                         "warning",
                         message=(
@@ -609,15 +619,19 @@ class UsbAoaTransportAdapter:
                     "debug",
                     message=(
                         "UsbAoaTransportAdapter/_session_loop: dispatched AOA request "
-                        f"request_id={response_request_id} "
+                        f"request_id={envelope_request_id} "
                         f"status_code={response.status_code}"
                     ),
                 )
                 self._send_frame(
                     write_stream=write_stream,
-                    request_id=response_request_id,
+                    # The mobile frames requests with the request_id padded to 36
+                    # bytes while the envelope keeps the unpadded id used for
+                    # correlation. Echo the 36-byte frame id so encode_aoa_frame
+                    # accepts the response frame; the envelope keeps the unpadded id.
+                    request_id=frame_request_id,
                     payload=self._encode_response_envelope(
-                        request_id=response_request_id,
+                        request_id=envelope_request_id,
                         response=response,
                     ).encode("utf-8"),
                 )

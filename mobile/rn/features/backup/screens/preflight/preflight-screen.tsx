@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Alert } from 'react-native';
+import { ActivityIndicator, Alert, AppState } from 'react-native';
 
 import { usePreflightScreenController, type PreflightPromptPhase } from '@/features/backup/hooks/use-preflight-screen-controller';
 import { Pressable, ScrollView, Text, View } from '@/src/tw';
@@ -7,18 +7,10 @@ import { Pressable, ScrollView, Text, View } from '@/src/tw';
 export function PreflightScreen() {
   const controller = usePreflightScreenController();
   const prompted_phase_ref = useRef<PreflightPromptPhase | null>(null);
+  const prompt_delivered_ref = useRef(false);
 
-  useEffect(() => {
-    if (controller.phase === 'loading' || controller.phase === 'failed') {
-      prompted_phase_ref.current = null;
-      return;
-    }
-    if (prompted_phase_ref.current === controller.phase) {
-      return;
-    }
-    prompted_phase_ref.current = controller.phase;
-
-    if (controller.phase === 'media') {
+  const show_prompt_for_phase = (phase: PreflightPromptPhase) => {
+    if (phase === 'media') {
       Alert.alert(
         'Full media access recommended',
         'Do you want to expand access permission to back up more or all media files in your photo library?',
@@ -41,7 +33,7 @@ export function PreflightScreen() {
       return;
     }
 
-    if (controller.phase === 'low-battery') {
+    if (phase === 'low-battery') {
       Alert.alert(
         'Low battery detected',
         'Long transfers are more likely to pause when battery is low. Connect the device to a charger or desktop if you can.',
@@ -84,6 +76,44 @@ export function PreflightScreen() {
         },
       ]
     );
+  };
+
+  useEffect(() => {
+    if (controller.phase === 'loading' || controller.phase === 'failed') {
+      prompted_phase_ref.current = null;
+      prompt_delivered_ref.current = false;
+      return;
+    }
+    if (prompted_phase_ref.current === controller.phase) {
+      return;
+    }
+    prompted_phase_ref.current = controller.phase;
+    prompt_delivered_ref.current = false;
+    // Only present the dialog while the app is in the foreground. React Native's
+    // Android DialogModule drops alerts queued while the app is paused (e.g. behind
+    // the system USB-accessory permission dialog), which would leave preflight stuck.
+    if (AppState.currentState === 'active') {
+      prompt_delivered_ref.current = true;
+      show_prompt_for_phase(controller.phase);
+    }
+  }, [controller]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next_state) => {
+      if (next_state !== 'active') {
+        return;
+      }
+      const pending_phase = prompted_phase_ref.current;
+      if (!pending_phase || pending_phase === 'loading' || pending_phase === 'failed') {
+        return;
+      }
+      if (prompt_delivered_ref.current) {
+        return;
+      }
+      prompt_delivered_ref.current = true;
+      show_prompt_for_phase(pending_phase);
+    });
+    return () => subscription.remove();
   }, [controller]);
 
   return (

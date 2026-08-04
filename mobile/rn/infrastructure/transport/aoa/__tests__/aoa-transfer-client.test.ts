@@ -68,7 +68,7 @@ test('AoaTransferClient streams asset chunks through the bridge', async () => {
     'start'
   );
   expect(started.status).toBe('accepted');
-  expect(started.request_id).toBe('req-1');
+  expect(started.request_id).toBe('req-1'.padEnd(36, ' '));
 
   await client.asset({} as never, 'req-1', 'chunk', new Uint8Array([1, 2, 3]));
   expect(bridge.sentRequests.length).toBe(0);
@@ -77,8 +77,68 @@ test('AoaTransferClient streams asset chunks through the bridge', async () => {
   expect(completed.status).toBe('stored');
 });
 
+test('AoaTransferClient normalizes long asset request ids to a 36-byte stream id', async () => {
+  class RecordingAoaBridge extends FakeAoaBridge {
+    binaryChunkRequestIds: string[] = [];
+    finishRequestIds: string[] = [];
+
+    async sendBinaryChunk(request_id?: string): Promise<void> {
+      this.binaryChunkRequestIds.push(request_id ?? '');
+    }
+
+    async finishStreamingRequest(request_id: string): Promise<string> {
+      this.finishRequestIds.push(request_id);
+      return JSON.stringify({
+        schema: 'dtis.mobile-transport.v1',
+        request_id,
+        status_code: 200,
+        body: { status: 'stored' },
+      });
+    }
+  }
+
+  const bridge = new RecordingAoaBridge();
+  const client = new AoaTransferClient(bridge, context);
+  const long_asset_id = 'content://media/external/images/media/1120';
+
+  const started = await client.asset(
+    {
+      schema: MOBILE_TRANSFER_SCHEMA,
+      session_id: 's1',
+      device_uuid: 'd1',
+      trust_proof: 'proof',
+      asset_id: long_asset_id,
+      filename: 'photo.jpg',
+      file_size: 3,
+    },
+    long_asset_id,
+    'start'
+  );
+  expect(started.status).toBe('accepted');
+  expect(started.request_id).toHaveLength(36);
+
+  await client.asset({} as never, long_asset_id, 'chunk', new Uint8Array([1, 2, 3]));
+  await client.asset({} as never, long_asset_id, 'complete');
+
+  expect(bridge.binaryChunkRequestIds).toEqual([started.request_id]);
+  expect(bridge.finishRequestIds).toEqual([started.request_id]);
+});
+
 test('AoaTransferClient rejects a chunk without content', async () => {
   const bridge = new FakeAoaBridge();
   const client = new AoaTransferClient(bridge, context);
   await expect(client.asset({} as never, 'req-1', 'chunk')).rejects.toThrow('requires content');
+});
+
+test('AoaTransferClient throws an abort error when the signal is aborted without throwIfAborted', async () => {
+  const bridge = new FakeAoaBridge();
+  const client = new AoaTransferClient(bridge, context);
+  const aborted_signal = { aborted: true } as AbortSignal;
+  await expect(
+    client.start(
+      { session_id: 's1', device_uuid: 'd1', trust_proof: 'proof', total_assets: 5 },
+      aborted_signal
+    )
+  ).rejects.toThrow('Transfer stopped by user.');
+  expect(bridge.sentRequests.length).toBe(0);
 });

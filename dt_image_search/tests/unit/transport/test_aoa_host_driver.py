@@ -8,6 +8,7 @@ Date: 2026-08-01
 
 from __future__ import annotations
 
+import errno
 import time
 import unittest
 from unittest import mock
@@ -377,6 +378,41 @@ class TestPyUsbAoaHostDriverStreams(unittest.TestCase):
             driver.open_stream(_ACCESSORY_DEVICE)
         handle.set_configuration.assert_called_once()
 
+    def test_open_stream_releases_previous_handle_before_reopen(self) -> None:
+        driver = PyUsbAoaHostDriver()
+        first_handle = mock.Mock()
+        first_handle.serial_number = "serial-001"
+        first_handle.get_active_configuration.return_value = _FakeConfiguration(
+            [_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        )
+        second_handle = mock.Mock()
+        second_handle.serial_number = "serial-001"
+        second_handle.get_active_configuration.return_value = _FakeConfiguration(
+            [_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        )
+        handles = iter([first_handle, second_handle])
+        with mock.patch.object(
+            usb_core, "find", side_effect=lambda **kwargs: next(handles)
+        ), mock.patch.object(
+            usb_util,
+            "find_descriptor",
+            side_effect=[
+                _FakeEndpoint(0x01),
+                _FakeEndpoint(0x81),
+                _FakeEndpoint(0x01),
+                _FakeEndpoint(0x81),
+            ],
+        ), mock.patch.object(usb_util, "claim_interface"), mock.patch.object(
+            usb_util, "release_interface"
+        ) as release, mock.patch.object(
+            usb_util, "dispose_resources"
+        ) as dispose:
+            driver.open_stream(_ACCESSORY_DEVICE)
+            driver.open_stream(_ACCESSORY_DEVICE)
+
+        release.assert_called_once_with(first_handle, 0)
+        dispose.assert_called_once_with(first_handle)
+
     def test_stop_releases_active_handle(self) -> None:
         driver = PyUsbAoaHostDriver()
         handle = mock.Mock()
@@ -394,6 +430,40 @@ class TestPyUsbAoaHostDriverStreams(unittest.TestCase):
         release.assert_called_once()
         dispose.assert_called_once()
         self.assertEqual(driver.state, AoaHostState.STOPPED)
+
+    def test_read_stream_translates_usb_timeout_to_timeout_error(self) -> None:
+        driver = PyUsbAoaHostDriver()
+        handle = mock.Mock()
+        handle.serial_number = "serial-001"
+        handle.get_active_configuration.return_value = _FakeConfiguration(
+            [_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        )
+        handle.read.side_effect = usb_core.USBError(
+            "Operation timed out", error_code=-7, errno=errno.ETIMEDOUT
+        )
+        with mock.patch.object(usb_core, "find", return_value=handle), mock.patch.object(
+            usb_util, "find_descriptor", side_effect=[_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        ), mock.patch.object(usb_util, "claim_interface"):
+            read_stream, _ = driver.open_stream(_ACCESSORY_DEVICE)
+        with self.assertRaises(TimeoutError):
+            read_stream.read(timeout=0.5)
+
+    def test_read_stream_wraps_non_timeout_usb_error(self) -> None:
+        driver = PyUsbAoaHostDriver()
+        handle = mock.Mock()
+        handle.serial_number = "serial-001"
+        handle.get_active_configuration.return_value = _FakeConfiguration(
+            [_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        )
+        handle.read.side_effect = usb_core.USBError(
+            "No such device", error_code=-4, errno=errno.ENODEV
+        )
+        with mock.patch.object(usb_core, "find", return_value=handle), mock.patch.object(
+            usb_util, "find_descriptor", side_effect=[_FakeEndpoint(0x01), _FakeEndpoint(0x81)]
+        ), mock.patch.object(usb_util, "claim_interface"):
+            read_stream, _ = driver.open_stream(_ACCESSORY_DEVICE)
+        with self.assertRaises(RuntimeError):
+            read_stream.read(timeout=0.5)
 
 
 if __name__ == "__main__":

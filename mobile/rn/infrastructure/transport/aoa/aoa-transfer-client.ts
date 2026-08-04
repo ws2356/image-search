@@ -1,3 +1,4 @@
+import QuickCrypto from 'react-native-quick-crypto';
 import {
   MOBILE_TRANSFER_SCHEMA,
   type TransferAssetExistenceRequest,
@@ -13,8 +14,24 @@ import type { PayloadCipher } from '@/infrastructure/crypto/payload-cipher';
 import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
 import type { AoaBridge } from '@/infrastructure/transport/aoa/aoa-bridge';
+import { create_transfer_abort_error } from '@/features/backup/transfer/transfer-abort';
 
 const MOBILE_TRANSPORT_SCHEMA = 'dtis.mobile-transport.v1';
+
+const AOA_REQUEST_ID_LENGTH = 36;
+
+/**
+ * AOA frames carry a fixed 36-byte request id. Asset streaming uses the asset
+ * content URI as its request id, which can exceed 36 bytes and would break the
+ * frame codec. Derive a deterministic 36-byte id so the start envelope, binary
+ * chunks, and completion envelope all share one id that the desktop can correlate.
+ */
+function to_aoa_stream_request_id(request_id: string): string {
+  if (request_id.length > AOA_REQUEST_ID_LENGTH) {
+    return QuickCrypto.createHash('sha1').update(request_id).digest('hex').slice(0, AOA_REQUEST_ID_LENGTH);
+  }
+  return request_id.padEnd(AOA_REQUEST_ID_LENGTH, ' ');
+}
 
 export interface AoaTransferClientDeps {
   payload_cipher: PayloadCipher;
@@ -37,18 +54,28 @@ export class AoaTransferClient implements TransferClient {
     };
   }
 
+  /**
+   * AbortSignal.throwIfAborted is not available in the Hermes runtime (it is
+   * undefined), so relying on it would throw "undefined is not a function".
+   * Check the always-present `aborted` flag instead.
+   */
+  private throw_if_transfer_aborted(abort_signal?: AbortSignal): void {
+    if (abort_signal?.aborted) {
+      throw create_transfer_abort_error();
+    }
+  }
+
   async start(request: Omit<TransferSessionRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse> {
-    abort_signal?.throwIfAborted();
+    this.throw_if_transfer_aborted(abort_signal);
     const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
     const response = await this.send_request('transfer.start', body);
     return this.parse_response(response);
   }
-
   async existence(
     request: Omit<TransferAssetExistenceRequest, 'schema'>,
     abort_signal?: AbortSignal
   ): Promise<TransferResponse> {
-    abort_signal?.throwIfAborted();
+    this.throw_if_transfer_aborted(abort_signal);
     const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
     const response = await this.send_request('transfer.existence', body);
     return this.parse_response(response);
@@ -61,12 +88,13 @@ export class AoaTransferClient implements TransferClient {
     content?: Blob | Uint8Array,
     abort_signal?: AbortSignal
   ): Promise<TransferResponse> {
-    abort_signal?.throwIfAborted();
+    this.throw_if_transfer_aborted(abort_signal);
+    const stream_request_id = to_aoa_stream_request_id(request_id);
     if (stream_state === 'start') {
       const encrypted = await this.deps.payload_cipher.encrypt_json_payload(metadata);
-      const body = { ...encrypted, stream_state, request_id, chunk_size: 256 * 1024 };
+      const body = { ...encrypted, stream_state, request_id: stream_request_id, chunk_size: 256 * 1024 };
       const streaming_request_id = await this.bridge.beginStreamingRequest(
-        JSON.stringify(this.envelope('transfer.asset', body, request_id))
+        JSON.stringify(this.envelope('transfer.asset', body, stream_request_id))
       );
       return {
         schema: MOBILE_TRANSFER_SCHEMA,
@@ -78,10 +106,10 @@ export class AoaTransferClient implements TransferClient {
     if (stream_state === 'chunk') {
       if (!content) throw new Error('AOA asset chunk requires content');
       const encrypted = await this.deps.payload_cipher.encrypt_binary_chunk(content);
-      await this.bridge.sendBinaryChunk(request_id, encrypted);
-      return { schema: MOBILE_TRANSFER_SCHEMA, status: 'accepted', message: 'chunk accepted', request_id };
+      await this.bridge.sendBinaryChunk(stream_request_id, encrypted);
+      return { schema: MOBILE_TRANSFER_SCHEMA, status: 'accepted', message: 'chunk accepted', request_id: stream_request_id };
     }
-    const response = await this.bridge.finishStreamingRequest(request_id);
+    const response = await this.bridge.finishStreamingRequest(stream_request_id);
     return this.parse_response(response);
   }
 
@@ -89,7 +117,7 @@ export class AoaTransferClient implements TransferClient {
     request: Omit<TransferCompleteRequest, 'schema'>,
     abort_signal?: AbortSignal
   ): Promise<TransferResponse> {
-    abort_signal?.throwIfAborted();
+    this.throw_if_transfer_aborted(abort_signal);
     const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
     const response = await this.send_request('transfer.complete', body);
     return this.parse_response(response);
