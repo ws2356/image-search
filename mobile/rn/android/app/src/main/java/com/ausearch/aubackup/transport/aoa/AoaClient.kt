@@ -318,6 +318,8 @@ class AoaClient internal constructor(
         val completionEnvelope = JSONObject().apply {
             put("request_id", requestId)
             put("schema", AoaAuthResponder.MOBILE_TRANSPORT_ENVELOPE_SCHEMA)
+            put("operation", TRANSFER_ASSET_OPERATION)
+            put("body_schema", MOBILE_TRANSFER_SCHEMA)
             put("body", JSONObject().apply {
                 put("stream_state", "complete")
             })
@@ -775,6 +777,9 @@ class AoaClient internal constructor(
         private const val READ_BUFFER_SIZE = 16 * 1024
         private const val RESPONSE_TIMEOUT_MS = 10_000L
         private const val ACTION_USB_PERMISSION = "com.ausearch.aubackup.USB_ACCESSORY_PERMISSION"
+
+        private const val TRANSFER_ASSET_OPERATION = "transfer.asset"
+        private const val MOBILE_TRANSFER_SCHEMA = "dtis.mobile-transfer.v1"
 
         /**
          * Identity of the accessory produced by the AuBackup PC pairing flow.

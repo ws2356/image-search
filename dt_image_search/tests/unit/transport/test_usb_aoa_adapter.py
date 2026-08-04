@@ -490,6 +490,12 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
         self.assertTrue(_is_access_denied_error(RuntimeError("insufficient permissions")))
         self.assertFalse(_is_access_denied_error(RuntimeError("No such device (it may have been disconnected)")))
 
+    def test_is_mobile_not_ready_error_detects_auth_timeout(self) -> None:
+        from dt_image_search.mobile.transport.usb_aoa_adapter import _is_mobile_not_ready_error
+
+        self.assertTrue(_is_mobile_not_ready_error(RuntimeError("Desktop AOA auth challenge timed out.")))
+        self.assertFalse(_is_mobile_not_ready_error(RuntimeError("AOA stream write failed: [Errno 60] Operation timed out")))
+
     def test_driver_handle_is_released_after_session_ends(self) -> None:
         router = MobileTransportRouter()
         device = AoaDetectedDevice(

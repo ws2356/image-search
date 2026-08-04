@@ -138,7 +138,7 @@ export function useTransferScreenController(): TransferScreenController {
         return;
       }
 
-      await stopTransfer({ abort_controller: transfer_abort_controller_ref.current });
+      await stopTransfer({ abort_controller: transfer_abort_controller_ref.current }, { transport_strategy });
       set_running(false);
       set_last_error(null);
       await returnHome();

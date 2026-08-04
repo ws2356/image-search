@@ -5,6 +5,7 @@ import { TransferService } from '@/features/backup/services/transfer-service';
 import { persist_home_summary } from '@/features/backup/services/pairing-persistence-service';
 import { build_home_summary_from_session } from '@/features/backup/session/home-summary';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
+import type { TransportStrategy } from '@/infrastructure/transport/transport-strategy';
 import {
   end_transfer_runtime_session,
   get_default_transfer_runtime_wiring,
@@ -12,7 +13,8 @@ import {
 } from '@/infrastructure/platform/transfer-runtime-wiring';
 
 export interface StopTransferDeps {
-  transfer_runtime_wiring: TransferRuntimeWiring;
+  transfer_runtime_wiring?: TransferRuntimeWiring;
+  transport_strategy?: TransportStrategy;
 }
 
 export interface StopTransferOptions {
@@ -21,10 +23,9 @@ export interface StopTransferOptions {
 
 export async function stopTransfer(
   options: StopTransferOptions = {},
-  deps: StopTransferDeps = {
-    transfer_runtime_wiring: get_default_transfer_runtime_wiring(),
-  }
+  deps: StopTransferDeps = {}
 ): Promise<void> {
+  const transfer_runtime_wiring = deps.transfer_runtime_wiring ?? get_default_transfer_runtime_wiring();
   const session = useBackupSessionStore.getState().session;
   const session_id = session.pairingSession?.sessionId;
   const endpoint_base_url = session.pairingSession?.endpointBaseUrl;
@@ -38,13 +39,18 @@ export async function stopTransfer(
   let notify_error: Error | null = null;
   if (session_id && endpoint_base_url && trust_key_b64 && device_uuid) {
     try {
-      const transfer_service = new TransferService({
+      const transfer_context = {
         endpoint_base_url,
         session_id,
         device_uuid,
         trust_key_b64,
         encryption_enabled,
-      });
+      };
+      const transfer_client = deps.transport_strategy?.create_transfer_client(transfer_context);
+      const transfer_service = new TransferService(
+        transfer_context,
+        transfer_client ? { transfer_client } : undefined
+      );
       await transfer_service.complete(
         transferred_count,
         failed_count,
@@ -61,7 +67,7 @@ export async function stopTransfer(
   });
   useBackupSessionStore.getState().setHomeSummary(home_summary);
   await persist_home_summary(home_summary);
-  await end_transfer_runtime_session(deps.transfer_runtime_wiring);
+  await end_transfer_runtime_session(transfer_runtime_wiring);
   if (notify_error) {
     throw notify_error;
   }

@@ -119,6 +119,7 @@ export class AoaTransferClient implements TransferClient {
   ): Promise<TransferResponse> {
     this.throw_if_transfer_aborted(abort_signal);
     const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
+    console.log('[AoaTransferClient] complete via AOA bridge');
     const response = await this.send_request('transfer.complete', body);
     return this.parse_response(response);
   }

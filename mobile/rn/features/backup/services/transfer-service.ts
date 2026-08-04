@@ -144,6 +144,7 @@ export class TransferService {
       failed_count,
       interruption_reason,
     };
+    console.log(`[TransferService] complete client=${(this.deps.transfer_client as { constructor?: { name?: string } }).constructor?.name}`);
     return this.deps.transfer_client.complete(request, abort_signal);
   }
 

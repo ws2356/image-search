@@ -82,7 +82,7 @@ export async function run_android_headless_transfer_task(
     await publish_android_transfer_state({ status: 'completed' });
   } catch (error) {
     if (abort_controller.signal.aborted || is_transfer_abort_error(error) || is_android_transfer_stop_requested()) {
-      await stopTransfer({ abort_controller });
+      await stopTransfer({ abort_controller }, { transport_strategy });
       await publish_android_transfer_state({ status: 'stopped' });
       return;
     }

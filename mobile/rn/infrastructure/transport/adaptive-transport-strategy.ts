@@ -46,12 +46,17 @@ export class AdaptiveTransportStrategy implements TransportStrategy {
   create_transfer_client(context: TransferServiceContext): TransferClient {
     if (this.can_try_aoa()) {
       try {
-        return this.aoa_strategy.create_transfer_client(context);
-      } catch {
+        const client = this.aoa_strategy.create_transfer_client(context);
+        console.log('[AdaptiveTransport] create_transfer_client -> AOA');
+        return client;
+      } catch (error) {
         this.mark_aoa_unavailable();
+        console.log(`[AdaptiveTransport] AOA client creation failed, falling back to LAN: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-    return this.lan_strategy.create_transfer_client(context);
+    const client = this.lan_strategy.create_transfer_client(context);
+    console.log('[AdaptiveTransport] create_transfer_client -> LAN');
+    return client;
   }
 
   private async execute_with_fallback<T>(

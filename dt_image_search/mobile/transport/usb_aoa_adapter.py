@@ -90,6 +90,17 @@ def _is_access_denied_error(exc: BaseException) -> bool:
     )
 
 
+def _is_mobile_not_ready_error(exc: BaseException) -> bool:
+    """Detect AOA auth failures caused by the mobile not being ready yet.
+
+    Before the mobile scans the QR and prepares its AOA client, the desktop's
+    auth challenge goes unanswered and times out. This is the normal pre-pairing
+    state and should not be logged as a session failure.
+    """
+    error_message = str(exc).lower()
+    return "auth challenge timed out" in error_message
+
+
 class UsbAoaTransportAdapter:
     """Desktop-side AOA transport adapter.
 
@@ -273,13 +284,26 @@ class UsbAoaTransportAdapter:
                 AoaFrameError,
             ) as exc:
                 self._set_probe_error(str(exc))
-                self._safe_log(
-                    "debug",
-                    message=(
-                        "UsbAoaTransportAdapter/_run_transport_loop: AOA session failed "
-                        f"device={device.device_id}: {exc}"
-                    ),
-                )
+                if _is_mobile_not_ready_error(exc):
+                    # The mobile has not prepared its AOA client yet (e.g. the user
+                    # has not scanned the QR). This is the normal pre-pairing state;
+                    # keep probing quietly instead of logging a session failure.
+                    self._safe_log(
+                        "debug",
+                        message=(
+                            "UsbAoaTransportAdapter/_run_transport_loop: "
+                            f"device={device.device_id} not ready for AOA auth yet; "
+                            f"retrying. ({exc})"
+                        ),
+                    )
+                else:
+                    self._safe_log(
+                        "warning",
+                        message=(
+                            "UsbAoaTransportAdapter/_run_transport_loop: AOA session failed "
+                            f"device={device.device_id}: {exc}"
+                        ),
+                    )
             finally:
                 self._close_active_stream_locked()
                 try:
@@ -654,8 +678,20 @@ class UsbAoaTransportAdapter:
     ) -> tuple[str | None, MobileTransportResponse | None]:
         parsed_envelope = self._parse_envelope(raw_message)
         if isinstance(parsed_envelope, MobileTransportResponse):
+            self._safe_log(
+                "warning",
+                message=(
+                    f"UsbAoaTransportAdapter/_dispatch_envelope_request sth failed: {raw_message}"
+                ),
+            )
             return self._extract_request_id(raw_message), parsed_envelope
 
+        self._safe_log(
+            "debug",
+            message=(
+                f"UsbAoaTransportAdapter/_dispatch_envelope_request parsed: {parsed_envelope}"
+            ),
+        )
         operation = parsed_envelope["operation"]
         request_id = parsed_envelope.get("request_id")
         if not isinstance(request_id, str) or not request_id.strip():
@@ -804,7 +840,19 @@ class UsbAoaTransportAdapter:
             )
             active_request_id = self._asset_upload_stream.active_request_id
         if append_error is None:
+            self._safe_log(
+                "debug",
+                message=(
+                    f"UsbAoaTransportAdapter/_append_aoa_binary_chunk: {len(frame_payload)} bytes, request_id={request_id}"
+                ),
+            )
             return
+        self._safe_log(
+            "warning",
+            message=(
+                f"UsbAoaTransportAdapter/_append_aoa_binary_chunk: failed to append {len(frame_payload)} bytes to request_id={request_id}: {append_error}"
+            ),
+        )
         if not frame_payload:
             return
         if len(frame_payload) > TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES:
