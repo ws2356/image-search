@@ -18,6 +18,7 @@ export interface PairingSessionSummary {
   trustKeyB64: string | null;
   strictSecurityEnabled: boolean;
   encryptionEnabled: boolean;
+  transport?: 'lan' | 'usb';
 }
 
 export interface TrustedDesktopSummary {

@@ -83,6 +83,7 @@ export function usePairingScreenController(): PairingScreenController {
     let has_finished = false;
     let poll_timer: ReturnType<typeof setInterval> | null = null;
     let mismatch_started_at_ms: number | null = null;
+    let adaptive_strategy: AdaptiveTransportStrategy | null = null;
 
     const finish = () => {
       has_finished = true;
@@ -118,7 +119,8 @@ export function usePairingScreenController(): PairingScreenController {
       endpoint_base_url: string,
       fallback_session_id: string,
       trust_key_b64: string,
-      strict_security_enabled: boolean
+      strict_security_enabled: boolean,
+      transport: 'lan' | 'usb'
     ) => {
       if (cancelled || has_finished) {
         return;
@@ -134,6 +136,7 @@ export function usePairingScreenController(): PairingScreenController {
           trustKeyB64: trust_key_b64,
           strictSecurityEnabled: strict_security_enabled,
           encryptionEnabled: false,
+          transport,
         },
       });
       if (!cancelled) {
@@ -184,12 +187,13 @@ export function usePairingScreenController(): PairingScreenController {
         return;
       }
 
+      adaptive_strategy = new AdaptiveTransportStrategy(
+        createAoaTransportStrategyForQr(aoa_bridge, payload),
+        new LanTransportStrategy(endpoint_base_url),
+        () => aoa_bridge.isConnected()
+      );
       const pairing_service = new PairingService({
-        transport_strategy: new AdaptiveTransportStrategy(
-          createAoaTransportStrategyForQr(aoa_bridge, payload),
-          new LanTransportStrategy(endpoint_base_url),
-          () => aoa_bridge.isConnected()
-        ),
+        transport_strategy: adaptive_strategy,
       });
       const session_id = payload.sessionId;
       const claim_platform: LocalDeviceIdentitySummary['platform'] = 'android';
@@ -236,7 +240,8 @@ export function usePairingScreenController(): PairingScreenController {
             endpoint_base_url,
             session_id,
             resolved_trust_key_b64,
-            payload.strictSecurityEnabled
+            payload.strictSecurityEnabled,
+            adaptive_strategy?.last_working_transport ?? 'lan'
           );
           return true;
         }
