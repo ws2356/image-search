@@ -13,7 +13,7 @@ import typing
 import numpy as np
 import faiss
 import hf_xet
-from dt_image_search.model.dts_db import create_db_conn, get_folder_by_id, get_files_by_clip_indices, get_pending_files_for_folder, count_files_in_folder, update_file, mark_files_deleted, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
+from dt_image_search.model.dts_db import create_db_conn, get_folder_by_id, get_files_by_clip_indices, get_pending_files_for_folder, count_files_in_folder, update_file, mark_files_deleted, mark_files_skipped, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
 from dt_image_search.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
@@ -269,7 +269,7 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
     
     for i, future in enumerate(futures):
         try:
-            batch_tensor, batch_valid_files, deleted_files, _ = future.result(timeout=600)
+            batch_tensor, batch_valid_files, deleted_files, invalid_files = future.result(timeout=600)
             if batch_tensor is not None:
                 torch.set_grad_enabled(False)
                 with torch.inference_mode():
@@ -288,6 +288,9 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
             
             with create_db_conn() as conn:
                 mark_files_deleted(conn, [file.id for file in deleted_files])
+                # Files that could not be decoded must leave the pending set too;
+                # otherwise the build_index loop re-processes them forever.
+                mark_files_skipped(conn, [file.id for file in invalid_files])
                 
         except Exception as e:
             log("error", "embedding", message=f"Error processing batch {i} {type(e).__name__}: {e}")
@@ -296,8 +299,12 @@ def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: 
 
     if not all_features:
         if all(not is_image_file(file.path) for file in image_files):
+            with create_db_conn() as conn:
+                mark_files_skipped(conn, [file.id for file in image_files])
             return True
         log("warning", "embedding", message="No valid images to add to index")
+        with create_db_conn() as conn:
+            mark_files_skipped(conn, [file.id for file in image_files])
         return False
 
     # Rest remains the same
