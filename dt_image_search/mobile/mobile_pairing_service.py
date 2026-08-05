@@ -277,11 +277,10 @@ class MobilePairingService:
                 raise RuntimeError("Cannot refresh QR tokens after pairing is already accepted.")
             refreshed_token = self._active_session.refresh_token(platform, now=now)
             session_id = self._active_session.session_id
-        if platform == MobilePlatform.IOS:
-            self._configure_usb_bootstrap_for_token(
-                session_id=session_id,
-                token=refreshed_token,
-            )
+        self._configure_usb_bootstrap_for_token(
+            session_id=session_id,
+            token=refreshed_token,
+        )
         return refreshed_token
 
     def current_result(self) -> MobilePairingResult:

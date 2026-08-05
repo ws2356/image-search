@@ -777,6 +777,30 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertIs(transport_manager.configure_aoa_calls[1], refreshed_config)
         self.assertEqual(transport_manager.start_aoa_calls, 2)
 
+    def test_refresh_android_token_reconfigures_aoa_bootstrap(self):
+        pairing_service = MobilePairingService(
+            self._ctx,
+            listen_host="127.0.0.1",
+            desktop_name="Studio Mac",
+        )
+        self.addCleanup(pairing_service.shutdown)
+        transport_manager = _StubTransportManager()
+        pairing_service._transport_manager = transport_manager
+
+        now = datetime(2026, 4, 10, 8, 30, tzinfo=timezone.utc)
+        session = pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        refreshed_android_token = pairing_service.refresh_token(
+            MobilePlatform.ANDROID,
+            now=now + timedelta(seconds=30),
+        )
+
+        self.assertEqual(len(transport_manager.configure_aoa_calls), 2)
+        refreshed_config = transport_manager.configure_aoa_calls[1]
+        self.assertEqual(refreshed_config.session_id, session.session_id)
+        self.assertEqual(refreshed_config.one_time_passcode, refreshed_android_token.one_time_passcode)
+        self.assertEqual(refreshed_config.suggested_port, refreshed_android_token.suggested_usb_port)
+        self.assertEqual(transport_manager.start_aoa_calls, 2)
+
     def test_handle_pairing_request_prefers_usb_transport_when_connected(self):
         pairing_service = MobilePairingService(
             self._ctx,
