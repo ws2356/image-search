@@ -350,6 +350,7 @@ class MobilePairingService:
         request_payload: dict[str, object],
         *,
         now: datetime | None = None,
+        claimed_transport: str | None = None,
     ) -> tuple[int, dict[str, object]]:
         current_time = _utc_now(now)
         requested_session_id = _optional_request_string(request_payload, "sid")
@@ -540,6 +541,7 @@ class MobilePairingService:
                     current_time=current_time,
                     backup_again_context=backup_again_context,
                     backup_again_decision=MobileBackupAgainDecision.BACKUP_IN_NEW_FOLDER,
+                    claimed_transport=claimed_transport,
                 )
             finally:
                 with self._lock:
@@ -615,6 +617,7 @@ class MobilePairingService:
         current_time: datetime,
         backup_again_context: MobileBackupAgainSessionContext | None,
         backup_again_decision: MobileBackupAgainDecision,
+        claimed_transport: str | None = None,
     ) -> tuple[int, dict[str, object]]:
         with self._lock:
             current_session = self._active_session
@@ -672,7 +675,7 @@ class MobilePairingService:
                 paired_at=current_time,
             )
 
-        selected_transport = self._resolve_pairing_transport(requested_platform)
+        selected_transport = claimed_transport or self._resolve_pairing_transport(requested_platform)
         if selected_transport == PAIRING_TRANSPORT_USB:
             acceptance_message = f"Pairing accepted for {device_name}. Desktop is ready for USB transfer."
         else:
@@ -918,7 +921,10 @@ class MobilePairingService:
                     "message": "Desktop requires JSON object payloads for pairing requests.",
                 },
             )
-        status_code, response_payload = self.handle_pairing_request(request.payload)
+        status_code, response_payload = self.handle_pairing_request(
+            request.payload,
+            claimed_transport=_transport_kind_label(request.context.transport),
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_pairing_state_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -1408,6 +1414,12 @@ class MobilePairingService:
     def _on_app_foreground_state_changed(self, *, is_foreground: object, **_: object) -> None:
         with self._lock:
             self._app_is_foreground = bool(is_foreground)
+
+
+def _transport_kind_label(transport: MobileTransportKind) -> str:
+    if transport in (MobileTransportKind.AOA_USB, MobileTransportKind.USB_WEBSOCKET):
+        return PAIRING_TRANSPORT_USB
+    return PAIRING_TRANSPORT_LAN
 
 
 def _response(

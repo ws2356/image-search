@@ -41,6 +41,7 @@ from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
 from dt_image_search.mobile.mobile_trust_proof import derive_trust_proof_b64
 from dt_image_search.mobile.transport.lan_http_adapter import LanHttpEndpointInfo
 from dt_image_search.mobile.transport.contracts import (
+    PAIRING_CLAIM_OPERATION,
     PAIRING_STATE_OPERATION,
     MobileTransportContext,
     MobileTransportKind,
@@ -310,6 +311,34 @@ class TestMobilePairingService(unittest.TestCase):
 
         self.assertEqual(dispatch_response.status_code, 200)
         self.assertEqual(dispatch_response.payload["backup_state"], "pairing_completed")
+
+    def test_pairing_claim_route_reports_usb_transport_for_aoa(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.ANDROID)
+
+        dispatch_response = self._pairing_service._transport_router.dispatch(
+            operation=PAIRING_CLAIM_OPERATION,
+            payload={
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "android",
+                "device_uuid": "android-device-aoa-001",
+                "device_name": "Pixel AOA",
+                "client_nonce": "aoa-client-nonce-123",
+            },
+            context=MobileTransportContext(
+                transport=MobileTransportKind.AOA_USB,
+                operation=PAIRING_CLAIM_OPERATION,
+                request_id="claim-aoa-001",
+                remote_address="aoa://android-device-aoa-001",
+            ),
+        )
+
+        self.assertEqual(dispatch_response.status_code, 200)
+        self.assertEqual(dispatch_response.payload["transport"], "usb")
+        self.assertIn("USB transfer", dispatch_response.payload["message"])
 
     def test_pairing_service_uses_event_bus_to_track_app_foreground_state(self):
         self.assertTrue(self._pairing_service._is_desktop_foreground())
@@ -1291,3 +1320,7 @@ class TestMobilePairingService(unittest.TestCase):
         if path == MOBILE_UPDATE_PROMPT_PATH:
             return MOBILE_UPDATE_PROMPT_PROOF_PURPOSE
         return None
+
+
+if __name__ == "__main__":
+    unittest.main()
