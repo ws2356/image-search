@@ -5,7 +5,7 @@ import { AoaTransportStrategy } from '@/infrastructure/transport/aoa/aoa-transpo
 import { LanTransportStrategy } from '@/infrastructure/transport/lan/lan-transport-strategy';
 import type { TransportStrategy } from '@/infrastructure/transport/transport-strategy';
 
-export function build_headless_transfer_transport_strategy(
+export function build_transfer_transport_strategy(
   pairing_session: PairingSessionSummary
 ): TransportStrategy {
   const aoa_bridge = new NativeAoaBridge();
@@ -15,6 +15,7 @@ export function build_headless_transfer_transport_strategy(
       oneTimePasscode: '',
     }),
     new LanTransportStrategy(pairing_session.endpointBaseUrl ?? ''),
-    () => aoa_bridge.isConnected()
+    () => aoa_bridge.isConnected(),
+    { initial_preferred_transport: pairing_session.transport }
   );
 }

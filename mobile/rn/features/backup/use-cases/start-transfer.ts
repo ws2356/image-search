@@ -120,6 +120,7 @@ function build_snapshot(input: {
   sha1_elapsed_ms: number;
   sha1_measured_assets: number;
   started_at_ms: number;
+  transport: TransferTransport;
 }): TransferProgressSnapshot {
   const elapsed_seconds = Math.max(1, (Date.now() - input.started_at_ms) / 1000);
   const remaining_assets = Math.max(
@@ -138,7 +139,6 @@ function build_snapshot(input: {
   const estimated_seconds_remaining = estimated_sha1_seconds_remaining + estimated_transfer_seconds_remaining;
   return {
     pipelineStage: input.stage,
-    transport: TransferTransport.Lan,
     counts: {
       totalAssets: input.total_assets,
       matchedAssets: input.matched_assets,
@@ -150,6 +150,7 @@ function build_snapshot(input: {
     bytesUploaded: input.bytes_uploaded,
     bytesPerSecond: bytes_per_second,
     estimatedSecondsRemaining: estimated_seconds_remaining,
+    transport: input.transport,
     startedAt: new Date(input.started_at_ms).toISOString(),
     lastUpdatedAt: new Date().toISOString(),
   };
@@ -230,6 +231,8 @@ export async function startTransfer(
 
   const session_id = pairing_session.sessionId;
   const endpoint_base_url = pairing_session.endpointBaseUrl;
+  const snapshot_transport: TransferTransport =
+    pairing_session.transport === 'usb' ? TransferTransport.Usb : TransferTransport.Lan;
   const strict_security_enabled = pairing_session.strictSecurityEnabled === true;
   const transport_strategy = deps.transport_strategy ?? new LanTransportStrategy(endpoint_base_url);
   console.log(
@@ -263,6 +266,7 @@ export async function startTransfer(
         sha1_elapsed_ms: 0,
         sha1_measured_assets: 0,
         started_at_ms,
+        transport: snapshot_transport,
       }),
     });
     throw_if_transfer_stopped();
@@ -358,6 +362,7 @@ export async function startTransfer(
         sha1_elapsed_ms: 0,
         sha1_measured_assets: 0,
         started_at_ms,
+        transport: snapshot_transport,
       }),
     });
 
@@ -385,6 +390,7 @@ export async function startTransfer(
           sha1_elapsed_ms,
           sha1_measured_assets,
           started_at_ms,
+          transport: snapshot_transport,
         }),
       });
     };
@@ -599,6 +605,7 @@ export async function startTransfer(
         sha1_elapsed_ms,
         sha1_measured_assets,
         started_at_ms,
+        transport: snapshot_transport,
       }),
     });
 

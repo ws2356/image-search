@@ -12,6 +12,7 @@ import { is_transfer_abort_error } from '@/features/backup/transfer/transfer-abo
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import { finishTransfer } from '@/features/backup/use-cases/finish-transfer';
 import { returnHome } from '@/features/backup/use-cases/return-home';
+import { build_transfer_transport_strategy } from '@/features/backup/runtime/headless-transfer-transport';
 import { startTransfer } from '@/features/backup/use-cases/start-transfer';
 import { stopTransfer } from '@/features/backup/use-cases/stop-transfer';
 import { useAppServices } from '@/infrastructure/di/app-services-provider';
@@ -40,7 +41,12 @@ const TRANSFER_SCREEN_SNAPSHOT_INTERVAL_MS = 1000;
 
 export function useTransferScreenController(): TransferScreenController {
   const router = useRouter();
-  const { transport_strategy } = useAppServices();
+  const { transport_strategy: default_transport_strategy } = useAppServices();
+  const pairing_session = useBackupSessionStore((state) => state.session.pairingSession);
+  const transport_strategy = useMemo(
+    () => (pairing_session ? build_transfer_transport_strategy(pairing_session) : default_transport_strategy),
+    [pairing_session, default_transport_strategy]
+  );
   const app_awake_policy = useMemo(create_default_app_awake_policy, []);
   const is_incomplete_library = useBackupSessionStore(
     (state) => state.session.permissionSummary.mediaScope !== PermissionScope.Full

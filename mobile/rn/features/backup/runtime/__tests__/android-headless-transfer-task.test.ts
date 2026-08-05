@@ -2,7 +2,7 @@ import { NativeModules } from 'react-native';
 
 import type { PairingSessionSummary } from '@/features/backup/pairing/models';
 import {
-  build_headless_transfer_transport_strategy,
+  build_transfer_transport_strategy,
 } from '@/features/backup/runtime/headless-transfer-transport';
 import type { TransferServiceContext } from '@/features/backup/services/transfer-service';
 import { AoaTransferClient } from '@/infrastructure/transport/aoa/aoa-transfer-client';
@@ -44,14 +44,28 @@ function install_mock_native_module(is_connected: boolean): Record<string, jest.
 
 test('headless transfer strategy prefers the AOA transfer client when USB is connected', () => {
   install_mock_native_module(true);
-  const strategy = build_headless_transfer_transport_strategy(PAIRING_SESSION);
+  const strategy = build_transfer_transport_strategy(PAIRING_SESSION);
   const client = strategy.create_transfer_client(TRANSFER_CONTEXT);
   expect(client).toBeInstanceOf(AoaTransferClient);
 });
 
 test('headless transfer strategy falls back to the LAN transfer client when USB is not connected', () => {
   install_mock_native_module(false);
-  const strategy = build_headless_transfer_transport_strategy(PAIRING_SESSION);
+  const strategy = build_transfer_transport_strategy(PAIRING_SESSION);
   const client = strategy.create_transfer_client(TRANSFER_CONTEXT);
   expect(client).toBeInstanceOf(DefaultHttpTransferClient);
+});
+
+test('headless transfer strategy prefers LAN when the session was paired over LAN', () => {
+  install_mock_native_module(true);
+  const strategy = build_transfer_transport_strategy({ ...PAIRING_SESSION, transport: 'lan' });
+  const client = strategy.create_transfer_client(TRANSFER_CONTEXT);
+  expect(client).toBeInstanceOf(DefaultHttpTransferClient);
+});
+
+test('headless transfer strategy prefers AOA when the session was paired over USB', () => {
+  install_mock_native_module(true);
+  const strategy = build_transfer_transport_strategy({ ...PAIRING_SESSION, transport: 'usb' });
+  const client = strategy.create_transfer_client(TRANSFER_CONTEXT);
+  expect(client).toBeInstanceOf(AoaTransferClient);
 });
