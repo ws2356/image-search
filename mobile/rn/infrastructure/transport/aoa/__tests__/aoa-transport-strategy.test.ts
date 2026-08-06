@@ -21,11 +21,18 @@ test('AoaTransportStrategy exposes the USB transport kind', () => {
   expect(strategy.kind).toBe(TransportKind.Usb);
 });
 
-test('AoaTransportStrategy claims pairing and prepares bootstrap', async () => {
+test('AoaTransportStrategy claims pairing without re-preparing the bootstrap', async () => {
   const bridge = new FakeAoaBridge();
   const strategy = new AoaTransportStrategy(bridge, QR_PAYLOAD);
   const response = await strategy.claim_pairing(CLAIM_REQUEST);
   expect(response.backup_state).toBe('pairing_completed');
+  expect(bridge.prepared).toBe(false);
+});
+
+test('AoaTransportStrategy prepare_bootstrap prepares the native client', async () => {
+  const bridge = new FakeAoaBridge();
+  const strategy = new AoaTransportStrategy(bridge, QR_PAYLOAD);
+  await strategy.prepare_bootstrap();
   expect(bridge.prepared).toBe(true);
 });
 

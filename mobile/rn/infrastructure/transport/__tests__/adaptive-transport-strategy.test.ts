@@ -128,10 +128,29 @@ test('claim_pairing throws when both transports fail', async () => {
     new AoaTransportStrategy(new FakeAoaBridge(), { sessionId: 's1', oneTimePasscode: '123456' }),
     new LanTransportStrategy('http://localhost'),
     () => false,
-    { transport_timeout_ms: 30 }
+    { transport_timeout_ms: 30, aoa_connect_timeout_ms: 30 }
   );
 
   await expect(adaptive.claim_pairing(CLAIM_REQUEST)).rejects.toThrow();
+});
+
+test('AOA connect-wait uses its own budget independent of the LAN timeout', async () => {
+  mock_fetch_hanging();
+  const bridge = new FakeAoaBridge();
+  let connected = false;
+  setTimeout(() => {
+    connected = true;
+  }, 60);
+  const adaptive = new AdaptiveTransportStrategy(
+    new AoaTransportStrategy(bridge, { sessionId: 's1', oneTimePasscode: '123456' }),
+    new LanTransportStrategy('http://localhost'),
+    () => connected,
+    { transport_timeout_ms: 20, aoa_connect_timeout_ms: 200 }
+  );
+
+  const response = await adaptive.claim_pairing(CLAIM_REQUEST);
+  expect(response.backup_state).toBe('pairing_completed');
+  expect(bridge.sentRequests.length).toBeGreaterThan(0);
 });
 
 test('create_transfer_client uses remembered USB transport', async () => {

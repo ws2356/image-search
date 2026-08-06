@@ -401,6 +401,43 @@ class AoaClientTest {
     }
 
     @Test
+    fun `prepareBootstrap with same material keeps an established connection`() {
+        val observer = stateObserver()
+        openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
+        performAuthHandshake()
+        assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
+
+        client.prepareBootstrap("sid-001", "123456", 8080)
+
+        assertTrue(client.isConnected())
+        // The accessory was opened exactly once; the redundant prepare did not reopen it.
+        verify(exactly = 1) { streamOpener.open(any()) }
+    }
+
+    @Test
+    fun `prepareBootstrap with a different session reopens and re-authenticates`() {
+        val observer = stateObserver()
+        openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
+        performAuthHandshake()
+        assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
+
+        openTestPipes()
+        client.prepareBootstrap("sid-002", "654321", 9090)
+
+        val rand = "00112233445566778899aabbccddeeff"
+        writeFrame(
+            AUTH_CHALLENGE_REQUEST_ID,
+            buildAuthChallengeEnvelope(rand, sid = "sid-002").toByteArray(Charsets.UTF_8),
+        )
+        val responseEnvelope = JSONObject(String(readFrame().payload, Charsets.UTF_8))
+        assertEquals(sha256Hex("654321$rand"), responseEnvelope.getJSONObject("body").getString("proof"))
+        assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
+        verify(exactly = 2) { streamOpener.open(any()) }
+    }
+
+    @Test
     fun `non matching accessory is ignored and not opened`() {
         val observer = stateObserver()
         val foreignAccessory = mockk<UsbAccessory>().apply {

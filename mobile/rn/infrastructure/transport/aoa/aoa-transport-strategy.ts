@@ -31,7 +31,6 @@ export class AoaTransportStrategy implements TransportStrategy {
   }
 
   async claim_pairing(request: PairingClaimRequest): Promise<PairingResponse> {
-    await this.prepare_bootstrap();
     const response = await this.bridge.sendRequest(JSON.stringify(this.envelope('pairing.claim', request)));
     return this.parse_pairing_response(response);
   }

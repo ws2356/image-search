@@ -21,6 +21,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -117,6 +118,7 @@ class AoaClient internal constructor(
     private val stopped = AtomicBoolean(true)
     private var currentInputStream: InputStream? = null
     private var currentOutputStream: OutputStream? = null
+    private val connectionGeneration = AtomicLong(0)
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -164,6 +166,13 @@ class AoaClient internal constructor(
      * Prepares the client with the pairing material from the scanned QR code.
      * If an accessory is already attached, this attempts to open it immediately.
      *
+     * Re-preparing with the exact same bootstrap material while already connected
+     * is a no-op: the established accessory connection is kept so a re-scan of the
+     * same QR (or a redundant prepare) does not tear down the authenticated link.
+     * Re-preparing with different material (new session or refreshed token) closes
+     * the old connection and re-opens so the host re-authenticates with the new
+     * one-time passcode.
+     *
      * @throws AoaTransportError.InvalidBootstrap if [suggestedPort] is not in 1..65535.
      */
     @Synchronized
@@ -174,10 +183,20 @@ class AoaClient internal constructor(
             )
         }
         Log.i(LOG_TAG, "prepareBootstrap sessionId=$sessionId suggestedPort=$suggestedPort")
+        val keepsEstablishedConnection = state.get() == AoaTransportState.CONNECTED
+            && preparedSessionId == sessionId
+            && preparedOneTimePasscode == oneTimePasscode
         preparedSessionId = sessionId
         preparedOneTimePasscode = oneTimePasscode
         preparedSuggestedPort = suggestedPort
         bootstrapPrepared = true
+        if (keepsEstablishedConnection) {
+            Log.i(
+                LOG_TAG,
+                "prepareBootstrap already connected with matching bootstrap; keeping connection."
+            )
+            return
+        }
         transitionTo(AoaTransportState.PREPARING)
         startInternal()
         probeAttachedAccessories()
@@ -532,13 +551,14 @@ class AoaClient internal constructor(
 
     @Synchronized
     private fun startReaderWriter(inputStream: InputStream, outputStream: OutputStream) {
+        val generation = connectionGeneration.incrementAndGet()
         currentInputStream = inputStream
         currentOutputStream = outputStream
-        readerThread = Thread({ runReader(inputStream) }, "AoaClientReader").apply {
+        readerThread = Thread({ runReader(inputStream, generation) }, "AoaClientReader").apply {
             isDaemon = true
             start()
         }
-        writerThread = Thread({ runWriter(outputStream) }, "AoaClientWriter").apply {
+        writerThread = Thread({ runWriter(outputStream, generation) }, "AoaClientWriter").apply {
             isDaemon = true
             start()
         }
@@ -546,6 +566,7 @@ class AoaClient internal constructor(
 
     @Synchronized
     private fun closeConnection() {
+        connectionGeneration.incrementAndGet()
         readerThread?.interrupt()
         writerThread?.interrupt()
         readerThread = null
@@ -584,7 +605,7 @@ class AoaClient internal constructor(
         }
     }
 
-    private fun runReader(inputStream: InputStream) {
+    private fun runReader(inputStream: InputStream, generation: Long) {
         val buffer = ByteArray(READ_BUFFER_SIZE)
         val decoder = AoaFrameCodec.StreamDecoder()
         try {
@@ -609,7 +630,9 @@ class AoaClient internal constructor(
         } catch (e: RuntimeException) {
             Log.w(LOG_TAG, "Reader stopped unexpectedly: ${e.message}")
         } finally {
-            closeConnection()
+            if (generation == connectionGeneration.get()) {
+                closeConnection()
+            }
         }
     }
 
@@ -704,7 +727,7 @@ class AoaClient internal constructor(
         }
     }
 
-    private fun runWriter(outputStream: OutputStream) {
+    private fun runWriter(outputStream: OutputStream, generation: Long) {
         try {
             while (!stopped.get() && !Thread.currentThread().isInterrupted) {
                 val frame = outgoingQueue.take()
@@ -716,7 +739,9 @@ class AoaClient internal constructor(
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
         } finally {
-            closeConnection()
+            if (generation == connectionGeneration.get()) {
+                closeConnection()
+            }
         }
     }
 

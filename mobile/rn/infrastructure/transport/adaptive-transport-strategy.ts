@@ -15,10 +15,12 @@ import type { TransportStrategy } from '@/infrastructure/transport/transport-str
 export type PreferredTransport = 'lan' | 'usb';
 
 const DEFAULT_TRANSPORT_TIMEOUT_MS = 3000;
+const DEFAULT_AOA_CONNECT_TIMEOUT_MS = 8000;
 const AOA_CONNECT_POLL_INTERVAL_MS = 100;
 
 export interface AdaptiveTransportStrategyOptions {
   transport_timeout_ms?: number;
+  aoa_connect_timeout_ms?: number;
   initial_preferred_transport?: PreferredTransport;
 }
 
@@ -33,6 +35,7 @@ export class AdaptiveTransportStrategy implements TransportStrategy {
 
   private preferred_transport: PreferredTransport | null;
   private readonly transport_timeout_ms: number;
+  private readonly aoa_connect_timeout_ms: number;
 
   constructor(
     private readonly aoa_strategy: TransportStrategy,
@@ -42,6 +45,7 @@ export class AdaptiveTransportStrategy implements TransportStrategy {
   ) {
     this.preferred_transport = options.initial_preferred_transport ?? null;
     this.transport_timeout_ms = options.transport_timeout_ms ?? DEFAULT_TRANSPORT_TIMEOUT_MS;
+    this.aoa_connect_timeout_ms = options.aoa_connect_timeout_ms ?? DEFAULT_AOA_CONNECT_TIMEOUT_MS;
   }
 
   get last_working_transport(): PreferredTransport | null {
@@ -97,7 +101,7 @@ export class AdaptiveTransportStrategy implements TransportStrategy {
     operation: (strategy: TransportStrategy) => Promise<T>
   ): Promise<T> {
     if (kind === 'usb') {
-      await this.wait_for_aoa_connection(this.transport_timeout_ms);
+      await this.wait_for_aoa_connection(this.aoa_connect_timeout_ms);
       return operation(this.aoa_strategy);
     }
     return this.with_timeout(operation(this.lan_strategy), this.transport_timeout_ms);
