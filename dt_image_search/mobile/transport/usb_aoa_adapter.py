@@ -75,6 +75,13 @@ AOA_AUTH_CHALLENGE_REQUEST_ID = USB_AUTH_CHALLENGE_REQUEST_ID.ljust(
     "0",
 )
 
+# Read the AOA bulk IN endpoint in large pieces so each ~1 MB chunk frame is
+# reassembled in one or two libusb bulk_read calls instead of ~128 eight-KB
+# round trips. This was the desktop-side throughput bottleneck (~15 MB/s vs the
+# USB link's capacity) and let the mobile's unbounded outgoing queue grow until
+# its completion frames exceeded the 10 s streaming-response timeout.
+AOA_SESSION_READ_SIZE_BYTES = 1_048_576
+
 
 def _is_access_denied_error(exc: BaseException) -> bool:
     """Detect USB permission denials (e.g. macOS TCC 'USB' privacy denial).
@@ -596,7 +603,10 @@ class UsbAoaTransportAdapter:
         decoder = AoaFrameDecoder()
         while not self._stop_event.is_set():
             try:
-                chunk = read_stream.read(8192, timeout=self._response_poll_timeout_seconds)
+                chunk = read_stream.read(
+                    AOA_SESSION_READ_SIZE_BYTES,
+                    timeout=self._response_poll_timeout_seconds,
+                )
             except TimeoutError:
                 continue
             if not chunk:

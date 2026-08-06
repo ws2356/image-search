@@ -48,6 +48,7 @@ const TRANSFER_CONCURRENT_UPLOAD_LIMIT = 5;
 const TRANSFER_CONCURRENT_SHA1_LIMIT = 3;
 const CAPABILITY_EXCHANGE_MAX_ATTEMPTS = 3;
 const CAPABILITY_EXCHANGE_RETRY_DELAY_MS = 500;
+const CONSECUTIVE_UPLOAD_FAILURE_LIMIT = 5;
 
 function delay(duration_ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -372,6 +373,7 @@ export async function startTransfer(
     let matched_assets = 0;
     let sha1_elapsed_ms = 0;
     let sha1_measured_assets = 0;
+    let consecutive_upload_failures = 0;
 
     const publish_snapshot = async (
       stage: TransferPipelineStage,
@@ -459,16 +461,24 @@ export async function startTransfer(
         }
         if (upload_response?.status === 'skipped') {
           matched_assets += 1;
+          consecutive_upload_failures = 0;
           await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
           return;
         }
         bytes_uploaded += asset_bytes_uploaded;
         transferred_assets += 1;
+        consecutive_upload_failures = 0;
         await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
       } catch (error) {
         failed_assets += 1;
+        consecutive_upload_failures += 1;
         const message = error instanceof Error ? error.message : 'Unknown upload error.';
-        throw new Error(`Failed uploading asset ${asset.asset_id}: ${message}`);
+        console.warn(`[Transfer] failed asset ${asset.asset_id}: ${message}`);
+        if (consecutive_upload_failures >= CONSECUTIVE_UPLOAD_FAILURE_LIMIT) {
+          throw new Error(
+            `Transfer aborted after ${consecutive_upload_failures} consecutive asset failures: ${message}`
+          );
+        }
       }
     };
 

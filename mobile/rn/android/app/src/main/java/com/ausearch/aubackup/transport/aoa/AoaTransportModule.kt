@@ -110,22 +110,42 @@ open class AoaTransportModule(
 
     @ReactMethod
     fun beginStreamingRequest(envelopeJson: String, promise: Promise) {
+        if (invalidated.get()) {
+            promise.reject("AOA_MODULE_INVALIDATED", "AoaTransportModule has been invalidated")
+            return
+        }
         try {
-            val requestId = aoaClient.beginStreamingRequest(envelopeJson)
-            promise.resolve(requestId)
-        } catch (e: Throwable) {
-            promise.reject("AOA_BEGIN_STREAM_FAILED", e.message, e)
+            executor.execute {
+                try {
+                    val requestId = aoaClient.beginStreamingRequest(envelopeJson)
+                    promise.resolve(requestId)
+                } catch (e: Throwable) {
+                    promise.reject("AOA_BEGIN_STREAM_FAILED", e.message, e)
+                }
+            }
+        } catch (e: RejectedExecutionException) {
+            promise.reject("AOA_EXECUTOR_REJECTED", e.message, e)
         }
     }
 
     @ReactMethod
     fun sendBinaryChunk(requestId: String, chunkBase64: String, promise: Promise) {
+        if (invalidated.get()) {
+            promise.reject("AOA_MODULE_INVALIDATED", "AoaTransportModule has been invalidated")
+            return
+        }
         try {
-            val bytes = Base64.decode(chunkBase64, Base64.DEFAULT)
-            aoaClient.sendBinaryChunk(requestId, bytes)
-            promise.resolve(null)
-        } catch (e: Throwable) {
-            promise.reject("AOA_SEND_CHUNK_FAILED", e.message, e)
+            executor.execute {
+                try {
+                    val bytes = Base64.decode(chunkBase64, Base64.DEFAULT)
+                    aoaClient.sendBinaryChunk(requestId, bytes)
+                    promise.resolve(null)
+                } catch (e: Throwable) {
+                    promise.reject("AOA_SEND_CHUNK_FAILED", e.message, e)
+                }
+            }
+        } catch (e: RejectedExecutionException) {
+            promise.reject("AOA_EXECUTOR_REJECTED", e.message, e)
         }
     }
 

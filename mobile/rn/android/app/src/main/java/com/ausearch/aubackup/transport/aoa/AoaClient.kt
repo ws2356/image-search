@@ -96,7 +96,7 @@ class AoaClient internal constructor(
     private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
     private val state = AtomicReference(AoaTransportState.IDLE)
     private val authResponder = AoaAuthResponder()
-    private val outgoingQueue: BlockingQueue<ByteArray> = LinkedBlockingQueue()
+    private val outgoingQueue: BlockingQueue<ByteArray> = LinkedBlockingQueue(OUTGOING_QUEUE_CAPACITY)
     private val listeners = mutableListOf<AoaClientListener>()
 
     private val pendingResponses = ConcurrentHashMap<String, BlockingQueue<ResponseResult>>()
@@ -802,6 +802,16 @@ class AoaClient internal constructor(
         private const val READ_BUFFER_SIZE = 16 * 1024
         private const val RESPONSE_TIMEOUT_MS = 10_000L
         private const val ACTION_USB_PERMISSION = "com.ausearch.aubackup.USB_ACCESSORY_PERMISSION"
+
+        /**
+         * Upper bound on frames queued for the USB writer. Producers (sendRequest,
+         * beginStreamingRequest, sendBinaryChunk, finishStreamingRequest) block on
+         * [LinkedBlockingQueue.put] when the queue is full, applying backpressure so
+         * the JS layer cannot outrun the USB link. Without this, the unbounded queue
+         * grew faster than the desktop consumed it and delayed an asset's completion
+         * frame past [RESPONSE_TIMEOUT_MS], failing the upload and stopping the backup.
+         */
+        private const val OUTGOING_QUEUE_CAPACITY = 16
 
         private const val TRANSFER_ASSET_OPERATION = "transfer.asset"
         private const val MOBILE_TRANSFER_SCHEMA = "dtis.mobile-transfer.v1"
