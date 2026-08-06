@@ -6,16 +6,13 @@ import android.app.Application
 import android.content.Context
 import android.hardware.usb.UsbAccessory
 import android.hardware.usb.UsbManager
+import android.util.Base64
 import com.facebook.react.bridge.Callback
 import com.facebook.react.bridge.CatalystInstance
-import com.facebook.react.bridge.Dynamic
 import com.facebook.react.bridge.JavaScriptModule
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReadableArray
-import com.facebook.react.bridge.ReadableMap
-import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.UIManager
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
@@ -187,7 +184,7 @@ class AoaTransportModuleTest {
 
         val chunk = byteArrayOf(0x01, 0x02, 0x03)
         val chunkPromise = TestPromise()
-        module.sendBinaryChunk(requestId, TestReadableArray(chunk.map { it.toInt() }), chunkPromise)
+        module.sendBinaryChunk(requestId, Base64.encodeToString(chunk, Base64.NO_WRAP), chunkPromise)
 
         assertTrue("sendBinaryChunk should resolve", chunkPromise.await())
         assertTrue(chunkPromise.isResolved)
@@ -223,29 +220,6 @@ class AoaTransportModuleTest {
         assertTrue("finishStreamingRequest should resolve", finishPromise.await())
         assertTrue(finishPromise.isResolved)
         assertEquals(finalResponse, finishPromise.resolvedValue)
-    }
-
-    @Test
-    fun `sendBinaryChunk rejects values outside byte range`() {
-        openTestPipes()
-        client().prepareBootstrap("sid-001", "123456", 8080)
-        performAuthHandshake()
-
-        val requestId = UUID.randomUUID().toString()
-        val requestEnvelope = """
-            {"operation":"asset.upload","request_id":"$requestId","body":{"total_bytes":1024}}
-        """.trimIndent().trim()
-        val beginPromise = TestPromise()
-        module.beginStreamingRequest(requestEnvelope, beginPromise)
-        assertTrue(beginPromise.await())
-        assertEquals(requestId, beginPromise.resolvedValue)
-
-        val chunkPromise = TestPromise()
-        module.sendBinaryChunk(requestId, TestReadableArray(listOf(0, 128, 256, -1)), chunkPromise)
-
-        assertTrue("sendBinaryChunk should reject", chunkPromise.await())
-        assertTrue(chunkPromise.isRejected)
-        assertEquals("AOA_INVALID_CHUNK", chunkPromise.rejectedCode)
     }
 
     @Test
@@ -421,21 +395,6 @@ class AoaTransportModuleTest {
             lastEmittedState = state
             lastEmittedError = errorMessage
         }
-    }
-
-    private class TestReadableArray(private val items: List<Int>) : ReadableArray {
-        override fun size(): Int = items.size
-        override fun getInt(index: Int): Int = items[index]
-        override fun toArrayList(): ArrayList<Any?> = ArrayList(items)
-        override fun getArray(index: Int): ReadableArray = throw UnsupportedOperationException()
-        override fun getBoolean(index: Int): Boolean = throw UnsupportedOperationException()
-        override fun getDouble(index: Int): Double = throw UnsupportedOperationException()
-        override fun getDynamic(index: Int): Dynamic = throw UnsupportedOperationException()
-        override fun getLong(index: Int): Long = throw UnsupportedOperationException()
-        override fun getMap(index: Int): ReadableMap = throw UnsupportedOperationException()
-        override fun getString(index: Int): String = throw UnsupportedOperationException()
-        override fun getType(index: Int): ReadableType = throw UnsupportedOperationException()
-        override fun isNull(index: Int): Boolean = false
     }
 
     private class TestPromise : Promise {

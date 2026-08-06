@@ -1,4 +1,7 @@
 import { NativeEventEmitter, NativeModules } from 'react-native';
+import QuickCrypto from 'react-native-quick-crypto';
+
+const { Buffer } = QuickCrypto;
 
 export interface AoaBridgeStateEvent {
   state: 'IDLE' | 'PREPARING' | 'AUTHENTICATING' | 'CONNECTED' | 'DISCONNECTED' | 'FAILED';
@@ -25,7 +28,7 @@ export class NativeAoaBridge implements AoaBridge {
     isConnected(): boolean;
     sendRequest(envelopeJson: string): Promise<string>;
     beginStreamingRequest(envelopeJson: string): Promise<string>;
-    sendBinaryChunk(requestId: string, chunk: number[]): Promise<void>;
+    sendBinaryChunk(requestId: string, chunkBase64: string): Promise<void>;
     finishStreamingRequest(requestId: string): Promise<string>;
   };
   private readonly eventEmitter = new NativeEventEmitter(NativeModules.AoaTransportModule);
@@ -51,8 +54,8 @@ export class NativeAoaBridge implements AoaBridge {
   }
 
   async sendBinaryChunk(request_id: string, chunk: Uint8Array): Promise<void> {
-    const array = Array.from(chunk);
-    return this.nativeModule.sendBinaryChunk(request_id, array);
+    const base64_chunk = Buffer.from(chunk).toString('base64');
+    return this.nativeModule.sendBinaryChunk(request_id, base64_chunk);
   }
 
   async finishStreamingRequest(request_id: string): Promise<string> {

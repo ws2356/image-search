@@ -1,12 +1,12 @@
 package com.ausearch.aubackup.transport.aoa
 
+import android.util.Base64
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -119,21 +119,9 @@ open class AoaTransportModule(
     }
 
     @ReactMethod
-    fun sendBinaryChunk(requestId: String, chunk: ReadableArray, promise: Promise) {
+    fun sendBinaryChunk(requestId: String, chunkBase64: String, promise: Promise) {
         try {
-            val size = chunk.size()
-            val bytes = ByteArray(size)
-            for (i in 0 until size) {
-                val value = chunk.getInt(i)
-                if (value !in 0..255) {
-                    promise.reject(
-                        "AOA_INVALID_CHUNK",
-                        "Chunk value at index $i is out of byte range: $value"
-                    )
-                    return
-                }
-                bytes[i] = value.toByte()
-            }
+            val bytes = Base64.decode(chunkBase64, Base64.DEFAULT)
             aoaClient.sendBinaryChunk(requestId, bytes)
             promise.resolve(null)
         } catch (e: Throwable) {

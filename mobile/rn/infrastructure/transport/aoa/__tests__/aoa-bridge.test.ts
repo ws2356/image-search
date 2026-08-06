@@ -97,7 +97,7 @@ test('NativeAoaBridge forwards request and streaming calls', async () => {
 
   const chunk = new Uint8Array([1, 2, 3]);
   await bridge.sendBinaryChunk(request_id, chunk);
-  expect(module.sendBinaryChunk).toHaveBeenCalledWith('req-1', [1, 2, 3]);
+  expect(module.sendBinaryChunk).toHaveBeenCalledWith('req-1', 'AQID');
 
   await bridge.finishStreamingRequest(request_id);
   expect(module.finishStreamingRequest).toHaveBeenCalledWith('req-1');
