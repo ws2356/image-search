@@ -6,11 +6,14 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.ausearch.aubackup.MainActivity
 import com.ausearch.aubackup.R
@@ -21,6 +24,9 @@ import org.json.JSONException
 import org.json.JSONObject
 
 class BackupTransferForegroundService : HeadlessJsTaskService() {
+
+  private var transferWakeLock: PowerManager.WakeLock? = null
+
   override fun onCreate() {
     super.onCreate()
     applicationContextRef = applicationContext
@@ -29,6 +35,7 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
   }
 
   override fun onDestroy() {
+    releaseTransferWakeLock()
     serviceInstance = null
     super.onDestroy()
   }
@@ -56,7 +63,13 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
         latestStateJson = buildStateJson(status = "running", errorMessage = null)
         lastProgressEmissionElapsedMs = 0L
         broadcastStateChanged()
-        startForeground(NOTIFICATION_ID, buildNotification(snapshotJson = null, statusText = "Preparing backup…"))
+        acquireTransferWakeLock()
+        ServiceCompat.startForeground(
+          this,
+          NOTIFICATION_ID,
+          buildNotification(snapshotJson = null, statusText = "Preparing backup…"),
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+        )
       }
     }
     return super.onStartCommand(intent, flags, startId)
@@ -96,6 +109,7 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
   }
 
   fun showTerminalNotificationAndStop(stateJson: String, snapshotJson: String?) {
+    releaseTransferWakeLock()
     val notificationManager = getSystemService(NotificationManager::class.java)
     notificationManager.notify(NOTIFICATION_ID, buildTerminalNotification(stateJson, snapshotJson))
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -105,6 +119,35 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
       stopForeground(false)
     }
     stopSelf()
+  }
+
+  /**
+   * Holds a PARTIAL_WAKE_LOCK for the whole transfer so the CPU stays awake (and
+   * Samsung-style app freezers are less likely to suspend the process) while the
+   * AOA USB streams are in use. Released on every stop/terminal path.
+   */
+  private fun acquireTransferWakeLock() {
+    if (transferWakeLock?.isHeld == true) {
+      return
+    }
+    val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+    transferWakeLock = powerManager.newWakeLock(
+      PowerManager.PARTIAL_WAKE_LOCK,
+      "$packageName:backupTransfer"
+    ).apply {
+      setReferenceCounted(false)
+      acquire()
+    }
+    Log.i(LOG_TAG, "Acquired transfer PARTIAL_WAKE_LOCK.")
+  }
+
+  private fun releaseTransferWakeLock() {
+    transferWakeLock?.let { wakeLock ->
+      if (wakeLock.isHeld) {
+        wakeLock.release()
+      }
+    }
+    transferWakeLock = null
   }
 
   private fun ensureNotificationChannel() {
@@ -175,6 +218,7 @@ class BackupTransferForegroundService : HeadlessJsTaskService() {
   }
 
   private fun removeNotificationAndStop() {
+    releaseTransferWakeLock()
     val notificationManager = getSystemService(NotificationManager::class.java)
     notificationManager.cancel(NOTIFICATION_ID)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
