@@ -142,3 +142,63 @@ test('AoaTransferClient throws an abort error when the signal is aborted without
   ).rejects.toThrow('Transfer stopped by user.');
   expect(bridge.sentRequests.length).toBe(0);
 });
+
+test('AoaTransferClient retries a request after the AOA client resyncs', async () => {
+  class ResyncAoaBridge extends FakeAoaBridge {
+    private failuresRemaining = 1;
+    connected = false;
+
+    override isConnected(): boolean {
+      return this.connected;
+    }
+
+    override async sendRequest(envelopeJson: string): Promise<string> {
+      this.sentRequests.push(envelopeJson);
+      if (this.failuresRemaining > 0) {
+        this.failuresRemaining -= 1;
+        throw new Error('AOA client is not connected (state=DISCONNECTED)');
+      }
+      return JSON.stringify({
+        schema: 'dtis.mobile-transport.v1',
+        request_id: JSON.parse(envelopeJson).request_id,
+        status_code: 200,
+        body: { status: 'accepted', message: 'ok' },
+      });
+    }
+  }
+
+  const bridge = new ResyncAoaBridge();
+  const client = new AoaTransferClient(bridge, context);
+
+  // Simulate the native client reconnecting shortly after the first failure.
+  setTimeout(() => {
+    bridge.connected = true;
+  }, 50);
+
+  const response = await client.complete({
+    session_id: 's1',
+    device_uuid: 'd1',
+    trust_proof: 'proof',
+    transferred_count: 4,
+    failed_count: 1,
+  });
+
+  expect(response.status).toBe('accepted');
+  expect(bridge.sentRequests.length).toBe(2);
+});
+
+test('AoaTransferClient propagates a non-connection error without retrying', async () => {
+  class ErrorBridge extends FakeAoaBridge {
+    override async sendRequest(envelopeJson: string): Promise<string> {
+      this.sentRequests.push(envelopeJson);
+      throw new Error('desktop rejected the request');
+    }
+  }
+
+  const bridge = new ErrorBridge();
+  const client = new AoaTransferClient(bridge, context);
+  await expect(
+    client.complete({ session_id: 's1', device_uuid: 'd1', trust_proof: 'proof' })
+  ).rejects.toThrow('desktop rejected the request');
+  expect(bridge.sentRequests.length).toBe(1);
+});

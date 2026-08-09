@@ -88,6 +88,10 @@ class AoaClientTest {
             synchronized(states) { return states.contains(state) }
         }
 
+        fun countSeen(state: AoaTransportState): Int {
+            synchronized(states) { return states.count { it == state } }
+        }
+
         fun waitFor(state: AoaTransportState, timeoutMs: Long = 5000): Boolean {
             if (hasSeen(state)) {
                 return true
@@ -95,6 +99,17 @@ class AoaClientTest {
             val latch = latches.getOrPut(state) { CountDownLatch(1) }
             return latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         }
+    }
+
+    private fun waitUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) {
+                return true
+            }
+            Thread.sleep(50)
+        }
+        return condition()
     }
 
     /**
@@ -435,6 +450,35 @@ class AoaClientTest {
         assertEquals(sha256Hex("654321$rand"), responseEnvelope.getJSONObject("body").getString("proof"))
         assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
         verify(exactly = 2) { streamOpener.open(any()) }
+    }
+
+    @Test
+    fun `auth challenge while connected triggers resync and reopens accessory`() {
+        val observer = stateObserver()
+        openTestPipes()
+        client.prepareBootstrap("sid-001", "123456", 8080)
+        performAuthHandshake()
+        assertTrue(observer.waitFor(AoaTransportState.CONNECTED))
+
+        // The desktop detected a desynced stream (e.g. after the OS froze the
+        // process) and restarts its session with a fresh auth challenge. The
+        // already-connected client must tear down the stale streams instead of
+        // answering on a corrupted connection.
+        writeFrame(
+            AUTH_CHALLENGE_REQUEST_ID,
+            buildAuthChallengeEnvelope("aabbccddeeff00112233445566778899").toByteArray(Charsets.UTF_8),
+        )
+
+        // The resync re-opens the accessory so the desktop's next probe can
+        // re-authenticate on clean streams.
+        verify(timeout = 5000, atLeast = 2) { streamOpener.open(any()) }
+
+        // The client went through DISCONNECTED (stale teardown) and is now
+        // waiting to re-authenticate; it must not report itself connected until
+        // the new handshake completes.
+        assertTrue(waitUntil(5000) { observer.countSeen(AoaTransportState.DISCONNECTED) >= 2 })
+        assertTrue(observer.countSeen(AoaTransportState.AUTHENTICATING) >= 2)
+        assertFalse(client.isConnected())
     }
 
     @Test

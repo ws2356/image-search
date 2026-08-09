@@ -9,6 +9,7 @@ import android.hardware.usb.UsbAccessory
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.util.Log
 import org.json.JSONObject
 import java.io.IOException
@@ -18,6 +19,7 @@ import java.util.UUID
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -119,6 +121,20 @@ class AoaClient internal constructor(
     private var currentInputStream: InputStream? = null
     private var currentOutputStream: OutputStream? = null
     private val connectionGeneration = AtomicLong(0)
+
+    /**
+     * Monotonic timestamps of the last successful frame read/write, used by the
+     * stall watchdog to detect a connection that went silent (e.g. after the OS
+     * froze the process). Initialized on construction so a freshly-prepared
+     * connection does not appear stalled immediately.
+     */
+    private val lastReadActivityAt = AtomicLong(SystemClock.elapsedRealtime())
+    private val lastWriteActivityAt = AtomicLong(SystemClock.elapsedRealtime())
+    private val resyncInProgress = AtomicBoolean(false)
+    private val resyncExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "AoaClient-Resync").apply { isDaemon = true }
+    }
+    private var watchdogThread: Thread? = null
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -384,6 +400,94 @@ class AoaClient internal constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
         registerReceiver()
+        startWatchdog()
+    }
+
+    /**
+     * Starts a daemon thread that watches for a silently stalled AOA connection.
+     *
+     * The OS can freeze the app process (screen off / battery optimizations) while
+     * the USB accessory is connected. When the process thaws, the bulk streams may
+     * be desynchronized: the desktop sees garbage frames ("Unsupported AOA frame
+     * version") and enters an endless reconnect loop that never succeeds. The
+     * watchdog notices that no frame has been read for a while and forces a
+     * [resyncConnection] so both sides re-establish a clean session.
+     */
+    private fun startWatchdog() {
+        if (watchdogThread?.isAlive == true) {
+            return
+        }
+        watchdogThread = Thread({
+            while (!stopped.get() && !Thread.currentThread().isInterrupted) {
+                try {
+                    Thread.sleep(WATCHDOG_POLL_INTERVAL_MS)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+                val currentState = state.get()
+                if (currentState != AoaTransportState.CONNECTED &&
+                    currentState != AoaTransportState.AUTHENTICATING
+                ) {
+                    continue
+                }
+                // Only treat silence as a stall when we are waiting on a response.
+                // A healthy connection streams binary chunks for minutes without any
+                // inbound frames, so idle reads alone must not trigger a resync.
+                val hasPendingWork =
+                    pendingResponses.isNotEmpty() || pendingStreamingResponses.isNotEmpty()
+                if (!hasPendingWork) {
+                    continue
+                }
+                // Compare against the most recent read OR write: during a long chunk
+                // stream the writes keep flowing even though reads are rare, so a
+                // genuinely stalled link is one where both directions went quiet.
+                val lastActivityAt = maxOf(lastReadActivityAt.get(), lastWriteActivityAt.get())
+                val idleMs = SystemClock.elapsedRealtime() - lastActivityAt
+                if (idleMs >= STALL_TIMEOUT_MS) {
+                    Log.w(
+                        LOG_TAG,
+                        "Watchdog detected stalled AOA connection " +
+                            "(no reads/writes for ${idleMs}ms with ${pendingResponses.size} pending " +
+                            "and ${pendingStreamingResponses.size} streaming; resyncing."
+                    )
+                    resyncConnection()
+                }
+            }
+        }, "AoaClient-Watchdog").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    /**
+     * Tears down and re-opens the AOA accessory so both sides restart with fresh
+     * streams. Clears the outgoing queue and wakes any blocked request with
+     * [AoaTransportError.ConnectionLost]; the JS layer retries the transfer on the
+     * re-established session.
+     */
+    private fun resyncConnection() {
+        if (!resyncInProgress.compareAndSet(false, true)) {
+            return
+        }
+        if (stopped.get() || !bootstrapPrepared) {
+            resyncInProgress.set(false)
+            return
+        }
+        Log.i(LOG_TAG, "Resyncing AOA connection.")
+        closeConnection()
+        resyncExecutor.execute {
+            try {
+                Thread.sleep(RESYNC_REOPEN_DELAY_MS)
+                if (!stopped.get() && bootstrapPrepared) {
+                    probeAttachedAccessories()
+                }
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } finally {
+                resyncInProgress.set(false)
+            }
+        }
     }
 
     /**
@@ -455,6 +559,9 @@ class AoaClient internal constructor(
         if (stopped.getAndSet(true)) {
             return
         }
+        watchdogThread?.interrupt()
+        watchdogThread = null
+        resyncExecutor.shutdownNow()
         closeConnection()
         try {
             context.unregisterReceiver(receiver)
@@ -618,6 +725,7 @@ class AoaClient internal constructor(
                 if (readBytes == 0) {
                     continue
                 }
+                lastReadActivityAt.set(SystemClock.elapsedRealtime())
                 val frames = decoder.feed(buffer.copyOfRange(0, readBytes))
                 for (frame in frames) {
                     handleFrame(frame)
@@ -631,7 +739,7 @@ class AoaClient internal constructor(
             Log.w(LOG_TAG, "Reader stopped unexpectedly: ${e.message}")
         } finally {
             if (generation == connectionGeneration.get()) {
-                closeConnection()
+                resyncConnection()
             }
         }
     }
@@ -667,6 +775,20 @@ class AoaClient internal constructor(
         val oneTimePasscode = preparedOneTimePasscode
         if (sessionId == null || oneTimePasscode == null) {
             Log.w(LOG_TAG, "Received auth challenge before bootstrap was prepared.")
+            return
+        }
+        // The desktop restarts its AOA session with a fresh auth challenge whenever
+        // it detects a desynchronized stream (e.g. after the OS froze this process).
+        // If we were already authenticated, the bulk endpoint likely still holds stale
+        // bytes from before the freeze, so responding on the current stream would only
+        // corrupt the handshake. Tear the streams down and let the desktop's next
+        // probe re-authenticate on a fresh, clean connection.
+        if (state.get() == AoaTransportState.CONNECTED) {
+            Log.w(
+                LOG_TAG,
+                "Received auth challenge while already connected; resyncing AOA connection."
+            )
+            resyncConnection()
             return
         }
         val body = try {
@@ -733,6 +855,7 @@ class AoaClient internal constructor(
                 val frame = outgoingQueue.take()
                 outputStream.write(frame)
                 outputStream.flush()
+                lastWriteActivityAt.set(SystemClock.elapsedRealtime())
             }
         } catch (e: IOException) {
             Log.w(LOG_TAG, "Writer stopped with I/O error: ${e.message}")
@@ -740,7 +863,7 @@ class AoaClient internal constructor(
             Thread.currentThread().interrupt()
         } finally {
             if (generation == connectionGeneration.get()) {
-                closeConnection()
+                resyncConnection()
             }
         }
     }
@@ -802,6 +925,17 @@ class AoaClient internal constructor(
         private const val READ_BUFFER_SIZE = 16 * 1024
         private const val RESPONSE_TIMEOUT_MS = 10_000L
         private const val ACTION_USB_PERMISSION = "com.ausearch.aubackup.USB_ACCESSORY_PERMISSION"
+
+        /**
+         * If no frame has been read from the host for this long while the client is
+         * CONNECTED/AUTHENTICATING, the bulk stream is assumed desynchronized (e.g.
+         * after the OS froze the process) and a resync is triggered. Must stay well
+         * above RESPONSE_TIMEOUT_MS so a normal slow desktop response does not look
+         * like a stall.
+         */
+        private const val STALL_TIMEOUT_MS = 30_000L
+        private const val WATCHDOG_POLL_INTERVAL_MS = 2_000L
+        private const val RESYNC_REOPEN_DELAY_MS = 1_000L
 
         /**
          * Upper bound on frames queued for the USB writer. Producers (sendRequest,

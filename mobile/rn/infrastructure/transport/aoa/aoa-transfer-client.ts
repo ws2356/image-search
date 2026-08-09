@@ -21,6 +21,21 @@ const MOBILE_TRANSPORT_SCHEMA = 'dtis.mobile-transport.v1';
 const AOA_REQUEST_ID_LENGTH = 36;
 
 /**
+ * How long to keep retrying a request while the native AOA client is tearing
+ * down a desynchronized stream and re-opening the accessory (resync). The native
+ * client detects a stalled session and reconnects on its own; the JS layer must
+ * survive that brief reconnection window instead of failing the whole transfer.
+ */
+const AOA_RECONNECT_RETRY_WINDOW_MS = 10_000;
+const AOA_RECONNECT_POLL_INTERVAL_MS = 250;
+
+function delay(duration_ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, duration_ms);
+  });
+}
+
+/**
  * AOA frames carry a fixed 36-byte request id. Asset streaming uses the asset
  * content URI as its request id, which can exceed 36 bytes and would break the
  * frame codec. Derive a deterministic 36-byte id so the start envelope, binary
@@ -68,7 +83,7 @@ export class AoaTransferClient implements TransferClient {
   async start(request: Omit<TransferSessionRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse> {
     this.throw_if_transfer_aborted(abort_signal);
     const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
-    const response = await this.send_request('transfer.start', body);
+    const response = await this.with_reconnect_retry(() => this.send_request('transfer.start', body), abort_signal);
     return this.parse_response(response);
   }
   async existence(
@@ -77,7 +92,7 @@ export class AoaTransferClient implements TransferClient {
   ): Promise<TransferResponse> {
     this.throw_if_transfer_aborted(abort_signal);
     const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
-    const response = await this.send_request('transfer.existence', body);
+    const response = await this.with_reconnect_retry(() => this.send_request('transfer.existence', body), abort_signal);
     return this.parse_response(response);
   }
 
@@ -120,7 +135,7 @@ export class AoaTransferClient implements TransferClient {
     this.throw_if_transfer_aborted(abort_signal);
     const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
     console.log('[AoaTransferClient] complete via AOA bridge');
-    const response = await this.send_request('transfer.complete', body);
+    const response = await this.with_reconnect_retry(() => this.send_request('transfer.complete', body), abort_signal);
     return this.parse_response(response);
   }
 
@@ -128,6 +143,66 @@ export class AoaTransferClient implements TransferClient {
     const request_id = this.generate_request_id();
     const envelope = this.envelope(operation, body, request_id);
     return this.bridge.sendRequest(JSON.stringify(envelope));
+  }
+
+  /**
+   * Retries a request/response operation when the native AOA client is tearing
+   * down a desynchronized stream and re-opening the accessory (resync). The
+   * native client reconnects on its own; this wrapper waits for it and then
+   * retries so a brief reconnection window does not fail the whole transfer.
+   */
+  private async with_reconnect_retry<T>(
+    operation: () => Promise<T>,
+    abort_signal?: AbortSignal
+  ): Promise<T> {
+    const deadline = Date.now() + AOA_RECONNECT_RETRY_WINDOW_MS;
+    let attempt = 0;
+    while (true) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.is_connection_error(error)) {
+          throw error;
+        }
+        attempt += 1;
+        if (abort_signal?.aborted || Date.now() >= deadline) {
+          throw error;
+        }
+        // Wait for the native client to finish resyncing, then retry.
+        if (!(await this.wait_for_aoa_reconnection(deadline, abort_signal))) {
+          throw error;
+        }
+        if (attempt >= 3) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private is_connection_error(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return (
+      message.toLowerCase().includes('not connected') ||
+      message.toLowerCase().includes('connection lost') ||
+      message.toLowerCase().includes('connection unavailable') ||
+      message.toLowerCase().includes('response timed out')
+    );
+  }
+
+  private async wait_for_aoa_reconnection(
+    deadline: number,
+    abort_signal?: AbortSignal
+  ): Promise<boolean> {
+    while (Date.now() < deadline) {
+      if (abort_signal?.aborted) {
+        return false;
+      }
+      if (this.bridge.isConnected()) {
+        return true;
+      }
+      await delay(AOA_RECONNECT_POLL_INTERVAL_MS);
+    }
+    return this.bridge.isConnected();
   }
 
   private envelope(operation: string, body: object, request_id: string) {
