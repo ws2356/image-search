@@ -59,3 +59,44 @@ test('TransferService complete forwards counts and proof', async () => {
     undefined
   );
 });
+
+test('TransferService delegates connection-error detection to the client', () => {
+  const is_connection_error = jest.fn().mockReturnValue(true);
+  const service = new TransferService(
+    { endpoint_base_url: 'http://localhost', session_id: 's1', device_uuid: 'd1', trust_key_b64: 'key' },
+    {
+      transfer_client: { ...fakeClient, is_connection_error },
+      trust_proof_signer: { derive_trust_proof: jest.fn().mockResolvedValue('proof') },
+    }
+  );
+
+  const error = new Error('AOA connection lost');
+  expect(service.is_connection_error(error)).toBe(true);
+  expect(is_connection_error).toHaveBeenCalledWith(error);
+});
+
+test('TransferService reports false for connection errors when the client has no resync concept', () => {
+  const service = new TransferService(
+    { endpoint_base_url: 'http://localhost', session_id: 's1', device_uuid: 'd1', trust_key_b64: 'key' },
+    {
+      transfer_client: fakeClient,
+      trust_proof_signer: { derive_trust_proof: jest.fn().mockResolvedValue('proof') },
+    }
+  );
+
+  expect(service.is_connection_error(new Error('AOA connection lost'))).toBe(false);
+});
+
+test('TransferService delegates wait_for_reconnection to the client', async () => {
+  const wait_for_reconnection = jest.fn().mockResolvedValue(true);
+  const service = new TransferService(
+    { endpoint_base_url: 'http://localhost', session_id: 's1', device_uuid: 'd1', trust_key_b64: 'key' },
+    {
+      transfer_client: { ...fakeClient, wait_for_reconnection },
+      trust_proof_signer: { derive_trust_proof: jest.fn().mockResolvedValue('proof') },
+    }
+  );
+
+  await expect(service.wait_for_reconnection(5000)).resolves.toBe(true);
+  expect(wait_for_reconnection).toHaveBeenCalledWith(5000);
+});

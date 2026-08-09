@@ -36,6 +36,23 @@ function delay(duration_ms: number): Promise<void> {
 }
 
 /**
+ * Detects errors that indicate the AOA transport link itself dropped, as opposed
+ * to a genuine asset/request rejection. The native client tears down and re-opens
+ * the accessory on its own after a desync, so these errors are transient: the
+ * caller should wait for reconnection and retry rather than treating the asset as
+ * permanently failed.
+ */
+export function is_aoa_connection_error(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.toLowerCase().includes('not connected') ||
+    message.toLowerCase().includes('connection lost') ||
+    message.toLowerCase().includes('connection unavailable') ||
+    message.toLowerCase().includes('response timed out')
+  );
+}
+
+/**
  * AOA frames carry a fixed 36-byte request id. Asset streaming uses the asset
  * content URI as its request id, which can exceed 36 bytes and would break the
  * frame codec. Derive a deterministic 36-byte id so the start envelope, binary
@@ -151,6 +168,15 @@ export class AoaTransferClient implements TransferClient {
    * native client reconnects on its own; this wrapper waits for it and then
    * retries so a brief reconnection window does not fail the whole transfer.
    */
+  is_connection_error(error: unknown): boolean {
+    return is_aoa_connection_error(error);
+  }
+
+  async wait_for_reconnection(timeout_ms: number): Promise<boolean> {
+    const deadline = Date.now() + timeout_ms;
+    return this.wait_for_aoa_reconnection(deadline, undefined);
+  }
+
   private async with_reconnect_retry<T>(
     operation: () => Promise<T>,
     abort_signal?: AbortSignal
@@ -161,7 +187,7 @@ export class AoaTransferClient implements TransferClient {
       try {
         return await operation();
       } catch (error) {
-        if (!this.is_connection_error(error)) {
+        if (!is_aoa_connection_error(error)) {
           throw error;
         }
         attempt += 1;
@@ -177,16 +203,6 @@ export class AoaTransferClient implements TransferClient {
         }
       }
     }
-  }
-
-  private is_connection_error(error: unknown): boolean {
-    const message = error instanceof Error ? error.message : String(error);
-    return (
-      message.toLowerCase().includes('not connected') ||
-      message.toLowerCase().includes('connection lost') ||
-      message.toLowerCase().includes('connection unavailable') ||
-      message.toLowerCase().includes('response timed out')
-    );
   }
 
   private async wait_for_aoa_reconnection(

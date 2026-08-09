@@ -202,3 +202,38 @@ test('AoaTransferClient propagates a non-connection error without retrying', asy
   ).rejects.toThrow('desktop rejected the request');
   expect(bridge.sentRequests.length).toBe(1);
 });
+
+test('AoaTransferClient classifies connection errors and waits for reconnection', async () => {
+  class ReconnectingBridge extends FakeAoaBridge {
+    connected = false;
+
+    override isConnected(): boolean {
+      return this.connected;
+    }
+  }
+
+  const bridge = new ReconnectingBridge();
+  const client = new AoaTransferClient(bridge, context);
+
+  expect(
+    client.is_connection_error(new Error('AOA connection lost'))
+  ).toBe(true);
+  expect(
+    client.is_connection_error(new Error('AOA client is not connected (state=DISCONNECTED)'))
+  ).toBe(true);
+  expect(
+    client.is_connection_error(new Error('desktop rejected the request'))
+  ).toBe(false);
+
+  // It must not return reconnected before the native client reconnects.
+  const pending = client.wait_for_reconnection(200);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  bridge.connected = true;
+  await expect(pending).resolves.toBe(true);
+});
+
+test('AoaTransferClient times out waiting for reconnection when the link stays down', async () => {
+  const bridge = new FakeAoaBridge();
+  const client = new AoaTransferClient(bridge, context);
+  await expect(client.wait_for_reconnection(50)).resolves.toBe(false);
+});

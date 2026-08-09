@@ -148,6 +148,24 @@ export class TransferService {
     return this.deps.transfer_client.complete(request, abort_signal);
   }
 
+  /**
+   * True when the failure means the transport link dropped (AOA resync) rather
+   * than a genuine asset rejection. Transports without connection semantics
+   * report false so non-AOA flows keep their existing failure behavior.
+   */
+  is_connection_error(error: unknown): boolean {
+    return this.deps.transfer_client.is_connection_error?.(error) ?? false;
+  }
+
+  /**
+   * Waits up to timeout_ms for the transport to re-establish after a connection
+   * drop. Returns true when the link is usable again; false on timeout or for
+   * transports without a resync concept.
+   */
+  async wait_for_reconnection(timeout_ms: number): Promise<boolean> {
+    return this.deps.transfer_client.wait_for_reconnection?.(timeout_ms) ?? true;
+  }
+
   private async build_transfer_trust_proof(
     purpose: 'transfer.start' | 'transfer.existence' | 'transfer.asset' | 'transfer.complete'
   ): Promise<string> {

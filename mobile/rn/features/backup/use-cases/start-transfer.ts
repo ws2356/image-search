@@ -14,6 +14,7 @@ import { apply_backup_command } from '@/features/backup/state/backup-flow-transi
 import { TransferFailureReason, TransferPipelineStage, TransferTransport } from '@/features/backup/transfer/enums';
 import type { TransferProgressSnapshot } from '@/features/backup/transfer/models';
 import type { TransferAssetSignature } from '@/features/backup/protocols/transfer';
+import type { TransferResponse } from '@/features/backup/protocols/transfer';
 import { useBackupSessionStore } from '@/features/backup/store/backup-session-store';
 import {
   create_transfer_abort_error,
@@ -49,6 +50,14 @@ const TRANSFER_CONCURRENT_SHA1_LIMIT = 3;
 const CAPABILITY_EXCHANGE_MAX_ATTEMPTS = 3;
 const CAPABILITY_EXCHANGE_RETRY_DELAY_MS = 500;
 const CONSECUTIVE_UPLOAD_FAILURE_LIMIT = 5;
+
+/**
+ * How many times to retry an asset upload whose failure was caused by a dropped
+ * AOA link (rather than a genuine rejection). The native client auto-resyncs, so
+ * a retry after reconnection should succeed.
+ */
+const TRANSFER_CONNECTION_RETRY_LIMIT = 3;
+const TRANSFER_RECONNECT_WAIT_MS = 15_000;
 
 function delay(duration_ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -436,29 +445,7 @@ export async function startTransfer(
       throw_if_transfer_stopped();
       await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
       try {
-        const chunk_reader = await transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
-        let asset_bytes_uploaded = 0;
-        let upload_response;
-        try {
-          upload_response = await transfer_service.upload_asset_chunked(
-            asset.metadata,
-            async (_offset, length) => {
-              throw_if_transfer_stopped();
-              return chunk_reader.read_chunk(length);
-            },
-            typeof asset.metadata.file_size === 'number' && asset.metadata.file_size > 0
-              ? asset.metadata.file_size
-              : undefined,
-            1024 * 1024,
-            transfer_abort_signal,
-            async (chunk_length) => {
-              asset_bytes_uploaded += chunk_length;
-              await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
-            }
-          );
-        } finally {
-          chunk_reader.close();
-        }
+        const { upload_response, asset_bytes_uploaded } = await upload_asset_with_connection_retry(asset);
         if (upload_response?.status === 'skipped') {
           matched_assets += 1;
           consecutive_upload_failures = 0;
@@ -478,6 +465,73 @@ export async function startTransfer(
           throw new Error(
             `Transfer aborted after ${consecutive_upload_failures} consecutive asset failures: ${message}`
           );
+        }
+      }
+    };
+
+    const upload_asset_once = async (
+      asset: (typeof assets)[number]
+    ): Promise<{ upload_response?: TransferResponse; asset_bytes_uploaded: number }> => {
+      const chunk_reader = await transfer_asset_source.open_asset_chunk_reader(asset.asset_id, 0);
+      let asset_bytes_uploaded = 0;
+      try {
+        const upload_response = await transfer_service.upload_asset_chunked(
+          asset.metadata,
+          async (_offset, length) => {
+            throw_if_transfer_stopped();
+            return chunk_reader.read_chunk(length);
+          },
+          typeof asset.metadata.file_size === 'number' && asset.metadata.file_size > 0
+            ? asset.metadata.file_size
+            : undefined,
+          1024 * 1024,
+          transfer_abort_signal,
+          async (chunk_length) => {
+            asset_bytes_uploaded += chunk_length;
+            await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
+          }
+        );
+        return { upload_response, asset_bytes_uploaded };
+      } finally {
+        chunk_reader.close();
+      }
+    };
+
+    /**
+     * Uploads an asset, retrying when the transport link drops. The native AOA
+     * client auto-resyncs (re-opens the accessory) after a desync, so a
+     * connection-loss failure is transient: wait for the link to come back and
+     * retry the same asset instead of counting it as a permanent failure. Only
+     * genuinely rejected assets increment the consecutive-failure abort counter.
+     */
+    const upload_asset_with_connection_retry = async (
+      asset: (typeof assets)[number]
+    ): Promise<{ upload_response?: TransferResponse; asset_bytes_uploaded: number }> => {
+      let attempt = 0;
+      while (true) {
+        try {
+          return await upload_asset_once(asset);
+        } catch (error) {
+          const is_connection_error = transfer_service.is_connection_error(error);
+          const can_retry = is_connection_error && attempt < TRANSFER_CONNECTION_RETRY_LIMIT;
+          if (!can_retry) {
+            throw error;
+          }
+          attempt += 1;
+          console.warn(
+            `[Transfer] connection lost while uploading ${asset.asset_id}; ` +
+              `waiting for reconnection (attempt ${attempt}/${TRANSFER_CONNECTION_RETRY_LIMIT})`
+          );
+          if (transfer_abort_signal.aborted) {
+            throw create_transfer_abort_error();
+          }
+          const reconnected = await transfer_service.wait_for_reconnection(TRANSFER_RECONNECT_WAIT_MS);
+          if (!reconnected) {
+            throw error;
+          }
+          if (transfer_abort_signal.aborted) {
+            throw create_transfer_abort_error();
+          }
         }
       }
     };
