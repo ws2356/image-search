@@ -557,6 +557,73 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
         finally:
             adapter.stop()
 
+    def test_session_failure_backoff_grows_then_resets(self) -> None:
+        """Repeated session failures must back off the retry interval and reset on success."""
+        router = MobileTransportRouter()
+        device = AoaDetectedDevice(
+            device_id="dev-backoff",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = SimulatedAoaHostDriver([device])
+        adapter = UsbAoaTransportAdapter(
+            router=router,
+            driver=driver,
+            probe_interval_seconds=0.01,
+            response_poll_timeout_seconds=0.01,
+            auth_challenge_timeout_seconds=0.05,
+            max_session_failure_backoff_seconds=0.2,
+        )
+
+        # Without any failure, the wait equals the base probe interval.
+        adapter._consecutive_session_failures = 0
+        start = time.monotonic()
+        adapter._wait_for_retry_interval()
+        base_elapsed = time.monotonic() - start
+        self.assertLess(base_elapsed, 0.05)
+
+        # A few failures should push the wait past the base interval (backoff).
+        adapter._consecutive_session_failures = 3
+        start = time.monotonic()
+        adapter._wait_for_retry_interval()
+        backed_off_elapsed = time.monotonic() - start
+        self.assertGreaterEqual(backed_off_elapsed, 0.02)
+        self.assertLessEqual(backed_off_elapsed, 0.3)
+
+        # A successful connection resets the failure counter.
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="sid-001",
+                one_time_passcode="123456",
+                suggested_port=45000,
+            )
+        )
+        adapter.start()
+        try:
+            challenge_frame = driver.read_frame(timeout=2.0)
+            self.assertIsNotNone(challenge_frame)
+            request_id, _, payload = decode_aoa_frame(challenge_frame)
+            challenge = json.loads(payload.decode("utf-8"))
+            driver.inject_frame(
+                encode_aoa_frame(
+                    request_id,
+                    _build_auth_response(challenge["body"]["rand"], "123456", request_id),
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+            connected = False
+            for _ in range(200):
+                if adapter.state.value == "connected":
+                    connected = True
+                    break
+                time.sleep(0.01)
+            self.assertTrue(connected)
+            self.assertEqual(adapter._consecutive_session_failures, 0)
+        finally:
+            adapter.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

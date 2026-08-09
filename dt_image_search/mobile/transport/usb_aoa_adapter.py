@@ -126,6 +126,7 @@ class UsbAoaTransportAdapter:
         open_retry_attempts: int = 3,
         open_retry_delay_seconds: float = 0.25,
         resolve_transfer_trust_key: Callable[..., str | None] | None = None,
+        max_session_failure_backoff_seconds: float = 5.0,
     ) -> None:
         if probe_interval_seconds <= 0:
             raise ValueError("AOA probe_interval_seconds must be greater than zero.")
@@ -141,6 +142,10 @@ class UsbAoaTransportAdapter:
             raise ValueError("AOA open_retry_attempts must be greater than zero.")
         if open_retry_delay_seconds < 0:
             raise ValueError("AOA open_retry_delay_seconds must not be negative.")
+        if max_session_failure_backoff_seconds < 0:
+            raise ValueError(
+                "AOA max_session_failure_backoff_seconds must not be negative."
+            )
 
         self._router = router
         self._driver = driver or PyUsbAoaHostDriver()
@@ -150,6 +155,7 @@ class UsbAoaTransportAdapter:
         self._open_retry_attempts = open_retry_attempts
         self._open_retry_delay_seconds = open_retry_delay_seconds
         self._resolve_transfer_trust_key = resolve_transfer_trust_key
+        self._max_session_failure_backoff_seconds = max_session_failure_backoff_seconds
 
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
@@ -160,6 +166,7 @@ class UsbAoaTransportAdapter:
         self._last_probe_error: str | None = None
         self._active_read_stream: AoaReadStream | None = None
         self._active_write_stream: AoaWriteStream | None = None
+        self._consecutive_session_failures = 0
 
     @property
     def state(self) -> UsbTransportState:
@@ -272,6 +279,7 @@ class UsbAoaTransportAdapter:
                     if self._state != UsbTransportState.STOPPED:
                         self._state = UsbTransportState.CONNECTED
                         self._last_probe_error = None
+                    self._consecutive_session_failures = 0
                 self._safe_log(
                     "info",
                     message=(
@@ -291,6 +299,8 @@ class UsbAoaTransportAdapter:
                 AoaFrameError,
             ) as exc:
                 self._set_probe_error(str(exc))
+                with self._lock:
+                    self._consecutive_session_failures += 1
                 if _is_mobile_not_ready_error(exc):
                     # The mobile has not prepared its AOA client yet (e.g. the user
                     # has not scanned the QR). This is the normal pre-pairing state;
@@ -308,7 +318,8 @@ class UsbAoaTransportAdapter:
                         "warning",
                         message=(
                             "UsbAoaTransportAdapter/_run_transport_loop: AOA session failed "
-                            f"device={device.device_id}: {exc}"
+                            f"device={device.device_id}: {exc} "
+                            f"(consecutive_failures={self._consecutive_session_failures})"
                         ),
                     )
             finally:
@@ -1009,7 +1020,20 @@ class UsbAoaTransportAdapter:
                 self._state = UsbTransportState.READY
 
     def _wait_for_retry_interval(self) -> None:
-        self._stop_event.wait(timeout=self._probe_interval_seconds)
+        # Back off after repeated AOA session failures (e.g. a mobile process that
+        # was frozen by the OS and is now resyncing its accessory streams). A slow
+        # reconnect loop gives the mobile time to re-establish clean streams instead
+        # of the host hammering the USB bus with probe/auth attempts.
+        with self._lock:
+            failure_count = self._consecutive_session_failures
+        if failure_count <= 1:
+            wait_seconds = self._probe_interval_seconds
+        else:
+            wait_seconds = min(
+                self._probe_interval_seconds * (2 ** min(failure_count - 1, 4)),
+                self._max_session_failure_backoff_seconds,
+            )
+        self._stop_event.wait(timeout=wait_seconds)
 
     def _close_active_stream_locked(self) -> None:
         with self._lock:
