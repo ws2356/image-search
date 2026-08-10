@@ -17,6 +17,11 @@ export interface MediaAssetDescriptor {
 export interface MediaLibraryGateway {
   enumerate_transfer_candidates(batch_size: number): Promise<MediaAssetDescriptor[]>;
   open_asset_chunk_reader(asset_id: string, offset?: number): Promise<MediaAssetChunkReader>;
+  /**
+   * Deletes the given assets from the device media store. Only the supplied
+   * asset ids are removed. Returns the number of assets successfully deleted.
+   */
+  delete_assets(asset_ids: string[]): Promise<number>;
 }
 
 export interface MediaAssetChunkReader {
@@ -128,6 +133,20 @@ export class ExpoMediaLibraryGateway implements MediaLibraryGateway {
     }
   }
 
+  async delete_assets(asset_ids: string[]): Promise<number> {
+    let removedCount = 0;
+    for (const asset_id of asset_ids) {
+      try {
+        const asset = new MediaLibrary.Asset(asset_id);
+        await asset.delete();
+        removedCount += 1;
+      } catch {
+        // Asset may already be gone; keep removing the remaining ids.
+      }
+    }
+    return removedCount;
+  }
+
 }
 
 export class StubMediaLibraryGateway implements MediaLibraryGateway {
@@ -140,6 +159,10 @@ export class StubMediaLibraryGateway implements MediaLibraryGateway {
       read_chunk: (_length: number) => new Uint8Array(),
       close: () => {},
     };
+  }
+
+  async delete_assets(_asset_ids: string[]): Promise<number> {
+    return 0;
   }
 
 }

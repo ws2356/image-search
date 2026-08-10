@@ -11,6 +11,7 @@ export interface AndroidTransferService {
 export interface AndroidHeadlessTransferTaskPayload {
   pairingSession: PairingSessionSummary;
   localDeviceIdentity: LocalDeviceIdentitySummary;
+  removeAfterBackupEnabled: boolean;
 }
 
 export type AndroidTransferSessionStatus = 'idle' | 'running' | 'completed' | 'failed' | 'stopped';

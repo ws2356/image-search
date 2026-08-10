@@ -282,6 +282,7 @@ export function useTransferScreenController(): TransferScreenController {
         await start_android_headless_transfer_session({
           pairingSession: session.pairingSession,
           localDeviceIdentity: session.localDeviceIdentity,
+          removeAfterBackupEnabled: session.permissionSummary.removeAfterBackupEnabled,
         });
       })().catch((error) => {
         const message = error instanceof Error ? error.message : 'Failed to start transfer.';

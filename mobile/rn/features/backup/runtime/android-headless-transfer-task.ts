@@ -29,6 +29,10 @@ function hydrate_headless_transfer_session(task_payload: AndroidHeadlessTransfer
   const store = useBackupSessionStore.getState();
   store.setPairingSession(task_payload.pairingSession);
   store.setLocalDeviceIdentity(task_payload.localDeviceIdentity);
+  store.setPermissionSummary({
+    ...store.session.permissionSummary,
+    removeAfterBackupEnabled: task_payload.removeAfterBackupEnabled,
+  });
   store.setLatestError(null);
 }
 

@@ -30,6 +30,11 @@ import {
   get_default_transfer_runtime_wiring,
   type TransferRuntimeWiring,
 } from '@/infrastructure/platform/transfer-runtime-wiring';
+import { cleanupAfterBackup } from '@/features/backup/use-cases/cleanup-after-backup';
+import {
+  create_default_media_library_gateway,
+  type MediaLibraryGateway,
+} from '@/infrastructure/system/media-library-gateway';
 
 export interface StartTransferDeps {
   apply_command: typeof apply_backup_command;
@@ -37,6 +42,7 @@ export interface StartTransferDeps {
   transport_strategy?: TransportStrategy;
   transfer_runtime_wiring: TransferRuntimeWiring;
   transfer_asset_source: TransferAssetSource;
+  media_library_gateway: MediaLibraryGateway;
 }
 
 export interface StartTransferOptions {
@@ -202,8 +208,10 @@ export async function startTransfer(
     trust_proof_signer: deps.trust_proof_signer ?? new DefaultTrustProofSigner(),
     transfer_runtime_wiring: deps.transfer_runtime_wiring ?? get_default_transfer_runtime_wiring(),
     transfer_asset_source: deps.transfer_asset_source ?? new DefaultTransferAssetSource(),
+    media_library_gateway: deps.media_library_gateway ?? create_default_media_library_gateway(),
   };
-  const { apply_command, transfer_asset_source, transfer_runtime_wiring, trust_proof_signer } = resolved_deps;
+  const { apply_command, transfer_asset_source, transfer_runtime_wiring, trust_proof_signer, media_library_gateway } =
+    resolved_deps;
   assert_transfer_not_live_in_phase4('startTransfer');
   const session = useBackupSessionStore.getState().session;
   const pairing_session = session.pairingSession;
@@ -383,6 +391,7 @@ export async function startTransfer(
     let sha1_elapsed_ms = 0;
     let sha1_measured_assets = 0;
     let consecutive_upload_failures = 0;
+    const successfullyTransferredAssetIds = new Set<string>();
 
     const publish_snapshot = async (
       stage: TransferPipelineStage,
@@ -448,12 +457,16 @@ export async function startTransfer(
         const { upload_response, asset_bytes_uploaded } = await upload_asset_with_connection_retry(asset);
         if (upload_response?.status === 'skipped') {
           matched_assets += 1;
+          successfullyTransferredAssetIds.add(asset.asset_id);
           consecutive_upload_failures = 0;
           await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
           return;
         }
         bytes_uploaded += asset_bytes_uploaded;
         transferred_assets += 1;
+        if (upload_response?.status === 'stored') {
+          successfullyTransferredAssetIds.add(asset.asset_id);
+        }
         consecutive_upload_failures = 0;
         await publish_snapshot(TransferPipelineStage.Transferring, asset.asset_id);
       } catch (error) {
@@ -595,6 +608,9 @@ export async function startTransfer(
       }
       if (matched_asset_ids.size > 0) {
         matched_assets += matched_asset_ids.size;
+        for (const asset_id of matched_asset_ids) {
+          successfullyTransferredAssetIds.add(asset_id);
+        }
       }
       for (const item of batch) {
         if (!matched_asset_ids.has(item.asset.asset_id)) {
@@ -675,6 +691,15 @@ export async function startTransfer(
 
     await transfer_service.complete(transferred_assets, failed_assets, transfer_abort_signal);
     throw_if_transfer_stopped();
+    const cleanupResult = await cleanupAfterBackup(
+      Array.from(successfullyTransferredAssetIds),
+      { media_library_gateway }
+    );
+    if (cleanupResult.kind === 'removed') {
+      console.log(`[Transfer] cleanup removed ${cleanupResult.removedCount} transferred assets`);
+    } else if (cleanupResult.kind === 'failed') {
+      console.warn(`[Transfer] cleanup failed: ${cleanupResult.message}`);
+    }
     await end_transfer_runtime_session(transfer_runtime_wiring);
     runtime_started = false;
   } catch (error) {
