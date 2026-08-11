@@ -56,6 +56,29 @@ export function PreflightScreen() {
       return;
     }
 
+    if (phase === 'battery-optimization') {
+      Alert.alert(
+        'Keep backup running in background?',
+        'Android may pause the transfer while the screen is off unless AuBackup is allowed to run in the background. Allow battery optimization exemption so a long backup keeps running while you lock the device?',
+        [
+          {
+            text: 'Allow',
+            onPress: () => {
+              void controller.request_battery_optimization_exemption();
+            },
+          },
+          {
+            text: 'Not now',
+            style: 'cancel',
+            onPress: () => {
+              void controller.continue_without_battery_optimization_exemption();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     Alert.alert(
       'After backup, remove transferred media?',
       'Choose whether successfully transferred photos and videos should be moved to Recently Removed on this device after backup completes.',

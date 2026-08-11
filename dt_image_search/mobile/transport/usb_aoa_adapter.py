@@ -108,6 +108,16 @@ def _is_mobile_not_ready_error(exc: BaseException) -> bool:
     return "auth challenge timed out" in error_message
 
 
+class AoaSessionStallError(RuntimeError):
+    """Raised when an in-flight AOA asset upload goes silent for too long.
+
+    The mobile can be frozen by the OS (screen off / battery optimization)
+    mid-upload. Its own watchdog eventually re-opens the accessory stream, but
+    the host's read loop would otherwise time out forever without ever returning
+    to the probe loop to re-authenticate the fresh stream.
+    """
+
+
 class UsbAoaTransportAdapter:
     """Desktop-side AOA transport adapter.
 
@@ -127,6 +137,7 @@ class UsbAoaTransportAdapter:
         open_retry_delay_seconds: float = 0.25,
         resolve_transfer_trust_key: Callable[..., str | None] | None = None,
         max_session_failure_backoff_seconds: float = 5.0,
+        session_stall_timeout_seconds: float = 60.0,
     ) -> None:
         if probe_interval_seconds <= 0:
             raise ValueError("AOA probe_interval_seconds must be greater than zero.")
@@ -146,6 +157,10 @@ class UsbAoaTransportAdapter:
             raise ValueError(
                 "AOA max_session_failure_backoff_seconds must not be negative."
             )
+        if session_stall_timeout_seconds <= 0:
+            raise ValueError(
+                "AOA session_stall_timeout_seconds must be greater than zero."
+            )
 
         self._router = router
         self._driver = driver or PyUsbAoaHostDriver()
@@ -156,6 +171,7 @@ class UsbAoaTransportAdapter:
         self._open_retry_delay_seconds = open_retry_delay_seconds
         self._resolve_transfer_trust_key = resolve_transfer_trust_key
         self._max_session_failure_backoff_seconds = max_session_failure_backoff_seconds
+        self._session_stall_timeout_seconds = session_stall_timeout_seconds
 
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
@@ -291,6 +307,18 @@ class UsbAoaTransportAdapter:
                     device=device,
                     read_stream=read_stream,
                     write_stream=write_stream,
+                )
+            except AoaSessionStallError as exc:
+                # The mobile went silent mid-upload (e.g. the OS froze the app).
+                # Tear down and re-probe so the host re-authenticates the fresh
+                # stream the mobile re-opens; a stall is a recovery event, not a
+                # session failure, so it must not trigger the failure backoff.
+                self._safe_log(
+                    "warning",
+                    message=(
+                        "UsbAoaTransportAdapter/_run_transport_loop: AOA session "
+                        f"stalled device={device.device_id}: {exc}; re-probing."
+                    ),
                 )
             except (
                 OSError,
@@ -490,6 +518,13 @@ class UsbAoaTransportAdapter:
         write_stream: AoaWriteStream,
         config: UsbBootstrapConfig,
     ) -> None:
+        # A freshly opened bulk IN endpoint can still hold stale bytes from a
+        # desynchronized stream generation (e.g. the OS froze the mobile or the
+        # app was reloaded). Reading them during the handshake raises
+        # "Unsupported AOA frame version" and makes the desktop re-probe forever
+        # without ever re-establishing. Drain them before the handshake.
+        self._drain_stale_stream_bytes(read_stream)
+
         challenge_rand = secrets.token_hex(16)
         challenge_envelope = {
             "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
@@ -531,7 +566,16 @@ class UsbAoaTransportAdapter:
             if not chunk:
                 continue
 
-            for request_id, flags, payload in decoder.feed(chunk):
+            try:
+                frames = decoder.feed(chunk)
+            except AoaFrameError:
+                # The stream is still desynchronized (stale bytes). Discard the
+                # chunk and keep waiting for a valid frame instead of failing the
+                # session; the mobile re-establishes a clean stream on resync.
+                decoder.reset()
+                continue
+
+            for request_id, flags, payload in frames:
                 if request_id != AOA_AUTH_CHALLENGE_REQUEST_ID:
                     self._safe_log(
                         "debug",
@@ -612,6 +656,7 @@ class UsbAoaTransportAdapter:
     ) -> None:
         remote_address = f"aoa://{device.device_id}"
         decoder = AoaFrameDecoder()
+        last_frame_received_at = time.monotonic()
         while not self._stop_event.is_set():
             try:
                 chunk = read_stream.read(
@@ -619,9 +664,11 @@ class UsbAoaTransportAdapter:
                     timeout=self._response_poll_timeout_seconds,
                 )
             except TimeoutError:
+                self._raise_if_session_stalled(last_frame_received_at)
                 continue
             if not chunk:
                 raise RuntimeError("AOA stream closed by mobile runtime.")
+            last_frame_received_at = time.monotonic()
 
             frames = decoder.feed(chunk)
             for frame_request_id, flags, payload in frames:
@@ -690,6 +737,55 @@ class UsbAoaTransportAdapter:
     ) -> None:
         frame = encode_aoa_frame(request_id, payload, flags=flags)
         write_stream.write(frame)
+
+    def _drain_stale_stream_bytes(self, read_stream: AoaReadStream) -> None:
+        """Discard stale bytes from a freshly-opened bulk IN endpoint.
+
+        After the mobile is frozen by the OS (or the app is reloaded), the
+        gadget's IN endpoint can hold leftover bytes from the desynchronized
+        stream. Reading them during the auth handshake raises "Unsupported AOA
+        frame version" and makes the desktop re-probe endlessly without ever
+        re-establishing. Draining until the endpoint is quiet realigns the
+        stream before the handshake.
+        """
+        for _ in range(8):
+            if self._stop_event.is_set():
+                return
+            try:
+                chunk = read_stream.read(AOA_SESSION_READ_SIZE_BYTES, timeout=0.05)
+            except (TimeoutError, OSError, RuntimeError):
+                return
+            if not chunk:
+                return
+            self._safe_log(
+                "debug",
+                message=(
+                    "UsbAoaTransportAdapter/_drain_stale_stream_bytes: discarded "
+                    f"{len(chunk)} stale bytes from the AOA IN endpoint."
+                ),
+            )
+
+    def _raise_if_session_stalled(self, last_frame_received_at: float) -> None:
+        """Abort a session whose in-flight asset upload went silent.
+
+        The mobile can be frozen by the OS (screen off / battery optimization)
+        mid-upload. The host's read loop would otherwise time out forever and
+        never return to the probe loop, so when a fresh stream the mobile
+        re-opens after thawing can never be re-authenticated. Only a session
+        with an unfinished upload is considered stalled: an idle-but-healthy
+        session (phone connected, nothing being transferred) legitimately has no
+        inbound frames and must be left alone.
+        """
+        with self._lock:
+            has_pending_upload = self._asset_upload_stream.has_pending
+        if not has_pending_upload:
+            return
+        idle_seconds = time.monotonic() - last_frame_received_at
+        if idle_seconds >= self._session_stall_timeout_seconds:
+            raise AoaSessionStallError(
+                "AOA session stalled: no frames received for "
+                f"{idle_seconds:.1f}s while an asset upload was in progress."
+            )
 
     def _dispatch_envelope_request(
         self,

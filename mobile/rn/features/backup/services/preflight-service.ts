@@ -6,19 +6,28 @@ import {
   type BatteryStatusGateway,
 } from '@/infrastructure/system/battery-status-gateway';
 import {
+  AndroidBatteryOptimizationGateway,
+  type BatteryOptimizationGateway,
+  UnsupportedBatteryOptimizationGateway,
+} from '@/infrastructure/system/battery-optimization-gateway';
+import {
   ExpoMediaLibraryPermissionGateway,
   type PermissionGateway,
 } from '@/infrastructure/system/permission-gateway';
+import { Platform } from 'react-native';
 
 export interface PreflightService {
   load_permission_summary(): Promise<PermissionSummary>;
   request_media_access(): Promise<PermissionScope>;
   set_remove_after_backup_enabled(enabled: boolean): Promise<void>;
+  is_ignoring_battery_optimizations(): Promise<boolean>;
+  request_battery_optimization_exemption(): Promise<void>;
 }
 
 export interface PreflightServiceDeps {
   permission_gateway: PermissionGateway;
   battery_status_gateway: BatteryStatusGateway;
+  battery_optimization_gateway: BatteryOptimizationGateway;
   low_battery_threshold_percent: number;
 }
 
@@ -42,11 +51,13 @@ function to_permission_scope(value: 'full' | 'limited' | 'denied'): PermissionSc
 export class DefaultPreflightService implements PreflightService {
   private readonly permission_gateway: PermissionGateway;
   private readonly battery_status_gateway: BatteryStatusGateway;
+  private readonly battery_optimization_gateway: BatteryOptimizationGateway;
   private readonly low_battery_threshold_percent: number;
 
   constructor(deps: PreflightServiceDeps) {
     this.permission_gateway = deps.permission_gateway;
     this.battery_status_gateway = deps.battery_status_gateway;
+    this.battery_optimization_gateway = deps.battery_optimization_gateway;
     this.low_battery_threshold_percent = deps.low_battery_threshold_percent;
   }
 
@@ -82,12 +93,24 @@ export class DefaultPreflightService implements PreflightService {
       removeAfterBackupEnabled: enabled,
     });
   }
+
+  async is_ignoring_battery_optimizations(): Promise<boolean> {
+    return this.battery_optimization_gateway.is_ignoring_battery_optimizations();
+  }
+
+  async request_battery_optimization_exemption(): Promise<void> {
+    await this.battery_optimization_gateway.request_battery_optimization_exemption();
+  }
 }
 
 export function create_default_preflight_service(): PreflightService {
   return new DefaultPreflightService({
     permission_gateway: new ExpoMediaLibraryPermissionGateway(),
     battery_status_gateway: new ExpoBatteryStatusGateway(),
+    battery_optimization_gateway:
+      Platform.OS === 'android'
+        ? new AndroidBatteryOptimizationGateway()
+        : new UnsupportedBatteryOptimizationGateway(),
     low_battery_threshold_percent: DEFAULT_LOW_BATTERY_THRESHOLD_PERCENT,
   });
 }

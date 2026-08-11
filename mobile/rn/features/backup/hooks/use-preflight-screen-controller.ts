@@ -10,7 +10,7 @@ import { apply_backup_command } from '@/features/backup/state/backup-flow-transi
 import { returnHome } from '@/features/backup/use-cases/return-home';
 import { runPreflight } from '@/features/backup/use-cases/run-preflight';
 
-export type PreflightPromptPhase = 'loading' | 'media' | 'low-battery' | 'remove-after-backup' | 'failed';
+export type PreflightPromptPhase = 'loading' | 'media' | 'low-battery' | 'battery-optimization' | 'remove-after-backup' | 'failed';
 
 export interface PreflightScreenController {
   phase: PreflightPromptPhase;
@@ -20,6 +20,8 @@ export interface PreflightScreenController {
   continue_without_media_update: () => Promise<void>;
   continue_past_low_battery: () => Promise<void>;
   cancel_from_low_battery: () => Promise<void>;
+  request_battery_optimization_exemption: () => Promise<void>;
+  continue_without_battery_optimization_exemption: () => Promise<void>;
   choose_remove_after_backup: (enabled: boolean) => Promise<void>;
   return_home: () => void;
 }
@@ -51,15 +53,18 @@ export function usePreflightScreenController(): PreflightScreenController {
     );
   });
 
-  const resolve_next_phase = useCallback((current_summary: PermissionSummary): PreflightPromptPhase => {
+  const resolve_next_phase = useCallback(async (current_summary: PermissionSummary): Promise<PreflightPromptPhase> => {
     if (current_summary.mediaScope !== PermissionScope.Full) {
       return 'media';
     }
     if (current_summary.lowBatteryWarningNeeded && !current_summary.isCharging) {
       return 'low-battery';
     }
+    if (!(await preflight_service.is_ignoring_battery_optimizations())) {
+      return 'battery-optimization';
+    }
     return 'remove-after-backup';
-  }, []);
+  }, [preflight_service]);
 
   const load_preflight_state = useCallback(async () => {
     try {
@@ -71,7 +76,7 @@ export function usePreflightScreenController(): PreflightScreenController {
       });
       console.log('[Preflight] Loaded', { mediaScope: next_summary.mediaScope, isCharging: next_summary.isCharging });
       set_summary(next_summary);
-      set_phase(resolve_next_phase(next_summary));
+      set_phase(await resolve_next_phase(next_summary));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to run preflight checks.';
       console.log('[Preflight] Error', message);
@@ -87,12 +92,8 @@ export function usePreflightScreenController(): PreflightScreenController {
   const continue_after_media_step = useCallback(async () => {
     const refreshed = await preflight_service.load_permission_summary();
     set_summary(refreshed);
-    if (refreshed.lowBatteryWarningNeeded && !refreshed.isCharging) {
-      set_phase('low-battery');
-      return;
-    }
-    set_phase('remove-after-backup');
-  }, [preflight_service]);
+    set_phase(await resolve_next_phase(refreshed));
+  }, [preflight_service, resolve_next_phase]);
 
   return {
     phase,
@@ -106,6 +107,15 @@ export function usePreflightScreenController(): PreflightScreenController {
       await continue_after_media_step();
     },
     continue_past_low_battery: async () => {
+      set_phase('remove-after-backup');
+    },
+    request_battery_optimization_exemption: async () => {
+      await preflight_service.request_battery_optimization_exemption();
+      // Continue regardless of whether the user granted the exemption; the next
+      // preflight re-checks and prompts again if needed.
+      set_phase('remove-after-backup');
+    },
+    continue_without_battery_optimization_exemption: async () => {
       set_phase('remove-after-backup');
     },
     cancel_from_low_battery: async () => {

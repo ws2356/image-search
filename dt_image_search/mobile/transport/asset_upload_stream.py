@@ -66,6 +66,16 @@ class TransferAssetUploadStream:
         self._active_request_id: str | None = None
 
     @property
+    def has_pending(self) -> bool:
+        """True while any asset upload has started but not yet completed.
+
+        Used by the transport adapter to detect a mobile that went silent
+        mid-upload (e.g. the OS froze the app) so the host can tear down and
+        re-probe instead of blocking forever on a dead stream.
+        """
+        return bool(self._pending_by_request_id)
+
+    @property
     def active_request_id(self) -> str | None:
         active_request_id = self._active_request_id
         if (

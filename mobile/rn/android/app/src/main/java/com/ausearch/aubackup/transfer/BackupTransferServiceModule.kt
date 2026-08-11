@@ -1,12 +1,18 @@
 package com.ausearch.aubackup.transfer
 
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.LifecycleEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -73,6 +79,62 @@ class BackupTransferServiceModule(
       }
     }
     promise.resolve(payload)
+  }
+
+  /**
+   * True when this app is exempt from Android battery optimizations (Doze/app
+   * standby). When it is not, the OS can freeze the transfer process while the
+   * screen is locked even though a foreground service and wake lock are held.
+   */
+  @ReactMethod
+  fun isIgnoringBatteryOptimizations(promise: Promise) {
+    promise.resolve(is_ignoring_battery_optimizations(reactApplicationContext.applicationContext))
+  }
+
+  /**
+   * Requests the battery-optimization exemption on behalf of the user, opening
+   * the system dialog (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS). Resolves
+   * true if the app is already exempt; otherwise the promise resolves only after
+   * the system dialog is dismissed and the app returns to the foreground, so the
+   * JS preflight flow continues while the app is active instead of advancing
+   * while backgrounded (which left the next prompt undelivered and the preflight
+   * spinner stuck).
+   */
+  @ReactMethod
+  fun requestIgnoreBatteryOptimizations(promise: Promise) {
+    val context = reactApplicationContext.applicationContext
+    if (is_ignoring_battery_optimizations(context)) {
+      Log.i(LOG_TAG, "Battery optimization exemption already granted.")
+      promise.resolve(true)
+      return
+    }
+    val resumeListener = object : LifecycleEventListener {
+      override fun onHostResume() {
+        reactApplicationContext.removeLifecycleEventListener(this)
+        Log.i(LOG_TAG, "Battery optimization request dialog dismissed; continuing preflight.")
+        promise.resolve(true)
+      }
+
+      override fun onHostPause() = Unit
+
+      override fun onHostDestroy() {
+        reactApplicationContext.removeLifecycleEventListener(this)
+        promise.resolve(false)
+      }
+    }
+    reactApplicationContext.addLifecycleEventListener(resumeListener)
+    val intent = Intent(
+      Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+      Uri.parse("package:${context.packageName}")
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+      context.startActivity(intent)
+      Log.i(LOG_TAG, "Requested battery optimization exemption.")
+    } catch (error: ActivityNotFoundException) {
+      reactApplicationContext.removeLifecycleEventListener(resumeListener)
+      Log.w(LOG_TAG, "Battery optimization settings are not available: ${error.message}")
+      promise.reject("BATTERY_OPTIMIZATION_UNAVAILABLE", "Battery optimization settings are not available.", error)
+    }
   }
 
   @ReactMethod
@@ -155,6 +217,14 @@ class BackupTransferServiceModule(
     reactApplicationContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit(TRANSFER_SERVICE_STATE_EVENT, payload)
+  }
+
+  private fun is_ignoring_battery_optimizations(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+      return true
+    }
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    return powerManager.isIgnoringBatteryOptimizations(context.packageName)
   }
 
   companion object {

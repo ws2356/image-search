@@ -12,6 +12,7 @@ import unittest
 from dt_image_search.mobile.transport import (
     MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
     PAIRING_CLAIM_OPERATION,
+    TRANSFER_ASSET_OPERATION,
     AOA_FRAME_FLAG_TEXT,
     AoaDetectedDevice,
     MobileTransportRequest,
@@ -99,6 +100,49 @@ class _TrackingStopDriver(SimulatedAoaHostDriver):
     def stop(self) -> None:
         self.stop_calls += 1
         super().stop()
+
+
+class _StaleFirstReadStream:
+    """Wraps a read stream and returns stale garbage bytes on the first read.
+
+    Models the gadget's bulk IN endpoint holding leftover bytes from a
+    desynchronized stream generation (e.g. after the OS froze the mobile or the
+    app was reloaded).
+    """
+
+    def __init__(self, wrapped: _StubAoaStream, stale_bytes: bytes) -> None:
+        self._wrapped = wrapped
+        self._stale_bytes = stale_bytes
+
+    def read(self, size: int = -1, timeout: float | None = None) -> bytes:
+        if self._stale_bytes is not None:
+            stale = self._stale_bytes
+            self._stale_bytes = None
+            return stale
+        return self._wrapped.read(size, timeout)
+
+    def write(self, data: bytes) -> int:
+        return self._wrapped.write(data)
+
+    def close(self) -> None:
+        return self._wrapped.close()
+
+
+class _StaleReadAoaDriver(SimulatedAoaHostDriver):
+    """Simulated driver whose freshly-opened IN stream returns stale garbage on
+    the first read, on every stream generation (persistent desync)."""
+
+    def __init__(
+        self,
+        accessory_device: AoaDetectedDevice,
+        stale_bytes: bytes,
+    ) -> None:
+        super().__init__([accessory_device])
+        self._stale_bytes = stale_bytes
+
+    def open_stream(self, device: AoaDetectedDevice):
+        read_stream, write_stream = super().open_stream(device)
+        return _StaleFirstReadStream(read_stream, self._stale_bytes), write_stream
 
 
 class TestUsbAoaTransportAdapter(unittest.TestCase):
@@ -621,6 +665,228 @@ class TestUsbAoaTransportAdapter(unittest.TestCase):
                 time.sleep(0.01)
             self.assertTrue(connected)
             self.assertEqual(adapter._consecutive_session_failures, 0)
+        finally:
+            adapter.stop()
+
+
+    def test_auth_recovers_from_stale_stream_bytes(self) -> None:
+        """The desktop must drain stale bytes from a desynchronized stream before
+        the auth handshake instead of failing and re-probing forever."""
+        router = MobileTransportRouter()
+        device = AoaDetectedDevice(
+            device_id="sim-device",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        # Garbage that the desynchronized gadget would return on the first read.
+        stale_bytes = b"\x00\x01\x02 stale bytes from a previous stream generation"
+        driver = _StaleReadAoaDriver(accessory_device=device, stale_bytes=stale_bytes)
+        adapter = UsbAoaTransportAdapter(
+            router=router,
+            driver=driver,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="sid-001",
+                one_time_passcode="123456",
+                suggested_port=45000,
+            )
+        )
+        adapter.start()
+
+        try:
+            challenge_frame = driver.read_frame(timeout=2.0)
+            self.assertIsNotNone(
+                challenge_frame,
+                "desktop must drain stale bytes and send an auth challenge "
+                "instead of looping on 'Unsupported AOA frame version'",
+            )
+            request_id, flags, payload = decode_aoa_frame(challenge_frame)
+            self.assertEqual(flags, AOA_FRAME_FLAG_TEXT)
+            challenge = json.loads(payload.decode("utf-8"))
+            driver.inject_frame(
+                encode_aoa_frame(
+                    request_id,
+                    _build_auth_response(challenge["body"]["rand"], "123456", request_id),
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+            connected = False
+            for _ in range(200):
+                if adapter.state.value == "connected":
+                    connected = True
+                    break
+                time.sleep(0.01)
+            self.assertTrue(connected, "adapter must authenticate despite stale stream bytes")
+        finally:
+            adapter.stop()
+
+    def test_session_stall_timeout_validation(self) -> None:
+        """The session stall timeout must be positive when provided."""
+        router = MobileTransportRouter()
+        with self.assertRaises(ValueError):
+            UsbAoaTransportAdapter(
+                router=router,
+                session_stall_timeout_seconds=0,
+            )
+
+    def test_session_loop_recovers_from_stalled_asset_upload(self) -> None:
+        """A session with an in-flight asset upload that goes silent must be torn
+        down and re-probed so the host can re-authenticate a fresh mobile stream.
+
+        The mobile can be frozen by the OS (screen off / battery optimization)
+        mid-upload. The desktop must not block forever in the read loop waiting
+        for frames that never arrive; otherwise the transfer hangs permanently
+        because the host never returns to the probe loop to re-authenticate.
+        """
+        router = MobileTransportRouter()
+        device = AoaDetectedDevice(
+            device_id="sim-device",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = SimulatedAoaHostDriver([device])
+        adapter = UsbAoaTransportAdapter(
+            router=router,
+            driver=driver,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+            session_stall_timeout_seconds=0.2,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="sid-001",
+                one_time_passcode="123456",
+                suggested_port=45000,
+            )
+        )
+        adapter.start()
+
+        try:
+            # Authenticate so the session reaches CONNECTED.
+            challenge_frame = driver.read_frame(timeout=2.0)
+            self.assertIsNotNone(challenge_frame)
+            request_id, _, payload = decode_aoa_frame(challenge_frame)
+            challenge = json.loads(payload.decode("utf-8"))
+            driver.inject_frame(
+                encode_aoa_frame(
+                    request_id,
+                    _build_auth_response(challenge["body"]["rand"], "123456", request_id),
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+            for _ in range(200):
+                if adapter.state.value == "connected":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(adapter.state.value, "connected")
+
+            # Arm an in-flight asset upload, then stop sending anything. The
+            # desktop must notice the stalled upload and re-probe, which produces
+            # a fresh auth challenge.
+            asset_request_id = "asset-001".ljust(36, "0")
+            asset_start = {
+                "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+                "operation": TRANSFER_ASSET_OPERATION,
+                "request_id": "asset-001",
+                "body_schema": "dtis.mobile-transfer.v1",
+                "body": {
+                    "schema": "dtis.mobile-transfer.v1",
+                    "session_id": "sid-001",
+                    "device_uuid": "dev-1",
+                    "stream_state": "start",
+                    "request_id": "asset-001",
+                    "chunk_size": 262144,
+                    "asset_id": "content://media/external/images/media/1",
+                    "sha1": "0123456789abcdef0123456789abcdef01234567",
+                    "file_size": 1000,
+                    "created_at": "2026-08-10T21:53:50.000Z",
+                },
+            }
+            driver.inject_frame(
+                encode_aoa_frame(
+                    asset_request_id,
+                    json.dumps(asset_start, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+
+            # Expect the host to give up on the silent session and re-probe.
+            # The simulated driver places a None sentinel in the queue when the
+            # host stops the old stream, so skip non-bytes results while polling.
+            reauth_frame: bytes | None = None
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline and reauth_frame is None:
+                frame = driver.read_frame(timeout=0.1)
+                if frame:
+                    reauth_frame = frame
+            self.assertIsNotNone(
+                reauth_frame,
+                "desktop must re-probe after a stalled in-flight upload instead of blocking forever",
+            )
+            reauth_request_id, reauth_flags, _ = decode_aoa_frame(reauth_frame)
+            self.assertEqual(reauth_request_id, AOA_AUTH_CHALLENGE_REQUEST_ID)
+            self.assertEqual(reauth_flags, AOA_FRAME_FLAG_TEXT)
+        finally:
+            adapter.stop()
+
+    def test_session_loop_keeps_idle_session_alive(self) -> None:
+        """An idle but healthy session (no in-flight upload) must not be torn down
+        by the stall detector."""
+        router = MobileTransportRouter()
+        device = AoaDetectedDevice(
+            device_id="sim-device",
+            vendor_id=0x18D1,
+            product_id=0x2D01,
+            serial_number="abc",
+            is_accessory_mode=True,
+        )
+        driver = SimulatedAoaHostDriver([device])
+        adapter = UsbAoaTransportAdapter(
+            router=router,
+            driver=driver,
+            probe_interval_seconds=0.05,
+            response_poll_timeout_seconds=0.05,
+            session_stall_timeout_seconds=0.2,
+        )
+        adapter.configure_bootstrap(
+            UsbBootstrapConfig(
+                session_id="sid-001",
+                one_time_passcode="123456",
+                suggested_port=45000,
+            )
+        )
+        adapter.start()
+
+        try:
+            challenge_frame = driver.read_frame(timeout=2.0)
+            self.assertIsNotNone(challenge_frame)
+            request_id, _, payload = decode_aoa_frame(challenge_frame)
+            challenge = json.loads(payload.decode("utf-8"))
+            driver.inject_frame(
+                encode_aoa_frame(
+                    request_id,
+                    _build_auth_response(challenge["body"]["rand"], "123456", request_id),
+                    flags=AOA_FRAME_FLAG_TEXT,
+                )
+            )
+            for _ in range(200):
+                if adapter.state.value == "connected":
+                    break
+                time.sleep(0.01)
+            self.assertEqual(adapter.state.value, "connected")
+
+            # Wait past the stall timeout with no frames at all: the idle session
+            # must stay connected and no re-auth challenge may be produced.
+            time.sleep(0.5)
+            self.assertEqual(adapter.state.value, "connected")
+            self.assertIsNone(driver.read_frame(timeout=0.3))
         finally:
             adapter.stop()
 
