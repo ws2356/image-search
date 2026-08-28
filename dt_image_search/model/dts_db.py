@@ -311,6 +311,23 @@ def mark_files_deleted(conn, ids: list):
     conn.commit()
 
 @perffunc
+def mark_files_skipped(conn, ids: list):
+    """Mark files as skipped so they leave the pending (status=0) index set.
+
+    Files that cannot be embedded (e.g. corrupt/unsupported images) must not stay
+    pending, otherwise the index worker re-processes them forever. Reuses status=2
+    (the non-pending state); a later re-add of the same path resets it to pending.
+    """
+    if not ids:
+        return
+    placeholders = ', '.join('?' for _ in ids)
+    conn.execute(
+        f"UPDATE files SET status = 2 WHERE id IN ({placeholders})",
+        ids
+    )
+    conn.commit()
+
+@perffunc
 def get_files_by_clip_indices(conn, folder_id, clip_indices: list):
     if not clip_indices:
         return []

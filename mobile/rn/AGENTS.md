@@ -15,6 +15,27 @@ You must strictly follow these architectural boundaries. Never compromise struct
 *   **Infrastructure Layer:** Use the **Strategy Pattern** to unify transport. Define a strict `TransportStrategy` TypeScript interface. Inject the platform-specific implementation (`AndroidTransport` vs `IosTransport`) at the root level using **React Context as the DI Container**.
 *   **Keep app alive during transfer:** for iOS, disable the idle timer; for Android, use Foreground Service.
 *   **Single Responsibility:** If a file has more than 600 lines, check if it's taking on more than one responsibility, and split the code if so.
+*   **Feature First folder structure:** 
+```
+features/
+  chat/
+  profile/
+  payment/
+```
+```
+feature/
+  components/
+  hooks/
+  api/
+  store/
+  types/
+```
+*   **UI styling:** Tailwind
+*   **Design System:**
+spacing tokens
+typography
+color tokens
+theme system
 
 ---
 

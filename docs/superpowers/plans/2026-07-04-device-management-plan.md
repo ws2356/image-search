@@ -1,7 +1,5 @@
 # Device Management Feature — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Add a device management screen as the initial screen of the Instant Share iOS app, listing trusted peer certificates with swipe-to-delete, and a QR button in the app's RootView to launch the PC-to-mobile receive flow.
 
 **Architecture:** New `ISDeviceManagement` target in `InstantShareKit` (depends on `Common` only). App's `RootView` wraps `DeviceManagementView` and owns the QR toolbar button + full-screen cover. `ISFromPC` gets a configurable initial state for `.scan` entry.

@@ -60,13 +60,8 @@ USB_TRANSFER_BINARY_HEADER_SIZE = (
     + 1
 )
 
-try:
-    from websockets.exceptions import ConnectionClosed, WebSocketException
-    from websockets.sync.client import connect as websocket_connect
-except ImportError:  # pragma: no cover - exercised in environments without websockets.
-    ConnectionClosed = RuntimeError  # type: ignore[assignment]
-    WebSocketException = RuntimeError  # type: ignore[assignment]
-    websocket_connect = None
+from websockets.exceptions import ConnectionClosed, WebSocketException
+from websockets.sync.client import connect as websocket_connect
 
 
 class UsbTransportState(str, Enum):
@@ -314,27 +309,6 @@ class UsbWebSocketTransportAdapter:
     def verify_auth_digest(self, *, rand: str, provided_digest: str) -> bool:
         expected_digest = self.build_auth_digest(rand)
         return hmac.compare_digest(expected_digest, provided_digest)
-
-    def dispatch_text_envelope(
-        self,
-        raw_message: str,
-        *,
-        remote_address: str | None = None,
-    ) -> MobileTransportResponse:
-        _, response = self._dispatch_envelope_request(
-            raw_message,
-            remote_address=remote_address,
-        )
-        if response is None:
-            return MobileTransportResponse(
-                status_code=202,
-                payload={
-                    "schema": MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
-                    "status": "accepted",
-                    "message": "Desktop accepted the transfer asset stream metadata.",
-                },
-            )
-        return response
 
     def _run_transport_loop(self) -> None:
         while not self._stop_event.is_set():

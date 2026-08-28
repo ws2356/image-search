@@ -76,6 +76,7 @@ from dt_image_search.mobile.transport.lan_http_adapter import (
 )
 from dt_image_search.mobile.transport.router import MobileTransportRouter
 from dt_image_search.mobile.transport.transport_manager import MobileTransportManager
+from dt_image_search.mobile.transport.usb_aoa_adapter import UsbAoaTransportAdapter
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbBootstrapConfig,
     UsbTransportState,
@@ -92,6 +93,7 @@ PAIRING_STATE_PATH = "/api/mobile/pairing/state"
 PAIRING_TRANSPORT_LAN = "lan"
 PAIRING_TRANSPORT_USB = "usb"
 MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT = "mobile_app_foreground_state_changed"
+MOBILE_AOA_TRANSFER_CAPABILITY = "aoa_transfer"
 
 
 class PairingResultState(str, Enum):
@@ -182,7 +184,12 @@ class MobilePairingService:
         self._transfer_service = MobileTransferService(ctx)
         self._capability_exchange_service = MobileCapabilityExchangeService(
             ctx,
-            desktop_capability_flags={MOBILE_ENCRYPTION_CAPABILITY: 1} if is_encryption_enabled() else {},
+            desktop_capability_flags={
+                MOBILE_ENCRYPTION_CAPABILITY: 1,
+                MOBILE_AOA_TRANSFER_CAPABILITY: 1,
+            }
+            if is_encryption_enabled()
+            else {MOBILE_AOA_TRANSFER_CAPABILITY: 1},
         )
         self._update_prompt_service = MobileUpdatePromptService(ctx)
         self._pairing_result = MobilePairingResult(
@@ -270,11 +277,10 @@ class MobilePairingService:
                 raise RuntimeError("Cannot refresh QR tokens after pairing is already accepted.")
             refreshed_token = self._active_session.refresh_token(platform, now=now)
             session_id = self._active_session.session_id
-        if platform == MobilePlatform.IOS:
-            self._configure_usb_bootstrap_for_token(
-                session_id=session_id,
-                token=refreshed_token,
-            )
+        self._configure_usb_bootstrap_for_token(
+            session_id=session_id,
+            token=refreshed_token,
+        )
         return refreshed_token
 
     def current_result(self) -> MobilePairingResult:
@@ -343,6 +349,7 @@ class MobilePairingService:
         request_payload: dict[str, object],
         *,
         now: datetime | None = None,
+        claimed_transport: str | None = None,
     ) -> tuple[int, dict[str, object]]:
         current_time = _utc_now(now)
         requested_session_id = _optional_request_string(request_payload, "sid")
@@ -533,6 +540,7 @@ class MobilePairingService:
                     current_time=current_time,
                     backup_again_context=backup_again_context,
                     backup_again_decision=MobileBackupAgainDecision.BACKUP_IN_NEW_FOLDER,
+                    claimed_transport=claimed_transport,
                 )
             finally:
                 with self._lock:
@@ -608,6 +616,7 @@ class MobilePairingService:
         current_time: datetime,
         backup_again_context: MobileBackupAgainSessionContext | None,
         backup_again_decision: MobileBackupAgainDecision,
+        claimed_transport: str | None = None,
     ) -> tuple[int, dict[str, object]]:
         with self._lock:
             current_session = self._active_session
@@ -665,7 +674,7 @@ class MobilePairingService:
                 paired_at=current_time,
             )
 
-        selected_transport = self._resolve_pairing_transport(requested_platform)
+        selected_transport = claimed_transport or self._resolve_pairing_transport(requested_platform)
         if selected_transport == PAIRING_TRANSPORT_USB:
             acceptance_message = f"Pairing accepted for {device_name}. Desktop is ready for USB transfer."
         else:
@@ -911,7 +920,10 @@ class MobilePairingService:
                     "message": "Desktop requires JSON object payloads for pairing requests.",
                 },
             )
-        status_code, response_payload = self.handle_pairing_request(request.payload)
+        status_code, response_payload = self.handle_pairing_request(
+            request.payload,
+            claimed_transport=_transport_kind_label(request.context.transport),
+        )
         return MobileTransportResponse(status_code=status_code, payload=response_payload)
 
     def _dispatch_pairing_state_operation(self, request: MobileTransportRequest) -> MobileTransportResponse:
@@ -1338,9 +1350,14 @@ class MobilePairingService:
             is_desktop_foreground_fn=self._is_desktop_foreground,
             resolve_transfer_trust_key=self._resolve_transfer_trust_key,
         )
+        aoa_transport = UsbAoaTransportAdapter(
+            router=self._transport_router,
+            resolve_transfer_trust_key=self._resolve_transfer_trust_key,
+        )
         return MobileTransportManager(
             lan_transport=lan_transport,
             usb_transport=usb_transport,
+            aoa_transport=aoa_transport,
         )
 
     def _configure_usb_bootstrap_for_session(self, session: MobilePairingSessionDraft) -> None:
@@ -1365,12 +1382,17 @@ class MobilePairingService:
         usb_state = self._transport_manager.start_usb()
         probe_error = self._transport_manager.usb_last_probe_error
         probe_error_message = probe_error or "none"
+        self._transport_manager.configure_aoa_bootstrap(bootstrap_config)
+        aoa_state = self._transport_manager.start_aoa()
+        aoa_probe_error = self._transport_manager.aoa_last_probe_error
+        aoa_probe_error_message = aoa_probe_error or "none"
         _log(
             "info",
             message=(
                 "MobilePairingService/_configure_usb_bootstrap_for_token: "
                 f"session_id={session_id} suggested_port={token.suggested_usb_port} "
-                f"state={usb_state.value} probe_error={probe_error_message}"
+                f"state={usb_state.value} probe_error={probe_error_message} "
+                f"aoa_state={aoa_state.value} aoa_probe_error={aoa_probe_error_message}"
             ),
             attributes=_pairing_telemetry_attributes(
                 session_id=session_id,
@@ -1391,6 +1413,12 @@ class MobilePairingService:
     def _on_app_foreground_state_changed(self, *, is_foreground: object, **_: object) -> None:
         with self._lock:
             self._app_is_foreground = bool(is_foreground)
+
+
+def _transport_kind_label(transport: MobileTransportKind) -> str:
+    if transport in (MobileTransportKind.AOA_USB, MobileTransportKind.USB_WEBSOCKET):
+        return PAIRING_TRANSPORT_USB
+    return PAIRING_TRANSPORT_LAN
 
 
 def _response(

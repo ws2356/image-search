@@ -18,6 +18,9 @@ from dt_image_search.mobile.transport.router import (
 )
 from dt_image_search.mobile.transport.usb_ws_adapter import (
     MOBILE_TRANSPORT_ENVELOPE_SCHEMA,
+    USB_AUTH_CHALLENGE_BODY_SCHEMA,
+    USB_AUTH_CHALLENGE_OPERATION,
+    USB_AUTH_CHALLENGE_REQUEST_ID,
     UsbBootstrapConfig,
     UsbTunnelTarget,
     UsbTransportState,
@@ -33,6 +36,23 @@ from dt_image_search.mobile.transport.usb_tunnel import (
     UsbTunnelProvider,
     UsbTunnelUnavailableError,
 )
+from dt_image_search.mobile.transport.aoa_frame_codec import (
+    AOA_FRAME_FLAG_BINARY,
+    AOA_FRAME_FLAG_TEXT,
+    AoaFrameDecoder,
+    decode_aoa_frame,
+    encode_aoa_frame,
+)
+from dt_image_search.mobile.transport.aoa_host_driver import (
+    AoaDetectedDevice,
+    AoaHostDriver,
+    AoaHostState,
+    AoaReadStream,
+    AoaWriteStream,
+    PyUsbAoaHostDriver,
+    SimulatedAoaHostDriver,
+)
+from dt_image_search.mobile.transport.usb_aoa_adapter import UsbAoaTransportAdapter
 
 __all__ = [
     "CAPABILITY_EXCHANGE_OPERATION",
@@ -50,6 +70,9 @@ __all__ = [
     "MobileTransportRouteNotFoundError",
     "MobileTransportRouter",
     "MOBILE_TRANSPORT_ENVELOPE_SCHEMA",
+    "USB_AUTH_CHALLENGE_OPERATION",
+    "USB_AUTH_CHALLENGE_BODY_SCHEMA",
+    "USB_AUTH_CHALLENGE_REQUEST_ID",
     "UsbBootstrapConfig",
     "UsbTunnelTarget",
     "UsbTransportState",
@@ -62,4 +85,17 @@ __all__ = [
     "UsbTunnelConnectError",
     "Pymobiledevice3UsbTunnelProvider",
     "MobileTransportManager",
+    "AOA_FRAME_FLAG_TEXT",
+    "AOA_FRAME_FLAG_BINARY",
+    "AoaFrameDecoder",
+    "decode_aoa_frame",
+    "encode_aoa_frame",
+    "AoaDetectedDevice",
+    "AoaHostDriver",
+    "AoaHostState",
+    "AoaReadStream",
+    "AoaWriteStream",
+    "PyUsbAoaHostDriver",
+    "SimulatedAoaHostDriver",
+    "UsbAoaTransportAdapter",
 ]

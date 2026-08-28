@@ -66,6 +66,9 @@
 
 # Attempt to set APP_HOME
 
+# Fix for node not being in PATH in some environments (like Android Studio)
+export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+
 # Resolve links: $0 may be a link
 app_path=$0
 

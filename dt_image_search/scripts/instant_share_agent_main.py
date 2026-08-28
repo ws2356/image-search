@@ -69,17 +69,14 @@ def _parse_args() -> argparse.Namespace:
 def hide_dock_icon():
     """动态隐藏当前进程在 macOS Dock 栏的图标"""
     if sys.platform == "darwin":
-        try:
-            # 导入 macOS 原生 Cocoa 框架
-            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
-            
-            # 获取当前运行的 App 实例
-            ns_app = NSApplication.sharedApplication()
-            # 设置激活策略为 Accessory（在 Dock 和菜单栏中隐藏，但仍可接收事件）
-            ns_app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-            print("Hiding Dock icon on macOS...")
-        except ImportError:
-            print("警告: 缺少 pyobjc 库，无法动态隐藏 Dock 图标")
+        # 导入 macOS 原生 Cocoa 框架
+        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+        
+        # 获取当前运行的 App 实例
+        ns_app = NSApplication.sharedApplication()
+        # 设置激活策略为 Accessory（在 Dock 和菜单栏中隐藏，但仍可接收事件）
+        ns_app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        print("Hiding Dock icon on macOS...")
 
 def main() -> int:
 

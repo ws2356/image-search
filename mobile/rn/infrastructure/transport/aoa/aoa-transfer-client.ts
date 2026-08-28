@@ -1,0 +1,245 @@
+import QuickCrypto from 'react-native-quick-crypto';
+import {
+  MOBILE_TRANSFER_SCHEMA,
+  type TransferAssetExistenceRequest,
+  type TransferAssetMetadata,
+  type TransferCompleteRequest,
+  type TransferResponse,
+  type TransferSessionRequest,
+} from '@/features/backup/protocols/transfer';
+import type { TransferClient } from '@/features/backup/services/transfer-client';
+import type { TransferServiceContext } from '@/features/backup/services/transfer-service';
+import { NoopPayloadCipher, TransferPayloadCipher } from '@/infrastructure/crypto/payload-cipher';
+import type { PayloadCipher } from '@/infrastructure/crypto/payload-cipher';
+import { DefaultTrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
+import type { TrustProofSigner } from '@/infrastructure/crypto/trust-proof-signer';
+import type { AoaBridge } from '@/infrastructure/transport/aoa/aoa-bridge';
+import { create_transfer_abort_error } from '@/features/backup/transfer/transfer-abort';
+
+const MOBILE_TRANSPORT_SCHEMA = 'dtis.mobile-transport.v1';
+
+const AOA_REQUEST_ID_LENGTH = 36;
+
+/**
+ * How long to keep retrying a request while the native AOA client is tearing
+ * down a desynchronized stream and re-opening the accessory (resync). The native
+ * client detects a stalled session and reconnects on its own; the JS layer must
+ * survive that brief reconnection window instead of failing the whole transfer.
+ */
+const AOA_RECONNECT_RETRY_WINDOW_MS = 10_000;
+const AOA_RECONNECT_POLL_INTERVAL_MS = 250;
+
+function delay(duration_ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, duration_ms);
+  });
+}
+
+/**
+ * Detects errors that indicate the AOA transport link itself dropped, as opposed
+ * to a genuine asset/request rejection. The native client tears down and re-opens
+ * the accessory on its own after a desync, so these errors are transient: the
+ * caller should wait for reconnection and retry rather than treating the asset as
+ * permanently failed.
+ */
+export function is_aoa_connection_error(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.toLowerCase().includes('not connected') ||
+    message.toLowerCase().includes('connection lost') ||
+    message.toLowerCase().includes('connection unavailable') ||
+    message.toLowerCase().includes('response timed out')
+  );
+}
+
+/**
+ * AOA frames carry a fixed 36-byte request id. Asset streaming uses the asset
+ * content URI as its request id, which can exceed 36 bytes and would break the
+ * frame codec. Derive a deterministic 36-byte id so the start envelope, binary
+ * chunks, and completion envelope all share one id that the desktop can correlate.
+ */
+function to_aoa_stream_request_id(request_id: string): string {
+  if (request_id.length > AOA_REQUEST_ID_LENGTH) {
+    return QuickCrypto.createHash('sha1').update(request_id).digest('hex').slice(0, AOA_REQUEST_ID_LENGTH);
+  }
+  return request_id.padEnd(AOA_REQUEST_ID_LENGTH, ' ');
+}
+
+export interface AoaTransferClientDeps {
+  payload_cipher: PayloadCipher;
+  trust_proof_signer: TrustProofSigner;
+}
+
+export class AoaTransferClient implements TransferClient {
+  private readonly bridge: AoaBridge;
+  private readonly context: TransferServiceContext;
+  private readonly deps: AoaTransferClientDeps;
+
+  constructor(bridge: AoaBridge, context: TransferServiceContext, deps?: Partial<AoaTransferClientDeps>) {
+    this.bridge = bridge;
+    this.context = context;
+    this.deps = {
+      payload_cipher:
+        deps?.payload_cipher ??
+        (context.encryption_enabled ? new TransferPayloadCipher(context.trust_key_b64) : new NoopPayloadCipher()),
+      trust_proof_signer: deps?.trust_proof_signer ?? new DefaultTrustProofSigner(),
+    };
+  }
+
+  /**
+   * AbortSignal.throwIfAborted is not available in the Hermes runtime (it is
+   * undefined), so relying on it would throw "undefined is not a function".
+   * Check the always-present `aborted` flag instead.
+   */
+  private throw_if_transfer_aborted(abort_signal?: AbortSignal): void {
+    if (abort_signal?.aborted) {
+      throw create_transfer_abort_error();
+    }
+  }
+
+  async start(request: Omit<TransferSessionRequest, 'schema'>, abort_signal?: AbortSignal): Promise<TransferResponse> {
+    this.throw_if_transfer_aborted(abort_signal);
+    const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
+    const response = await this.with_reconnect_retry(() => this.send_request('transfer.start', body), abort_signal);
+    return this.parse_response(response);
+  }
+  async existence(
+    request: Omit<TransferAssetExistenceRequest, 'schema'>,
+    abort_signal?: AbortSignal
+  ): Promise<TransferResponse> {
+    this.throw_if_transfer_aborted(abort_signal);
+    const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
+    const response = await this.with_reconnect_retry(() => this.send_request('transfer.existence', body), abort_signal);
+    return this.parse_response(response);
+  }
+
+  async asset(
+    metadata: TransferAssetMetadata,
+    request_id: string,
+    stream_state: 'start' | 'chunk' | 'complete',
+    content?: Blob | Uint8Array,
+    abort_signal?: AbortSignal
+  ): Promise<TransferResponse> {
+    this.throw_if_transfer_aborted(abort_signal);
+    const stream_request_id = to_aoa_stream_request_id(request_id);
+    if (stream_state === 'start') {
+      const encrypted = await this.deps.payload_cipher.encrypt_json_payload(metadata);
+      const body = { ...encrypted, stream_state, request_id: stream_request_id, chunk_size: 256 * 1024 };
+      const streaming_request_id = await this.bridge.beginStreamingRequest(
+        JSON.stringify(this.envelope('transfer.asset', body, stream_request_id))
+      );
+      return {
+        schema: MOBILE_TRANSFER_SCHEMA,
+        status: 'accepted',
+        message: 'streaming started',
+        request_id: streaming_request_id,
+      };
+    }
+    if (stream_state === 'chunk') {
+      if (!content) throw new Error('AOA asset chunk requires content');
+      const encrypted = await this.deps.payload_cipher.encrypt_binary_chunk(content);
+      await this.bridge.sendBinaryChunk(stream_request_id, encrypted);
+      return { schema: MOBILE_TRANSFER_SCHEMA, status: 'accepted', message: 'chunk accepted', request_id: stream_request_id };
+    }
+    const response = await this.bridge.finishStreamingRequest(stream_request_id);
+    return this.parse_response(response);
+  }
+
+  async complete(
+    request: Omit<TransferCompleteRequest, 'schema'>,
+    abort_signal?: AbortSignal
+  ): Promise<TransferResponse> {
+    this.throw_if_transfer_aborted(abort_signal);
+    const body = { schema: MOBILE_TRANSFER_SCHEMA, ...request };
+    console.log('[AoaTransferClient] complete via AOA bridge');
+    const response = await this.with_reconnect_retry(() => this.send_request('transfer.complete', body), abort_signal);
+    return this.parse_response(response);
+  }
+
+  private async send_request(operation: string, body: object): Promise<string> {
+    const request_id = this.generate_request_id();
+    const envelope = this.envelope(operation, body, request_id);
+    return this.bridge.sendRequest(JSON.stringify(envelope));
+  }
+
+  /**
+   * Retries a request/response operation when the native AOA client is tearing
+   * down a desynchronized stream and re-opening the accessory (resync). The
+   * native client reconnects on its own; this wrapper waits for it and then
+   * retries so a brief reconnection window does not fail the whole transfer.
+   */
+  is_connection_error(error: unknown): boolean {
+    return is_aoa_connection_error(error);
+  }
+
+  async wait_for_reconnection(timeout_ms: number): Promise<boolean> {
+    const deadline = Date.now() + timeout_ms;
+    return this.wait_for_aoa_reconnection(deadline, undefined);
+  }
+
+  private async with_reconnect_retry<T>(
+    operation: () => Promise<T>,
+    abort_signal?: AbortSignal
+  ): Promise<T> {
+    const deadline = Date.now() + AOA_RECONNECT_RETRY_WINDOW_MS;
+    let attempt = 0;
+    while (true) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!is_aoa_connection_error(error)) {
+          throw error;
+        }
+        attempt += 1;
+        if (abort_signal?.aborted || Date.now() >= deadline) {
+          throw error;
+        }
+        // Wait for the native client to finish resyncing, then retry.
+        if (!(await this.wait_for_aoa_reconnection(deadline, abort_signal))) {
+          throw error;
+        }
+        if (attempt >= 3) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async wait_for_aoa_reconnection(
+    deadline: number,
+    abort_signal?: AbortSignal
+  ): Promise<boolean> {
+    while (Date.now() < deadline) {
+      if (abort_signal?.aborted) {
+        return false;
+      }
+      if (this.bridge.isConnected()) {
+        return true;
+      }
+      await delay(AOA_RECONNECT_POLL_INTERVAL_MS);
+    }
+    return this.bridge.isConnected();
+  }
+
+  private envelope(operation: string, body: object, request_id: string) {
+    return {
+      schema: MOBILE_TRANSPORT_SCHEMA,
+      operation,
+      request_id,
+      body_schema: MOBILE_TRANSFER_SCHEMA,
+      body,
+    };
+  }
+
+  private parse_response(raw: string): TransferResponse {
+    const parsed = JSON.parse(raw);
+    if (parsed.body && typeof parsed.body === 'object') {
+      return parsed.body as TransferResponse;
+    }
+    return parsed as TransferResponse;
+  }
+
+  private generate_request_id(): string {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}

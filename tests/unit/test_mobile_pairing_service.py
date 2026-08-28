@@ -41,6 +41,7 @@ from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64
 from dt_image_search.mobile.mobile_trust_proof import derive_trust_proof_b64
 from dt_image_search.mobile.transport.lan_http_adapter import LanHttpEndpointInfo
 from dt_image_search.mobile.transport.contracts import (
+    PAIRING_CLAIM_OPERATION,
     PAIRING_STATE_OPERATION,
     MobileTransportContext,
     MobileTransportKind,
@@ -67,6 +68,8 @@ class _StubTransportManager:
         self.configure_usb_calls: list[UsbBootstrapConfig] = []
         self.start_usb_calls = 0
         self.stop_usb_calls = 0
+        self.configure_aoa_calls: list[UsbBootstrapConfig] = []
+        self.start_aoa_calls = 0
         self.stop_all_calls = 0
 
     def start_lan(self) -> LanHttpEndpointInfo:
@@ -87,6 +90,16 @@ class _StubTransportManager:
         self.stop_usb_calls += 1
         self._usb_state = UsbTransportState.STOPPED
 
+    def configure_aoa_bootstrap(self, config: UsbBootstrapConfig) -> None:
+        self.configure_aoa_calls.append(config)
+        self._usb_bootstrap_config = config
+        self._usb_state = UsbTransportState.CONFIGURED
+
+    def start_aoa(self) -> UsbTransportState:
+        self.start_aoa_calls += 1
+        self._usb_state = self._usb_state_after_start
+        return self._usb_state
+
     def stop_all(self) -> None:
         self.stop_all_calls += 1
         self._usb_state = UsbTransportState.STOPPED
@@ -102,6 +115,10 @@ class _StubTransportManager:
     @property
     def usb_bootstrap_config(self) -> UsbBootstrapConfig | None:
         return self._usb_bootstrap_config
+
+    @property
+    def aoa_last_probe_error(self) -> str | None:
+        return self._usb_last_probe_error
 
 
 class TestMobilePairingService(unittest.TestCase):
@@ -295,6 +312,34 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(dispatch_response.status_code, 200)
         self.assertEqual(dispatch_response.payload["backup_state"], "pairing_completed")
 
+    def test_pairing_claim_route_reports_usb_transport_for_aoa(self):
+        now = datetime.now(timezone.utc)
+        session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        token = session.token_for(MobilePlatform.ANDROID)
+
+        dispatch_response = self._pairing_service._transport_router.dispatch(
+            operation=PAIRING_CLAIM_OPERATION,
+            payload={
+                "schema": "dtis.mobile-pairing.v1",
+                "sid": session.session_id,
+                "opt": token.one_time_passcode,
+                "platform": "android",
+                "device_uuid": "android-device-aoa-001",
+                "device_name": "Pixel AOA",
+                "client_nonce": "aoa-client-nonce-123",
+            },
+            context=MobileTransportContext(
+                transport=MobileTransportKind.AOA_USB,
+                operation=PAIRING_CLAIM_OPERATION,
+                request_id="claim-aoa-001",
+                remote_address="aoa://android-device-aoa-001",
+            ),
+        )
+
+        self.assertEqual(dispatch_response.status_code, 200)
+        self.assertEqual(dispatch_response.payload["transport"], "usb")
+        self.assertIn("USB transfer", dispatch_response.payload["message"])
+
     def test_pairing_service_uses_event_bus_to_track_app_foreground_state(self):
         self.assertTrue(self._pairing_service._is_desktop_foreground())
 
@@ -459,7 +504,7 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(exchange_payload["status"], "accepted")
         self.assertEqual(exchange_payload["session_id"], session.session_id)
         self.assertEqual(exchange_payload["device_uuid"], device_uuid)
-        self.assertEqual(exchange_payload["capabilities"], {"encryption": 1})
+        self.assertEqual(exchange_payload["capabilities"], {"encryption": 1, "aoa_transfer": 1})
 
     def test_live_capability_exchange_http_endpoint_rejects_invalid_trust_key(self):
         now = datetime.now(timezone.utc)
@@ -701,6 +746,9 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(bootstrap_config.suggested_port, ios_token.suggested_usb_port)
         self.assertEqual(bootstrap_config.fallback_port_window, 20)
         self.assertEqual(transport_manager.start_usb_calls, 1)
+        self.assertEqual(len(transport_manager.configure_aoa_calls), 1)
+        self.assertIs(transport_manager.configure_aoa_calls[0], bootstrap_config)
+        self.assertEqual(transport_manager.start_aoa_calls, 1)
 
     def test_refresh_ios_token_reconfigures_usb_bootstrap(self):
         pairing_service = MobilePairingService(
@@ -725,6 +773,33 @@ class TestMobilePairingService(unittest.TestCase):
         self.assertEqual(refreshed_config.one_time_passcode, refreshed_ios_token.one_time_passcode)
         self.assertEqual(refreshed_config.suggested_port, refreshed_ios_token.suggested_usb_port)
         self.assertEqual(transport_manager.start_usb_calls, 2)
+        self.assertEqual(len(transport_manager.configure_aoa_calls), 2)
+        self.assertIs(transport_manager.configure_aoa_calls[1], refreshed_config)
+        self.assertEqual(transport_manager.start_aoa_calls, 2)
+
+    def test_refresh_android_token_reconfigures_aoa_bootstrap(self):
+        pairing_service = MobilePairingService(
+            self._ctx,
+            listen_host="127.0.0.1",
+            desktop_name="Studio Mac",
+        )
+        self.addCleanup(pairing_service.shutdown)
+        transport_manager = _StubTransportManager()
+        pairing_service._transport_manager = transport_manager
+
+        now = datetime(2026, 4, 10, 8, 30, tzinfo=timezone.utc)
+        session = pairing_service.start_pairing_session(self._temp_dir.name, now=now)
+        refreshed_android_token = pairing_service.refresh_token(
+            MobilePlatform.ANDROID,
+            now=now + timedelta(seconds=30),
+        )
+
+        self.assertEqual(len(transport_manager.configure_aoa_calls), 2)
+        refreshed_config = transport_manager.configure_aoa_calls[1]
+        self.assertEqual(refreshed_config.session_id, session.session_id)
+        self.assertEqual(refreshed_config.one_time_passcode, refreshed_android_token.one_time_passcode)
+        self.assertEqual(refreshed_config.suggested_port, refreshed_android_token.suggested_usb_port)
+        self.assertEqual(transport_manager.start_aoa_calls, 2)
 
     def test_handle_pairing_request_prefers_usb_transport_when_connected(self):
         pairing_service = MobilePairingService(
@@ -1269,3 +1344,7 @@ class TestMobilePairingService(unittest.TestCase):
         if path == MOBILE_UPDATE_PROMPT_PATH:
             return MOBILE_UPDATE_PROMPT_PROOF_PURPOSE
         return None
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,6 +1,5 @@
 # Instant Share Page Load Optimization Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Optimize first paint speed of the Instant Share web app by fixing the critical rendering path.
 

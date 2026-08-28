@@ -1,6 +1,5 @@
 # Web-Based Instant Share Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a browser-based fallback for the existing instant-share QR flow so that scanning the QR without the native iOS app installed opens a web SPA that auto-receives the stashed payload over WebRTC.
 

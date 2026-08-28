@@ -1,4 +1,4 @@
-Based on pm spec [mobile-folder pm spec for mobile](../specs/%5Bpm%5D%20%5Bmobile%5D%202.%20mobile-folder.md) and UI mock files in folder `<repo_root>/dt_image_search/prompt/ui-mobile-folder` and feature roadmap in [feature roadmap](../specs/feature%20roadmap%20-%20mobile-folder.md), generate a detailed dev design spec for mobile side. This version of the dev spec should focus on the MVP phase but should also accommodate future extensibility for later phases.
+Based on pm spec [mobile-folder pm spec for mobile](../specs/%5Bpm%5D%20%5Bmobile%5D%202.%20mobile-folder.md) and UI mock files in folder `<repo_root>/ui-design/mobile-folder` and feature roadmap in [feature roadmap](../specs/feature%20roadmap%20-%20mobile-folder.md), generate a detailed dev design spec for mobile side. This version of the dev spec should focus on the MVP phase but should also accommodate future extensibility for later phases.
 
 Refer to pc side pm specs for context: [image search pm spec for pc](../specs/%5Bpm%5D%20%5Bpc%5D%200.%20image-search.md) and [mobile-folder pm spec for pc](../specs/%5Bpm%5D%20%5Bpc%5D%201.%20mobile-folder.md) .
 

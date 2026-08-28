@@ -1,6 +1,5 @@
 # SnapGet User Instruction Screen Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Show a first-time user instruction screen in the SnapGet iOS app that explains PC↔mobile sharing and PC setup, permanently replaced by DeviceManagementView after the user completes their first session.
 

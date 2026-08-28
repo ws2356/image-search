@@ -1,0 +1,973 @@
+package com.ausearch.aubackup.transport.aoa
+
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbAccessory
+import android.hardware.usb.UsbManager
+import android.os.Build
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
+import android.util.Log
+import org.json.JSONObject
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.UUID
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Listener interface for AOA transport state changes.
+ *
+ * Implementations are invoked on the thread that triggered the state change.
+ */
+interface AoaClientListener {
+    fun onStateChanged(state: AoaTransportState, errorMessage: String?)
+}
+
+/**
+ * Opens the raw bulk streams of an attached USB accessory.
+ *
+ * The production implementation ([UsbStreamOpener]) reads from
+ * [UsbManager.openAccessory]; tests inject fakes to run the client without
+ * physical USB hardware.
+ */
+internal fun interface AoaStreamOpener {
+    fun open(accessory: UsbAccessory): OpenedStreams?
+}
+
+/**
+ * The streams of an opened accessory, plus the underlying file descriptor when
+ * one exists (production opens). Tests pass null for [descriptor] and provide
+ * their own streams.
+ */
+internal class OpenedStreams(
+    val descriptor: ParcelFileDescriptor?,
+    val inputStream: InputStream,
+    val outputStream: OutputStream,
+)
+
+private class UsbStreamOpener(private val usbManager: UsbManager) : AoaStreamOpener {
+    override fun open(accessory: UsbAccessory): OpenedStreams? {
+        val descriptor = usbManager.openAccessory(accessory) ?: return null
+        return OpenedStreams(
+            descriptor = descriptor,
+            inputStream = ParcelFileDescriptor.AutoCloseInputStream(descriptor),
+            outputStream = ParcelFileDescriptor.AutoCloseOutputStream(descriptor),
+        )
+    }
+}
+
+/**
+ * Internal result type for correlated request/response queues.
+ * Allows a dropped connection to wake blocked callers with an error instead of a timeout.
+ */
+private sealed class ResponseResult {
+    data class Success(val payload: String) : ResponseResult()
+    data class Error(val error: AoaTransportError) : ResponseResult()
+}
+
+/**
+ * Native Android AOA transport client.
+ *
+ * Owns the AOA state machine, registers for USB accessory events, and opens the
+ * accessory bulk stream when a matching accessory is attached. The auth challenge
+ * is handled locally using the one-time passcode supplied via [prepareBootstrap];
+ * the opt never leaves the device.
+ *
+ * Use [getInstance] to obtain the production singleton.
+ */
+class AoaClient internal constructor(
+    private val context: Context,
+    private val streamOpener: AoaStreamOpener = UsbStreamOpener(
+        context.getSystemService(Context.USB_SERVICE) as UsbManager
+    ),
+    private val responseTimeoutMs: Long = RESPONSE_TIMEOUT_MS,
+) {
+
+    private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+    private val state = AtomicReference(AoaTransportState.IDLE)
+    private val authResponder = AoaAuthResponder()
+    private val outgoingQueue: BlockingQueue<ByteArray> = LinkedBlockingQueue(OUTGOING_QUEUE_CAPACITY)
+    private val listeners = mutableListOf<AoaClientListener>()
+
+    private val pendingResponses = ConcurrentHashMap<String, BlockingQueue<ResponseResult>>()
+    private val pendingStreamingResponses = ConcurrentHashMap<String, BlockingQueue<ResponseResult>>()
+
+    @Volatile
+    private var preparedSessionId: String? = null
+    @Volatile
+    private var preparedOneTimePasscode: String? = null
+    @Volatile
+    private var preparedSuggestedPort: Int = -1
+    @Volatile
+    private var bootstrapPrepared = false
+    private var permissionPendingIntent: PendingIntent? = null
+    private var openedDescriptor: ParcelFileDescriptor? = null
+    private var openedAccessory: UsbAccessory? = null
+    private var readerThread: Thread? = null
+    private var writerThread: Thread? = null
+    private val stopped = AtomicBoolean(true)
+    private var currentInputStream: InputStream? = null
+    private var currentOutputStream: OutputStream? = null
+    private val connectionGeneration = AtomicLong(0)
+
+    /**
+     * Monotonic timestamps of the last successful frame read/write, used by the
+     * stall watchdog to detect a connection that went silent (e.g. after the OS
+     * froze the process). Initialized on construction so a freshly-prepared
+     * connection does not appear stalled immediately.
+     */
+    private val lastReadActivityAt = AtomicLong(SystemClock.elapsedRealtime())
+    private val lastWriteActivityAt = AtomicLong(SystemClock.elapsedRealtime())
+    private val resyncInProgress = AtomicBoolean(false)
+    private val resyncExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "AoaClient-Resync").apply { isDaemon = true }
+    }
+    private var watchdogThread: Thread? = null
+
+    private val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                UsbManager.ACTION_USB_ACCESSORY_ATTACHED -> {
+                    if (!bootstrapPrepared) {
+                        return
+                    }
+                    val accessory = extractAccessory(intent) ?: return probeAttachedAccessories()
+                    if (!isMatchingAccessory(accessory)) {
+                        Log.d(
+                            LOG_TAG,
+                            "Ignoring attached accessory ${accessory.manufacturer}/${accessory.model}/${accessory.version}"
+                        )
+                        return
+                    }
+                    Log.i(
+                        LOG_TAG,
+                        "Matching accessory attached ${accessory.manufacturer}/${accessory.model}/${accessory.version}; requesting permission."
+                    )
+                    requestAccessoryPermission(accessory)
+                }
+                UsbManager.ACTION_USB_ACCESSORY_DETACHED -> {
+                    val detached = extractAccessory(intent)
+                    if (detached == null || isSameAccessory(detached, openedAccessory)) {
+                        Log.i(LOG_TAG, "Accessory detached; closing connection.")
+                        closeConnection()
+                    }
+                }
+                ACTION_USB_PERMISSION -> {
+                    val accessory = extractAccessory(intent) ?: return
+                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                    if (!granted) {
+                        Log.w(LOG_TAG, "USB accessory permission denied.")
+                        return
+                    }
+                    Log.i(LOG_TAG, "USB accessory permission granted; opening.")
+                    openAccessory(accessory)
+                }
+            }
+        }
+    }
+
+    /**
+     * Prepares the client with the pairing material from the scanned QR code.
+     * If an accessory is already attached, this attempts to open it immediately.
+     *
+     * Re-preparing with the exact same bootstrap material while already connected
+     * is a no-op: the established accessory connection is kept so a re-scan of the
+     * same QR (or a redundant prepare) does not tear down the authenticated link.
+     * Re-preparing with different material (new session or refreshed token) closes
+     * the old connection and re-opens so the host re-authenticates with the new
+     * one-time passcode.
+     *
+     * @throws AoaTransportError.InvalidBootstrap if [suggestedPort] is not in 1..65535.
+     */
+    @Synchronized
+    fun prepareBootstrap(sessionId: String, oneTimePasscode: String, suggestedPort: Int) {
+        if (suggestedPort !in 1..65535) {
+            throw AoaTransportError.InvalidBootstrap(
+                "suggestedPort must be in 1..65535, got $suggestedPort"
+            )
+        }
+        Log.i(LOG_TAG, "prepareBootstrap sessionId=$sessionId suggestedPort=$suggestedPort")
+        val keepsEstablishedConnection = state.get() == AoaTransportState.CONNECTED
+            && preparedSessionId == sessionId
+            && preparedOneTimePasscode == oneTimePasscode
+        preparedSessionId = sessionId
+        preparedOneTimePasscode = oneTimePasscode
+        preparedSuggestedPort = suggestedPort
+        bootstrapPrepared = true
+        if (keepsEstablishedConnection) {
+            Log.i(
+                LOG_TAG,
+                "prepareBootstrap already connected with matching bootstrap; keeping connection."
+            )
+            return
+        }
+        transitionTo(AoaTransportState.PREPARING)
+        startInternal()
+        probeAttachedAccessories()
+    }
+
+    /**
+     * Stops the client and clears bootstrap state, returning it to [AoaTransportState.IDLE].
+     */
+    @Synchronized
+    fun reset() {
+        stopInternal()
+        clearBootstrapState()
+        transitionTo(AoaTransportState.IDLE)
+    }
+
+    /**
+     * Returns true only when the client is in the [AoaTransportState.CONNECTED] state.
+     */
+    fun isConnected(): Boolean = state.get() == AoaTransportState.CONNECTED
+
+    /**
+     * Sends a request envelope and blocks until the correlated response arrives.
+     *
+     * The [envelopeJson] must contain a `request_id` field. The returned string is the
+     * JSON payload of the matching response envelope.
+     * TODO: songwan, avoid fucking blocking io
+     *
+     * @throws AoaTransportError.ConnectionUnavailable if the client is not connected.
+     * @throws AoaTransportError.InvalidEnvelope if the envelope is not valid JSON or lacks a request_id.
+     * @throws AoaTransportError.ResponseTimedOut if the response does not arrive in time.
+     */
+    fun sendRequest(envelopeJson: String): String {
+        val requestId = extractRequestId(envelopeJson)
+        val responseQueue = synchronized(this) {
+            if (state.get() != AoaTransportState.CONNECTED) {
+                throw AoaTransportError.ConnectionUnavailable(
+                    "AOA client is not connected (state=${state.get()})"
+                )
+            }
+            registerPendingResponse(requestId)
+        }
+        try {
+            val frame = AoaFrameCodec.encodeFrame(
+                padRequestId(requestId),
+                envelopeJson.toByteArray(Charsets.UTF_8),
+                AoaFrameCodec.FRAME_FLAG_TEXT,
+            )
+            outgoingQueue.put(frame)
+            val timeoutMs = responseTimeoutMs
+            val result = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS)
+                ?: throw AoaTransportError.ResponseTimedOut(
+                    "No response received for request $requestId within ${timeoutMs}ms"
+                )
+            return when (result) {
+                is ResponseResult.Success -> result.payload
+                is ResponseResult.Error -> throw result.error
+            }
+        } finally {
+            pendingResponses.remove(requestId)
+        }
+    }
+
+    /**
+     * Begins a streaming request and returns its request_id.
+     *
+     * The request_id is taken from [envelopeJson] if present; otherwise a new UUID is
+     * generated and the envelope is not rewritten. Callers that rely on a known
+     * request_id should include it in the envelope.
+     *
+     * @throws AoaTransportError.ConnectionUnavailable if the client is not connected.
+     * @throws AoaTransportError.InvalidEnvelope if the envelope is not valid JSON.
+     */
+    fun beginStreamingRequest(envelopeJson: String): String {
+        val requestId = extractRequestIdOrGenerate(envelopeJson)
+        synchronized(this) {
+            if (state.get() != AoaTransportState.CONNECTED) {
+                throw AoaTransportError.ConnectionUnavailable(
+                    "AOA client is not connected (state=${state.get()})"
+                )
+            }
+            registerPendingStreamingResponse(requestId)
+        }
+        val frame = AoaFrameCodec.encodeFrame(
+            padRequestId(requestId),
+            envelopeJson.toByteArray(Charsets.UTF_8),
+            AoaFrameCodec.FRAME_FLAG_TEXT,
+        )
+        outgoingQueue.put(frame)
+        return requestId
+    }
+
+    /**
+     * Sends a binary chunk for an active streaming request.
+     *
+     * @throws AoaTransportError.ConnectionUnavailable if the client is not connected.
+     * @throws AoaTransportError.SendFailed if [requestId] is not an active streaming request.
+     */
+    fun sendBinaryChunk(requestId: String, chunk: ByteArray) {
+        val responseQueue = synchronized(this) {
+            if (state.get() != AoaTransportState.CONNECTED) {
+                throw AoaTransportError.ConnectionUnavailable(
+                    "AOA client is not connected (state=${state.get()})"
+                )
+            }
+            pendingStreamingResponses[requestId]
+        }
+        if (responseQueue == null) {
+            throw AoaTransportError.SendFailed(
+                "Cannot send binary chunk for inactive streaming request $requestId"
+            )
+        }
+        val frame = AoaFrameCodec.encodeFrame(
+            padRequestId(requestId),
+            chunk,
+            AoaFrameCodec.FRAME_FLAG_BINARY,
+        )
+        outgoingQueue.put(frame)
+    }
+
+    /**
+     * Finishes a streaming request and waits for the final response.
+     *
+     * @throws AoaTransportError.ConnectionUnavailable if the client is not connected when this method is called.
+     * @throws AoaTransportError.ConnectionLost if the connection drops while acquiring the response queue.
+     * @throws AoaTransportError.SendFailed if [requestId] is not an active streaming request.
+     * @throws AoaTransportError.ResponseTimedOut if the final response does not arrive in time.
+     */
+    fun finishStreamingRequest(requestId: String): String {
+        val responseQueue = synchronized(this) {
+            if (state.get() != AoaTransportState.CONNECTED) {
+                throw AoaTransportError.ConnectionLost("AOA connection lost")
+            }
+            pendingStreamingResponses[requestId]
+                ?: throw AoaTransportError.SendFailed(
+                    "Cannot finish inactive streaming request $requestId"
+                )
+        }
+        val completionEnvelope = JSONObject().apply {
+            put("request_id", requestId)
+            put("schema", AoaAuthResponder.MOBILE_TRANSPORT_ENVELOPE_SCHEMA)
+            put("operation", TRANSFER_ASSET_OPERATION)
+            put("body_schema", MOBILE_TRANSFER_SCHEMA)
+            put("body", JSONObject().apply {
+                put("stream_state", "complete")
+            })
+        }.toString()
+        val completionFrame = AoaFrameCodec.encodeFrame(
+            padRequestId(requestId),
+            completionEnvelope.toByteArray(Charsets.UTF_8),
+            AoaFrameCodec.FRAME_FLAG_TEXT,
+        )
+        outgoingQueue.put(completionFrame)
+        try {
+            val timeoutMs = responseTimeoutMs
+            val result = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS)
+                ?: throw AoaTransportError.ResponseTimedOut(
+                    "No final response received for streaming request $requestId within ${timeoutMs}ms"
+                )
+            return when (result) {
+                is ResponseResult.Success -> result.payload
+                is ResponseResult.Error -> throw result.error
+            }
+        } finally {
+            pendingStreamingResponses.remove(requestId)
+        }
+    }
+
+    /**
+     * Starts listening for USB accessory attach/detach events.
+     * Safe to call multiple times; subsequent calls are ignored.
+     *
+     * This is an internal lifecycle step automatically invoked by [prepareBootstrap].
+     * The client does not open an accessory until [prepareBootstrap] has been called,
+     * matching the pairing flow where the QR code supplies the one-time passcode.
+     */
+    @Synchronized
+    private fun startInternal() {
+        if (!stopped.getAndSet(false)) {
+            return
+        }
+        permissionPendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            Intent(ACTION_USB_PERMISSION),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        registerReceiver()
+        startWatchdog()
+    }
+
+    /**
+     * Starts a daemon thread that watches for a silently stalled AOA connection.
+     *
+     * The OS can freeze the app process (screen off / battery optimizations) while
+     * the USB accessory is connected. When the process thaws, the bulk streams may
+     * be desynchronized: the desktop sees garbage frames ("Unsupported AOA frame
+     * version") and enters an endless reconnect loop that never succeeds. The
+     * watchdog notices that no frame has been read for a while and forces a
+     * [resyncConnection] so both sides re-establish a clean session.
+     */
+    private fun startWatchdog() {
+        if (watchdogThread?.isAlive == true) {
+            return
+        }
+        watchdogThread = Thread({
+            while (!stopped.get() && !Thread.currentThread().isInterrupted) {
+                try {
+                    Thread.sleep(WATCHDOG_POLL_INTERVAL_MS)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+                val currentState = state.get()
+                if (currentState != AoaTransportState.CONNECTED &&
+                    currentState != AoaTransportState.AUTHENTICATING
+                ) {
+                    continue
+                }
+                // Only treat silence as a stall when we are waiting on a response.
+                // A healthy connection streams binary chunks for minutes without any
+                // inbound frames, so idle reads alone must not trigger a resync.
+                val hasPendingWork =
+                    pendingResponses.isNotEmpty() || pendingStreamingResponses.isNotEmpty()
+                if (!hasPendingWork) {
+                    continue
+                }
+                // Compare against the most recent read OR write: during a long chunk
+                // stream the writes keep flowing even though reads are rare, so a
+                // genuinely stalled link is one where both directions went quiet.
+                val lastActivityAt = maxOf(lastReadActivityAt.get(), lastWriteActivityAt.get())
+                val idleMs = SystemClock.elapsedRealtime() - lastActivityAt
+                if (idleMs >= STALL_TIMEOUT_MS) {
+                    Log.w(
+                        LOG_TAG,
+                        "Watchdog detected stalled AOA connection " +
+                            "(no reads/writes for ${idleMs}ms with ${pendingResponses.size} pending " +
+                            "and ${pendingStreamingResponses.size} streaming; resyncing."
+                    )
+                    resyncConnection()
+                }
+            }
+        }, "AoaClient-Watchdog").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    /**
+     * Tears down and re-opens the AOA accessory so both sides restart with fresh
+     * streams. Clears the outgoing queue and wakes any blocked request with
+     * [AoaTransportError.ConnectionLost]; the JS layer retries the transfer on the
+     * re-established session.
+     */
+    private fun resyncConnection() {
+        if (!resyncInProgress.compareAndSet(false, true)) {
+            return
+        }
+        if (stopped.get() || !bootstrapPrepared) {
+            resyncInProgress.set(false)
+            return
+        }
+        Log.i(LOG_TAG, "Resyncing AOA connection.")
+        closeConnection()
+        resyncExecutor.execute {
+            try {
+                Thread.sleep(RESYNC_REOPEN_DELAY_MS)
+                if (!stopped.get() && bootstrapPrepared) {
+                    probeAttachedAccessories()
+                }
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            } finally {
+                resyncInProgress.set(false)
+            }
+        }
+    }
+
+    /**
+     * Registers a listener that will be invoked on every AOA transport state change.
+     */
+    fun addListener(listener: AoaClientListener) {
+        synchronized(listeners) {
+            listeners.add(listener)
+        }
+    }
+
+    /**
+     * Unregisters a previously added listener.
+     */
+    fun removeListener(listener: AoaClientListener) {
+        synchronized(listeners) {
+            listeners.remove(listener)
+        }
+    }
+
+    private fun ensureConnected() {
+        if (state.get() != AoaTransportState.CONNECTED) {
+            throw AoaTransportError.ConnectionUnavailable(
+                "AOA client is not connected (state=${state.get()})"
+            )
+        }
+    }
+
+    private fun extractRequestId(envelopeJson: String): String {
+        val requestId = parseRequestId(envelopeJson)
+            ?: throw AoaTransportError.InvalidEnvelope("Envelope is missing request_id")
+        return requestId
+    }
+
+    private fun extractRequestIdOrGenerate(envelopeJson: String): String {
+        return parseRequestId(envelopeJson) ?: UUID.randomUUID().toString()
+    }
+
+    private fun parseRequestId(envelopeJson: String): String? {
+        return try {
+            val envelope = JSONObject(envelopeJson)
+            if (envelope.has("request_id")) {
+                envelope.optString("request_id")
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            throw AoaTransportError.InvalidEnvelope("Envelope is not valid JSON")
+        }
+    }
+
+    private fun padRequestId(requestId: String): String {
+        return requestId.padEnd(AoaFrameCodec.REQUEST_ID_LENGTH, ' ')
+    }
+
+    private fun registerPendingResponse(requestId: String): BlockingQueue<ResponseResult> {
+        val queue = LinkedBlockingQueue<ResponseResult>(1)
+        pendingResponses[requestId] = queue
+        return queue
+    }
+
+    private fun registerPendingStreamingResponse(requestId: String): BlockingQueue<ResponseResult> {
+        val queue = LinkedBlockingQueue<ResponseResult>(1)
+        pendingStreamingResponses[requestId] = queue
+        return queue
+    }
+
+    private fun stopInternal() {
+        if (stopped.getAndSet(true)) {
+            return
+        }
+        watchdogThread?.interrupt()
+        watchdogThread = null
+        resyncExecutor.shutdownNow()
+        closeConnection()
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (_: IllegalArgumentException) {
+            // Receiver may already be unregistered.
+        }
+        permissionPendingIntent?.let {
+            try {
+                it.cancel()
+            } catch (_: Exception) {
+                // Ignore cancellation errors during cleanup.
+            }
+        }
+        permissionPendingIntent = null
+    }
+
+    private fun clearBootstrapState() {
+        preparedSessionId = null
+        preparedOneTimePasscode = null
+        preparedSuggestedPort = -1
+        bootstrapPrepared = false
+    }
+
+    private fun registerReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(ACTION_USB_PERMISSION)
+            addAction(UsbManager.ACTION_USB_ACCESSORY_ATTACHED)
+            addAction(UsbManager.ACTION_USB_ACCESSORY_DETACHED)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            context.registerReceiver(receiver, filter)
+        }
+    }
+
+    private fun probeAttachedAccessories() {
+        val accessories = usbManager.accessoryList ?: run {
+            Log.i(LOG_TAG, "probeAttachedAccessories: no attached accessories.")
+            return
+        }
+        val accessory = accessories.firstOrNull { isMatchingAccessory(it) }
+        if (accessory == null) {
+            val identities = accessories.joinToString { acc ->
+                "${acc.manufacturer}/${acc.model}/${acc.version}"
+            }
+            Log.i(
+                LOG_TAG,
+                "probeAttachedAccessories: no matching accessory among " +
+                    "${accessories.size} attached (identities=$identities)."
+            )
+            return
+        }
+        Log.i(LOG_TAG, "probeAttachedAccessories: matching accessory ${accessory.manufacturer}/${accessory.model}/${accessory.version}; requesting permission.")
+        requestAccessoryPermission(accessory)
+    }
+
+    private fun requestAccessoryPermission(accessory: UsbAccessory) {
+        val intent = permissionPendingIntent ?: return
+        if (usbManager.hasPermission(accessory)) {
+            Log.i(LOG_TAG, "Accessory permission already granted; opening.")
+            openAccessory(accessory)
+            return
+        }
+        Log.i(LOG_TAG, "Requesting USB accessory permission.")
+        usbManager.requestPermission(accessory, intent)
+    }
+
+    @Synchronized
+    private fun openAccessory(accessory: UsbAccessory) {
+        closeConnection()
+        val opened = try {
+            streamOpener.open(accessory)
+        } catch (e: SecurityException) {
+            Log.w(LOG_TAG, "openAccessory failed with security exception: ${e.message}")
+            transitionTo(AoaTransportState.FAILED)
+            return
+        }
+        if (opened == null) {
+            Log.w(LOG_TAG, "openAccessory returned null.")
+            return
+        }
+        openedDescriptor = opened.descriptor
+        openedAccessory = accessory
+        transitionTo(AoaTransportState.AUTHENTICATING)
+        startReaderWriter(opened.inputStream, opened.outputStream)
+        Log.i(
+            LOG_TAG,
+            "Accessory stream opened; authenticating. " +
+                "accessory=${accessory.manufacturer}/${accessory.model}/${accessory.version}"
+        )
+    }
+
+    @Synchronized
+    private fun startReaderWriter(inputStream: InputStream, outputStream: OutputStream) {
+        val generation = connectionGeneration.incrementAndGet()
+        currentInputStream = inputStream
+        currentOutputStream = outputStream
+        readerThread = Thread({ runReader(inputStream, generation) }, "AoaClientReader").apply {
+            isDaemon = true
+            start()
+        }
+        writerThread = Thread({ runWriter(outputStream, generation) }, "AoaClientWriter").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    @Synchronized
+    private fun closeConnection() {
+        connectionGeneration.incrementAndGet()
+        readerThread?.interrupt()
+        writerThread?.interrupt()
+        readerThread = null
+        writerThread = null
+        try {
+            currentInputStream?.close()
+        } catch (_: IOException) {
+            // Ignore close errors during cleanup.
+        }
+        currentInputStream = null
+        try {
+            currentOutputStream?.close()
+        } catch (_: IOException) {
+            // Ignore close errors during cleanup.
+        }
+        currentOutputStream = null
+        try {
+            openedDescriptor?.close()
+        } catch (_: IOException) {
+            // Ignore close errors during cleanup.
+        }
+        openedDescriptor = null
+        openedAccessory = null
+        outgoingQueue.clear()
+        val connectionLostError = AoaTransportError.ConnectionLost("AOA connection lost")
+        pendingResponses.values.forEach { queue ->
+            queue.offer(ResponseResult.Error(connectionLostError))
+        }
+        pendingStreamingResponses.values.forEach { queue ->
+            queue.offer(ResponseResult.Error(connectionLostError))
+        }
+        pendingResponses.clear()
+        pendingStreamingResponses.clear()
+        if (!stopped.get()) {
+            transitionTo(AoaTransportState.DISCONNECTED)
+        }
+    }
+
+    private fun runReader(inputStream: InputStream, generation: Long) {
+        val buffer = ByteArray(READ_BUFFER_SIZE)
+        val decoder = AoaFrameCodec.StreamDecoder()
+        try {
+            while (!stopped.get() && !Thread.currentThread().isInterrupted) {
+                val readBytes = inputStream.read(buffer)
+                if (readBytes < 0) {
+                    Log.i(LOG_TAG, "Reader: accessory stream closed by host.")
+                    break
+                }
+                if (readBytes == 0) {
+                    continue
+                }
+                lastReadActivityAt.set(SystemClock.elapsedRealtime())
+                val frames = decoder.feed(buffer.copyOfRange(0, readBytes))
+                for (frame in frames) {
+                    handleFrame(frame)
+                }
+            }
+        } catch (e: IOException) {
+            Log.w(LOG_TAG, "Reader stopped with I/O error: ${e.message}")
+        } catch (e: AoaFrameCodecException) {
+            Log.w(LOG_TAG, "Reader stopped with malformed frame: ${e.message}")
+        } catch (e: RuntimeException) {
+            Log.w(LOG_TAG, "Reader stopped unexpectedly: ${e.message}")
+        } finally {
+            if (generation == connectionGeneration.get()) {
+                resyncConnection()
+            }
+        }
+    }
+
+    private fun handleFrame(frame: AoaFrame) {
+        if (frame.flags == AoaFrameCodec.FRAME_FLAG_BINARY) {
+            // Incoming binary asset chunks are not surfaced through the current public API.
+            // They are intentionally ignored here; streaming is driven from the mobile side.
+            return
+        }
+        val payload = try {
+            String(frame.payload, Charsets.UTF_8)
+        } catch (e: Exception) {
+            Log.w(LOG_TAG, "Ignored non-UTF8 AOA text frame.")
+            return
+        }
+        val envelope = try {
+            JSONObject(payload)
+        } catch (e: Exception) {
+            Log.w(LOG_TAG, "Ignored malformed AOA JSON envelope.")
+            return
+        }
+        val operation = envelope.optString("operation")
+        if (operation == AoaAuthResponder.AUTH_OPERATION) {
+            handleAuthChallenge(frame.requestId, envelope)
+        } else {
+            handleResponse(payload, envelope)
+        }
+    }
+
+    private fun handleAuthChallenge(frameRequestId: String, envelope: JSONObject) {
+        val sessionId = preparedSessionId
+        val oneTimePasscode = preparedOneTimePasscode
+        if (sessionId == null || oneTimePasscode == null) {
+            Log.w(LOG_TAG, "Received auth challenge before bootstrap was prepared.")
+            return
+        }
+        // The desktop restarts its AOA session with a fresh auth challenge whenever
+        // it detects a desynchronized stream (e.g. after the OS froze this process).
+        // If we were already authenticated, the bulk endpoint likely still holds stale
+        // bytes from before the freeze, so responding on the current stream would only
+        // corrupt the handshake. Tear the streams down and let the desktop's next
+        // probe re-authenticate on a fresh, clean connection.
+        if (state.get() == AoaTransportState.CONNECTED) {
+            Log.w(
+                LOG_TAG,
+                "Received auth challenge while already connected; resyncing AOA connection."
+            )
+            resyncConnection()
+            return
+        }
+        val body = try {
+            envelope.getJSONObject("body")
+        } catch (e: Exception) {
+            Log.w(LOG_TAG, "Auth challenge envelope missing body.")
+            return
+        }
+        val challengeSessionId = body.optString("sid")
+        val challengeRand = body.optString("rand")
+        Log.d(
+            LOG_TAG,
+            "Auth challenge received frameRequestId=$frameRequestId " +
+                "sid_match=${challengeSessionId == sessionId} rand_len=${challengeRand.length}"
+        )
+        val input = AuthChallengeInput(
+            frameRequestId = frameRequestId,
+            envelopeSchema = envelope.optString("schema"),
+            operation = envelope.optString("operation"),
+            bodySchema = envelope.optString("body_schema"),
+            sid = challengeSessionId,
+            rand = challengeRand,
+        )
+        val response = try {
+            authResponder.respond(
+                input = input,
+                expectedSessionId = sessionId,
+                oneTimePasscode = oneTimePasscode,
+            )
+        } catch (e: AoaTransportError) {
+            Log.w(LOG_TAG, "Auth challenge rejected: ${e.message}")
+            transitionTo(AoaTransportState.FAILED, e.message)
+            return
+        }
+        val responseFrame = AoaFrameCodec.encodeFrame(
+            response.responseFrameRequestId,
+            response.responseEnvelopeJson.toByteArray(Charsets.UTF_8),
+            AoaFrameCodec.FRAME_FLAG_TEXT,
+        )
+        outgoingQueue.put(responseFrame)
+        Log.d(
+            LOG_TAG,
+            "Auth challenge response sent requestId=${response.responseFrameRequestId}"
+        )
+        transitionTo(AoaTransportState.CONNECTED)
+    }
+
+    private fun handleResponse(payload: String, envelope: JSONObject) {
+        if (!envelope.has("request_id")) {
+            return
+        }
+        val requestId = envelope.optString("request_id")
+        val queue = pendingResponses[requestId] ?: pendingStreamingResponses[requestId]
+        if (queue != null) {
+            queue.offer(ResponseResult.Success(payload))
+        } else {
+            Log.w(LOG_TAG, "Received response for unknown request_id: $requestId")
+        }
+    }
+
+    private fun runWriter(outputStream: OutputStream, generation: Long) {
+        try {
+            while (!stopped.get() && !Thread.currentThread().isInterrupted) {
+                val frame = outgoingQueue.take()
+                outputStream.write(frame)
+                outputStream.flush()
+                lastWriteActivityAt.set(SystemClock.elapsedRealtime())
+            }
+        } catch (e: IOException) {
+            Log.w(LOG_TAG, "Writer stopped with I/O error: ${e.message}")
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } finally {
+            if (generation == connectionGeneration.get()) {
+                resyncConnection()
+            }
+        }
+    }
+
+    private fun transitionTo(newState: AoaTransportState, errorMessage: String? = null) {
+        val previous = state.getAndSet(newState)
+        if (previous != newState) {
+            Log.d(LOG_TAG, "State $previous -> $newState")
+            notifyStateListeners(newState, errorMessage)
+        }
+    }
+
+    private fun notifyStateListeners(newState: AoaTransportState, errorMessage: String?) {
+        val snapshot = synchronized(listeners) { listeners.toList() }
+        snapshot.forEach { listener ->
+            try {
+                listener.onStateChanged(newState, errorMessage)
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "State listener threw: ${e.message}")
+            }
+        }
+    }
+
+    private fun extractAccessory(intent: Intent): UsbAccessory? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+        }
+    }
+
+    private fun isMatchingAccessory(accessory: UsbAccessory): Boolean {
+        // The AuSearch desktop sets the accessory identity strings during AOA
+        // negotiation, but on macOS those string descriptors are not always
+        // delivered reliably: the phone can sit in accessory mode with the
+        // framework defaults (manufacturer=model="Android") instead. Accept the
+        // default-string accessory too — the auth challenge (SHA256(opt + rand))
+        // still authenticates the host before any data is exchanged.
+        val isAuSearchAccessory = accessory.manufacturer == AOA_MANUFACTURER
+            && accessory.model == AOA_MODEL
+            && accessory.version == AOA_VERSION
+        val hasFrameworkDefaultStrings = accessory.manufacturer == "Android"
+            && accessory.model == "Android"
+        return isAuSearchAccessory || hasFrameworkDefaultStrings
+    }
+
+    private fun isSameAccessory(first: UsbAccessory?, second: UsbAccessory?): Boolean {
+        if (first == null || second == null) {
+            return false
+        }
+        return first.manufacturer == second.manufacturer
+            && first.model == second.model
+            && first.version == second.version
+    }
+
+    companion object {
+        private const val LOG_TAG = "AoaClient"
+        private const val READ_BUFFER_SIZE = 16 * 1024
+        private const val RESPONSE_TIMEOUT_MS = 10_000L
+        private const val ACTION_USB_PERMISSION = "com.ausearch.aubackup.USB_ACCESSORY_PERMISSION"
+
+        /**
+         * If no frame has been read from the host for this long while the client is
+         * CONNECTED/AUTHENTICATING, the bulk stream is assumed desynchronized (e.g.
+         * after the OS froze the process) and a resync is triggered. Must stay well
+         * above RESPONSE_TIMEOUT_MS so a normal slow desktop response does not look
+         * like a stall.
+         */
+        private const val STALL_TIMEOUT_MS = 30_000L
+        private const val WATCHDOG_POLL_INTERVAL_MS = 2_000L
+        private const val RESYNC_REOPEN_DELAY_MS = 1_000L
+
+        /**
+         * Upper bound on frames queued for the USB writer. Producers (sendRequest,
+         * beginStreamingRequest, sendBinaryChunk, finishStreamingRequest) block on
+         * [LinkedBlockingQueue.put] when the queue is full, applying backpressure so
+         * the JS layer cannot outrun the USB link. Without this, the unbounded queue
+         * grew faster than the desktop consumed it and delayed an asset's completion
+         * frame past [RESPONSE_TIMEOUT_MS], failing the upload and stopping the backup.
+         */
+        private const val OUTGOING_QUEUE_CAPACITY = 16
+
+        private const val TRANSFER_ASSET_OPERATION = "transfer.asset"
+        private const val MOBILE_TRANSFER_SCHEMA = "dtis.mobile-transfer.v1"
+
+        /**
+         * Identity of the accessory produced by the AuBackup PC pairing flow.
+         */
+        internal const val AOA_MANUFACTURER = "AuSearch"
+        internal const val AOA_MODEL = "AuBackup AOA"
+        internal const val AOA_VERSION = "1.0"
+
+        @Volatile
+        private var instance: AoaClient? = null
+
+        /**
+         * Returns the production singleton for the AOA transport client.
+         */
+        @JvmStatic
+        fun getInstance(context: Context): AoaClient {
+            return instance ?: synchronized(this) {
+                instance ?: AoaClient(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+}

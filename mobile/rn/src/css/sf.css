@@ -1,0 +1,76 @@
+/*
+ * Apple SF / UIKit semantic color tokens.
+ *
+ * react-native-css/lightningcss compatibility constraints:
+ *   1. A CSS variable that has both a plain :root definition AND a @media ios
+ *      override for the same property fails to serialize.
+ *   2. var(--X, fallback) where --X is undefined also fails.
+ *
+ * Solution: define all color tokens directly in @theme with concrete
+ * Android/web light-mode values. Components that need true iOS semantic
+ * colors (systemBlue, label, etc.) should use React Native's PlatformColor
+ * API directly via style props.
+ *
+ * Font stack variables keep their @media ios / @media android overrides
+ * because they are never referenced inside a utility color property.
+ */
+
+/* ── Font stacks — safe to use @media platform overrides ─────────────────── */
+@media android {
+  :root {
+    --font-mono:    monospace;
+    --font-rounded: normal;
+    --font-serif:   serif;
+    --font-sans:    normal;
+  }
+}
+
+@media ios {
+  :root {
+    --font-mono:    ui-monospace;
+    --font-serif:   ui-serif;
+    --font-sans:    system-ui;
+    --font-rounded: ui-rounded;
+  }
+}
+
+/* ── SF color tokens — concrete light-mode values registered in @theme ─────── */
+@layer theme {
+  @theme {
+    /* Accent (Apple HIG light-mode values) */
+    --color-sf-blue:             rgb(0 122 255);
+    --color-sf-green:            rgb(52 199 89);
+    --color-sf-red:              rgb(255 59 48);
+    --color-sf-orange:           rgb(255 149 0);
+    --color-sf-yellow:           rgb(255 204 0);
+    --color-sf-indigo:           rgb(88 86 214);
+    --color-sf-purple:           rgb(175 82 222);
+
+    /* Grays */
+    --color-sf-gray:             rgb(142 142 147);
+    --color-sf-gray-2:           rgb(174 174 178);
+    --color-sf-gray-3:           rgb(199 199 204);
+    --color-sf-gray-4:           rgb(209 209 214);
+    --color-sf-gray-5:           rgb(229 229 234);
+    --color-sf-gray-6:           rgb(242 242 247);
+
+    /* Text */
+    --color-sf-text:             rgb(0 0 0);
+    --color-sf-text-2:           rgb(60 60 67 / 0.6);
+    --color-sf-text-3:           rgb(60 60 67 / 0.3);
+    --color-sf-text-4:           rgb(60 60 67 / 0.18);
+
+    /* Backgrounds */
+    --color-sf-bg:               rgb(255 255 255);
+    --color-sf-bg-2:             rgb(242 242 247);
+    --color-sf-bg-3:             rgb(255 255 255);
+
+    /* Fills */
+    --color-sf-fill:             rgb(120 120 128 / 0.2);
+    --color-sf-fill-2:           rgb(120 120 128 / 0.16);
+
+    /* Separators */
+    --color-sf-separator:        rgb(60 60 67 / 0.29);
+    --color-sf-separator-opaque: rgb(198 198 200);
+  }
+}

@@ -1,0 +1,55 @@
+# Agent Guidelines
+
+## 1. Tech Stack & Environment
+- **Language**: Python 3.10.
+- **UI Framework**: PySide6 (Qt for Python). UI layouts are often defined in `.ui` files and compiled.
+- **Core AI**: PyTorch, OpenCLIP, and FAISS for image embeddings and similarity search.
+- **Database**: SQLite (via `sqlite3`) with Write-Ahead Logging (WAL) for concurrency.
+- **Dependencies**: Listed in `requirements.txt` and `requirements-dev.txt`.
+
+## 2. Development Commands
+- **Package**: Run `dt_image_search/scripts/build_pyinstaller.sh --distpath pyinstaller-dist` to create a packaged app bundle.
+- **Package DMG**: Run `dt_image_search/scripts/package_dmg.sh  --app-path pyinstaller-dist/AuSearch.app` to create a standalone application bundle (macOS DMG in this case).
+- **Package DMG and notarize**: Run `dt_image_search/scripts/distribute_dmg.sh  --app-path pyinstaller-dist/AuSearch.app` to create a standalone application bundle (macOS DMG) and notarize it.
+- **Package MSIX**: Run `powershell dt_image_search/scripts/package_msix.ps1 && powershell dt_image_search/scripts/codesign.ps1` to create msix for Windows.
+- **Run Application**: Usually executed from the root via `python dt_image_search/main.py` or `python -m dt_image_search`.
+- **Testing**: There is no established pytest suite yet, but individual test scripts like `test_exception_handlers.py` can be executed directly via `python test_exception_handlers.py`. Use standard Python `unittest` or `pytest` paradigms for new tests.
+
+
+## 3. Architecture & State Management
+- **Global Context**: A singleton `BMContext` object is passed throughout the app to manage global configuration, model versions, and environment-specific paths. Use it rather than declaring new global variables.
+- **UI Architecture**: Follows Qt's Model/View architecture (e.g., `QAbstractListModel` for image lists).
+- **Concurrency**: Background tasks (indexing, searching) run in `threading.Thread` to keep the UI responsive.
+  - Thread safety must be maintained using `threading.Lock` and `threading.RLock`.
+  - Never update the UI directly from a background thread.
+- **Communication**: A custom Event Bus (`dts_event_bus.py`) provides a decoupled pub/sub mechanism for component communication (e.g., UI notifying background workers).
+
+## 4. Imports and Paths
+- **Imports**: Prefer **absolute imports** starting from the package root (e.g., `from dt_image_search.model.dts_db import ...`).
+- **Path Manipulation**: Use `pathlib.Path`.
+- **Path Storage**: All file paths are normalized to use **forward slashes (`/`)** for cross-platform consistency, especially before being inserted into the database.
+
+## 5. Error Handling & Telemetry
+- **Standard Handling**: Use `try...except...finally` blocks. Handle specific exceptions rather than broad `Exception` where possible.
+- **Telemetry**: Uses OpenTelemetry for structured logging, tracing and metrics.
+  - **Do NOT use `print()` or standard `logging` module.**
+  - Always import and use the centralized log function: `from dt_image_search.telemetry.telemetry_client import log`.
+  - **Span-First approach**: Use hierarchical spans for flows that take some time, so we can measure the duration. Create sub-spans for critical steps within those flows. Use Span Events for important events or state changes within a span. Example of spans - "QR code claim request/response", page/dialog views, etc. Example of span events - "User clicked 'Claim' button", "http/websocket request failure".
+  - **Trace & Span**: Use Trace (or Root Span) for high-level operations (e.g., "Indexing Folder", "Performing Search", "One Backup session") and Sub-Spans for individual steps (e.g., http/websocket request/response, page view).
+  - [Mobile] Use Persistent Buffering for logs/spans/metrics to ensure data is not lost on scenario like server down or app crash.
+  - [Mobile] Flush on entering background and on app exit.
+  - [Mobile] Use batching and compression to optimize network usage.
+  - **Correlation** When mobile/pc components interact, ensure to pass correlation IDs in telemetry to link related events across systems.
+  - Use standard keys like http.method, device.model.identifier, and os.version.
+  - Use `app.device.id` for identifying unique devices in telemetry
+  - **Sampling**: For high-volume events, e.g. per file/chunk spans or events, use sampling to reduce server load.
+- **Performance Profiling**: Critical functions are often wrapped with a custom `@perffunc` decorator for execution time monitoring.
+
+## 6. Database Operations
+- **SQL Execution**: Always use parameterized queries `(?, ?)` for security and stability.
+- **Transactions**: Explicit `conn.commit()` calls must follow write operations.
+- **Row Access**: The project uses `conn.row_factory = sqlite3.Row` to allow dictionary-like column access by name. Do not rely on tuple indexing unless strictly necessary.
+- **Concurrency**: `PRAGMA journal_mode=WAL;` is enabled to resolve multi-writer conflicts. Keep DB connections short-lived or thread-local if writing heavily.
+
+## 7. TESTING
+- After adding unit and functional tests, ensure to add then to the [test script](./dt_image_search/scripts/run_tests.sh) so they can be run collectively.

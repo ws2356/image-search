@@ -1,6 +1,5 @@
 # Instant Share Web App UI Overhaul Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Overhaul web/instant-share UI to adopt the iOS native instant-share DesignSystem (light theme, DM Sans/JetBrains Mono fonts, `#2563EB` primary) with reusable components and type-specific receive views.
 

@@ -1,9 +1,6 @@
-/**
- * @format
- */
-
 import { AppRegistry } from 'react-native';
-import App from './App';
-import { name as appName } from './app.json';
+import { run_android_headless_transfer_task } from './features/backup/runtime/android-headless-transfer-task';
 
-AppRegistry.registerComponent(appName, () => App);
+AppRegistry.registerHeadlessTask('AuBackupTransferTask', () => run_android_headless_transfer_task);
+
+import 'expo-router/entry';
