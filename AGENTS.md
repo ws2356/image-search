@@ -34,6 +34,7 @@ Specifications:
 - Build must pass before task completion.
 - Think critically.
 - Keep commits small. Leave the LLM name in the commit message with format `[LLM: <LLM_NAME>]` where `<LLM_NAME>` can be, e.g. gpt-5.4, gpt-5.3-codex, opus-4.7, deepseek-v4-pro, glm-5.1, opencode/mimo-v2.5-pro ..., which will be used for audit and assessment of the LLM's performance.
+- Commit & push frequently. This is mainly to avoid data loss.
 - The `SOLID` principles.  Single Responsibility (Every module, class, or function should be responsible for a single part of the functionality); Open/Closed (You should be able to add new features or behaviors without changing the existing source code); Liskov Substitution (Don't "empty out" inherited methods. If a subclass cannot actually perform the action of its parent, the inheritance hierarchy is wrong); Interface Segregation (It is better to have many small, specific interfaces than one large, general-purpose one); Dependency Inversion (Use Dependency Injection).
 - DRY (Don't Repeat Yourself). Abstract common logic into reusable functions or modules. Avoid copy-pasting code blocks.
 - KISS (Keep It Simple, Stupid). Avoid over-engineering. Choose the simplest solution that fully satisfies the requirements.
