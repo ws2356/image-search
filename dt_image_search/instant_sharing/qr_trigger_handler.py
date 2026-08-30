@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from dt_image_search.instant_sharing.session_id_generator import SessionIdGenerator
     from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
 
+from dt_image_search.telemetry.telemetry_client import add_span, log
+
 _logger = logging.getLogger(__name__)
 
 TRIGGER_PATH = "/api/instant-share/v1/qr-trigger"
@@ -88,6 +90,50 @@ class QRTriggerHandler:
             return DEFAULT_MAX_BATCH_FILE_COUNT
 
     def handle_trigger(self, body: dict[str, object]) -> dict[str, object]:
+        payload_type = body.get("type")
+        with add_span(
+            "instant_share.qr_trigger.request",
+            attributes={"instant_share.payload_type": str(payload_type)},
+        ) as span:
+            try:
+                response = self._process_trigger(body)
+            except Exception as exc:
+                log(
+                    "error",
+                    error_type="qr_trigger.handler_exception",
+                    message=f"{type(exc).__name__}: {exc}",
+                    where="instant_sharing.qr_trigger_handler.handle_trigger",
+                    attributes={"instant_share.payload_type": str(payload_type)},
+                )
+                raise
+            status = response.get("_status", 201)
+            http_status = status if isinstance(status, int) else 201
+            span.set_attribute("instant_share.http_status", http_status)
+            if http_status != 201:
+                log(
+                    "warning",
+                    message=f"QR trigger rejected with status {http_status}: {response.get('error', '')}",
+                    where="instant_sharing.qr_trigger_handler.handle_trigger",
+                    attributes={
+                        "instant_share.payload_type": str(payload_type),
+                        "instant_share.http_status": http_status,
+                    },
+                )
+            else:
+                log(
+                    "info",
+                    message="QR trigger stash created",
+                    where="instant_sharing.qr_trigger_handler.handle_trigger",
+                    attributes={
+                        "instant_share.session_id": response.get("session_id"),
+                        "instant_share.stash_id": response.get("stash_id"),
+                        "instant_share.content_type": response.get("content_type"),
+                        "instant_share.file_count": response.get("file_count", 0),
+                    },
+                )
+            return response
+
+    def _process_trigger(self, body: dict[str, object]) -> dict[str, object]:
         payload_type = body.get("type")
         if payload_type not in ("text", "file", "html", "link"):
             return {"_status": 400, "status": "error", "error": "Invalid type, must be 'text', 'file', 'html', or 'link'"}

@@ -17,25 +17,30 @@ For headless testing without GUI, use `instant_share_agent_main.py`.
 from __future__ import annotations
 
 import argparse
-import logging
+import faulthandler
+import os
 import signal
 import sys
+import threading
+import time
+import traceback
 from pathlib import Path
 
-import faulthandler
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QStandardPaths, QTimer
+from PySide6.QtCore import QTimer
 
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE
 from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
+from dt_image_search.telemetry.telemetry_client import (
+    flush_telemetry,
+    flush_telemetry_for_fatal,
+    log,
+)
 
-def _get_log_file_path() -> Path:
-    _LOG_DIR = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)) / "logs"
-    _LOG_DIR.mkdir(parents=True, exist_ok=True)
-    _LOG_FILE = _LOG_DIR / "instantshare.log"
-    return _LOG_FILE
+_WHERE = "instant_share.agent_main"
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -66,67 +71,153 @@ def _parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
 def hide_dock_icon():
     """动态隐藏当前进程在 macOS Dock 栏的图标"""
     if sys.platform == "darwin":
         # 导入 macOS 原生 Cocoa 框架
         from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
-        
+
         # 获取当前运行的 App 实例
         ns_app = NSApplication.sharedApplication()
         # 设置激活策略为 Accessory（在 Dock 和菜单栏中隐藏，但仍可接收事件）
         ns_app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-        print("Hiding Dock icon on macOS...")
+
+
+def _install_crash_hooks() -> None:
+    """Report uncaught exceptions (main + threads) through telemetry.
+
+    The launch agent is restarted silently by launchd, so without these hooks
+    a crashing agent would be invisible on the telemetry side.
+    """
+
+    def _handle_python_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        log(
+            "error",
+            error_type="agent.uncaught_exception",
+            message=error_msg,
+            where=_WHERE,
+        )
+        flush_telemetry_for_fatal()
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+    def _handle_threading_exception(args):
+        exc_type, exc_value, exc_traceback, thread = args
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        thread_name = thread.name if thread else "Unknown"
+        log(
+            "error",
+            error_type="agent.thread_exception",
+            message=error_msg,
+            where=f"{_WHERE}.{thread_name}",
+        )
+        flush_telemetry_for_fatal()
+
+    sys.excepthook = _handle_python_exception
+    if hasattr(threading, "excepthook"):
+        threading.excepthook = _handle_threading_exception
+
+
+def _log_agent_startup(args: argparse.Namespace) -> None:
+    log(
+        "info",
+        message="instant-share agent starting",
+        where=f"{_WHERE}.main",
+        attributes={
+            "instant_share.pid": os.getpid(),
+            "instant_share.ppid": os.getppid(),
+            "instant_share.argv": sys.argv[1:],
+            "instant_share.image_delivery_mode": args.image_delivery_mode,
+            "instant_share.downloads_dir": str(args.downloads_dir) if args.downloads_dir else "",
+            "instant_share.mdns_service_type": INSTANT_SHARE_MDNS_SERVICE_TYPE,
+        },
+    )
+
+
+class _AgentHeartbeat:
+    """Rate-limited heartbeat distinguishing 'agent alive' from 'sock missing'.
+
+    The BLE daemon invokes the callback on a fast poll loop; emission is
+    capped at one telemetry record per interval.
+    """
+
+    _INTERVAL_SECONDS = 300.0
+
+    def __init__(self) -> None:
+        self._runtime: InstantShareRuntime | None = None
+        self._started_at = time.monotonic()
+        self._last_emit = 0.0
+
+    def attach(self, runtime: InstantShareRuntime) -> None:
+        self._runtime = runtime
+
+    def __call__(self) -> None:
+        now = time.monotonic()
+        if now - self._last_emit < self._INTERVAL_SECONDS:
+            return
+        self._last_emit = now
+        unix_server = self._runtime.unix_socket_server if self._runtime is not None else None
+        socket_path = unix_server.socket_path if unix_server is not None else None
+        log(
+            "info",
+            message="instant-share agent heartbeat",
+            where=f"{_WHERE}.heartbeat",
+            attributes={
+                "instant_share.uptime_seconds": round(now - self._started_at, 1),
+                "instant_share.unix_socket_running": (
+                    unix_server.is_running if unix_server is not None else False
+                ),
+                "instant_share.socket_exists": (
+                    bool(socket_path is not None and socket_path.exists())
+                ),
+                "instant_share.socket_path": str(socket_path) if socket_path is not None else "",
+            },
+        )
+
 
 def main() -> int:
 
     args = _parse_args()
-
-    print(f"Starting Snap Get runtime with GUI...")
-    print(f"  mDNS service:      {INSTANT_SHARE_MDNS_SERVICE_TYPE}")
-    print(f"  Image delivery:    {args.image_delivery_mode}")
-    print(f"  Auto-receive:      enabled")
-    if args.downloads_dir:
-        print(f"  Downloads dir:     {args.downloads_dir}")
-    else:
-        print(f"  Downloads dir:     ~/Downloads (default)")
-
-    # from dt_image_search.model.feature_flags import is_instant_share_enabled
-    # if not args.force_enable and not is_instant_share_enabled():
-    #     print("Instant Share feature is disabled by feature flag. Use --force-enable to bypass.")
-    #     return 0
 
     app = QApplication(sys.argv)
     app.setOrganizationDomain("net.boldman")
     app.setApplicationName("SnapGet")
     app.setQuitOnLastWindowClosed(False)
 
-    logging.basicConfig(
-        level=getattr(logging, args.log_level),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        filename=str(_get_log_file_path()),
-        filemode="a",
-    )
-    _logger = logging.getLogger(__name__)
+    _install_crash_hooks()
+    _log_agent_startup(args)
 
     # 1. 在初始化 GUI 之后，戴上“隐形斗篷”
     hide_dock_icon()
 
     mini_window_factory = InstantShareMiniWindowFactory()
     mini_window_factory.start()
-    _logger.info("MiniWindowFactory started")
+    log("info", message="MiniWindowFactory started", where=f"{_WHERE}.main")
 
+    heartbeat = _AgentHeartbeat()
     runtime = InstantShareRuntime(
         is_enabled=lambda: True,
         image_delivery_mode=args.image_delivery_mode,
         downloads_dir=args.downloads_dir,
         auto_receive=True,
         pin_display_callback=mini_window_factory.show_pin,
+        heartbeat=heartbeat,
     )
+    heartbeat.attach(runtime)
 
     started = runtime.start()
     if not started:
-        print("Failed to start runtime.", file=sys.stderr)
+        log(
+            "error",
+            error_type="agent.start_failed",
+            message="Failed to start instant-share runtime; agent will exit (launchd will restart it)",
+            where=f"{_WHERE}.main",
+        )
+        flush_telemetry_for_fatal()
         mini_window_factory.stop()
         return 1
 
@@ -137,23 +228,34 @@ def main() -> int:
         pc_tls_port=runtime.tls_server.port,
     )
     qr_window_factory.start()
-    _logger.info("QRTriggerMiniWindowFactory started")
+    log("info", message="QRTriggerMiniWindowFactory started", where=f"{_WHERE}.main")
 
-    is_advertising = runtime.mdns_advertiser.is_advertising
-    print(f"\nRuntime started.")
-    print(f"  mDNS advertising: {is_advertising}")
-    print(f"  HTTP server:      listening on port {runtime.http_server.port}")
-    if not is_advertising:
-        print(
-            "  NOTE: advertising may become active in a few seconds.",
-            file=sys.stderr,
-        )
+    log(
+        "info",
+        message="instant-share runtime ready",
+        where=f"{_WHERE}.main",
+        attributes={
+            "instant_share.mdns_advertising": runtime.mdns_advertiser.is_advertising,
+            "instant_share.http_port": runtime.http_server.port,
+            "instant_share.tls_port": runtime.tls_server.port,
+        },
+    )
 
     stop_requested = False
 
     def _handle_signal(signum: int, frame: object) -> None:
         nonlocal stop_requested
         stop_requested = True
+        try:
+            signal_name = signal.Signals(signum).name
+        except ValueError:
+            signal_name = str(signum)
+        log(
+            "info",
+            message="agent stop signal received",
+            where=f"{_WHERE}._handle_signal",
+            attributes={"instant_share.signal": signal_name},
+        )
         app.quit()
 
     signal.signal(signal.SIGINT, _handle_signal)
@@ -165,12 +267,20 @@ def main() -> int:
 
     exit_code = app.exec()
 
-    print("\nStopping runtime...")
+    log(
+        "info",
+        message="instant-share agent exiting",
+        where=f"{_WHERE}.main",
+        attributes={
+            "instant_share.exit_code": exit_code,
+            "instant_share.stop_requested": stop_requested,
+        },
+    )
     qr_window_factory.stop()
     mini_window_factory.stop()
     runtime.stop()
-    print("Stopped.")
-    _logger.info("Test runtime exited")
+    flush_telemetry()
+    log("info", message="agent stopped", where=f"{_WHERE}.main")
 
     return exit_code
 

@@ -1,7 +1,9 @@
 import os
 import sys
+import tempfile
 import unittest
 import uuid
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -18,8 +20,11 @@ from dt_image_search.instant_sharing.orchestrator import (
     InstantShareReceiverOrchestrator,
     _session_attributes,
 )
+from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler
 from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
 from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
+from dt_image_search.instant_sharing.unix_socket_server import UnixSocketHttpServer
+from dt_image_search.scripts.instant_share_agent_main import _AgentHeartbeat
 
 
 def _connection_config():
@@ -115,6 +120,142 @@ class TelemetrySpanTests(unittest.TestCase):
         span_calls = mock_span.call_args_list
         span_names = [call[0][0] for call in span_calls]
         self.assertIn("instant_share.transfer.received", span_names)
+
+
+class UnixSocketServerTelemetryTests(unittest.TestCase):
+    def _mock_span(self, mock_span) -> None:
+        mock_span.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+    @patch("dt_image_search.instant_sharing.unix_socket_server.add_span")
+    @patch("dt_image_search.instant_sharing.unix_socket_server.log")
+    def test_start_and_stop_emit_span_and_logs(self, mock_log, mock_span) -> None:
+        self._mock_span(mock_span)
+        with tempfile.TemporaryDirectory() as tmp:
+            server = UnixSocketHttpServer(
+                request_handler=lambda body: {},
+                socket_path=Path(tmp) / "is.sock",
+            )
+            self.assertTrue(server.start())
+            server.stop()
+
+        span_names = [call[0][0] for call in mock_span.call_args_list]
+        self.assertIn("unix_socket_server.start", span_names)
+
+        log_wheres = [call[1]["where"] for call in mock_log.call_args_list]
+        self.assertIn("instant_sharing.unix_socket_server.start", log_wheres)
+        self.assertIn("instant_sharing.unix_socket_server.stop", log_wheres)
+        stop_call = next(
+            call for call in mock_log.call_args_list
+            if call[1]["where"] == "instant_sharing.unix_socket_server.stop"
+        )
+        self.assertTrue(stop_call[1]["attributes"]["instant_share.socket_removed"])
+
+    @patch("dt_image_search.instant_sharing.unix_socket_server.add_span")
+    @patch("dt_image_search.instant_sharing.unix_socket_server.log")
+    def test_start_failure_on_stale_unlink_emits_error_log(self, mock_log, mock_span) -> None:
+        self._mock_span(mock_span)
+        with tempfile.TemporaryDirectory() as tmp:
+            # A directory at the socket path makes unlink() fail deterministically.
+            socket_path = Path(tmp) / "is.sock"
+            socket_path.mkdir()
+            server = UnixSocketHttpServer(
+                request_handler=lambda body: {},
+                socket_path=socket_path,
+            )
+            self.assertFalse(server.start())
+
+        error_calls = [
+            call for call in mock_log.call_args_list if call[0][0] == "error"
+        ]
+        self.assertTrue(error_calls)
+        self.assertEqual(
+            error_calls[0][1]["error_type"],
+            "unix_socket_server.stale_unlink_failed",
+        )
+
+    @patch("dt_image_search.instant_sharing.unix_socket_server.add_span")
+    @patch("dt_image_search.instant_sharing.unix_socket_server.log")
+    def test_start_failure_without_handler_emits_error_log(self, mock_log, mock_span) -> None:
+        self._mock_span(mock_span)
+        with tempfile.TemporaryDirectory() as tmp:
+            server = UnixSocketHttpServer(
+                request_handler=None,
+                socket_path=Path(tmp) / "is.sock",
+            )
+            self.assertFalse(server.start())
+
+        error_calls = [
+            call for call in mock_log.call_args_list if call[0][0] == "error"
+        ]
+        self.assertTrue(error_calls)
+        self.assertEqual(
+            error_calls[0][1]["error_type"],
+            "unix_socket_server.no_request_handler",
+        )
+
+
+class QRTriggerTelemetryTests(unittest.TestCase):
+    def _mock_span(self, mock_span) -> None:
+        mock_span.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_span.return_value.__exit__ = MagicMock(return_value=False)
+
+    @patch("dt_image_search.instant_sharing.qr_trigger_handler.add_span")
+    @patch("dt_image_search.instant_sharing.qr_trigger_handler.log")
+    def test_handle_trigger_success_emits_span_and_correlation_log(
+        self, mock_log, mock_span
+    ) -> None:
+        self._mock_span(mock_span)
+        handler = QRTriggerHandler()
+        response = handler.handle_trigger({"type": "text", "content": "hello"})
+
+        self.assertEqual(response.get("status"), "stashed")
+        span_names = [call[0][0] for call in mock_span.call_args_list]
+        self.assertIn("instant_share.qr_trigger.request", span_names)
+
+        accepted_calls = [
+            call for call in mock_log.call_args_list
+            if call[1].get("attributes", {}).get("instant_share.stash_id")
+        ]
+        self.assertTrue(accepted_calls)
+        self.assertEqual(
+            accepted_calls[0][1]["attributes"]["instant_share.stash_id"],
+            response["stash_id"],
+        )
+        self.assertEqual(
+            accepted_calls[0][1]["attributes"]["instant_share.session_id"],
+            response["session_id"],
+        )
+
+    @patch("dt_image_search.instant_sharing.qr_trigger_handler.add_span")
+    @patch("dt_image_search.instant_sharing.qr_trigger_handler.log")
+    def test_handle_trigger_rejection_emits_warning(self, mock_log, mock_span) -> None:
+        self._mock_span(mock_span)
+        handler = QRTriggerHandler()
+        response = handler.handle_trigger({"type": "video"})
+
+        self.assertEqual(response.get("_status"), 400)
+        severities = [call[0][0] for call in mock_log.call_args_list]
+        self.assertIn("warning", severities)
+
+
+class AgentHeartbeatTelemetryTests(unittest.TestCase):
+    @patch("dt_image_search.scripts.instant_share_agent_main.log")
+    def test_heartbeat_rate_limits_and_reports_socket_state(self, mock_log) -> None:
+        heartbeat = _AgentHeartbeat()
+        runtime = MagicMock()
+        runtime.unix_socket_server.socket_path = Path("/nonexistent/is.sock")
+        runtime.unix_socket_server.is_running = True
+        heartbeat.attach(runtime)
+
+        heartbeat()  # first call emits
+        heartbeat()  # immediate second call is rate-limited
+
+        self.assertEqual(mock_log.call_count, 1)
+        attributes = mock_log.call_args[1]["attributes"]
+        self.assertTrue(attributes["instant_share.unix_socket_running"])
+        self.assertFalse(attributes["instant_share.socket_exists"])
+        self.assertTrue(attributes["instant_share.uptime_seconds"] >= 0)
 
 
 if __name__ == "__main__":

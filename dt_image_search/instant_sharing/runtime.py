@@ -34,6 +34,7 @@ from dt_image_search.instant_sharing.unix_socket_server import UnixSocketHttpSer
 from dt_image_search.instant_sharing.webrtc_peer import WebRTCPeerManager
 from dt_image_search.model.dt_device_id import get_device_id
 from dt_image_search.model.feature_flags import is_instant_share_enabled
+from dt_image_search.telemetry.telemetry_client import log
 
 
 class InstantShareRuntime:
@@ -263,6 +264,23 @@ class InstantShareRuntime:
             _logger.info("[InstantShareRuntime] QR window factory started")
         self._webrtc_peer_manager.start()
         _logger.info("[InstantShareRuntime] WebRTC peer manager started")
+        log(
+            "info",
+            message=(
+                f"instant-share runtime started http={http_ok} tls={tls_ok} "
+                f"mdns={result} unix={unix_ok}"
+            ),
+            where="instant_sharing.runtime.start",
+            attributes={
+                "instant_share.http_ok": http_ok,
+                "instant_share.tls_ok": tls_ok,
+                "instant_share.mdns_ok": result,
+                "instant_share.unix_socket_ok": unix_ok,
+                "instant_share.http_port": self._http_server.port,
+                "instant_share.tls_port": self._tls_server.port,
+                "instant_share.socket_path": str(self._unix_socket_server.socket_path),
+            },
+        )
         return result
 
     def stop(self) -> None:

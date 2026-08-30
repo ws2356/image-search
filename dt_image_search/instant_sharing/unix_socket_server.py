@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 from PySide6.QtCore import QStandardPaths
@@ -13,8 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from dt_image_search.instant_sharing.qr_trigger_handler import TRIGGER_PATH
-
-_logger = logging.getLogger(__name__)
+from dt_image_search.telemetry.telemetry_client import add_span, log
 
 APP_GROUP_ID = "ZU6V838VRQ.net.boldman.ausearch"
 SOCKET_RELATIVE_PATH = "is.sock"
@@ -96,51 +95,99 @@ class UnixSocketHttpServer:
 
     def start(self) -> bool:
         sock_path = self._socket_path
-        if sock_path.exists():
-            try:
-                sock_path.unlink()
-            except OSError as exc:
-                _logger.error("Failed to remove stale socket at %s: %s", sock_path, exc)
+        started_at = time.monotonic()
+        had_stale_socket = sock_path.exists()
+        with add_span(
+            "unix_socket_server.start",
+            attributes={
+                "instant_share.socket_path": str(sock_path),
+                "instant_share.path_len_bytes": len(str(sock_path).encode("utf-8")),
+                "instant_share.had_stale_socket": had_stale_socket,
+            },
+        ) as span:
+            if had_stale_socket:
+                try:
+                    sock_path.unlink()
+                    span.add_event("stale_socket_removed")
+                except OSError as exc:
+                    log(
+                        "error",
+                        error_type="unix_socket_server.stale_unlink_failed",
+                        message=f"Failed to remove stale socket at {sock_path}: {exc}",
+                        where="instant_sharing.unix_socket_server.start",
+                        attributes={
+                            "instant_share.socket_path": str(sock_path),
+                            "instant_share.os_error": str(exc),
+                        },
+                    )
+                    return False
+            sock_path.parent.mkdir(parents=True, exist_ok=True)
+
+            path_len = len(str(sock_path).encode("utf-8"))
+            if path_len > _MACOS_SUN_PATH_MAX:
+                log(
+                    "error",
+                    error_type="unix_socket_server.path_too_long",
+                    message=f"Socket path {sock_path} is {path_len} bytes — exceeds AF_UNIX sun_path limit of {_MACOS_SUN_PATH_MAX} bytes",
+                    where="instant_sharing.unix_socket_server.start",
+                    attributes={
+                        "instant_share.socket_path": str(sock_path),
+                        "instant_share.path_len_bytes": path_len,
+                    },
+                )
                 return False
-        sock_path.parent.mkdir(parents=True, exist_ok=True)
 
-        path_len = len(str(sock_path).encode("utf-8"))
-        if path_len > _MACOS_SUN_PATH_MAX:
-            _logger.error(
-                "Socket path %s is %d bytes — exceeds AF_UNIX sun_path limit of %d bytes",
-                sock_path, path_len, _MACOS_SUN_PATH_MAX,
+            if self._request_handler is None:
+                log(
+                    "error",
+                    error_type="unix_socket_server.no_request_handler",
+                    message="No request_handler provided to UnixSocketHttpServer",
+                    where="instant_sharing.unix_socket_server.start",
+                )
+                return False
+
+            app = _build_app(self._request_handler)
+            config = uvicorn.Config(
+                app,
+                uds=str(sock_path),
+                lifespan="off",
+                access_log=False,
+                log_level="warning",
+                loop="asyncio",
             )
-            return False
+            self._server = uvicorn.Server(config)
+            self._thread = threading.Thread(
+                target=self._server.run,
+                name="qr_unix_socket",
+                daemon=True,
+            )
+            self._thread.start()
 
-        if self._request_handler is None:
-            _logger.error("No request_handler provided to UnixSocketHttpServer")
-            return False
+            if not self._wait_for_started():
+                log(
+                    "error",
+                    error_type="unix_socket_server.bind_failed",
+                    message=f"Unix socket server failed to bind {sock_path} within {self._STARTUP_TIMEOUT_SECONDS:.1f}s",
+                    where="instant_sharing.unix_socket_server.start",
+                    attributes={
+                        "instant_share.socket_path": str(sock_path),
+                        "instant_share.socket_file_exists_after_failure": sock_path.exists(),
+                    },
+                )
+                self.stop()
+                return False
 
-        app = _build_app(self._request_handler)
-        config = uvicorn.Config(
-            app,
-            uds=str(sock_path),
-            lifespan="off",
-            access_log=False,
-            log_level="warning",
-            loop="asyncio",
-        )
-        self._server = uvicorn.Server(config)
-        self._thread = threading.Thread(
-            target=self._server.run,
-            name="qr_unix_socket",
-            daemon=True,
-        )
-        self._thread.start()
-
-        if not self._wait_for_started():
-            _logger.error("Unix socket server failed to bind %s within %.1fs",
-                          sock_path, self._STARTUP_TIMEOUT_SECONDS)
-            self.stop()
-            return False
-
-        _logger.info("Unix socket HTTP server listening on %s", sock_path)
-        return True
+            log(
+                "info",
+                message=f"Unix socket HTTP server listening on {sock_path}",
+                where="instant_sharing.unix_socket_server.start",
+                attributes={
+                    "instant_share.socket_path": str(sock_path),
+                    "instant_share.startup_ms": round((time.monotonic() - started_at) * 1000, 1),
+                    "instant_share.had_stale_socket": had_stale_socket,
+                },
+            )
+            return True
 
     def _wait_for_started(self) -> bool:
         server = self._server
@@ -164,8 +211,19 @@ class UnixSocketHttpServer:
             server.should_exit = True
         if thread is not None:
             thread.join(timeout=3.0)
+        socket_removed = False
         if self._socket_path.exists():
             try:
                 self._socket_path.unlink()
+                socket_removed = True
             except OSError:
                 pass
+        log(
+            "info",
+            message=f"Unix socket server stopped (socket_removed={socket_removed})",
+            where="instant_sharing.unix_socket_server.stop",
+            attributes={
+                "instant_share.socket_path": str(self._socket_path),
+                "instant_share.socket_removed": socket_removed,
+            },
+        )
