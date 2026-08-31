@@ -2,6 +2,7 @@ import argparse
 import os
 import plistlib
 import time
+import uuid
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -39,6 +40,27 @@ _build_type = get_build_type()
 from dt_image_search.app_setting import initialize_app_settings
 
 initialize_app_settings(app_name="imagesearch")
+
+# Telemetry is entry-point-wired: telemetry_client carries no app-storage
+# dependencies so the instant-share launch agent can reuse it independently.
+from dt_image_search.dts_logging import get_other_handlers
+from dt_image_search.model.dt_device_id import get_device_id
+from dt_image_search.model.dts_config import get_log_level, get_revision
+from dt_image_search.model.feature_flags import get_desktop_root_trace_sample_rate
+from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
+from dt_image_search.telemetry.telemetry_client import init_telemetry
+from dt_image_search.tools.dt_is_debug import is_debug
+
+init_telemetry(
+    device_id=get_device_id(),
+    session_id=str(uuid.uuid4()),
+    revision=get_revision(),
+    log_level=get_log_level(),
+    root_trace_sample_rate=get_desktop_root_trace_sample_rate(),
+    resource_attributes=RESOURCE_ATTRIBUTES,
+    log_handlers=get_other_handlers(),
+    debug_mode=is_debug(),
+)
 
 from dt_image_search.bm_context import get_context, BMContext
 from dt_image_search.model.dts_config import setup_model_cache

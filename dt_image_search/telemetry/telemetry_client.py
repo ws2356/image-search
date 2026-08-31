@@ -1,10 +1,21 @@
+"""OpenTelemetry client for structured logging, tracing and metrics.
+
+This module is intentionally decoupled from app state (device id, session id,
+config file storage, feature flags, log handlers): everything that varies per
+host process is injected via init_telemetry() by the entry point (main app or
+instant-share launch agent). The only app-package import allowed here is
+otlp_settings, which holds the shared OTLP endpoints.
+"""
+
 from contextlib import contextmanager
 from functools import wraps
 import logging
 import os
 import sys
 import threading
-from collections.abc import Sequence
+import uuid
+from collections.abc import Mapping, Sequence
+from typing import Any
 from urllib.parse import urlparse
 
 # Ensure nuitka include this module which would otherwise be loaded dynamically
@@ -24,14 +35,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, Cons
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-from dt_image_search.dts_logging import get_other_handlers
-from dt_image_search.model.dt_device_id import get_device_id
-from dt_image_search.model.dt_session_id import session_id
 from dt_image_search.telemetry.otlp_settings import EXPORT_BATCH_SIZE, EXPORT_QUEUE_SIZE, EXPORT_TIMEOUT_SECONDS, LOGS_UPLOAD_ENDPOINT, METRICS_UPLOAD_ENDPOINT, TELEMETRY_UPLOAD_HOST, TRACES_UPLOAD_ENDPOINT
-from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
-from dt_image_search.model.dts_config import get_log_level, get_revision
-from dt_image_search.model.feature_flags import get_desktop_root_trace_sample_rate
-
 
 _telemetry_upload_host = TELEMETRY_UPLOAD_HOST
 _metrics_upload_endpoint = METRICS_UPLOAD_ENDPOINT
@@ -43,57 +47,189 @@ _revision_attribute = "app.revision"
 
 _image_search_client = "imagesearch_client"
 
-_resource = Resource.create(attributes={
-    "service.name": _image_search_client,
-    _device_id_attribute: get_device_id(),
-    _revision_attribute: get_revision(),
-    **RESOURCE_ATTRIBUTES,
-})
 _BATCH_SIZE = EXPORT_BATCH_SIZE
 _QUEUE_SIZE = EXPORT_QUEUE_SIZE
-_ROOT_SPAN_SAMPLE_RATE = get_desktop_root_trace_sample_rate()
 
-# === METRICS SETUP ===
-temporality = {
-                Counter: AggregationTemporality.CUMULATIVE,
-                UpDownCounter: AggregationTemporality.CUMULATIVE,
-                Histogram: AggregationTemporality.CUMULATIVE,
-                ObservableCounter: AggregationTemporality.CUMULATIVE,
-                ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
-                ObservableGauge: AggregationTemporality.CUMULATIVE,
-            }
-_metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality, timeout=EXPORT_TIMEOUT_SECONDS)
-metric_readers = [PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)]
-if sys.stdout is not None and sys.stderr is not None:
-    _metric_exporter2 = ConsoleMetricExporter(preferred_temporality=temporality)
-    metric_reader2 = PeriodicExportingMetricReader(_metric_exporter2, export_interval_millis=60_000)
-    metric_readers.append(metric_reader2)
-metrics.set_meter_provider(MeterProvider(metric_readers=metric_readers, resource=_resource))
-_meter = metrics.get_meter(_image_search_client)
+# === INITIALIZATION STATE ===
+# Populated once by init_telemetry(); read by the public API below.
+_init_lock = threading.Lock()
+_initialized = False
+_resource: Resource
+_metric_readers: list = []
+_logger_provider: LoggerProvider
+_tracer: Any = None
+_session_id = ""
+_log_level = logging.INFO
+_log_handlers: list[logging.Handler] = []
+_counters: dict[str, Any] = {}
 
-# Counters
-startup_counter = _meter.create_counter("app_startups")
-search_counter = _meter.create_counter("search")
-error_counter = _meter.create_counter("errors")
 
-# === TRACING SETUP ===
-trace.set_tracer_provider(
-    TracerProvider(
-        resource=_resource,
-        sampler=ParentBased(root=TraceIdRatioBased(_ROOT_SPAN_SAMPLE_RATE)),
+def _initialize(
+    *,
+    device_id: str,
+    session_id: str,
+    revision: str,
+    log_level: int,
+    root_trace_sample_rate: float,
+    resource_attributes: Mapping[str, str] | None,
+    log_handlers: Sequence[logging.Handler] | None,
+    debug_mode: bool,
+) -> None:
+    global _initialized, _resource, _logger_provider, _tracer
+    global _session_id, _log_level, _log_handlers, _metric_readers
+
+    _session_id = session_id
+    _log_level = log_level
+    _log_handlers = list(log_handlers) if log_handlers is not None else []
+
+    _resource = Resource.create(attributes={
+        "service.name": _image_search_client,
+        _device_id_attribute: device_id,
+        _revision_attribute: revision,
+        **(dict(resource_attributes) if resource_attributes else {}),
+    })
+
+    # === METRICS SETUP ===
+    temporality = {
+                    Counter: AggregationTemporality.CUMULATIVE,
+                    UpDownCounter: AggregationTemporality.CUMULATIVE,
+                    Histogram: AggregationTemporality.CUMULATIVE,
+                    ObservableCounter: AggregationTemporality.CUMULATIVE,
+                    ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+                    ObservableGauge: AggregationTemporality.CUMULATIVE,
+                }
+    _metric_exporter = OTLPMetricExporter(endpoint=_metrics_upload_endpoint, preferred_temporality=temporality, timeout=EXPORT_TIMEOUT_SECONDS)
+    _metric_readers = [PeriodicExportingMetricReader(_metric_exporter, export_interval_millis=60_000)]
+    if sys.stdout is not None and sys.stderr is not None:
+        _metric_exporter2 = ConsoleMetricExporter(preferred_temporality=temporality)
+        metric_reader2 = PeriodicExportingMetricReader(_metric_exporter2, export_interval_millis=60_000)
+        _metric_readers.append(metric_reader2)
+    metrics.set_meter_provider(MeterProvider(metric_readers=_metric_readers, resource=_resource))
+    _meter = metrics.get_meter(_image_search_client)
+
+    _counters.update({
+        "app_startups": _meter.create_counter("app_startups"),
+        "search": _meter.create_counter("search"),
+        "errors": _meter.create_counter("errors"),
+    })
+
+    # === TRACING SETUP ===
+    trace.set_tracer_provider(
+        TracerProvider(
+            resource=_resource,
+            sampler=ParentBased(root=TraceIdRatioBased(root_trace_sample_rate)),
+        )
     )
-)
-_trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
-trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
-if sys.stdout is not None and sys.stderr is not None:
-    trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
-tracer = trace.get_tracer(_image_search_client)
+    _trace_exporter = OTLPSpanExporter(endpoint=_traces_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
+    trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
+    if sys.stdout is not None and sys.stderr is not None:
+        trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
+    _tracer = trace.get_tracer(_image_search_client)
 
-# === LOGGING SETUP ===
-_logger_provider = LoggerProvider(resource=_resource)
-_log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
-_logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
-# otel_logger = _logger_provider.get_logger(_image_search_client)
+    # === LOGGING SETUP ===
+    _logger_provider = LoggerProvider(resource=_resource)
+    _log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
+    _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
+    # otel_logger = _logger_provider.get_logger(_image_search_client)
+
+    # Open the system’s null device for writing:
+    # ── '/dev/null' on Unix, 'nul' on Windows
+    # Redirect both Python stdout and stderr so that naive dependencies that write to stdout/stderr won't break the app
+    if not debug_mode and "PYTEST_CURRENT_TEST" not in os.environ:
+        devnull = open(os.devnull, 'w', encoding='utf-8')
+        sys.stdout = devnull
+        sys.stderr = devnull
+
+    _initialized = True
+
+
+def init_telemetry(
+    *,
+    device_id: str,
+    session_id: str,
+    revision: str,
+    log_level: int,
+    root_trace_sample_rate: float,
+    resource_attributes: Mapping[str, str] | None = None,
+    log_handlers: Sequence[logging.Handler] | None = None,
+    debug_mode: bool = True,
+) -> None:
+    """Initialize telemetry with host-process-provided values.
+
+    Must be called once by the process entry point (main app or launch agent)
+    before any telemetry is used. Later calls are no-ops, so entry points do
+    not need to coordinate.
+
+    Args:
+        device_id: Value for the `app.device.id` resource attribute.
+        session_id: Per-process session id set on every span and log record.
+        revision: Value for the `app.revision` resource attribute.
+        log_level: Stdlib logging level for the root logger configuration.
+        root_trace_sample_rate: Root span sampling ratio in [0.0, 1.0].
+        resource_attributes: Extra resource attributes (e.g. service.version,
+            app.package.type) provided by the host process.
+        log_handlers: Stdlib handlers (e.g. rotating file handler) the host
+            process wants local logs to go to; the OTLP handler is prepended.
+        debug_mode: True when running unpackaged; disables the stdout/stderr
+            redirect to the null device.
+    """
+    with _init_lock:
+        if _initialized:
+            return
+        _initialize(
+            device_id=device_id,
+            session_id=session_id,
+            revision=revision,
+            log_level=log_level,
+            root_trace_sample_rate=root_trace_sample_rate,
+            resource_attributes=resource_attributes,
+            log_handlers=log_handlers,
+            debug_mode=debug_mode,
+        )
+
+
+def _ensure_initialized() -> None:
+    """Lazily initialize with safe defaults when an entry point forgot to call init_telemetry().
+
+    This keeps telemetry strictly non-fatal: using log()/spans/counters before
+    init never raises, it only degrades resource attributes. The values mirror
+    what import-time setup used to provide under test environments.
+    """
+    if _initialized:
+        return
+    with _init_lock:
+        if _initialized:
+            return
+        under_pytest = "PYTEST_CURRENT_TEST" in os.environ
+        _initialize(
+            device_id="unknown",
+            session_id=str(uuid.uuid4()),
+            revision="",
+            log_level=logging.DEBUG if under_pytest else logging.INFO,
+            root_trace_sample_rate=1.0,
+            resource_attributes={},
+            log_handlers=[logging.StreamHandler(sys.stdout)],
+            debug_mode=True,
+        )
+
+
+class _LazyCounter:
+    """Counter handle that forwards to the real counter once telemetry is initialized."""
+
+    def __init__(self, name: str):
+        self._name = name
+
+    def add(self, amount, attributes=None):
+        _ensure_initialized()
+        counter = _counters.get(self._name)
+        if counter is not None:
+            counter.add(amount, attributes=attributes)
+
+
+startup_counter = _LazyCounter("app_startups")
+search_counter = _LazyCounter("search")
+error_counter = _LazyCounter("errors")
+
 
 # Temporary workaround to fix log loop: otel log handler -> upload via urllib3 -> urllib3 internal log -> otel log handler
 class OtelLogFilter(logging.Filter):
@@ -116,7 +252,7 @@ class OtelLogFilter(logging.Filter):
 
 class OtelContextFilter(logging.Filter):
     def filter(self, record):
-        setattr(record, _session_id_attribute, session_id)
+        setattr(record, _session_id_attribute, _session_id)
         return True
 
 
@@ -193,15 +329,6 @@ class OtelAttributeSanitizerFilter(logging.Filter):
         return True
 
 
-# Open the system’s null device for writing:
-# ── '/dev/null' on Unix, 'nul' on Windows
-# Redirect both Python stdout and stderr so that naive dependencies that write to stdout/stderr won't break the app
-from dt_image_search.tools.dt_is_debug import is_debug
-if not is_debug() and "PYTEST_CURRENT_TEST" not in os.environ:
-    devnull = open(os.devnull, 'w', encoding='utf-8')
-    sys.stdout = devnull
-    sys.stderr = devnull
-
 _logger = None
 _lock = threading.Lock()
 def log(
@@ -211,15 +338,14 @@ def log(
     where: str = "",
     attributes: dict[str, object] | None = None,
 ):
+    _ensure_initialized()
     # Lazy init logger to prevent circular import issues
     global _logger
     with _lock:
         if _logger is None:
             # Setup logger only once
-            level = get_log_level()
-            if "PYTEST_CURRENT_TEST" in os.environ:
-                level = logging.DEBUG
-            handlers = get_other_handlers()
+            level = logging.DEBUG if "PYTEST_CURRENT_TEST" in os.environ else _log_level
+            handlers = list(_log_handlers)
             if os.getenv('IS_TESTING', 'false') != 'true':
                 logging_handler = LoggingHandler(level=level, logger_provider=_logger_provider)
                 logging_handler.addFilter(OtelAttributeSanitizerFilter())
@@ -245,6 +371,11 @@ def log(
     )
 
 
+def _get_tracer():
+    _ensure_initialized()
+    return _tracer
+
+
 @contextmanager
 def add_span(
     name: str,
@@ -252,11 +383,11 @@ def add_span(
     carrier: dict[str, object] | None = None,
 ):
     """Context manager for tracing blocks of code."""
-    with tracer.start_as_current_span(
+    with _get_tracer().start_as_current_span(
         name,
         context=_extract_remote_context(carrier),
     ) as span:
-        span.set_attribute(_session_id_attribute, session_id)
+        span.set_attribute(_session_id_attribute, _session_id)
         for key, value in _normalize_otel_attributes(attributes, allow_none=False).items():
             span.set_attribute(key, value)
         yield span
@@ -266,20 +397,21 @@ def with_trace(name=None):
         @wraps(func)
         def wrapper(*args, **kwargs):
             span_name = name or func.__name__
-            with tracer.start_as_current_span(span_name) as span:
-                span.set_attribute(_session_id_attribute, session_id)
+            with _get_tracer().start_as_current_span(span_name) as span:
+                span.set_attribute(_session_id_attribute, _session_id)
                 return func(*args, **kwargs)
         return wrapper
     return decorator
 
 def flush_telemetry():
     """Flush telemetry data before the application exits."""
+    _ensure_initialized()
     # Flush logs
     _logger_provider.force_flush()
     # Flush traces
     trace.get_tracer_provider().force_flush()
     # Flush metrics
-    for reader in metric_readers:
+    for reader in _metric_readers:
         reader.force_flush()
 
 
@@ -304,12 +436,13 @@ def flush_telemetry_for_fatal(timeout_millis: int = 5000) -> bool:
     This method is intentionally tolerant: it never raises and returns whether
     all flush operations reported success.
     """
+    _ensure_initialized()
     all_ok = True
 
     all_ok = _force_flush_with_timeout(_logger_provider.force_flush, timeout_millis) and all_ok
     all_ok = _force_flush_with_timeout(trace.get_tracer_provider().force_flush, timeout_millis) and all_ok
 
-    for reader in metric_readers:
+    for reader in _metric_readers:
         all_ok = _force_flush_with_timeout(reader.force_flush, timeout_millis) and all_ok
 
     return all_ok

@@ -18,26 +18,35 @@ from __future__ import annotations
 
 import argparse
 import faulthandler
+import logging
 import os
 import signal
 import sys
 import threading
 import time
 import traceback
+import uuid
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
+from dt_image_search.dts_logging import get_other_handlers
 from dt_image_search.instant_sharing import InstantShareRuntime
 from dt_image_search.instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE
 from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 from dt_image_search.instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
+from dt_image_search.model.dt_device_id import get_device_id
+from dt_image_search.model.dts_config import get_log_level, get_revision
+from dt_image_search.model.feature_flags import get_desktop_root_trace_sample_rate
+from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
 from dt_image_search.telemetry.telemetry_client import (
     flush_telemetry,
     flush_telemetry_for_fatal,
+    init_telemetry,
     log,
 )
+from dt_image_search.tools.dt_is_debug import is_debug
 
 _WHERE = "instant_share.agent_main"
 
@@ -182,6 +191,21 @@ class _AgentHeartbeat:
 def main() -> int:
 
     args = _parse_args()
+
+    # Telemetry is entry-point-wired: the launch agent passes its own values so
+    # telemetry_client carries no app-storage dependencies. Resolving paths
+    # here (before QApplication sets the app name) matches the main app's
+    # QStandardPaths lifecycle.
+    init_telemetry(
+        device_id=get_device_id(),
+        session_id=str(uuid.uuid4()),
+        revision=get_revision(),
+        log_level=get_log_level(),
+        root_trace_sample_rate=get_desktop_root_trace_sample_rate(),
+        resource_attributes=RESOURCE_ATTRIBUTES,
+        log_handlers=get_other_handlers(),
+        debug_mode=is_debug(),
+    )
 
     app = QApplication(sys.argv)
     app.setOrganizationDomain("net.boldman")
