@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.lifecycle_notifications import (
+from instant_sharing.lifecycle_notifications import (
     build_instant_share_lifecycle_notification,
 )
 

@@ -5,16 +5,16 @@ import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
-from dt_image_search.instant_sharing.contracts import SessionState
-from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
-from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.orchestrator import (
+from instant_sharing.mdns import ConnectionConfig
+from instant_sharing.contracts import SessionState
+from instant_sharing.delivery import InstantShareDeliveryService
+from instant_sharing.errors import InstantShareError
+from instant_sharing.orchestrator import (
     INSTANT_SHARE_LIFECYCLE_EVENT,
     InstantShareReceiverOrchestrator,
 )
-from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
-from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
+from instant_sharing.session import InstantShareSessionRegistry
+from instant_sharing.trust_server import TrustSessionRegistry
 from dt_image_search.tools.dts_event_bus import default_bus
 
 
@@ -105,7 +105,7 @@ class TestInstantShareReceiverOrchestrator(unittest.TestCase):
         )
 
         error = InstantShareError(
-            error_code=__import__("dt_image_search.instant_sharing.contracts", fromlist=["ErrorCode"]).ErrorCode.TRANSFER_TIMEOUT,
+            error_code=__import__("instant_sharing.contracts", fromlist=["ErrorCode"]).ErrorCode.TRANSFER_TIMEOUT,
             message="transfer timed out",
             correlation_id=connection_config.correlation_id,
         )

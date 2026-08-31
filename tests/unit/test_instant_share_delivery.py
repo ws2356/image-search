@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.contracts import DownloadedImagePayload, DownloadedTextPayload, InstantShareMetadata
-from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
-from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.contracts import PayloadClass, TargetIntent, TrustMode
+from instant_sharing.contracts import DownloadedImagePayload, DownloadedTextPayload, InstantShareMetadata
+from instant_sharing.delivery import InstantShareDeliveryService
+from instant_sharing.errors import InstantShareError
+from instant_sharing.contracts import PayloadClass, TargetIntent, TrustMode
 
 
 class _ClipboardRecorder:
@@ -78,7 +78,7 @@ class TestInstantShareDeliveryService(unittest.TestCase):
             fake_home = Path(temp_dir)
             delivery_service = InstantShareDeliveryService(clipboard_writer=clipboard)
 
-            with patch("dt_image_search.instant_sharing.delivery.Path.home", return_value=fake_home):
+            with patch("instant_sharing.delivery.Path.home", return_value=fake_home):
                 first_result = delivery_service.deliver_image(
                     DownloadedImagePayload(
                         metadata=_image_metadata(),

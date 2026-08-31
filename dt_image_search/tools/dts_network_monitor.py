@@ -112,7 +112,7 @@ class NetworkMonitor:
     def _get_current_ips() -> set[str]:
         """Return current LAN IPv4 addresses as a set."""
         try:
-            from dt_image_search.instant_sharing.lan_discovery import get_lan_ip_addresses  # type: ignore[import-untyped]
+            from instant_sharing.lan_discovery import get_lan_ip_addresses  # type: ignore[import-untyped]
 
             return set(get_lan_ip_addresses())
         except Exception:

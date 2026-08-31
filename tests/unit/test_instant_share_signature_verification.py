@@ -22,9 +22,9 @@ import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.security import verify_session_signature
-from dt_image_search.instant_sharing.contracts import ErrorCode
-from dt_image_search.instant_sharing.errors import InstantShareError
+from instant_sharing.security import verify_session_signature
+from instant_sharing.contracts import ErrorCode
+from instant_sharing.errors import InstantShareError
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -84,7 +84,7 @@ class TestVerifySessionSignature(unittest.TestCase):
     def _patch_load_peer_certificate(self, return_value: str | None):
         """Patch load_peer_certificate to return the given PEM or None."""
         return patch(
-            "dt_image_search.instant_sharing.security.load_peer_certificate",
+            "instant_sharing.security.load_peer_certificate",
             return_value=return_value,
         )
 

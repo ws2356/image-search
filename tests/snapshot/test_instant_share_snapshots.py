@@ -13,22 +13,22 @@ from PySide6.QtCore import QBuffer, QIODevice
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QApplication
 
-from dt_image_search.instant_sharing.mobile_to_pc.state import (
+from instant_sharing.mobile_to_pc.state import (
     MiniWindowPhase,
     MiniWindowState,
 )
-from dt_image_search.instant_sharing.mini_window import (
+from instant_sharing.mini_window import (
     InstantShareMiniWindow,
     WINDOW_WIDTH,
     WINDOW_HEIGHT,
 )
-from dt_image_search.instant_sharing.qr_trigger_mini_window import (
+from instant_sharing.qr_trigger_mini_window import (
     QRTriggerMiniWindow,
     QR_SIZE,
     WINDOW_WIDTH as QR_WINDOW_WIDTH,
     WINDOW_HEIGHT as QR_WINDOW_HEIGHT,
 )
-from dt_image_search.instant_sharing.qr_trigger_handler import StashEntry
+from instant_sharing.qr_trigger_handler import StashEntry
 
 
 def capture_widget_as_png(widget) -> bytes:

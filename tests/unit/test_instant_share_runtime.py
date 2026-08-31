@@ -6,8 +6,8 @@ import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.contracts import SessionState
-from dt_image_search.instant_sharing.runtime import InstantShareRuntime
+from instant_sharing.contracts import SessionState
+from instant_sharing.runtime import InstantShareRuntime
 
 
 class _ClipboardRecorder:

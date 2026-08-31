@@ -7,16 +7,16 @@ import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
-from dt_image_search.instant_sharing import AesGcmTrustSessionProtector
-from dt_image_search.instant_sharing.contracts import (
+from instant_sharing.mdns import ConnectionConfig
+from instant_sharing import AesGcmTrustSessionProtector
+from instant_sharing.contracts import (
     DeliveryResult,
     DeliveryTargetResult,
     PayloadClass,
     SessionState,
 )
-from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.http_client import (
+from instant_sharing.errors import InstantShareError
+from instant_sharing.http_client import (
     InstantShareHttpClient,
     InstantShareHttpResponse,
     RetryPolicy,

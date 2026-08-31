@@ -9,8 +9,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from fastapi.testclient import TestClient
 
-from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry, TRIGGER_PATH
-from dt_image_search.instant_sharing.unix_socket_server import (
+from instant_sharing.qr_trigger_handler import QRTriggerHandler, StashEntry, TRIGGER_PATH
+from instant_sharing.unix_socket_server import (
     UnixSocketHttpServer,
     _build_app as build_uds_app,
 )

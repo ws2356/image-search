@@ -8,19 +8,19 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from fastapi.testclient import TestClient
 
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
-from dt_image_search.instant_sharing.contracts import (
+from instant_sharing.mdns import ConnectionConfig
+from instant_sharing.contracts import (
     TRANSFER_IMAGE_PATH,
     TRANSFER_TEXT_PATH,
     TRUST_APPLY_PATH,
     TRUST_CONFIRM_PATH,
     TRUST_HANDSHAKE_PATH,
 )
-from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.https_bootstrap import _Deps, _build_app
-from dt_image_search.instant_sharing.security import X25519TrustSessionKeyResolver
-from dt_image_search.instant_sharing.trust_crypto import AesGcmTrustSessionProtector
-from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
+from instant_sharing.errors import InstantShareError
+from instant_sharing.https_bootstrap import _Deps, _build_app
+from instant_sharing.security import X25519TrustSessionKeyResolver
+from instant_sharing.trust_crypto import AesGcmTrustSessionProtector
+from instant_sharing.trust_server import TrustSessionRegistry
 
 
 def _config(session_id: str | None = None):
@@ -143,7 +143,7 @@ class TestTrustHandshake(unittest.TestCase):
         self.assertEqual(exc_info.exception.error_code.value, "HANDSHAKE_REQUIRED")
 
     def test_generate_pin_returns_six_digit_string(self):
-        from dt_image_search.instant_sharing.trust_server import _generate_pin_code
+        from instant_sharing.trust_server import _generate_pin_code
         pin = _generate_pin_code()
         self.assertEqual(len(pin), 6)
         self.assertTrue(pin.isdigit())

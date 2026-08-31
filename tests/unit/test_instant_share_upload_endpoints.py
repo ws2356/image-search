@@ -6,17 +6,17 @@ import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
-from dt_image_search.instant_sharing.contracts import (
+from instant_sharing.mdns import ConnectionConfig
+from instant_sharing.contracts import (
     PayloadClass,
     SessionState,
 )
-from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
-from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
-from dt_image_search.instant_sharing.orchestrator import InstantShareReceiverOrchestrator
-from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
-from dt_image_search.instant_sharing.transfer_server import TransferHandler
+from instant_sharing.delivery import InstantShareDeliveryService
+from instant_sharing.errors import InstantShareError
+from instant_sharing.session import InstantShareSessionRegistry
+from instant_sharing.orchestrator import InstantShareReceiverOrchestrator
+from instant_sharing.trust_server import TrustSessionRegistry
+from instant_sharing.transfer_server import TransferHandler
 
 
 def _config(session_id: str | None = None, payload_class: str = "text"):
@@ -105,20 +105,20 @@ class TestTransferHandlerText(unittest.TestCase):
 
 class TestNewErrorCodeConstants(unittest.TestCase):
     def test_session_not_found_error_code(self):
-        from dt_image_search.instant_sharing.contracts import ErrorCode
+        from instant_sharing.contracts import ErrorCode
         self.assertEqual(ErrorCode.SESSION_NOT_FOUND.value, "SESSION_NOT_FOUND")
 
     def test_trust_required_error_code(self):
-        from dt_image_search.instant_sharing.contracts import ErrorCode
+        from instant_sharing.contracts import ErrorCode
         self.assertEqual(ErrorCode.TRUST_REQUIRED.value, "TRUST_REQUIRED")
 
     def test_handshake_required_error_code(self):
-        from dt_image_search.instant_sharing.contracts import ErrorCode
+        from instant_sharing.contracts import ErrorCode
         self.assertEqual(ErrorCode.HANDSHAKE_REQUIRED.value, "HANDSHAKE_REQUIRED")
 
     def test_transfer_limit_exceeded_error_code(self):
         """TRANSFER_LIMIT_EXCEEDED error code is defined and has correct value."""
-        from dt_image_search.instant_sharing.contracts import ErrorCode
+        from instant_sharing.contracts import ErrorCode
         self.assertEqual(ErrorCode.TRANSFER_LIMIT_EXCEEDED.value, "TRANSFER_LIMIT_EXCEEDED")
 
 

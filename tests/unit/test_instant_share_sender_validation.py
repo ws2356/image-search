@@ -5,10 +5,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from dt_image_search.instant_sharing.sender_validation import SenderIdentity
-from dt_image_search.instant_sharing.security import PersistentEd25519SessionSigner
-from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.contracts import ErrorCode
+from instant_sharing.sender_validation import SenderIdentity
+from instant_sharing.security import PersistentEd25519SessionSigner
+from instant_sharing.errors import InstantShareError
+from instant_sharing.contracts import ErrorCode
 
 
 class SenderIdentityTests(unittest.TestCase):

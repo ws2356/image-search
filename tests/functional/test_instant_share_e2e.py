@@ -17,8 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
-from dt_image_search.instant_sharing.contracts import (
+from instant_sharing.mdns import ConnectionConfig
+from instant_sharing.contracts import (
     DeliveryResult,
     DeliveryTargetResult,
     InstantShareMetadata,
@@ -27,24 +27,24 @@ from dt_image_search.instant_sharing.contracts import (
     TargetIntent,
     TrustMode,
 )
-from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
-from dt_image_search.instant_sharing.errors import InstantShareError
-from dt_image_search.instant_sharing.http_client import (
+from instant_sharing.delivery import InstantShareDeliveryService
+from instant_sharing.errors import InstantShareError
+from instant_sharing.http_client import (
     InstantShareHttpClient,
     RetryPolicy,
     SessionRequestSigner,
 )
-from dt_image_search.instant_sharing.https_bootstrap import TrustHandshakeRequest
-from dt_image_search.instant_sharing.orchestrator import (
+from instant_sharing.https_bootstrap import TrustHandshakeRequest
+from instant_sharing.orchestrator import (
     INSTANT_SHARE_LIFECYCLE_EVENT,
     InstantShareReceiverOrchestrator,
 )
-from dt_image_search.instant_sharing.security import (
+from instant_sharing.security import (
     PersistentEd25519SessionSigner,
     X25519TrustSessionKeyResolver,
 )
-from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
-from dt_image_search.instant_sharing.trust_crypto import AesGcmTrustSessionProtector
+from instant_sharing.session import InstantShareSessionRegistry
+from instant_sharing.trust_crypto import AesGcmTrustSessionProtector
 from dt_image_search.tools.dts_event_bus import default_bus
 
 from tests.functional.mock_mobile_instant_share_server import MockMobileInstantShareServer

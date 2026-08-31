@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from dt_image_search.instant_sharing.mini_window import (
+from instant_sharing.mini_window import (
     InstantShareMiniWindow,
     MiniWindowPhase,
     MiniWindowState,
@@ -157,7 +157,7 @@ class TestMiniWindowApplySessionEvent:
 
 class TestMiniWindowFactory:
     def test_start_stop_lifecycle(self) -> None:
-        from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
+        from instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 
         factory = InstantShareMiniWindowFactory()
         factory.start()
@@ -172,7 +172,7 @@ class TestMiniWindowFactory:
         if _qapp is None:
             _qapp = QApplication([])
 
-        from dt_image_search.instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
+        from instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 
         factory = InstantShareMiniWindowFactory()
         factory.start()

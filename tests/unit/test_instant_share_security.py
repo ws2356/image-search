@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat,
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.security import (
+from instant_sharing.security import (
     PersistentEd25519SessionSigner,
     X25519TrustSessionKeyResolver,
     compute_pairing_auth,

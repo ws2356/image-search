@@ -8,22 +8,22 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.mdns import ConnectionConfig
-from dt_image_search.instant_sharing.contracts import (
+from instant_sharing.mdns import ConnectionConfig
+from instant_sharing.contracts import (
     PayloadClass,
     SessionState,
     TargetIntent,
     TrustMode,
 )
-from dt_image_search.instant_sharing.delivery import InstantShareDeliveryService
-from dt_image_search.instant_sharing.orchestrator import (
+from instant_sharing.delivery import InstantShareDeliveryService
+from instant_sharing.orchestrator import (
     InstantShareReceiverOrchestrator,
     _session_attributes,
 )
-from dt_image_search.instant_sharing.qr_trigger_handler import QRTriggerHandler
-from dt_image_search.instant_sharing.session import InstantShareSessionRegistry
-from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
-from dt_image_search.instant_sharing.unix_socket_server import UnixSocketHttpServer
+from instant_sharing.qr_trigger_handler import QRTriggerHandler
+from instant_sharing.session import InstantShareSessionRegistry
+from instant_sharing.trust_server import TrustSessionRegistry
+from instant_sharing.unix_socket_server import UnixSocketHttpServer
 from dt_image_search.scripts.instant_share_agent_main import _AgentHeartbeat
 
 
@@ -59,7 +59,7 @@ class SessionAttributesTests(unittest.TestCase):
 
 
 class TelemetrySpanTests(unittest.TestCase):
-    @patch("dt_image_search.instant_sharing.orchestrator.log")
+    @patch("instant_sharing.orchestrator.log")
     def test_handle_connection_config_emits_log(self, mock_log) -> None:
         delivery_service = InstantShareDeliveryService()
         orchestrator = InstantShareReceiverOrchestrator(
@@ -74,8 +74,8 @@ class TelemetrySpanTests(unittest.TestCase):
         self.assertEqual(log_kwargs[0][0], "info")
         self.assertIn("accepted", log_kwargs[1]["message"].lower())
 
-    @patch("dt_image_search.instant_sharing.orchestrator.add_span")
-    @patch("dt_image_search.instant_sharing.orchestrator.log")
+    @patch("instant_sharing.orchestrator.add_span")
+    @patch("instant_sharing.orchestrator.log")
     def test_handle_trust_handshake_received_emits_span_and_log(self, mock_log, mock_span) -> None:
         mock_span.return_value.__enter__ = MagicMock(return_value=None)
         mock_span.return_value.__exit__ = MagicMock(return_value=False)
@@ -97,8 +97,8 @@ class TelemetrySpanTests(unittest.TestCase):
         span_names = [call[0][0] for call in span_calls]
         self.assertIn("instant_share.trust.handshake.received", span_names)
 
-    @patch("dt_image_search.instant_sharing.orchestrator.add_span")
-    @patch("dt_image_search.instant_sharing.orchestrator.log")
+    @patch("instant_sharing.orchestrator.add_span")
+    @patch("instant_sharing.orchestrator.log")
     def test_handle_transfer_received_emits_span(self, mock_log, mock_span) -> None:
         mock_span.return_value.__enter__ = MagicMock(return_value=None)
         mock_span.return_value.__exit__ = MagicMock(return_value=False)
@@ -127,8 +127,8 @@ class UnixSocketServerTelemetryTests(unittest.TestCase):
         mock_span.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_span.return_value.__exit__ = MagicMock(return_value=False)
 
-    @patch("dt_image_search.instant_sharing.unix_socket_server.add_span")
-    @patch("dt_image_search.instant_sharing.unix_socket_server.log")
+    @patch("instant_sharing.unix_socket_server.add_span")
+    @patch("instant_sharing.unix_socket_server.log")
     def test_start_and_stop_emit_span_and_logs(self, mock_log, mock_span) -> None:
         self._mock_span(mock_span)
         with tempfile.TemporaryDirectory() as tmp:
@@ -151,8 +151,8 @@ class UnixSocketServerTelemetryTests(unittest.TestCase):
         )
         self.assertTrue(stop_call[1]["attributes"]["instant_share.socket_removed"])
 
-    @patch("dt_image_search.instant_sharing.unix_socket_server.add_span")
-    @patch("dt_image_search.instant_sharing.unix_socket_server.log")
+    @patch("instant_sharing.unix_socket_server.add_span")
+    @patch("instant_sharing.unix_socket_server.log")
     def test_start_failure_on_stale_unlink_emits_error_log(self, mock_log, mock_span) -> None:
         self._mock_span(mock_span)
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,8 +174,8 @@ class UnixSocketServerTelemetryTests(unittest.TestCase):
             "unix_socket_server.stale_unlink_failed",
         )
 
-    @patch("dt_image_search.instant_sharing.unix_socket_server.add_span")
-    @patch("dt_image_search.instant_sharing.unix_socket_server.log")
+    @patch("instant_sharing.unix_socket_server.add_span")
+    @patch("instant_sharing.unix_socket_server.log")
     def test_start_failure_without_handler_emits_error_log(self, mock_log, mock_span) -> None:
         self._mock_span(mock_span)
         with tempfile.TemporaryDirectory() as tmp:
@@ -200,8 +200,8 @@ class QRTriggerTelemetryTests(unittest.TestCase):
         mock_span.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_span.return_value.__exit__ = MagicMock(return_value=False)
 
-    @patch("dt_image_search.instant_sharing.qr_trigger_handler.add_span")
-    @patch("dt_image_search.instant_sharing.qr_trigger_handler.log")
+    @patch("instant_sharing.qr_trigger_handler.add_span")
+    @patch("instant_sharing.qr_trigger_handler.log")
     def test_handle_trigger_success_emits_span_and_correlation_log(
         self, mock_log, mock_span
     ) -> None:
@@ -227,8 +227,8 @@ class QRTriggerTelemetryTests(unittest.TestCase):
             response["session_id"],
         )
 
-    @patch("dt_image_search.instant_sharing.qr_trigger_handler.add_span")
-    @patch("dt_image_search.instant_sharing.qr_trigger_handler.log")
+    @patch("instant_sharing.qr_trigger_handler.add_span")
+    @patch("instant_sharing.qr_trigger_handler.log")
     def test_handle_trigger_rejection_emits_warning(self, mock_log, mock_span) -> None:
         self._mock_span(mock_span)
         handler = QRTriggerHandler()

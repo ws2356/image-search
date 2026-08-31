@@ -24,15 +24,15 @@ import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.instant_sharing.contracts import (
+from instant_sharing.contracts import (
     TRANSFER_DOWNLOAD_PATH,
     TRANSFER_IMAGE_PATH,
     TRANSFER_MANIFEST_PATH,
     TRANSFER_TEXT_PATH,
 )
-from dt_image_search.instant_sharing.https_bootstrap import _Deps
-from dt_image_search.instant_sharing.https_tls_server import _build_tls_app
-from dt_image_search.instant_sharing.trust_server import TrustSessionRegistry
+from instant_sharing.https_bootstrap import _Deps
+from instant_sharing.https_tls_server import _build_tls_app
+from instant_sharing.trust_server import TrustSessionRegistry
 
 
 class _FakeResult:
@@ -116,7 +116,7 @@ class TestTLSServerSignatureAuth(unittest.TestCase):
 
     def _patch_cert(self):
         return patch(
-            "dt_image_search.instant_sharing.security.load_peer_certificate",
+            "instant_sharing.security.load_peer_certificate",
             return_value=self.cert_pem,
         )
 

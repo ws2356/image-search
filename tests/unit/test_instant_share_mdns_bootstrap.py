@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dt_image_search.instant_sharing.mdns import (
+from instant_sharing.mdns import (
     INSTANT_SHARE_MDNS_SERVICE_TYPE,
     BootstrapRequest,
     ConnectionConfig,
@@ -14,7 +14,7 @@ from dt_image_search.instant_sharing.mdns import (
     InstantShareBleService,
     InstantShareMDNSAdvertiser,
 )
-from dt_image_search.instant_sharing.contracts import (
+from instant_sharing.contracts import (
     InstantShareMetadata,
     PayloadClass,
     TargetIntent,
@@ -229,8 +229,8 @@ class TestInstantShareMDNSAdvertiser:
         assert advertiser.is_running is False
         assert advertiser.last_error is None
 
-    @patch("dt_image_search.instant_sharing.mdns._local_ip_addresses", return_value=["192.168.1.1"])
-    @patch("dt_image_search.instant_sharing.mdns.Zeroconf")
+    @patch("instant_sharing.mdns._local_ip_addresses", return_value=["192.168.1.1"])
+    @patch("instant_sharing.mdns.Zeroconf")
     def test_start_stop(self, mock_zeroconf_cls, mock_local_ips) -> None:
         mock_zc = Mock()
         mock_zeroconf_cls.return_value = mock_zc
@@ -258,7 +258,7 @@ class TestConstants:
         assert INSTANT_SHARE_MDNS_SERVICE_TYPE == "_instantshare._tcp.local."
 
     def test_mdns_port_required(self) -> None:
-        from dt_image_search.instant_sharing.mdns import InstantShareMDNSAdvertiser
+        from instant_sharing.mdns import InstantShareMDNSAdvertiser
         svc = InstantShareBleService(
             device_name_provider=lambda: DeviceNameAdvertisement("My Mac", "dev-1"),
             bootstrap_handler=lambda _: None,
