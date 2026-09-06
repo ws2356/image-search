@@ -4,7 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -52,6 +52,11 @@ class TestBuildFlavor(unittest.TestCase):
             fake_package_root = _FakePackageRoot(resource_root)
             with patch.object(build_flavor, "files", return_value=fake_package_root):
                 self.assertEqual(build_flavor._read_build_type_from_resource(), "dev")
+
+    def test_read_build_type_from_resource_uses_shared_package(self) -> None:
+        with patch.object(build_flavor, "files", wraps=build_flavor.files) as files_mock:
+            self.assertEqual(build_flavor._read_build_type_from_resource(), "prod")
+        files_mock.assert_has_calls([call("pc_common.resources")])
 
     def test_read_build_type_from_resource_returns_none_for_unsupported_value(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

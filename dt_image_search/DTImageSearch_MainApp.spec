@@ -40,7 +40,7 @@ build_vars_path.write_text(
     json.dumps({"build_type": build_type, "revision": revision}),
     encoding="utf-8",
 )
-datas += [(str(build_vars_path), "dt_image_search/resources")]
+datas += [(str(build_vars_path), "pc_common/resources")]
 
 upx_enabled = sys.platform != "darwin"
 excludes = []
