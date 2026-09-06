@@ -19,16 +19,6 @@ datas = [
     (str(src_resources_dir / "net.boldman.ausearch.instantshare.plist"), ".")
 ]
 
-if sys.platform == "win32":
-    platform_resource_includes = [
-        "*.msi",
-        "*.inf",
-        "*.cat",
-        "*.sys",
-        "*.dll",
-    ]
-    datas += collect_data_files("dt_image_search.resources", includes=platform_resource_includes)
-
 build_type = os.environ.get("DTIS_BUILD_TYPE", "prod").strip().lower()
 if build_type not in {"prod", "dev"}:
     raise ValueError(f"Unsupported DTIS_BUILD_TYPE: {build_type!r}. Expected 'prod' or 'dev'.")
