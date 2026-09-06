@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-sys.modules["dt_image_search.telemetry.telemetry_client"] = MagicMock()
+sys.modules["pc_common.telemetry.telemetry_client"] = MagicMock()
 
 from dt_image_search import pil_image_support
 

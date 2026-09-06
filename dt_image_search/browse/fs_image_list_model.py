@@ -4,7 +4,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.index.dts_index import is_image_file
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import back_slash_to_forward_slash
 
 

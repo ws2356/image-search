@@ -8,7 +8,7 @@ from dt_image_search.bm_context import BMContext
 from dt_image_search.mobile.mobile_pairing_store import get_mobile_transfer_context
 from dt_image_search.mobile.mobile_trust_proof import is_valid_trust_proof
 from dt_image_search.model.dts_db import create_db_conn
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_event_bus import default_bus
 
 MOBILE_UPDATE_PROMPT_SCHEMA = "dtis.mobile-update.v1"

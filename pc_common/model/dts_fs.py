@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import threading
 from PySide6.QtCore import QStandardPaths
-from dt_image_search.build_flavor import get_build_type, BUILD_TYPE_DEV
+from pc_common.build_flavor import get_build_type, BUILD_TYPE_DEV
 
 _data_lock = threading.Lock()
 

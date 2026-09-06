@@ -55,11 +55,11 @@ sys.modules['opentelemetry.context.contextvars_context'] = MagicMock()
 sys.modules['PIL'] = MagicMock()
 sys.modules['PIL.Image'] = MagicMock()
 sys.modules['PIL.ImageFile'] = MagicMock()
-sys.modules['dt_image_search.telemetry.telemetry_client'] = MagicMock()
+sys.modules['pc_common.telemetry.telemetry_client'] = MagicMock()
 mock_perf = MagicMock()
 mock_perf.perffunc = noop_decorator
 sys.modules['dt_image_search.tools.dts_perf'] = mock_perf
-sys.modules['dt_image_search.telemetry.telemetry_client'].with_trace = lambda _: noop_decorator
+sys.modules['pc_common.telemetry.telemetry_client'].with_trace = lambda _: noop_decorator
 
 # Now we can import the module
 from dt_image_search.index import dts_index

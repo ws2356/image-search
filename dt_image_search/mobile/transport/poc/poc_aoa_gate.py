@@ -8,7 +8,7 @@ from dt_image_search.mobile.transport.poc.summarize_aoa_runs import (
     discover_aoa_run_summaries,
     latest_by_host,
 )
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 EXIT_OK = 0
 EXIT_MISSING_REQUIRED_HOST = 2

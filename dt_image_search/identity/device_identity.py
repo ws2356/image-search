@@ -18,7 +18,7 @@ from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID, ObjectIdentifier
 import ipaddress
 import socket
 
-from dt_image_search.model.dt_device_id import get_device_id
+from pc_common.model.dt_device_id import get_device_id
 
 if sys.platform != "darwin":
     raise ImportError(

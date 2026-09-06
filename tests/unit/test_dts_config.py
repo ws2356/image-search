@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from dt_image_search.model import dts_config
+from pc_common.model import dts_config
 
 
 class TestDtsConfig(unittest.TestCase):
@@ -26,7 +26,6 @@ class TestDtsConfig(unittest.TestCase):
                         "debugpy_port": 9876,
                     },
                 ),
-                patch.object(dts_config, "get_context", return_value=object()),
                 patch.object(dts_config, "get_app_data_path", return_value=Path(temp_dir)),
             ):
                 config = dts_config.get_config()

@@ -3,7 +3,7 @@ from pathlib import Path
 import requests
 import threading
 import datetime
-from dt_image_search.telemetry.telemetry_client import with_trace, log
+from pc_common.telemetry.telemetry_client import with_trace, log
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.bm_context import BMContext
 

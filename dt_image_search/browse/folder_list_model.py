@@ -1,6 +1,6 @@
 import os
 from PySide6.QtCore import QAbstractListModel, Qt, QModelIndex
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 class FolderListModel(QAbstractListModel):
     def __init__(self, folder_paths: list[str]):

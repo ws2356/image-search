@@ -9,13 +9,13 @@ from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
 from dt_image_search.model.dts_db import create_db_conn, get_all_folders
 from dt_image_search.model.dts_folder import Folder
-from dt_image_search.model.dts_fs import get_app_data_path
+from pc_common.model.dts_fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.index.dts_index import query_index, index_path_for_folder, TOP_K
 from dt_image_search.tools.dts_debounce import debounce
 from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.tools.dts_dispatcher import dispatcher
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from dt_image_search.bm_context import BMContext
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 

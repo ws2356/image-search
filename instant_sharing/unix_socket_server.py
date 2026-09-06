@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from instant_sharing.qr_trigger_handler import TRIGGER_PATH
-from dt_image_search.telemetry.telemetry_client import add_span, log
+from pc_common.telemetry.telemetry_client import add_span, log
 
 APP_GROUP_ID = "ZU6V838VRQ.net.boldman.ausearch"
 SOCKET_RELATIVE_PATH = "is.sock"

@@ -35,7 +35,7 @@ from dt_image_search.mobile.mobile_pairing_session import (
     MobilePlatform,
     MobileSourceType,
 )
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 try:
     import qrcode

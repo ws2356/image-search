@@ -31,22 +31,22 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
-from dt_image_search.dts_logging import get_other_handlers
+from pc_common.dts_logging import get_other_handlers
 from instant_sharing import InstantShareRuntime
 from instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE
 from instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 from instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
-from dt_image_search.model.dt_device_id import get_device_id
-from dt_image_search.model.dts_config import get_log_level, get_revision
-from dt_image_search.model.feature_flags import get_desktop_root_trace_sample_rate
-from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
-from dt_image_search.telemetry.telemetry_client import (
+from pc_common.model.dt_device_id import get_device_id
+from pc_common.model.dts_config import get_log_level, get_revision
+from pc_common.model.feature_flags import get_desktop_root_trace_sample_rate
+from pc_common.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
+from pc_common.telemetry.telemetry_client import (
     flush_telemetry,
     flush_telemetry_for_fatal,
     init_telemetry,
     log,
 )
-from dt_image_search.tools.dt_is_debug import is_debug
+from pc_common.tools.dt_is_debug import is_debug
 
 _WHERE = "instant_share.agent_main"
 

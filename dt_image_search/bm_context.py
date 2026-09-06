@@ -28,7 +28,7 @@ class BMContext:
             return self._pretrained_model
 
     def get_model_cache_path(self) -> str:
-        from dt_image_search.model.dts_fs import get_app_data_path
+        from pc_common.model.dts_fs import get_app_data_path
         return str(get_app_data_path() / "model_cache")
 
     def is_local_cache_valid(self) -> bool:
@@ -64,7 +64,7 @@ class BMContext:
                 { "download_url": "https://github.com/ws2356/image-search/releases/download/model-all/models.tar.gz", "md5": "1f9483b31509986f3991cc03ff640cf8" }
         else:
             raise ValueError("Unknown BMContext")
-        from dt_image_search.telemetry.telemetry_client import log
+        from pc_common.telemetry.telemetry_client import log
         log("info", message=f"Model file info for version {self.version}: {ret}")
         return ret
 
@@ -78,7 +78,7 @@ class BMContext:
                 if self._model_file_info is None:
                     raise ValueError(f"Model file info for version {self.version} not found.")
             except Exception as e:
-                from dt_image_search.telemetry.telemetry_client import log
+                from pc_common.telemetry.telemetry_client import log
                 log("error", message=f"Failed to fetch model file info from {url}: {e}")
                 return None
         return self._model_file_info
@@ -94,7 +94,7 @@ def _check_md5(file_path, expected_md5):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest() == expected_md5
     except Exception as e:
-        from dt_image_search.telemetry.telemetry_client import log
+        from pc_common.telemetry.telemetry_client import log
         log("error", message=f"MD5 check failed for {file_path}: {e}")
         return False
 
@@ -183,3 +183,8 @@ def _set_model_offline_mode(offline_mode: bool):
     from dt_image_search.model.dts_db import create_db_conn, set_config
     with create_db_conn() as conn:
         set_config(conn, "model_offline_mode", str(offline_mode).lower())
+
+def setup_model_cache(ctx: BMContext):
+    if ctx.offline_mode:
+        os.environ['HF_HUB_OFFLINE'] = '1'
+        os.environ['HUGGINGFACE_HUB_CACHE'] = ctx.get_model_cache_path()

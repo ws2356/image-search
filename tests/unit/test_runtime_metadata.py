@@ -10,20 +10,20 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 
-from dt_image_search.telemetry import runtime_metadata
+from pc_common.telemetry import runtime_metadata
 
 
 class TestRuntimeMetadata(unittest.TestCase):
-    @patch('dt_image_search.tools.dt_is_debug.is_debug', return_value=True)
+    @patch('pc_common.tools.dt_is_debug.is_debug', return_value=True)
     def test_resolve_package_type_debug(self, _mock_is_debug):
         self.assertEqual(runtime_metadata.resolve_package_type(), runtime_metadata.PACKAGE_TYPE_DEBUG)
 
-    @patch('dt_image_search.tools.dt_is_debug.is_debug', return_value=True)
+    @patch('pc_common.tools.dt_is_debug.is_debug', return_value=True)
     def test_resolve_service_version_debug_is_empty(self, _mock_is_debug):
         self.assertEqual(runtime_metadata.resolve_service_version(), '')
 
     @unittest.skipIf(sys.platform != 'win32', 'Windows-only test: requires AppxManifest.xml')
-    @patch('dt_image_search.tools.dt_is_debug.is_debug', return_value=False)
+    @patch('pc_common.tools.dt_is_debug.is_debug', return_value=False)
     def test_resolve_service_version_from_manifest(self, _mock_is_debug):
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest_path = Path(tmpdir) / 'AppxManifest.xml'
@@ -39,7 +39,7 @@ class TestRuntimeMetadata(unittest.TestCase):
                 self.assertEqual(runtime_metadata.resolve_service_version(), '2.3.4.5')
 
     @unittest.skipIf(sys.platform != 'win32', 'Windows-only test: requires AppxManifest.xml')
-    @patch('dt_image_search.tools.dt_is_debug.is_debug', return_value=False)
+    @patch('pc_common.tools.dt_is_debug.is_debug', return_value=False)
     def test_resolve_service_version_returns_empty_on_parse_failure(self, _mock_is_debug):
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest_path = Path(tmpdir) / 'AppxManifest.xml'

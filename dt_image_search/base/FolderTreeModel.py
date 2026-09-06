@@ -9,7 +9,7 @@ from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QFileSystemModel
 
 from .DefaultFolderPredicate import DefaultFolderPredicate
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_util import normalized_folder_path
 
 

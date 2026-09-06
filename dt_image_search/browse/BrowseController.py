@@ -12,13 +12,13 @@ from dt_image_search.mobile.mobile_pairing_store import (
     get_mobile_folder_transfer_states,
 )
 from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_folder_by_path, insert_folder, match_parent_folder
-from dt_image_search.model.feature_flags import is_mobile_folder_enabled
+from pc_common.model.feature_flags import is_mobile_folder_enabled
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.index.dts_index import index_path_for_folder, delete_folder, is_image_file
 from dt_image_search.tools.dts_debounce import debounce, throttle
 from dt_image_search.index.index_worker import add_index_worker
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from dt_image_search.fs.bm_fs_monitor import add_folder, remove_folder
 from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_util import is_same_folder_path, normalized_folder_path

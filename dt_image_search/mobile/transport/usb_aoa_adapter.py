@@ -68,7 +68,7 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbBootstrapConfig,
     UsbTransportState,
 )
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 AOA_AUTH_CHALLENGE_REQUEST_ID = USB_AUTH_CHALLENGE_REQUEST_ID.ljust(
     AOA_REQUEST_ID_LENGTH,

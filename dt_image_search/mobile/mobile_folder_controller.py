@@ -45,7 +45,7 @@ from dt_image_search.mobile.mobile_transfer_service import (
     MOBILE_TRANSFER_STARTED_EVENT,
 )
 from dt_image_search.model.dts_db import create_db_conn, get_config, set_config
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from dt_image_search.tools.dts_event_bus import default_bus
 
 

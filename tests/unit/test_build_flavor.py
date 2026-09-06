@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import dt_image_search.build_flavor as build_flavor
-from dt_image_search.model.dts_fs import get_app_private_name
+import pc_common.build_flavor as build_flavor
+from pc_common.model.dts_fs import get_app_private_name
 
 
 class _FakePackageRoot:
@@ -49,7 +49,7 @@ class TestBuildFlavor(unittest.TestCase):
             resource_root = Path(temp_dir) / "resources"
             resource_root.mkdir(parents=True, exist_ok=True)
             (resource_root / "build_vars").write_text(json.dumps({"build_type": "dev"}), encoding="utf-8")
-            fake_package_root = _FakePackageRoot(Path(temp_dir))
+            fake_package_root = _FakePackageRoot(resource_root)
             with patch.object(build_flavor, "files", return_value=fake_package_root):
                 self.assertEqual(build_flavor._read_build_type_from_resource(), "dev")
 
@@ -58,7 +58,7 @@ class TestBuildFlavor(unittest.TestCase):
             resource_root = Path(temp_dir) / "resources"
             resource_root.mkdir(parents=True, exist_ok=True)
             (resource_root / "build_vars").write_text(json.dumps({"build_type": "qa"}), encoding="utf-8")
-            fake_package_root = _FakePackageRoot(Path(temp_dir))
+            fake_package_root = _FakePackageRoot(resource_root)
             with patch.object(build_flavor, "files", return_value=fake_package_root):
                 self.assertIsNone(build_flavor._read_build_type_from_resource())
 

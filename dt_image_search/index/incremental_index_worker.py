@@ -19,7 +19,7 @@ from dt_image_search.model.dts_db import (
     rename_file,
     rename_files_in_folder
 )
-from dt_image_search.telemetry.telemetry_client import log, with_trace
+from pc_common.telemetry.telemetry_client import log, with_trace
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus

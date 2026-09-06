@@ -41,7 +41,7 @@ from dt_image_search.mobile.transport.asset_upload_stream import (
     TRANSFER_ASSET_STREAM_CHUNK_SIZE_BYTES,
 )
 from dt_image_search.model.dts_db import create_db_conn
-from dt_image_search.telemetry.telemetry_client import add_span, log
+from pc_common.telemetry.telemetry_client import add_span, log
 from dt_image_search.tools.dts_event_bus import default_bus
 
 MOBILE_TRANSFER_SCHEMA = "dtis.mobile-transfer.v1"

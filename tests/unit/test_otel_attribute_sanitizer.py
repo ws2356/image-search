@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 _original_pytest_marker = os.environ.get("PYTEST_CURRENT_TEST")
 os.environ["PYTEST_CURRENT_TEST"] = "tests.unit.test_otel_attribute_sanitizer"
 
-from dt_image_search.telemetry.telemetry_client import OtelAttributeSanitizerFilter
+from pc_common.telemetry.telemetry_client import OtelAttributeSanitizerFilter
 
 if _original_pytest_marker is None:
     os.environ.pop("PYTEST_CURRENT_TEST", None)

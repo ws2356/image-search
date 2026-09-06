@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 
 @dataclass(frozen=True)

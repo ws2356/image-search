@@ -5,7 +5,7 @@ import unittest
 import uuid
 
 from dt_image_search.bm_context import BMContext
-from dt_image_search.model.dts_fs import get_app_private_name
+from pc_common.model.dts_fs import get_app_private_name
 from dt_image_search.model.dts_db import (
     create_db_conn,
     delete_folders,

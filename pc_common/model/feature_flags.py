@@ -11,7 +11,7 @@ from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from dt_image_search.model.dts_config import (
+from pc_common.model.dts_config import (
     is_encryption_feature_enabled,
     is_instant_share_feature_enabled,
     is_mobile_folder_feature_enabled,
@@ -228,7 +228,7 @@ def _sleep_before_retry(*, retry_attempt: int, reason: str) -> None:
 
 
 def _feature_flags_cache_path() -> Path:
-    from dt_image_search.model.dts_fs import get_app_data_path
+    from pc_common.model.dts_fs import get_app_data_path
 
     return get_app_data_path() / _FEATURE_FLAGS_CACHE_FILENAME
 
@@ -470,7 +470,7 @@ _REMOTE_FEATURE_DEFINITIONS = (
 
 def _log_feature_flags(severity: str, message: str) -> None:
     try:
-        from dt_image_search.telemetry.telemetry_client import log
+        from pc_common.telemetry.telemetry_client import log
     except Exception:
         return
     log(severity, message=message)

@@ -1,9 +1,7 @@
 import json
 import logging
-import os
 from importlib.resources import files
-from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.bm_context import BMContext
+from pc_common.model.dts_fs import get_app_data_path
 
 def get_config() -> dict:
     config = _read_build_vars_from_resource()
@@ -54,7 +52,6 @@ def is_mobile_folder_feature_enabled(default: bool = True) -> bool:
         return _as_bool(config.get("mobile_folder.enabled"), default)
     return default
 
-
 def is_encryption_feature_enabled(default: bool = True) -> bool:
     config = get_config()
     encryption_config = config.get("encryption")
@@ -103,8 +100,3 @@ def _as_bool(value, default: bool) -> bool:
         if normalized in {"0", "false", "no", "off"}:
             return False
     return default
-
-def setup_model_cache(ctx: BMContext):
-    if ctx.offline_mode:
-        os.environ['HF_HUB_OFFLINE'] = '1'
-        os.environ['HUGGINGFACE_HUB_CACHE'] = ctx.get_model_cache_path()

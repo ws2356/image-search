@@ -114,7 +114,7 @@ sys.modules['dt_image_search.base.status_bar_messenger'] = MagicMock(status_bar_
 
 from dt_image_search.bm_context import BMContext
 import dt_image_search.model.dts_db as dts_db
-import dt_image_search.model.dts_fs as dts_fs_mod
+import pc_common.model.dts_fs as dts_fs_mod
 import dt_image_search.index.dts_index as dts_index
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File

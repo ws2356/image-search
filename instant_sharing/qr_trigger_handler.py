@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from instant_sharing.session_id_generator import SessionIdGenerator
     from instant_sharing.trust_server import TrustSessionRegistry
 
-from dt_image_search.telemetry.telemetry_client import add_span, log
+from pc_common.telemetry.telemetry_client import add_span, log
 
 _logger = logging.getLogger(__name__)
 
@@ -74,14 +74,14 @@ class QRTriggerHandler:
     @property
     def _max_batch_file_count(self) -> int:
         try:
-            from dt_image_search.model.dts_config import is_instant_share_feature_enabled
+            from pc_common.model.dts_config import is_instant_share_feature_enabled
             # Read from config if available, otherwise use default
             import configparser
             config = configparser.ConfigParser()
             # Try reading the config file used by the app
             # Fall back to default if not available
             try:
-                from dt_image_search.model.dts_config import _config as _dts_config
+                from pc_common.model.dts_config import _config as _dts_config
                 raw = _dts_config.get("instant_share", {}).get("max_batch_file_count", DEFAULT_MAX_BATCH_FILE_COUNT)
                 return int(raw)
             except Exception:

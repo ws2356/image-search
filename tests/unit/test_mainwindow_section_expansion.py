@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from dt_image_search.__main__ import MainWindow, ctx, maybe_show_startup_update_prompt
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
-from dt_image_search.model.feature_flags import DesktopVersionFlag
+from pc_common.model.feature_flags import DesktopVersionFlag
 
 
 class TestMainWindowSectionExpansion(unittest.TestCase):

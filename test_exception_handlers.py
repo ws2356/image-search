@@ -16,7 +16,7 @@ if project_root not in sys.path:
 
 from PySide6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
 from PySide6.QtCore import QTimer, qDebug, qWarning, qCritical
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 
 class ExceptionTestWidget(QWidget):

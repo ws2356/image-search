@@ -197,7 +197,7 @@ class MockMobileBackupClient:
         pairing_record: MockPairingRecord,
         asset: MockBackupAsset,
     ) -> dict[str, object]:
-        from dt_image_search.telemetry.telemetry_client import log
+        from pc_common.telemetry.telemetry_client import log
         endpoint = urlsplit(pairing_record.endpoint_url)
         request_id = uuid.uuid4().hex
         metadata = self._upload_metadata(pairing_record=pairing_record, asset=asset)

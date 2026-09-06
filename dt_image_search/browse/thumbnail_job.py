@@ -1,7 +1,7 @@
 import threading
 from PySide6.QtCore import QRunnable, Signal, QObject
 from PySide6.QtGui import QImage
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from PIL import Image
 
 from dt_image_search.pil_image_support import open_pil_image

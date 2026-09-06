@@ -40,7 +40,7 @@ class _ManagedSQLiteConnection(sqlite3.Connection):
 
 
 def create_db_conn() -> sqlite3.Connection:
-    from dt_image_search.model.dts_fs import get_app_data_path
+    from pc_common.model.dts_fs import get_app_data_path
     db_path = get_app_data_path() / "app_data.sqlite"
     conn = None
     with db_init_lock:

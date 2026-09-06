@@ -82,9 +82,9 @@ from dt_image_search.mobile.transport.usb_ws_adapter import (
     UsbTransportState,
     UsbWebSocketTransportAdapter,
 )
-from dt_image_search.build_flavor import get_build_type
+from pc_common.build_flavor import get_build_type
 from dt_image_search.model.dts_db import create_db_conn
-from dt_image_search.model.feature_flags import is_encryption_enabled, is_strict_security_enabled
+from pc_common.model.feature_flags import is_encryption_enabled, is_strict_security_enabled
 from dt_image_search.tools.dts_event_bus import default_bus
 
 PAIRING_PROTOCOL_SCHEMA = "dtis.mobile-pairing.v1"
@@ -1563,7 +1563,7 @@ def _telemetry_span(
     attributes: dict[str, object] | None = None,
     carrier: dict[str, object] | None = None,
 ):
-    from dt_image_search.telemetry.telemetry_client import add_span
+    from pc_common.telemetry.telemetry_client import add_span
 
     return add_span(name, attributes=attributes, carrier=carrier)
 
@@ -1575,6 +1575,6 @@ def _log(
     where: str = "",
     attributes: dict[str, object] | None = None,
 ):
-    from dt_image_search.telemetry.telemetry_client import log
+    from pc_common.telemetry.telemetry_client import log
 
     log(severity=level, error_type=error_type, where=where, message=message, attributes=attributes)

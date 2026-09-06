@@ -33,10 +33,10 @@ iOS Share Extension          AuBackup Main App              PC (AuSearch)
 
 ### Feature Flag
 
-Instant Share is gated behind a feature flag. Check `dt_image_search/model/feature_flags.py`:
+Instant Share is gated behind a feature flag. Check `pc_common/model/feature_flags.py`:
 
 ```python
-from dt_image_search.model.feature_flags import is_instant_share_enabled
+from pc_common.model.feature_flags import is_instant_share_enabled
 ```
 
 Default: **off**. Enable via remote config payload with `instant_share: true`.

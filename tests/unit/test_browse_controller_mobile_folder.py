@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 from dt_image_search.bm_context import BMContext
 from dt_image_search.browse.BrowseController import BrowseController
-from dt_image_search.model.dts_fs import get_app_private_name
+from pc_common.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_store import (
     MOBILE_BACKUP_SESSION_STATUS_COMPLETED,
     MOBILE_BACKUP_SESSION_STATUS_TRANSFERRING,

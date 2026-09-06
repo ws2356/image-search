@@ -2,7 +2,7 @@ import time
 
 def perffunc(func):
     def wrapper(*args, **kwargs):
-        from dt_image_search.telemetry.telemetry_client import log
+        from pc_common.telemetry.telemetry_client import log
         start = time.perf_counter()
         result = func(*args, **kwargs)
         duration = time.perf_counter() - start

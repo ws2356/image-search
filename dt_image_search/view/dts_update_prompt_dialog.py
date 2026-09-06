@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 DEFAULT_UPDATE_BODY_TEXT = "Check out the new features by updating to the latest version."
 WINDOWS_UPDATE_DESTINATION = "https://apps.microsoft.com/detail/9n5n8gvnrzdn"

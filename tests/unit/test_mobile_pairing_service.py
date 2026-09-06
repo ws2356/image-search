@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
-from dt_image_search.model.dts_fs import get_app_private_name
+from pc_common.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_service import (
     MOBILE_APP_FOREGROUND_STATE_CHANGED_EVENT,
     MobileBackupAgainDecision,
@@ -218,7 +218,7 @@ class TestMobilePairingService(unittest.TestCase):
     def test_handle_pairing_request_logs_correlated_telemetry_attributes(self):
         now = datetime(2026, 4, 10, 6, 0, tzinfo=timezone.utc)
 
-        with patch("dt_image_search.telemetry.telemetry_client.log") as log_mock:
+        with patch("pc_common.telemetry.telemetry_client.log") as log_mock:
             session = self._pairing_service.start_pairing_session(self._temp_dir.name, now=now)
             token = session.token_for(MobilePlatform.IOS)
 

@@ -48,7 +48,7 @@ internal_mocks = [
     'dt_image_search.tools.dts_debounce',
     'dt_image_search.tools.dts_perf',
     'dt_image_search.tools.dts_dispatcher',
-    'dt_image_search.telemetry.telemetry_client',
+    'pc_common.telemetry.telemetry_client',
     'dt_image_search.base.status_bar_messenger',
     'dt_image_search.index.dts_index',
     'dt_image_search.view.dts_image_viewer', 'dt_image_search.view.image_navigator',
@@ -56,7 +56,7 @@ internal_mocks = [
     'dt_image_search.browse.folder_list_model',
     'dt_image_search.base.FolderTreeModel',
     'dt_image_search.model.dts_db',
-    'dt_image_search.model.dts_fs',
+    'pc_common.model.dts_fs',
     'dt_image_search.bm_context',
 ]
 

@@ -35,7 +35,7 @@ if project_root not in sys.path:
 from PySide6.QtWidgets import QApplication, QMainWindow, QFileDialog, QAbstractItemView, QWidget, QListView, QMenu, QLineEdit, QStyle, QSystemTrayIcon, QMessageBox, QLabel
 from PySide6.QtCore import QCoreApplication, QTimer, Qt, Slot, Signal, QSize, QUrl, QItemSelectionModel, QPersistentModelIndex, QModelIndex, QLockFile
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from dt_image_search.build_flavor import get_build_type
+from pc_common.build_flavor import get_build_type
 _build_type = get_build_type()
 from dt_image_search.app_setting import initialize_app_settings
 
@@ -43,13 +43,13 @@ initialize_app_settings(app_name="imagesearch")
 
 # Telemetry is entry-point-wired: telemetry_client carries no app-storage
 # dependencies so the instant-share launch agent can reuse it independently.
-from dt_image_search.dts_logging import get_other_handlers
-from dt_image_search.model.dt_device_id import get_device_id
-from dt_image_search.model.dts_config import get_log_level, get_revision
-from dt_image_search.model.feature_flags import get_desktop_root_trace_sample_rate
-from dt_image_search.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
-from dt_image_search.telemetry.telemetry_client import init_telemetry
-from dt_image_search.tools.dt_is_debug import is_debug
+from pc_common.dts_logging import get_other_handlers
+from pc_common.model.dt_device_id import get_device_id
+from pc_common.model.dts_config import get_log_level, get_revision
+from pc_common.model.feature_flags import get_desktop_root_trace_sample_rate
+from pc_common.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
+from pc_common.telemetry.telemetry_client import init_telemetry
+from pc_common.tools.dt_is_debug import is_debug
 
 init_telemetry(
     device_id=get_device_id(),
@@ -62,15 +62,14 @@ init_telemetry(
     debug_mode=is_debug(),
 )
 
-from dt_image_search.bm_context import get_context, BMContext
-from dt_image_search.model.dts_config import setup_model_cache
-from dt_image_search.model.feature_flags import (
+from dt_image_search.bm_context import get_context, BMContext, setup_model_cache
+from pc_common.model.feature_flags import (
     DesktopVersionFlag,
     get_version_update_requirement,
     initialize_feature_flags,
     is_mobile_folder_enabled,
 )
-from dt_image_search.model.dts_fs import get_app_data_path
+from pc_common.model.dts_fs import get_app_data_path
 ctx = get_context()
 setup_model_cache(ctx=ctx)
 
@@ -82,7 +81,7 @@ from dt_image_search.view.dts_update_prompt_dialog import UpdatePromptDialog
 from dt_image_search.browse.BrowseController import BrowseController
 from dt_image_search.search.SearchController import SearchController
 from dt_image_search.index.index_worker import init_index_workers, deinit_index_workers
-from dt_image_search.telemetry.telemetry_client import flush_telemetry, startup_counter
+from pc_common.telemetry.telemetry_client import flush_telemetry, startup_counter
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
@@ -106,7 +105,7 @@ _SearchMode = 2
 _app_lock = None
 _activation_server = None
 def _crash_support_log(severity: str, error_type: str = "", message: str = "", where: str = "") -> None:
-    from dt_image_search.telemetry.telemetry_client import log
+    from pc_common.telemetry.telemetry_client import log
 
     log(severity, error_type=error_type, message=message, where=where)
 
@@ -149,7 +148,7 @@ def _build_startup_update_prompt_body(version_flag: DesktopVersionFlag) -> str:
 
 
 def maybe_show_startup_update_prompt(window: "MainWindow", *, current_version: str | None = None) -> None:
-    from dt_image_search.telemetry.telemetry_client import log
+    from pc_common.telemetry.telemetry_client import log
 
     resolved_current_version = (
         current_version
@@ -263,7 +262,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, ctx: BMContext):
         super().__init__()
-        from dt_image_search.telemetry.telemetry_client import log
+        from pc_common.telemetry.telemetry_client import log
         log("debug", message="MainWindow/__init__: initializing window")
         self.ctx = ctx
         self.ui = Ui_MainWindow()
@@ -620,7 +619,7 @@ class MainWindow(QMainWindow):
     def _open_folder_in_explorer(self, folder_path: str) -> None:
         target_path = normalized_folder_path(folder_path)
         if not os.path.isdir(target_path):
-            from dt_image_search.telemetry.telemetry_client import log
+            from pc_common.telemetry.telemetry_client import log
             log("warning", message=f"MainWindow/_open_folder_in_explorer: path does not exist: {target_path}")
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(target_path))
@@ -658,7 +657,7 @@ class MainWindow(QMainWindow):
         # Scroll to make the selected item visible
         self.ui.browsePageFolderTreeView.scrollTo(folder_index)
         
-        from dt_image_search.telemetry.telemetry_client import log
+        from pc_common.telemetry.telemetry_client import log
         log("debug", message=f"Auto-selected folder in tree: {folder_item.data(Qt.UserRole)}")
 
     def _expand_section_headers(self):
@@ -760,7 +759,7 @@ def handle_python_exception(exc_type, exc_value, exc_traceback):
         return
     
     import traceback
-    from dt_image_search.telemetry.telemetry_client import log, flush_telemetry_for_fatal
+    from pc_common.telemetry.telemetry_client import log, flush_telemetry_for_fatal
     
     # Log the exception
     error_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -774,7 +773,7 @@ def handle_python_exception(exc_type, exc_value, exc_traceback):
 def handle_threading_exception(args):
     """Handle uncaught exceptions in threads"""
     import traceback
-    from dt_image_search.telemetry.telemetry_client import log, flush_telemetry_for_fatal
+    from pc_common.telemetry.telemetry_client import log, flush_telemetry_for_fatal
     
     exc_type, exc_value, exc_traceback, thread = args
     error_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -785,7 +784,7 @@ def handle_threading_exception(args):
 
 def qt_message_handler(mode, context, message):
     """Handle Qt messages and log them"""
-    from dt_image_search.telemetry.telemetry_client import log, flush_telemetry_for_fatal
+    from pc_common.telemetry.telemetry_client import log, flush_telemetry_for_fatal
     from PySide6.QtCore import QtMsgType
     
     if mode == QtMsgType.QtDebugMsg:

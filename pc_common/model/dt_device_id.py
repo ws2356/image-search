@@ -1,6 +1,6 @@
 import uuid
 import threading
-from dt_image_search.model.dts_fs import get_app_data_path
+from pc_common.model.dts_fs import get_app_data_path
 
 _cached_device_id = None
 _device_id_lock = threading.Lock()

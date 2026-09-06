@@ -3,7 +3,7 @@ from pathlib import Path
 import threading
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 from dt_image_search.model.dts_db import get_all_folders
 from dt_image_search.model.dts_db import create_db_conn
 from dt_image_search.tools.dts_event_bus import default_bus

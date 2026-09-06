@@ -33,7 +33,7 @@ def _candidate_manifest_paths() -> list[Path]:
 
 
 def resolve_package_type() -> str:
-    from dt_image_search.tools.dt_is_debug import is_debug
+    from pc_common.tools.dt_is_debug import is_debug
 
     return PACKAGE_TYPE_DEBUG if is_debug() else PACKAGE_TYPE_MSIX
 

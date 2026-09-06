@@ -11,7 +11,7 @@ import watchdog.events
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
-from dt_image_search.model.dts_fs import get_app_private_name
+from pc_common.model.dts_fs import get_app_private_name
 from dt_image_search.index.incremental_index_worker import _on_moved
 from dt_image_search.model.dts_db import create_db_conn, get_file_by_path, get_folder_by_path, insert_file, insert_folder
 from dt_image_search.tools.dts_util import normalized_folder_path

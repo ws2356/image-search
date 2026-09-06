@@ -8,7 +8,7 @@ from instant_sharing.delivery import InstantShareDeliveryService
 from instant_sharing.errors import InstantShareError
 from instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
 from instant_sharing.trust_server import TrustSessionRegistry
-from dt_image_search.telemetry.telemetry_client import add_span, log
+from pc_common.telemetry.telemetry_client import add_span, log
 from dt_image_search.tools.dts_event_bus import default_bus
 
 

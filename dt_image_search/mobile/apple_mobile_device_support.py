@@ -11,8 +11,8 @@ import sys
 import tempfile
 from typing import Callable
 
-from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.model.dts_fs import get_app_data_path
+from pc_common.telemetry.telemetry_client import log
 
 APPLE_MOBILE_DEVICE_SERVICE_NAME = "Apple Mobile Device Service"
 APPLE_MOBILE_DEVICE_SUPPORT_MSI = "AppleMobileDeviceSupport64.msi"

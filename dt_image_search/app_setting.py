@@ -1,6 +1,6 @@
 import logging
 from PySide6.QtCore import QCoreApplication, QStandardPaths
-from dt_image_search.build_flavor import get_build_type
+from pc_common.build_flavor import get_build_type
 
 def initialize_app_settings(app_name: str):
 

@@ -24,7 +24,7 @@ from instant_sharing.delivery import ClipboardWriter, InstantShareDeliveryServic
 from instant_sharing.orchestrator import InstantShareReceiverOrchestrator
 from instant_sharing.qr_trigger_handler import QRTriggerHandler
 from instant_sharing.session_id_generator import SessionIdGenerator
-from dt_image_search.model.dts_fs import get_app_data_path
+from pc_common.model.dts_fs import get_app_data_path
 from instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
 from instant_sharing.sender_validation import SenderIdentity
 from instant_sharing.session import InstantShareSession, InstantShareSessionRegistry
@@ -32,9 +32,9 @@ from instant_sharing.trust_server import TrustSessionRegistry
 from instant_sharing.transfer_server import TransferHandler
 from instant_sharing.unix_socket_server import UnixSocketHttpServer
 from instant_sharing.webrtc_peer import WebRTCPeerManager
-from dt_image_search.model.dt_device_id import get_device_id
-from dt_image_search.model.feature_flags import is_instant_share_enabled
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.model.dt_device_id import get_device_id
+from pc_common.model.feature_flags import is_instant_share_enabled
+from pc_common.telemetry.telemetry_client import log
 
 
 class InstantShareRuntime:

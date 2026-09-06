@@ -14,13 +14,13 @@ import numpy as np
 import faiss
 import hf_xet
 from dt_image_search.model.dts_db import create_db_conn, get_folder_by_id, get_files_by_clip_indices, get_pending_files_for_folder, count_files_in_folder, update_file, mark_files_deleted, mark_files_skipped, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
-from dt_image_search.model.dts_fs import get_app_data_path
+from pc_common.model.dts_fs import get_app_data_path
 from dt_image_search.index.dts_model_downloader import model_downloaded_event
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.tools.dts_throttle import ThrottledCallback
-from dt_image_search.telemetry.telemetry_client import log, with_trace
+from pc_common.telemetry.telemetry_client import log, with_trace
 from dt_image_search.dts_constants import IS_MODEL_DOWNLOADED
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
 import multiprocessing as mp

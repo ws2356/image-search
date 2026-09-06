@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from dt_image_search.bm_context import BMContext
-from dt_image_search.model.dts_fs import get_app_private_name
+from pc_common.model.dts_fs import get_app_private_name
 from dt_image_search.mobile.mobile_pairing_service import MobilePairingService
 from dt_image_search.mobile.mobile_pairing_session import MobilePlatform
 from dt_image_search.mobile.mobile_pairing_store import derive_pairing_key_b64, ensure_mobile_pairing_schema

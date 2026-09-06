@@ -45,7 +45,7 @@ def is_language_en() -> bool:
                 else:
                     _cached_is_language_en = True  # Default to True if unable to determine
             except Exception as e:
-                from dt_image_search.telemetry.telemetry_client import log
+                from pc_common.telemetry.telemetry_client import log
                 log("error", message=f"Failed to get system language on macOS: {e}")
                 _cached_is_language_en = True
         return _cached_is_language_en
@@ -67,7 +67,7 @@ def _get_system_region():
                 if "_" in locale:
                     return locale.split("_")[1]
         except Exception as e:
-            from dt_image_search.telemetry.telemetry_client import log
+            from pc_common.telemetry.telemetry_client import log
             log("error", message=f"Failed to get system region on macOS: {e}")
         return "US"  # Default for macOS if unable to determine
     # Fallback if needed

@@ -11,7 +11,7 @@ from pathlib import Path
 import time
 from typing import Any, Protocol
 
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 AOA_POC_METRICS_SCHEMA = "dtis.android-aoa-poc-metrics.v1"
 AOA_POC_TRANSPORT_FRAME_VERSION = 1

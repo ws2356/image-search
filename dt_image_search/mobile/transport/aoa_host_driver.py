@@ -19,7 +19,7 @@ from typing import Any, Protocol
 import usb.core as _usb_core
 import usb.util as _usb_util
 
-from dt_image_search.telemetry.telemetry_client import log
+from pc_common.telemetry.telemetry_client import log
 
 
 def _safe_log(

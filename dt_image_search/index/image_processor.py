@@ -3,7 +3,7 @@ Separate module for image processing workers to avoid GUI import issues.
 """
 from PIL import Image
 from dt_image_search.bm_context import BMContext
-from dt_image_search.telemetry.telemetry_client import log, with_trace
+from pc_common.telemetry.telemetry_client import log, with_trace
 from dt_image_search.pil_image_support import open_pil_image
 
 _MAX_EMBEDDING_IMAGE_DIM = 4096

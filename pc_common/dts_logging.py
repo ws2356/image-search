@@ -2,8 +2,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 import sys
 import os
-from dt_image_search.model.dts_fs import get_app_data_path
-from dt_image_search.tools.dt_is_debug import is_debug
+from pc_common.model.dts_fs import get_app_data_path
+from pc_common.tools.dt_is_debug import is_debug
 
 def get_other_handlers():
     log_dir = get_app_data_path() / "logs"
