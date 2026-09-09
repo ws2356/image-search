@@ -7,12 +7,28 @@ Date: 2026-09-06
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
 
 def _find_build_vars(package_path: Path) -> Path:
-    matches = sorted(package_path.rglob("pc_common/resources/build_vars"))
+    matches = []
+    for root, directories, files in os.walk(package_path):
+        # PyInstaller's macOS BUNDLE cross-links data directories from
+        # Contents/Resources into Contents/Frameworks. Do not traverse those
+        # links; otherwise the same physical resource is counted twice.
+        directories[:] = [
+            directory
+            for directory in directories
+            if not os.path.islink(os.path.join(root, directory))
+        ]
+        if "build_vars" in files:
+            candidate = Path(root) / "build_vars"
+            if candidate.is_file() and not candidate.is_symlink():
+                matches.append(candidate)
+
+    matches.sort()
     if not matches:
         raise ValueError(f"No packaged build_vars found under {package_path}")
     if len(matches) != 1:
