@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from instant_sharing.mdns import ConnectionConfig
 from instant_sharing.contracts import (
     API_PREFIX,
+    PING_PATH,
     TRUST_APPLY_PATH,
     TRUST_CONFIRM_PATH,
     TRUST_HANDSHAKE_PATH,
@@ -326,6 +327,11 @@ def _build_app(deps: _Deps) -> FastAPI:
         )
         return JSONResponse(result, status_code=200)
 
+    @app.get(PING_PATH)
+    async def ping() -> JSONResponse:
+        # Mobile pre-warms local network access with this no-auth endpoint.
+        return JSONResponse({"status": "ok"})
+
     @app.post(f"{API_PREFIX}/{{rest_of_path:path}}")
     async def _not_found(_: Request) -> JSONResponse:
         return JSONResponse(
@@ -345,13 +351,15 @@ def _build_app(deps: _Deps) -> FastAPI:
         process_time = (time.time() - start_time) * 1000
         formatted_process_time = f"{process_time:.2f}ms"
         
-        # 打印日志
-        _logger.info(
-            f"Method: {request.method} | "
-            f"Path: {request.url.path} | "
-            f"Status: {response.status_code} | "
-            f"Duration: {formatted_process_time}"
-        )
+        # Ping is only used for mobile local-network warmup and has no
+        # transfer/telemetry value in steady-state logs.
+        if request.url.path != PING_PATH:
+            _logger.info(
+                f"Method: {request.method} | "
+                f"Path: {request.url.path} | "
+                f"Status: {response.status_code} | "
+                f"Duration: {formatted_process_time}"
+            )
         
         return response
 

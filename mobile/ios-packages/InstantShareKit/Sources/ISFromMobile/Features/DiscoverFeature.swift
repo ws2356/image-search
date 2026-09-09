@@ -83,11 +83,14 @@ public struct DiscoverFeature {
                     state.preWarmStates[device.id] = true
                 }
                 return .run { _ in
-                    // Fire lightweight requests to all IPs to trigger iOS local network permission
+                    // Hitting a valid PC endpoint can trigger the iOS Local Network
+                    // permission prompt before the real transfer starts.
                     await withTaskGroup(of: Void.self) { group in
                         for device in needPreWarm {
                             for host in device.hosts {
-                                guard let url = URL(string: "http://\(host):\(device.port)/") else { continue }
+                                guard let url = URL(
+                                    string: "http://\(host):\(device.port)\(InstantShareProtocol.apiPrefix)/ping"
+                                ) else { continue }
                                 group.addTask {
                                     var request = URLRequest(url: url)
                                     request.timeoutInterval = 2

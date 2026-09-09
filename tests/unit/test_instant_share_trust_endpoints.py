@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import unittest
+from unittest import mock
 import uuid
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from instant_sharing.mdns import ConnectionConfig
 from instant_sharing.contracts import (
+    PING_PATH,
     TRANSFER_IMAGE_PATH,
     TRANSFER_TEXT_PATH,
     TRUST_APPLY_PATH,
@@ -17,6 +19,7 @@ from instant_sharing.contracts import (
     TRUST_HANDSHAKE_PATH,
 )
 from instant_sharing.errors import InstantShareError
+from instant_sharing.https_bootstrap import _logger as https_bootstrap_logger
 from instant_sharing.https_bootstrap import _Deps, _build_app
 from instant_sharing.security import X25519TrustSessionKeyResolver
 from instant_sharing.trust_crypto import AesGcmTrustSessionProtector
@@ -251,6 +254,17 @@ class TestFastAPIBootstrap(unittest.TestCase):
             )
         self.assertEqual(resp.status_code, 503)
         self.assertEqual(resp.json()["error_code"], "SERVICE_UNAVAILABLE")
+
+    def test_ping_endpoint_is_silent_for_pre_warm_requests(self):
+        deps = _Deps(trust_session_registry=TrustSessionRegistry())
+        app = _build_app(deps)
+        with TestClient(app) as client, mock.patch.object(
+            https_bootstrap_logger, "info"
+        ) as request_logger:
+            resp = client.get(PING_PATH)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"status": "ok"})
+        request_logger.assert_not_called()
 
     def test_confirm_before_handshake_returns_handshake_required(self):
         deps = _Deps(trust_session_registry=TrustSessionRegistry())

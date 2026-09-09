@@ -9,6 +9,7 @@ from typing import Mapping
 
 
 API_PREFIX = "/api/instant-share/v1"
+PING_PATH = f"{API_PREFIX}/ping"
 PROTOCOL_VERSION = "1.0"
 FLOW_ID = "instant_share"
 
