@@ -16,6 +16,8 @@ def get_app_private_name() -> str:
 def get_app_data_path() -> Path:
     app_data_segment = get_app_private_name()
     # Add a lock to protect against reentrant calls
+    # Caching this in an env var so that child processes can also access the same path without recalculating it
+    # One caveat: parent process must call this first
     data_path_cache_key = f"BM_DATA_PATH_{app_data_segment}"
     with _data_lock:
         if not os.getenv(data_path_cache_key):
