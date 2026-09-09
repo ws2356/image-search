@@ -29,8 +29,9 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QCoreApplication, QTimer
 
+from pc_common.build_flavor import get_build_type
 from pc_common.dts_logging import get_other_handlers
 from instant_sharing import InstantShareRuntime
 from instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE
@@ -192,10 +193,13 @@ def main() -> int:
 
     args = _parse_args()
 
+    app_name = "SnapGet-dev" if get_build_type() == "dev" else "SnapGet"
+    QCoreApplication.setOrganizationName("net.boldman")
+    QCoreApplication.setApplicationName(app_name)
+
     # Telemetry is entry-point-wired: the launch agent passes its own values so
-    # telemetry_client carries no app-storage dependencies. Resolving paths
-    # here (before QApplication sets the app name) matches the main app's
-    # QStandardPaths lifecycle.
+    # telemetry_client carries no app-storage dependencies. Resolve paths after
+    # the app identity is fixed so QStandardPaths is stable.
     init_telemetry(
         device_id=get_device_id(),
         session_id=str(uuid.uuid4()),
@@ -209,7 +213,7 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setOrganizationDomain("net.boldman")
-    app.setApplicationName("SnapGet")
+    app.setApplicationName(app_name)
     app.setQuitOnLastWindowClosed(False)
 
     _install_crash_hooks()

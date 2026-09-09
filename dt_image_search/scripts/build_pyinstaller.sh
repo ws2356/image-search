@@ -26,6 +26,7 @@ fi
 
 this_dir="$(dirname "$this_file")"
 project_root="${this_dir}/../.."
+python_bin="${PYTHON:-python3}"
 
 if [ -n "$build_type" ]; then
     if [[ "$build_type" != "prod" && "$build_type" != "dev" ]]; then
@@ -70,6 +71,25 @@ fi
 (cd "$project_root" && pyinstaller "$spec_file" --noconfirm --clean --distpath "$distpath")
 
 app_path="${distpath}/${app_name}.app"
+
+package_path="$app_path"
+if [[ "$(uname -s)" != "Darwin" ]]; then
+    package_path="${distpath}/${app_name}"
+fi
+
+case "$product" in
+    main)
+        expected_desktop_app="au_search"
+        ;;
+    snapget)
+        expected_desktop_app="snap_get"
+        ;;
+esac
+
+"$python_bin" "$this_dir/validate_packaged_build_vars.py" \
+    --package-path "$package_path" \
+    --expected-desktop-app "$expected_desktop_app" \
+    --expected-build-type "$build_type"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
     if [[ ! -d "$app_path" ]]; then

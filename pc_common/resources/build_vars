@@ -1,4 +1,5 @@
 {
   "build_type": "prod",
+  "desktop_app": "au_search",
   "revision": ""
 }

@@ -37,7 +37,13 @@ bundle_identifier = "vip.wansong.dtimagesearch" if build_type == "prod" else f"v
 build_vars_dir = Path(tempfile.mkdtemp(prefix=f"dtis_build_vars_{build_type}"))
 build_vars_path = build_vars_dir / "build_vars"
 build_vars_path.write_text(
-    json.dumps({"build_type": build_type, "revision": revision}),
+    json.dumps(
+        {
+            "build_type": build_type,
+            "desktop_app": "au_search",
+            "revision": revision,
+        }
+    ),
     encoding="utf-8",
 )
 datas += [(str(build_vars_path), "pc_common/resources")]

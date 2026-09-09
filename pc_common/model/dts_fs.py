@@ -2,11 +2,14 @@ import os
 from pathlib import Path
 import threading
 from PySide6.QtCore import QStandardPaths
-from pc_common.build_flavor import get_build_type, BUILD_TYPE_DEV
+from pc_common.build_flavor import BUILD_TYPE_DEV, DesktopApp, get_build_type, get_desktop_app
 
 _data_lock = threading.Lock()
 
+
 def get_app_private_name() -> str:
+    if get_desktop_app() == DesktopApp.SNAP_GET:
+        return "SnapGet-dev" if get_build_type() == BUILD_TYPE_DEV else "SnapGet"
     return "DTImageSearch-dev" if get_build_type() == BUILD_TYPE_DEV else "DTImageSearch"
 
 
