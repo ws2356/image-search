@@ -206,6 +206,8 @@ def main() -> int:
         revision=get_revision(),
         log_level=get_log_level(),
         root_trace_sample_rate=get_desktop_root_trace_sample_rate(),
+        # The Image Search entry point keeps the legacy identity.
+        service_name="snapget_pc",
         resource_attributes=RESOURCE_ATTRIBUTES,
         log_handlers=get_other_handlers(),
         debug_mode=is_debug(),

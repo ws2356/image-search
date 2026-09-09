@@ -45,7 +45,9 @@ _session_id_attribute = "app.session.id"
 _device_id_attribute = "app.device.id"
 _revision_attribute = "app.revision"
 
-_image_search_client = "imagesearch_client"
+# Used only when a host process forgets to call init_telemetry(); product
+# identity is never selected from this value.
+_safe_default_service_name = "imagesearch_client"
 
 _BATCH_SIZE = EXPORT_BATCH_SIZE
 _QUEUE_SIZE = EXPORT_QUEUE_SIZE
@@ -71,6 +73,7 @@ def _initialize(
     revision: str,
     log_level: int,
     root_trace_sample_rate: float,
+    service_name: str,
     resource_attributes: Mapping[str, str] | None,
     log_handlers: Sequence[logging.Handler] | None,
     debug_mode: bool,
@@ -83,7 +86,7 @@ def _initialize(
     _log_handlers = list(log_handlers) if log_handlers is not None else []
 
     _resource = Resource.create(attributes={
-        "service.name": _image_search_client,
+        "service.name": service_name,
         _device_id_attribute: device_id,
         _revision_attribute: revision,
         **(dict(resource_attributes) if resource_attributes else {}),
@@ -105,7 +108,7 @@ def _initialize(
         metric_reader2 = PeriodicExportingMetricReader(_metric_exporter2, export_interval_millis=60_000)
         _metric_readers.append(metric_reader2)
     metrics.set_meter_provider(MeterProvider(metric_readers=_metric_readers, resource=_resource))
-    _meter = metrics.get_meter(_image_search_client)
+    _meter = metrics.get_meter(service_name)
 
     _counters.update({
         "app_startups": _meter.create_counter("app_startups"),
@@ -124,13 +127,13 @@ def _initialize(
     trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(_trace_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
     if sys.stdout is not None and sys.stderr is not None:
         trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(ConsoleSpanExporter(), schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
-    _tracer = trace.get_tracer(_image_search_client)
+    _tracer = trace.get_tracer(service_name)
 
     # === LOGGING SETUP ===
     _logger_provider = LoggerProvider(resource=_resource)
     _log_exporter = OTLPLogExporter(endpoint=_logs_upload_endpoint, timeout=EXPORT_TIMEOUT_SECONDS)
     _logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter, schedule_delay_millis=60_000, max_export_batch_size=_BATCH_SIZE, max_queue_size=_QUEUE_SIZE))
-    # otel_logger = _logger_provider.get_logger(_image_search_client)
+    # otel_logger = _logger_provider.get_logger(service_name)
 
     # Open the system’s null device for writing:
     # ── '/dev/null' on Unix, 'nul' on Windows
@@ -150,6 +153,7 @@ def init_telemetry(
     revision: str,
     log_level: int,
     root_trace_sample_rate: float,
+    service_name: str,
     resource_attributes: Mapping[str, str] | None = None,
     log_handlers: Sequence[logging.Handler] | None = None,
     debug_mode: bool = True,
@@ -166,6 +170,8 @@ def init_telemetry(
         revision: Value for the `app.revision` resource attribute.
         log_level: Stdlib logging level for the root logger configuration.
         root_trace_sample_rate: Root span sampling ratio in [0.0, 1.0].
+        service_name: `service.name` reported by the host process. Required so
+            each entry point explicitly owns its telemetry identity.
         resource_attributes: Extra resource attributes (e.g. service.version,
             app.package.type) provided by the host process.
         log_handlers: Stdlib handlers (e.g. rotating file handler) the host
@@ -173,6 +179,9 @@ def init_telemetry(
         debug_mode: True when running unpackaged; disables the stdout/stderr
             redirect to the null device.
     """
+    if not service_name:
+        raise ValueError("service_name must identify the calling app")
+
     with _init_lock:
         if _initialized:
             return
@@ -182,6 +191,7 @@ def init_telemetry(
             revision=revision,
             log_level=log_level,
             root_trace_sample_rate=root_trace_sample_rate,
+            service_name=service_name,
             resource_attributes=resource_attributes,
             log_handlers=log_handlers,
             debug_mode=debug_mode,
@@ -207,6 +217,7 @@ def _ensure_initialized() -> None:
             revision="",
             log_level=logging.DEBUG if under_pytest else logging.INFO,
             root_trace_sample_rate=1.0,
+            service_name=_safe_default_service_name,
             resource_attributes={},
             log_handlers=[logging.StreamHandler(sys.stdout)],
             debug_mode=True,
