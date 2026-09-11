@@ -59,6 +59,7 @@ _initialized = False
 _resource: Resource
 _metric_readers: list = []
 _logger_provider: LoggerProvider
+_service_name = _safe_default_service_name
 _tracer: Any = None
 _session_id = ""
 _log_level = logging.INFO
@@ -78,9 +79,10 @@ def _initialize(
     log_handlers: Sequence[logging.Handler] | None,
     debug_mode: bool,
 ) -> None:
-    global _initialized, _resource, _logger_provider, _tracer
+    global _initialized, _resource, _logger_provider, _service_name, _tracer
     global _session_id, _log_level, _log_handlers, _metric_readers
 
+    _service_name = service_name
     _session_id = session_id
     _log_level = log_level
     _log_handlers = list(log_handlers) if log_handlers is not None else []
@@ -364,7 +366,7 @@ def log(
                 logging_handler.addFilter(OtelContextFilter())
                 handlers.insert(0, logging_handler)
             logging.basicConfig(level=level, handlers=handlers)
-            _logger = logging.getLogger(_image_search_client)
+            _logger = logging.getLogger(_service_name)
     if severity not in ["debug", "info", "warning", "error"]:
         raise ValueError(f"Invalid log severity: {severity}")
     log_function = getattr(_logger, severity, _logger.info)
