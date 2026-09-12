@@ -56,6 +56,8 @@ unit_and_functional_tests=(
   tests/unit/test_instant_share_signature_verification.py
   tests/unit/test_instant_share_tls_server.py
   tests/unit/test_instant_share_telemetry.py
+  tests/unit/test_model_state.py
+  tests/unit/test_index_model_failure.py
   tests/unit/test_mobile_apple_mobile_device_support.py
   tests/unit/test_dts_index.py
   tests/unit/test_browse_controller_mobile_folder.py

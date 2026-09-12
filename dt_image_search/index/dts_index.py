@@ -15,7 +15,11 @@ import faiss
 import hf_xet
 from dt_image_search.model.dts_db import create_db_conn, get_folder_by_id, get_files_by_clip_indices, get_pending_files_for_folder, count_files_in_folder, update_file, mark_files_deleted, mark_files_skipped, delete_folders, delete_files_by_folder_id, get_subfolders, get_file_by_path, update_folder_status
 from pc_common.model.dts_fs import get_app_data_path
-from dt_image_search.index.dts_model_downloader import model_downloaded_event
+from dt_image_search.index.dts_model_downloader import (
+    model_download_failed_event,
+    model_downloaded_event,
+    retry_model_download,
+)
 from dt_image_search.model.dts_folder import Folder
 from dt_image_search.model.dts_file import File
 from dt_image_search.tools.dts_perf import perffunc as profile
@@ -23,12 +27,17 @@ from dt_image_search.tools.dts_throttle import ThrottledCallback
 from pc_common.telemetry.telemetry_client import log, with_trace
 from dt_image_search.dts_constants import IS_MODEL_DOWNLOADED
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools.dts_event_bus import default_bus
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 import atexit
 from dt_image_search.index.image_processor import _initialize_worker, process_image_batch
 from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_util import normalized_folder_path
+
+MODEL_STATE_LOADING = "loading"
+MODEL_STATE_READY = "ready"
+MODEL_STATE_FAILED = "failed"
 
 # TODO: refactor multiprocessing code: move all model/preprocess loading to worker processes
 def index_path_for_folder(folder: Folder):
@@ -134,6 +143,20 @@ def _write_index_atomically(index, index_path: str):
                 pass
 
 
+def _rename_stale_index(index_path: str):
+    backup_path = f"{index_path}.stale-{uuid.uuid4().hex}"
+    try:
+        os.replace(index_path, backup_path)
+        log(
+            "warning",
+            "index",
+            message=f"Renamed stale index file {index_path} to {backup_path}.",
+        )
+    except OSError:
+        # Another recovery path may already have moved the stale file.
+        pass
+
+
 def _create_empty_index(index_path: str):
     _model, _, _ = _get_model()
     dim = _model.visual.output_dim
@@ -235,9 +258,14 @@ def _cleanup_process_pool():
 
 @with_trace("_add_to_index")
 def _add_to_index(ctx: BMContext, index_path: str, folder_id: int, image_files: typing.List[File]) -> bool:
+    if not model_is_ready():
+        log(
+            "error",
+            "model",
+            message=f"Model not ready; skipping index submission for folder {folder_id}",
+        )
+        return False
     import torch
-    model_downloaded_event.wait()  # Wait for the model to be downloaded
-
     result = True
     try:
         index = _get_index(index_path)
@@ -335,8 +363,19 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
     """
 
     log("info", message=f"Start build_index for folder ID {folder_id} at {index_path}")
-    _model_loaded_event.wait()  # Ensure model is preloaded before starting indexing
-
+    if not model_is_ready():
+        _model_loaded_event.wait()
+    if not model_is_ready():
+        log("error", "index", message=f"Model not ready; skipping indexing for folder {folder_id}")
+        yield {
+            'batch_start': 0,
+            'batch_end': 0,
+            'total_files': 0,
+            'files_processed': 0,
+            'files_in_batch': 0,
+            'batch_result': False
+        }
+        return
     create_index_if_needed(index_path)
 
     limit = 100
@@ -378,6 +417,22 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
         else:
             log("info", message=f"No new files to index in batch {batch_start} to {batch_end}.")
             continue
+
+        if not model_is_ready():
+            log(
+                "error",
+                "index",
+                message=f"Model became unavailable; stopping indexing for folder {folder_id}",
+            )
+            break
+
+        if not batch_result:
+            log(
+                "error",
+                "index",
+                message=f"Indexing batch failed for folder {folder_id}; stopping indexing.",
+            )
+            break
         
         # Yield progress information after each batch
         res = {
@@ -395,7 +450,12 @@ def build_index(ctx: BMContext, index_path: str, folder_id: int):
 # TODO: implement append_to_index
 @with_trace("append_to_index")
 def append_to_index(ctx: BMContext, index_path: str, folder_id: int, file_paths: list[str] = None):
-    _model_loaded_event.wait()  # Wait for the model to be downloaded
+    if not model_is_ready():
+        _model_loaded_event.wait()
+    if not model_is_ready():
+        log("error", "index", message=f"Model not ready; skipping append indexing for folder {folder_id}")
+        yield {"batch_result": False}
+        return
     if not file_paths:
         return
     create_index_if_needed(index_path)
@@ -494,27 +554,111 @@ _model = None
 _preprocess = None
 _tokenizer = None
 TOP_K = 100
+_model_state_lock = threading.RLock()
+_model_state = MODEL_STATE_READY
 _model_loaded_event = threading.Event()
+_model_load_failed_event = threading.Event()
+_model_reload_ready = threading.Event()
 
 @profile
 def _get_model():
-    global _model, _preprocess, _tokenizer, _model_loaded_event
+    global _model, _preprocess, _tokenizer, _model_state, _model_loaded_event, _model_load_failed_event
 
     if _model is not None:
         return _model, _preprocess, _tokenizer
-    _model_loaded_event.wait()  # Wait for the model to be preloaded
-
+    if not _model_loaded_event.wait(timeout=60):  # Wait for the model to be preloaded
+        log(
+            "error",
+            "model",
+            message="Model load timed out. A reload attempt may be required.",
+        )
+        raise RuntimeError("Model load timed out. A reload attempt may be required.")
+    if _model_load_failed_event.is_set() and _model_state == MODEL_STATE_FAILED:
+        raise RuntimeError("Model load failed. A reload attempt is required.")
     if _model is None:
         raise RuntimeError("Model is not loaded. Please ensure the model is preloaded before querying.")
     return _model, _preprocess, _tokenizer
 
-@with_trace("_preload_model")
+
+def model_is_ready() -> bool:
+    with _model_state_lock:
+        return _model_state == MODEL_STATE_READY
+
+
+def get_model_state() -> str:
+    with _model_state_lock:
+        return _model_state
+
+
+def _set_model_failed(message: str):
+    """Set the model to failed state and publish reload required message.
+
+    Args:
+        message: message to log.
+    """
+    with _model_state_lock:
+        _model_state = MODEL_STATE_FAILED
+        _model_load_failed_event.set()
+        _model_reload_ready.clear()
+    default_bus.publish("model_load_failed")
+    status_bar_messenger.show_status_message.emit(message)
+    log("error", "model", message=message)
+
+
+def reload_model(ctx: BMContext):
+    """Restart one model preload from a failed or interrupted state."""
+    global _model_state, _model, _preprocess, _tokenizer
+
+    with _model_state_lock:
+        if _model_state == MODEL_STATE_LOADING:
+            return False
+        _model_state = MODEL_STATE_LOADING
+        _model = None
+        _preprocess = None
+        _tokenizer = None
+
+    _model_loaded_event.clear()
+    _model_load_failed_event.clear()
+    _model_reload_ready.clear()
+    retry_model_download(ctx)
+    _trigger_model_preload(ctx)
+    return True
+
+
+def publish_model_load_failure() -> None:
+    with _model_state_lock:
+        _model_state = MODEL_STATE_FAILED
+        _model_load_failed_event.set()
+        _model_reload_ready.clear()
+    default_bus.publish("model_load_failed")
+
+
 def _preload_model(ctx: BMContext):
+    global _model_state, _model, _preprocess, _tokenizer
+    global _model_loaded_event, _model_load_failed_event
+
     import torch
     import open_clip
+    with _model_state_lock:
+        _model_state = MODEL_STATE_LOADING
+        _model_loaded_event.clear()
+        _model_load_failed_event.clear()
+        _model_reload_ready.clear()
+
     """Function to preload the model in background"""
-    global _model, _preprocess, _tokenizer
-    model_downloaded_event.wait()  # Wait for the model to be downloaded for cn market
+    while True:
+        model_downloaded_event.wait()
+        if not model_download_failed_event.is_set():
+            break
+        model_downloaded_event.clear()
+        model_download_failed_event.wait()
+
+    with _model_state_lock:
+        _model = None
+        _preprocess = None
+        _tokenizer = None
+        _model_loaded_event.clear()
+        _model_state = MODEL_STATE_LOADING
 
     def progress_callback(downloaded_bytes: int, total_bytes: typing.Optional[int], filename: str):
         if total_bytes:
@@ -543,7 +687,10 @@ def _preload_model(ctx: BMContext):
             log("info", message=f"Attempt {_attempt + 1} tokenizer init")
 
             _model = model.to(_get_device()).eval()
-            log("info", message=f"Attempt {_attempt + 1} model eval")
+
+            with _model_state_lock:
+                _model_state = MODEL_STATE_READY
+                _model_loaded_event.set()
 
             status_bar_messenger.show_status_message.emit("Model inited")
             # with create_db_conn() as conn:
@@ -552,11 +699,43 @@ def _preload_model(ctx: BMContext):
         except Exception as e:
             log("error", "model", message=f"Attempt {_attempt + 1}. Pretrained: {ctx.get_pretrained_model_name()}. offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. model version: {ctx.version}. offline mode: {ctx.offline_mode}. Preloading model failed: {e}")
             if _attempt == _MAX_ATTEMPTS - 1:
-                status_bar_messenger.show_status_message.emit("Model load failed")
-            else:
-                # wait a bit before retrying
-                time.sleep(3)
-    _model_loaded_event.set()
+                log(
+                    "error",
+                    "model",
+                    message=(
+                        "Model loading failed after retries. "
+                        "Indexing has been stopped until the model is reloaded."
+                    ),
+                )
+                _set_model_failed(f"Model load failed after {_attempt + 1} attempt(s).")
+    else:
+        # wait a bit before retrying
+        time.sleep(3)
+    if _model_state == MODEL_STATE_READY:
+        _model_reload_ready.set()
+        status_bar_messenger.show_status_message.emit("Model inited")
+    else:
+        _set_model_failed("Model loading failed after retries.")
 
 def init(ctx: BMContext):
-    threading.Thread(target=_preload_model, args=(ctx,), daemon=True).start()
+    _start_preload(ctx)
+
+
+def _trigger_model_preload(ctx: BMContext) -> None:
+    _start_preload(ctx)
+
+
+def _start_preload(ctx: BMContext):
+    global _preload_thread, _model_state, _model, _preprocess, _tokenizer
+    with _model_state_lock:
+        if _model_state == MODEL_STATE_LOADING:
+            return
+        _model_state = MODEL_STATE_LOADING
+        _model = None
+        _preprocess = None
+        _tokenizer = None
+        _model_loaded_event.clear()
+        _model_load_failed_event.clear()
+        _model_reload_ready.clear()
+    _preload_thread = threading.Thread(target=_preload_model, args=(ctx,), name="model-preload", daemon=True)
+    _preload_thread.start()
