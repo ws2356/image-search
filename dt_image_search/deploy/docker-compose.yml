@@ -1,6 +1,6 @@
 services:
   alloy:
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.18.1
     volumes:
       - ./otel/alloy/config.alloy:/etc/alloy/config.alloy
     command: ["run", "/etc/alloy/config.alloy"]
@@ -15,7 +15,7 @@ services:
       - tempo
       - loki
   mimir:
-    image: grafana/mimir:latest
+    image: grafana/mimir:3.2.0
     volumes:
       - ./otel/mimir/config:/etc/mimir-config
     entrypoint:
@@ -24,7 +24,7 @@ services:
     ports:
       - "9009:9009"
   tempo:
-    image: grafana/tempo:2.9.0
+    image: grafana/tempo:3.0.3
     restart: unless-stopped
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
@@ -35,13 +35,13 @@ services:
       - "7946:7946"
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.7.6
     command: -config.file=/etc/loki/local-config.yaml
     ports:
       - "127.0.0.1:3100:3100"
 
   grafana:
-    image: grafana/grafana-oss
+    image: grafana/grafana-oss:12.4.3
     ports:
       - "3000:3000"
     env_file:

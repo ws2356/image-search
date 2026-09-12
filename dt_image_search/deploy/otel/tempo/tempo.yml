@@ -16,21 +16,8 @@ distributor:
         grpc:
           endpoint: 0.0.0.0:4317
   ring:
-      kvstore:
-        store: memberlist
-
-ingester:
-  trace_idle_period: 60s
-  max_block_bytes: 1_000_000
-  max_block_duration: 5m
-  lifecycler:
-      ring:
-        kvstore:
-          store: memberlist
-
-compactor:
-  compaction:
-    block_retention: 672h
+    kvstore:
+      store: memberlist
 
 storage:
   trace:
@@ -40,33 +27,20 @@ storage:
 
 metrics_generator:
   processor:
-    local_blocks:
-      filter_server_spans: false
-      flush_to_storage: true
     span_metrics:
-      # Optional: Customize dimensions for span metrics
       dimensions: [http.method, http.status_code]
     service_graphs:
-      # Optional: Customize dimensions for service graphs
       dimensions: [http.method, http.status_code]
-  ring:  # Critical: Enables ring registration
-      kvstore:
-        store: memberlist  # In-memory for single-node; use 'consul' or 'etcd' for multi-node
-      heartbeat_period: 5s
-      heartbeat_timeout: 1m
-      instance_id: tempo
-      instance_addr: tempo  # Or your container IP, e.g., 172.17.0.2 (check with `ip addr show`)
-      instance_port: 9095  # Tempo gRPC port for generator ring communication
+  ring:
+    kvstore:
+      store: memberlist
   storage:
-      path: /var/tempo/generator  # Persistent volume for metrics WAL
-      remote_write:
-        - url: http://mimir:9009/api/v1/push  # Mimir remote write endpoint
-          send_exemplars: true
-  traces_storage:
-      path: /var/tempo/generator/wal
-      v2_encoding: snappy
+    path: /var/tempo/generator
+    remote_write:
+      - url: http://mimir:9009/api/v1/push
+        send_exemplars: true
 
-overrides:  # Enable processors globally/single-tenant
+overrides:
   defaults:
     metrics_generator:
-      processors: [local-blocks, span-metrics, service-graphs]
+      processors: [span-metrics, service-graphs]

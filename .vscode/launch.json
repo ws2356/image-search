@@ -10,7 +10,8 @@
       "request": "launch",
       "module": "dt_image_search.__main__",
       "env": {
-        "DTIS_BUILD_TYPE": "dev"
+        "DTIS_BUILD_TYPE": "dev",
+        "DTIS_TELEMETRY_UPLOAD_HOST": "http://localhost:4318"
       },
       "justMyCode": false,
       "logToFile": true
@@ -58,6 +59,7 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
+        "DTIS_TELEMETRY_UPLOAD_HOST": "http://localhost:4318",
         "PYTHONUNBUFFERED": "1"
       }
     },

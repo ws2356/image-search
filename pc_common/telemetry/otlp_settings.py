@@ -1,4 +1,9 @@
-TELEMETRY_UPLOAD_HOST = "https://otel.boldman.net"
+import os
+
+
+TELEMETRY_UPLOAD_HOST = os.getenv(
+    "DTIS_TELEMETRY_UPLOAD_HOST", "https://otel.boldman.net"
+)
 METRICS_UPLOAD_ENDPOINT = f"{TELEMETRY_UPLOAD_HOST}/v1/metrics"
 TRACES_UPLOAD_ENDPOINT = f"{TELEMETRY_UPLOAD_HOST}/v1/traces"
 LOGS_UPLOAD_ENDPOINT = f"{TELEMETRY_UPLOAD_HOST}/v1/logs"
