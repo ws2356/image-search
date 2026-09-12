@@ -1,11 +1,13 @@
 services:
-  agent:
-    image: grafana/agent:latest
+  alloy:
+    image: grafana/alloy:latest
     volumes:
-      - ./otel/agent/agent.river:/etc/agent.river
-    command: ["run", "/etc/agent.river"]
+      - ./otel/alloy/config.alloy:/etc/alloy/config.alloy
+    command: ["run", "/etc/alloy/config.alloy"]
     environment:
-      - AGENT_MODE=flow
+      - ALLOY_DEPLOY_MODE=docker
+      - ALLOY_HTTP_LISTEN_ADDRESS=0.0.0.0
+      - ALLOY_HTTP_LISTEN_PORT=12345
     ports:
       - "4318:4318"  # OTLP HTTP
     depends_on:
