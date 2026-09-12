@@ -26,7 +26,13 @@ fi
 
 this_dir="$(dirname "$this_file")"
 project_root="${this_dir}/../.."
-python_bin="${PYTHON:-python3}"
+if [[ -n "${PYTHON:-}" ]]; then
+    python_bin="$PYTHON"
+elif [[ -x "$project_root/.venv/bin/python" ]]; then
+    python_bin="$project_root/.venv/bin/python"
+else
+    python_bin="python3"
+fi
 
 if [ -n "$build_type" ]; then
     if [[ "$build_type" != "prod" && "$build_type" != "dev" ]]; then
@@ -68,7 +74,7 @@ if [[ "$build_type" != "prod" ]]; then
     app_name="${app_name}-${build_type}"
 fi
 
-(cd "$project_root" && pyinstaller "$spec_file" --noconfirm --clean --distpath "$distpath")
+(cd "$project_root" && "$python_bin" -m PyInstaller "$spec_file" --noconfirm --clean --distpath "$distpath")
 
 app_path="${distpath}/${app_name}.app"
 
