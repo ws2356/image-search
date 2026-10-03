@@ -1,5 +1,6 @@
 [project]
 name = "DTImageSearch"
+version = "0.1.0"
 
 [tool.pyside6-project]
 files = ["main.py", "ui/mainwindow.ui"]
