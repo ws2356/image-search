@@ -82,6 +82,9 @@ if [[ -z "$tag" ]]; then
     echo "Error: CFBundleVersion not found or empty in $app_info_plist"
     exit 1
 fi
+if [ "$build_type" != "prod" ]; then
+    tag="${tag}-${build_type}"
+fi
 
 echo "Using tag: $tag"
 echo "Product: $product"
