@@ -10,6 +10,8 @@ repo_root="$(cd "${this_dir}/../.." && pwd)"
 
 set -a; . "$repo_root/dt_image_search/.env-applecredential"; set +a
 
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+
 APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -l 'apple app specific password - ws2356' -w)
 if [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] ; then
     echo "Failed to find APPLE_APP_SPECIFIC_PASSWORD"
