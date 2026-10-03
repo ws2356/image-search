@@ -80,3 +80,45 @@ def init(ctx: BMContext):
         ).start()
     else:
         model_downloaded_event.set()
+
+def _cleanup_partial_download(ctx: BMContext):
+    final_path_ = Path(ctx.get_model_cache_path())
+    try:
+        if final_path_.is_dir():
+            import shutil
+            shutil.rmtree(str(final_path_))
+        else:
+            final_path_.unlink(missing_ok=True)
+    except:
+        log("error", message=f"Failed to remove final cache path: {final_path_}")
+
+def _download_with_progress(url, dest_path, chunk_size=4096):
+    downloaded = 0
+    headers = {}
+    if os.path.exists(dest_path):
+        downloaded = os.path.getsize(dest_path)
+        headers = {"Range": f"bytes={downloaded}-"}
+    response = requests.get(url, stream=True, headers=headers, allow_redirects=True)
+    if response.status_code not in (200, 206):
+        raise Exception(f"Failed to download file: {response.status_code}")
+
+    total_length = response.headers.get("content-length")
+    if total_length is not None:
+        total_length = int(total_length) + downloaded
+
+    _last_report_time = None
+    mode = "ab" if downloaded > 0 else "wb"
+    with open(dest_path, mode) as f:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if not chunk:
+                continue
+            f.write(chunk)
+            downloaded += len(chunk)
+
+            # Calculate progress
+            percent = downloaded / total_length * 100
+            now = datetime.datetime.now()
+            if _last_report_time is None or (now - _last_report_time).total_seconds() >= 3 or percent >= 100:
+                _last_report_time = now
+                status_bar_messenger.show_status_message.emit(f"Downloading model... {percent:.1f}%")
+                log("debug", message=f"Download progress: {percent:.1f}%")
