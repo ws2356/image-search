@@ -38,7 +38,7 @@
 │  托盘(pystray) + 单实例锁 + macOS App 菜单(PyObjC 少量代码)                │
 │  pywebview 窗口: 先加载 loading 页 → 收到 server ready 后加载             │
 │  http://127.0.0.1:<port>/                                                 │
-│  系统对话框桥: create_file_dialog(选目录) / reveal in Finder               │
+│  pywebview JS API 桥(进程内): pick_folder / reveal                         │
 └───────────────────────────────┬───────────────────────────────────────────┘
                                 │ 子进程 stdio 握手(port + 一次性 token)
 ┌───────────────────────────────▼── Index server 进程 ──────────────────────┐
@@ -95,8 +95,10 @@ HTTP(幂等/请求-响应):
 | `GET /thumb/{fileId}` | 缩略图(磁盘缓存 + 内存 LRU);网格/列表缩略图直接 `<img>` 加载 |
 | `GET /file/{fileId}` | 原图流;图片查看器打开大图时调用 |
 | `GET /status` | 模型加载状态 + 各 folder 索引进度汇总;启动页与设置页轮询/兜底 |
-| `POST /shell/pick-folder` | 转发壳进程弹出系统选目录对话框;添加 folder 流程第 1 步 |
-| `POST /shell/reveal {fileId}` | 转发壳进程在 Finder/资源管理器中显示文件;结果项右键/按钮用 |
+
+系统级交互不经 HTTP,由 WebUI 直接调用 pywebview 的 JS API 桥(壳进程内,仅暴露两个窄方法):
+- `pywebview.api.pick_folder()`: 弹原生选目录对话框,返回路径
+- `pywebview.api.reveal(fileId)`: 在 Finder/资源管理器中显示文件
 
 WebSocket `/events`(服务端推送,统一信封 schema):
 - `index_progress` / `status_message` / `fs_changed` / `model_load_failed`
@@ -121,7 +123,7 @@ WebSocket `/events`(服务端推送,统一信封 schema):
 2. **搭建 index server 骨架**:`index_server/main.py`(FastAPI + 仅 127.0.0.1 + token 校验 + 静态托管占位),接入 search/browse/folder/thumb/status API,复用现有模块;补 TestClient 集成测试与数据兼容验证。
 3. **搭建 webui 骨架**:`webui/` Vue3 + Vite + Pinia(pnpm 管理);实现搜索页、浏览页、缩略图加载三件套,先 mock 数据开发再对接真实 server。
 4. **EventBridge**:`default_bus` 事件 → WS 推送;WebUI 实时显示索引进度/状态消息;schema 契约测试。
-5. **文件夹选择桥**:壳 `create_file_dialog` → `POST /shell/pick-folder` → server `POST /folders` 全链路;reveal-in-Finder 走壳。
+5. **添加 folder 全链路**:WebUI → `pywebview.api.pick_folder()`(原生对话框)→ `POST /folders` → 索引入队;reveal-in-Finder 走 JS 桥;浏览器直开时桥缺失需优雅降级(隐藏入口)。
 6. **壳进程**:pywebview 窗口 + loading→ready 握手 + pystray 托盘 + 单实例锁 + macOS 菜单(PyObjC)。
 7. **打包与清理**:更新 `build_pyinstaller.sh` 双进程打包;验证 DMG/MSIX 与数据兼容;确认功能对齐后把 Qt UI 标记为待删除并清理 `requirements.txt`。
 
