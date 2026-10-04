@@ -134,7 +134,7 @@ if [[ ! -f "$RELEASES_JSON" ]]; then
     exit 1
 fi
 
-python3 -c "
+uv run --project "$REPO_ROOT" --frozen python -c "
 import json
 path = '$RELEASES_JSON'
 with open(path) as f:

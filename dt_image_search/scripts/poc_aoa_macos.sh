@@ -17,7 +17,7 @@ if [[ "$mode" != "host" && "$mode" != "simulate" ]]; then
   exit 1
 fi
 
-python -m dt_image_search.mobile.transport.poc.android_aoa_poc \
+uv run --project "$repo_root" --frozen python -m dt_image_search.mobile.transport.poc.android_aoa_poc \
   --host-os macos \
   --mode "$mode" \
   --output-root dt_image_search/mobile/transport/poc/runs

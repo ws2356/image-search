@@ -9,7 +9,7 @@ fi
 script_dir="$(dirname "$script_path")"
 cd "$script_dir/../.."
 
-python -m nuitka \
+uv run --frozen python -m nuitka \
   --standalone \
   --enable-plugin=pyside6 \
   --windows-icon-from-ico=dt_image_search/resources/icon.ico \

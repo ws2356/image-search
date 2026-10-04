@@ -19,6 +19,8 @@ set -euo pipefail
 #   notarize.sh --asset-path ./dist/AuSearch-1.2.3.pkg
 
 ARTIFACT_PATH=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -48,9 +50,9 @@ OUTPUT=$(xcrun notarytool submit "$ARTIFACT_PATH" \
 echo "$OUTPUT"
 
 STATUS=$(echo "$OUTPUT" \
-    | python3 -c "import sys, json; print(json.load(sys.stdin).get('status','unknown'))")
+    | uv run --project "$REPO_ROOT" --frozen python -c "import sys, json; print(json.load(sys.stdin).get('status','unknown'))")
 SUBMISSION_ID=$(echo "$OUTPUT" \
-    | python3 -c "import sys, json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null \
+    | uv run --project "$REPO_ROOT" --frozen python -c "import sys, json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null \
     || echo "")
 
 if [[ "$STATUS" != "Accepted" ]]; then

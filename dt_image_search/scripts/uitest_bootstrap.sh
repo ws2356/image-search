@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-pip_install=false
+sync_deps=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --pip-install)
-      pip_install=true
+    --sync-deps)
+      sync_deps=true
       shift
       ;;
     *)
@@ -18,13 +18,9 @@ done
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$SCRIPT_DIR/../.."
 
-if [ "$pip_install" = true ]; then
-    echo "Installing Python dependencies..."
-    python -m pip install -r "$PROJECT_ROOT/requirements.txt"
-
-    if [ -f "$PROJECT_ROOT/requirements-dev.txt" ]; then
-        python -m pip install -r "$PROJECT_ROOT/requirements-dev.txt"
-    fi
+if [ "$sync_deps" = true ]; then
+    echo "Syncing Python dependencies..."
+    uv sync --project "$PROJECT_ROOT" --frozen
 fi
 
 echo "Restoring Dotnet dependencies..."

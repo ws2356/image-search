@@ -11,8 +11,8 @@ release_json="$repo_root/releases.json"
 
 cd "${WEB_DIR}"
 
-download_main="$(python3 -c "import json; print(json.load(open('$release_json'))['main']['download_url'])")"
-download_is="$(python3 -c "import json; print(json.load(open('$release_json'))['snapget']['download_url'])")"
+download_main="$(uv run --project "$repo_root" --frozen python -c "import json; print(json.load(open('$release_json'))['main']['download_url'])")"
+download_is="$(uv run --project "$repo_root" --frozen python -c "import json; print(json.load(open('$release_json'))['snapget']['download_url'])")"
 
 cp .env.example .env
 sed -i '' "s|AUSEARCH_MACOS_DOWNLOAD_URL=.*|AUSEARCH_MACOS_DOWNLOAD_URL=\"$download_main\"|" .env && \

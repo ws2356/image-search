@@ -26,4 +26,4 @@ fi
 cd "$this_dir/../.."
 
 set -a; . "$this_dir/.env.$environment"; set +a
-python -m dt_image_search.scripts.instant_share_agent_main --force-enable --log-level DEBUG
+uv run --frozen python -m dt_image_search.scripts.instant_share_agent_main --force-enable --log-level DEBUG

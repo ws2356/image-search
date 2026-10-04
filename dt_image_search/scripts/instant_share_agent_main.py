@@ -6,7 +6,7 @@ device sends a bootstrap POST, the mini window pops up showing the
 trust/transfer/delivery lifecycle.
 
 Usage:
-    python -m dt_image_search.scripts.instant_share_agent_main [--downloads-dir DIR]
+    uv run --frozen python -m dt_image_search.scripts.instant_share_agent_main [--downloads-dir DIR]
 
 The script runs until the window is closed or Ctrl+C is pressed. Requires
 PySide6 (Qt) — uses the same QApplication as the main AuSearch app.

@@ -20,15 +20,14 @@ fi
 cd "$repo_root"
 export PYTHONPATH="${PYTHONPATH:-}${PYTHONPATH:+:}."
 
-python -m dt_image_search.mobile.transport.poc.android_aoa_poc \
+uv run --project "$repo_root" --frozen python -m dt_image_search.mobile.transport.poc.android_aoa_poc \
   --host-os macos \
   --mode "$mode" \
   --output-root "$runs_root"
 
-python -m dt_image_search.mobile.transport.poc.summarize_aoa_runs \
+uv run --project "$repo_root" --frozen python -m dt_image_search.mobile.transport.poc.summarize_aoa_runs \
   --runs-root "$runs_root"
 
-python -m dt_image_search.mobile.transport.poc.poc_aoa_gate \
+uv run --project "$repo_root" --frozen python -m dt_image_search.mobile.transport.poc.poc_aoa_gate \
   --runs-root "$runs_root" \
   --required-hosts "$required_hosts"
-

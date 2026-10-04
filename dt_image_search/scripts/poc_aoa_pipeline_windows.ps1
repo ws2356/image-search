@@ -20,7 +20,6 @@ if ([string]::IsNullOrWhiteSpace($env:PYTHONPATH)) {
   $env:PYTHONPATH = "$($env:PYTHONPATH);."
 }
 
-python -m dt_image_search.mobile.transport.poc.android_aoa_poc --host-os windows --mode $Mode --output-root $RunsRoot
-python -m dt_image_search.mobile.transport.poc.summarize_aoa_runs --runs-root $RunsRoot
-python -m dt_image_search.mobile.transport.poc.poc_aoa_gate --runs-root $RunsRoot --required-hosts $RequiredHosts
-
+uv run --project $repoRoot --frozen python -m dt_image_search.mobile.transport.poc.android_aoa_poc --host-os windows --mode $Mode --output-root $RunsRoot
+uv run --project $repoRoot --frozen python -m dt_image_search.mobile.transport.poc.summarize_aoa_runs --runs-root $RunsRoot
+uv run --project $repoRoot --frozen python -m dt_image_search.mobile.transport.poc.poc_aoa_gate --runs-root $RunsRoot --required-hosts $RequiredHosts

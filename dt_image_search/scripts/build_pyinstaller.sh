@@ -26,13 +26,6 @@ fi
 
 this_dir="$(dirname "$this_file")"
 project_root="${this_dir}/../.."
-if [[ -n "${PYTHON:-}" ]]; then
-    python_bin="$PYTHON"
-elif [[ -x "$project_root/.venv/bin/python" ]]; then
-    python_bin="$project_root/.venv/bin/python"
-else
-    python_bin="python3"
-fi
 
 if [ -n "$build_type" ]; then
     if [[ "$build_type" != "prod" && "$build_type" != "dev" ]]; then
@@ -74,7 +67,7 @@ if [[ "$build_type" != "prod" ]]; then
     app_name="${app_name}-${build_type}"
 fi
 
-(cd "$project_root" && "$python_bin" -m PyInstaller "$spec_file" --noconfirm --clean --distpath "$distpath")
+(cd "$project_root" && uv run --frozen python -m PyInstaller "$spec_file" --noconfirm --clean --distpath "$distpath")
 
 app_path="${distpath}/${app_name}.app"
 
@@ -92,7 +85,7 @@ case "$product" in
         ;;
 esac
 
-"$python_bin" "$this_dir/validate_packaged_build_vars.py" \
+uv run --project "$project_root" --frozen python "$this_dir/validate_packaged_build_vars.py" \
     --package-path "$package_path" \
     --expected-desktop-app "$expected_desktop_app" \
     --expected-build-type "$build_type"

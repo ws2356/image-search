@@ -133,7 +133,7 @@ All instant-share events include:
 
 Use the PC CLI script:
 ```bash
-python dt_image_search/scripts/instant_share_agent_main.py
+uv run --frozen python dt_image_search/scripts/instant_share_agent_main.py
 ```
 
 Use the iOS debug view (HomeView → Instant Share Debug) for full discovery → select → connect → trust → transfer flow.

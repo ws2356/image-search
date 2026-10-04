@@ -1,1 +1,1 @@
-pyside6-uic.exe .\dt_image_search\view\dts_mainwindow.ui -o  .\dt_image_search\view\dts_mainwindow_ui.py
+uv run --frozen pyside6-uic.exe .\dt_image_search\view\dts_mainwindow.ui -o .\dt_image_search\view\dts_mainwindow_ui.py

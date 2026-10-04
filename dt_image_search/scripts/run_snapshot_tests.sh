@@ -40,23 +40,6 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# Find Python binary
-python_bin=python
-if ! command -v "$python_bin" &> /dev/null; then
-    python_bin=python3
-    if ! command -v "$python_bin" &> /dev/null; then
-        echo "Python not found. Please install Python and ensure it's in your PATH." >&2
-        exit 1
-    fi
-fi
-
-# Check required packages
-echo "Checking required packages..."
-"$python_bin" -c "import pytest; import pytest_qt; import pytest_snapshot; from PIL import Image" 2>/dev/null || {
-    echo "Missing required packages. Installing..."
-    "$python_bin" -m pip install pytest pytest-qt pytest-snapshot Pillow PySide6
-}
-
 # Set environment variables
 export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$ROOT_DIR"
 export IS_TESTING=true
@@ -87,8 +70,8 @@ fi
 PYTEST_ARGS+=("$TEST_DIR")
 
 # Run pytest
-echo "==> Running: $python_bin -m pytest ${PYTEST_ARGS[*]}"
-"$python_bin" -m pytest "${PYTEST_ARGS[@]}" -v
+echo "==> Running: uv run --project \"$ROOT_DIR\" --frozen ... python -m pytest ${PYTEST_ARGS[*]}"
+uv run --project "$ROOT_DIR" --frozen --with pytest-qt --with pytest-snapshot python -m pytest "${PYTEST_ARGS[@]}" -v
 
 # Print results
 if [[ "$MODE" == "record" ]]; then

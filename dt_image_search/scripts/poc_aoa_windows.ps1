@@ -16,4 +16,4 @@ if ([string]::IsNullOrWhiteSpace($env:PYTHONPATH)) {
   $env:PYTHONPATH = "$($env:PYTHONPATH);."
 }
 
-python -m dt_image_search.mobile.transport.poc.android_aoa_poc --host-os windows --mode $Mode --output-root dt_image_search/mobile/transport/poc/runs
+uv run --project $repoRoot --frozen python -m dt_image_search.mobile.transport.poc.android_aoa_poc --host-os windows --mode $Mode --output-root dt_image_search/mobile/transport/poc/runs

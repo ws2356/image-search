@@ -33,16 +33,6 @@ export PYTHONPATH=${PYTHONPATH:-}${PYTHONPATH:+:}.
 
 echo "PYTHONPATH set to: $PYTHONPATH"
 
-python_bin=python
-if ! command -v $python_bin &> /dev/null; then
-    echo "$python_bin could not be found, trying python..."
-    python_bin=python3
-    if ! command -v $python_bin &> /dev/null; then
-        echo "Neither python nor python3 could be found. Please install Python and ensure it's in your PATH."
-        exit 1
-    fi
-fi
-
 export IS_TESTING=true
 
 unit_and_functional_tests=(
@@ -102,7 +92,7 @@ unit_and_functional_tests=(
 
 has_failed=false
 for test in "${unit_and_functional_tests[@]}"; do
-  if ! $python_bin "$test"; then
+  if ! uv run --project "$this_dir/../.." --frozen python "$test"; then
     has_failed=true
   fi
 done
@@ -130,8 +120,8 @@ fi
 # Run snapshot tests (if pytest-qt is available)
 echo ""
 echo "Running snapshot tests..."
-if $python_bin -c "import pytest_qt" 2>/dev/null; then
-  if ! $python_bin -m pytest tests/snapshot/ -v; then
+if uv run --project "$this_dir/../.." --frozen python -c "import pytest_qt" 2>/dev/null; then
+  if ! uv run --project "$this_dir/../.." --frozen python -m pytest tests/snapshot/ -v; then
     echo "Some snapshot tests failed."
     exit 1
   fi
