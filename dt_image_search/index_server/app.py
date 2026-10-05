@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from dt_image_search.index_server.auth import token_verifier
+from dt_image_search.index_server.routes import attach_routes
 from dt_image_search.bm_context import BMContext
 
 
@@ -26,19 +27,16 @@ def create_app(ctx: BMContext, token: str, static_dir: str | None = None) -> Fas
     app.state.token = token
 
     verify = token_verifier(token)
-    protected = APIRouter(dependencies=[Depends(verify)])
+    # Routes added later (routes.attach_routes) hang off this protected list;
+    # /health stays token-free below.
+    app.auth_dependencies = [Depends(verify)]
+    attach_routes(app)
 
     @app.get("/health")
     async def health():
         # Token-free on purpose: the shell probes liveness before it hands
         # the authenticated URL to the web view.
         return {"status": "ok"}
-
-    @protected.get("/ping")
-    async def ping():
-        return {"ok": True}
-
-    app.include_router(protected)
 
     if static_dir and Path(static_dir).is_dir():
         app.mount("/", SPAStaticFiles(directory=static_dir, html=True), name="webui")

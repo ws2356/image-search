@@ -83,6 +83,10 @@ unit_and_functional_tests=(
   tests/unit/test_search_service.py
   tests/unit/test_folder_service.py
   tests/unit/test_status_messenger.py
+  tests/unit/test_get_file_by_id.py
+  tests/unit/test_index_server_auth.py
+  tests/unit/test_index_server_app.py
+  tests/unit/test_index_server_routes.py
   tests/functional/test_mobile_backup_flow.py
   tests/functional/test_usb_handshake_pc_side.py
   # tests/functional/test_instant_share_e2e.py

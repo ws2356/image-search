@@ -199,6 +199,13 @@ def get_file_by_path(conn, path: str) -> File:
         return File(id=row[0], path=row[1], folder_id=row[2], clip_index=row[3], status=row[4])
     return None
 
+def get_file_by_id(conn, file_id: int) -> File:
+    cursor = conn.execute("SELECT id, path, folder_id, clip_index, status FROM files WHERE id = ?", (file_id,))
+    row = cursor.fetchone()
+    if row:
+        return File(id=row[0], path=row[1], folder_id=row[2], clip_index=row[3], status=row[4])
+    return None
+
 @perffunc
 def get_direct_child_files(conn, subtree: str) -> list[File]:
     # Replace '\' with '/' for consistency
