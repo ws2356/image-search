@@ -1,13 +1,16 @@
 <script setup lang="ts">
 // Text-to-image search page: debounced query → merged per-folder CLIP results.
 import { useSearchStore } from '../stores/search'
+import { useViewerStore } from '../stores/viewer'
 import { useRouter } from 'vue-router'
 import ImageGrid from '../components/ImageGrid.vue'
 
 const store = useSearchStore()
+const viewer = useViewerStore()
 const router = useRouter()
 
 function open(id: string) {
+  viewer.setContext(store.results.map((r) => r.id))
   void router.push(`/viewer/${id}`)
 }
 </script>

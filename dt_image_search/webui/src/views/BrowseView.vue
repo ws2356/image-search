@@ -6,12 +6,14 @@ import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import type { FolderDto, FileDto } from '../api/types'
 import { useFoldersStore } from '../stores/folders'
+import { useViewerStore } from '../stores/viewer'
 import FolderTree from '../components/FolderTree.vue'
 import ImageGrid from '../components/ImageGrid.vue'
 import AddFolderButton from '../components/AddFolderButton.vue'
 
 const router = useRouter()
 const folderStore = useFoldersStore()
+const viewer = useViewerStore()
 const hasFolders = computed(() => folderStore.folders.length > 0)
 const selectedFolder = ref<FolderDto | null>(null)
 const files = ref<FileDto[]>([])
@@ -43,6 +45,7 @@ function onTreeChanged() {
 }
 
 function open(id: string) {
+  viewer.setContext(files.value.map((f) => f.id))
   void router.push(`/viewer/${id}`)
 }
 </script>
