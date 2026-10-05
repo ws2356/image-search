@@ -1,13 +1,18 @@
 # FastAPI app factory for the index server: token-protected API surface,
-# token-free /health for the shell's liveness probe, and optional static
-# hosting of the Vue3 build with SPA history-mode fallback.
+# token-free /health for the shell's liveness probe, optional static hosting
+# of the Vue3 build with SPA history-mode fallback, and the /events WebSocket
+# fed by the dts_event_bus bridge.
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import Depends, FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
 from dt_image_search.index_server.auth import token_verifier
 from dt_image_search.index_server.routes import attach_routes
+from dt_image_search.index_server.event_bridge import attach_event_bridge
+from dt_image_search.index_server.ws import EventBroker
 from dt_image_search.bm_context import BMContext
 
 
@@ -22,7 +27,16 @@ class SPAStaticFiles(StaticFiles):
 
 
 def create_app(ctx: BMContext, token: str, static_dir: str | None = None) -> FastAPI:
-    app = FastAPI()
+    broker = EventBroker(token)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        broker.attach_loop(asyncio.get_running_loop())
+        bridge = attach_event_bridge(broker)
+        yield
+        bridge.dispose()
+
+    app = FastAPI(lifespan=lifespan)
     app.state.ctx = ctx
     app.state.token = token
 
@@ -40,5 +54,9 @@ def create_app(ctx: BMContext, token: str, static_dir: str | None = None) -> Fas
 
     if static_dir and Path(static_dir).is_dir():
         app.mount("/", SPAStaticFiles(directory=static_dir, html=True), name="webui")
+
+    @app.websocket("/events")
+    async def events(websocket: WebSocket):
+        await broker.connect(websocket)
 
     return app
