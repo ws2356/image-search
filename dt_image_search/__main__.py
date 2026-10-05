@@ -3,9 +3,10 @@ import os
 import plistlib
 import time
 import uuid
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['MKL_NUM_THREADS'] = '1'
+
+from dt_image_search.tools.process_env import setup_process_env
+
+setup_process_env()
 
 import sys
 import threading

@@ -1,7 +1,12 @@
+# App data path resolution, Qt-free.
+# Replicates QStandardPaths.AppLocalDataLocation's per-OS base so the Qt-free
+# shell/server processes resolve the exact same directory as the Qt build;
+# pinned by tests/unit/test_dts_fs.py::TestQtFreeBasePathMatchesQt.
 import os
-from pathlib import Path
+import sys
 import threading
-from PySide6.QtCore import QStandardPaths
+from pathlib import Path
+
 from pc_common.build_flavor import BUILD_TYPE_DEV, DesktopApp, get_build_type, get_desktop_app
 
 _data_lock = threading.Lock()
@@ -13,6 +18,16 @@ def get_app_private_name() -> str:
     return "DTImageSearch-dev" if get_build_type() == BUILD_TYPE_DEV else "DTImageSearch"
 
 
+def get_app_data_base_path() -> Path:
+    """Per-OS base path matching QStandardPaths.AppDataLocation."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support"
+    if sys.platform == "win32":
+        return Path(os.environ["APPDATA"])
+    # Unix: XDG_DATA_HOME, falling back to ~/.local/share
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+
+
 def get_app_data_path() -> Path:
     app_data_segment = get_app_private_name()
     # Add a lock to protect against reentrant calls
@@ -21,8 +36,7 @@ def get_app_data_path() -> Path:
     data_path_cache_key = f"BM_DATA_PATH_{app_data_segment}"
     with _data_lock:
         if not os.getenv(data_path_cache_key):
-            _base_path = QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)
-            _data_path = Path(_base_path) / app_data_segment
+            _data_path = get_app_data_base_path() / app_data_segment
             _data_path.mkdir(parents=True, exist_ok=True)
             os.environ[data_path_cache_key] = str(_data_path)
     return Path(os.getenv(data_path_cache_key))
