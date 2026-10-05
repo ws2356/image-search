@@ -9,6 +9,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metada
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
+# The web UI build (Vue3) is hosted by the index server from inside the bundle.
+datas += [("dt_image_search/webui/dist", "webui/dist")]
 platform_resource_includes = [
     "resources/ios_bitten_apple_gray.png",
     "resources/icon.png",
@@ -62,12 +64,15 @@ if sys.platform == "darwin":
     ]
 
 a = Analysis(
-    ['__main__.py', 'scripts/instant_share_agent_main.py'],
+    ['dt_image_search/shell_main_entry.py', 'dt_image_search/index_server_main.py', '__main__.py', 'scripts/instant_share_agent_main.py'],
     pathex=[],
     binaries=heif_binaries,
     datas=datas,
     hiddenimports=[
         'hf_xet',
+        # Qt-free shell dependencies (imported lazily inside functions).
+        'webview',
+        'pystray',
         # Import only the modules the desktop app uses. collect_all("pymobiledevice3")
         # also bundles sslpsk_pmd3's OpenSSL dylibs, which can shadow Python's
         # own libcrypto/libssl inside the app bundle and break import ssl.
@@ -87,29 +92,55 @@ a = Analysis(
 )
 
 # Split the combined scripts TOC into separate entry points
+_shell_script = None
+_index_server_script = None
 _main_script = None
 _daemon_script = None
 for _entry in a.scripts:
     _src = _entry[1]
-    if _src.endswith('__main__.py'):
+    if _src.endswith('shell_main_entry.py'):
+        _shell_script = _entry
+    elif _src.endswith('index_server_main.py'):
+        _index_server_script = _entry
+    elif _src.endswith('__main__.py'):
         _main_script = _entry
     elif _src.endswith('instant_share_agent_main.py'):
         _daemon_script = _entry
 
-if _main_script is None or _daemon_script is None:
+if None in (_shell_script, _index_server_script, _main_script, _daemon_script):
     raise ValueError(
         "Could not identify entry-point scripts in the Analysis TOC. "
-        "Expected '__main__.py' and 'instant_share_agent_main.py'."
+        "Expected 'shell_main_entry.py', 'index_server_main.py', '__main__.py' "
+        "and 'instant_share_agent_main.py'."
     )
 
 pyz = PYZ(a.pure)
 
-exe_main = EXE(
+# The shell is the shipped executable; the index server is its sidecar child.
+exe_shell = EXE(
     pyz,
-    [_main_script],
+    [_shell_script],
     [],
     exclude_binaries=True,
     name=app_name,
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=upx_enabled,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+exe_index_server = EXE(
+    pyz,
+    [_index_server_script],
+    [],
+    exclude_binaries=True,
+    name="AuSearchIndexServer",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -140,8 +171,28 @@ exe_daemon = EXE(
     entitlements_file=None,
 )
 
+exe_qt_fallback = EXE(
+    pyz,
+    [_main_script],
+    [],
+    exclude_binaries=True,
+    name=f"{app_name}QtFallback",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=upx_enabled,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 coll = COLLECT(
-    exe_main,
+    exe_shell,
+    exe_index_server,
+    exe_qt_fallback,
     exe_daemon,
     a.binaries,
     a.datas,
