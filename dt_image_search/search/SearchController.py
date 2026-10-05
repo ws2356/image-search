@@ -7,11 +7,8 @@ from PySide6.QtGui import QStandardItem
 from PySide6.QtWidgets import QFileSystemModel
 from dt_image_search.base.image_list_model import ImageListModel
 from dt_image_search.browse.folder_list_model import FolderListModel
-from dt_image_search.model.dts_db import create_db_conn, get_all_folders
-from dt_image_search.model.dts_folder import Folder
-from pc_common.model.dts_fs import get_app_data_path
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
-from dt_image_search.index.dts_index import query_index, index_path_for_folder, TOP_K
+from dt_image_search.search.search_service import search_folders, ModelNotReadyError
 from dt_image_search.tools.dts_debounce import debounce
 from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.tools.dts_dispatcher import dispatcher
@@ -48,32 +45,15 @@ class SearchController(BaseController):
 
         log("info", message=f"Search query: {query}")
         status_messenger.show(f"Searching for: {query}")
-        # TODO: do this in async job which can be cancelled
         dispatcher.post(lambda: self.imageListModel.load_images_from_paths([]))
 
-        results = []
-        with create_db_conn() as conn:
-            folders = get_all_folders(conn)
-            for folder in folders:
-                results_in_folder = self._search_in_folder(folder, query)
-                if results_in_folder:
-                    dispatcher.post(lambda res=results_in_folder[0]: self.imageListModel.add_image(res))
-                for item in results_in_folder:
-                    log("debug", message=f"Found item: {item[0]} with score: {item[1]}")
-                results.extend(results_in_folder)
-                results = sorted(results, key=lambda x: x[1], reverse=True)[:TOP_K]
+        try:
+            results = search_folders(self.ctx, query)
+        except ModelNotReadyError as e:
+            status_messenger.show(f"Model not ready ({e.state}). Please wait for the model to load.")
+            return
+
         if not results:
             log("info", message="No results found for the search query")
         status_messenger.show(f"Search completed with {len(results)} results.")
         dispatcher.post(lambda: self.imageListModel.load_images(results))
-    
-    @profile
-    def _search_in_folder(self, folder: Folder, query: str):
-        log("info", message=f"Searching in folder: {folder.path}")
-        # Implement the search logic here
-        # This could involve querying a database or filtering files in the folder
-        index_path = index_path_for_folder(folder=folder)
-        if not Path(index_path).exists():
-            log("warning", "search", message=f"Index file does not exist for folder: {folder.path}")
-            return []
-        return query_index(ctx=self.ctx, folder_id=folder.id, index_path=index_path, query_text=query)

@@ -80,6 +80,7 @@ unit_and_functional_tests=(
   tests/unit/test_device_identity.py
   tests/unit/test_runtime_metadata.py
   tests/unit/test_search_controller.py
+  tests/unit/test_search_service.py
   tests/unit/test_status_messenger.py
   tests/functional/test_mobile_backup_flow.py
   tests/functional/test_usb_handshake_pc_side.py

@@ -85,44 +85,33 @@ class TestSearchController(unittest.TestCase):
             # But SearchController inherits from BaseController which is NOT mocked.
             self.controller.is_active = True
 
-    @patch('dt_image_search.search.SearchController.create_db_conn')
-    @patch('dt_image_search.search.SearchController.get_all_folders')
-    @patch('dt_image_search.search.SearchController.query_index')
+    @patch('dt_image_search.search.SearchController.search_folders')
     @patch('dt_image_search.search.SearchController.dispatcher')
     @patch('dt_image_search.search.SearchController.status_messenger')
     @patch('dt_image_search.search.SearchController.log')
-    @patch('dt_image_search.search.SearchController.index_path_for_folder')
-    @patch('pathlib.Path.exists')
-    def test_on_search_query_non_empty(self, mock_exists, mock_index_path, mock_log, mock_status_bar, mock_dispatcher, mock_query_index, mock_get_folders, mock_db_conn):
+    def test_on_search_query_non_empty(self, mock_log, mock_status_bar, mock_dispatcher, mock_search_folders):
         # Setup
-        mock_exists.return_value = True
-        mock_index_path.return_value = "/mock/index/path"
-        
-        mock_folder = Folder(id="1", path="/mock/folder", status=2, added_at="2023-01-01")
-        mock_get_folders.return_value = [mock_folder]
-        
-        mock_query_index.return_value = [("/mock/image.jpg", 0.9)]
-        
+        mock_search_folders.return_value = [("/mock/image.jpg", 0.9)]
+
         # Mock dispatcher.post to execute immediately
         mock_dispatcher.post.side_effect = lambda f: f()
-        
+
         # Execute
         self.controller.on_search_query("test query")
-        
+
         # Verify
         mock_status_bar.show.assert_any_call("Searching for: test query")
-        mock_query_index.assert_called_once_with(ctx=self.mock_ctx, folder_id="1", index_path="/mock/index/path", query_text="test query")
+        mock_search_folders.assert_called_once_with(self.mock_ctx, "test query")
         self.mock_image_list_model.load_images.assert_called_once_with([("/mock/image.jpg", 0.9)])
         mock_status_bar.show.assert_any_call("Search completed with 1 results.")
 
-    @patch('dt_image_search.search.SearchController.create_db_conn')
-    @patch('dt_image_search.search.SearchController.get_all_folders')
+    @patch('dt_image_search.search.SearchController.search_folders')
     @patch('dt_image_search.search.SearchController.dispatcher')
     @patch('dt_image_search.search.SearchController.status_messenger')
     @patch('dt_image_search.search.SearchController.log')
-    def test_on_search_query_empty(self, mock_log, mock_status_bar, mock_dispatcher, mock_get_folders, mock_db_conn):
+    def test_on_search_query_empty(self, mock_log, mock_status_bar, mock_dispatcher, mock_search_folders):
         # Setup
-        mock_get_folders.return_value = []
+        mock_search_folders.return_value = []
         mock_dispatcher.post.side_effect = lambda f: f()
         
         # Execute
