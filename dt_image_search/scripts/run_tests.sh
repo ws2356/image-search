@@ -87,8 +87,14 @@ unit_and_functional_tests=(
   tests/unit/test_index_server_auth.py
   tests/unit/test_index_server_app.py
   tests/unit/test_index_server_routes.py
+  tests/unit/test_index_server_media.py
   tests/unit/test_ws_broker.py
   tests/unit/test_event_bridge.py
+  tests/unit/test_app_bootstrap.py
+  tests/unit/test_shell_api.py
+  tests/unit/test_server_process.py
+  tests/unit/test_shell_main.py
+  tests/unit/test_dts_fs.py
   tests/functional/test_mobile_backup_flow.py
   tests/functional/test_usb_handshake_pc_side.py
   # tests/functional/test_instant_share_e2e.py
