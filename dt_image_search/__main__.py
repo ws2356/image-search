@@ -65,6 +65,7 @@ init_telemetry(
 )
 
 from dt_image_search.bm_context import get_context, BMContext, setup_model_cache
+from dt_image_search.app_bootstrap import init_indexing_pipeline, deinit_indexing_pipeline
 from pc_common.model.feature_flags import (
     DesktopVersionFlag,
     get_version_update_requirement,
@@ -812,11 +813,9 @@ def qt_message_handler(mode, context, message):
 
 def cleanup():
     _crash_recovery.disable_native_crash_dump_capture()
-    stop_watch()
+    deinit_indexing_pipeline()
     flush_telemetry()
     _crash_recovery.clear_run_marker()
-    deinit_incremental_index_workers()
-    deinit_index_workers()
     close_activation_server()
     release_single_instance_lock()
 
@@ -877,11 +876,7 @@ def main():
 
     startup_counter.add(1)
 
-    model_downloader_init(ctx)  # Start model downloader if needed
-    index_init(ctx)  # Initialize the index system
-    init_incremental_index_workers(ctx)  # Initialize incremental index workers
-    init_index_workers(ctx)  # Initialize index workers
-    start_watch(ctx)  # Start watching file system changes
+    init_indexing_pipeline(ctx)  # Shared with the index server entrypoint.
     
     # Install Qt message handler
     from PySide6.QtCore import qInstallMessageHandler

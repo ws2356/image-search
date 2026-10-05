@@ -21,7 +21,7 @@ class TestIndexServerReadyHandshake(unittest.TestCase):
                 env[key] = temp_dir
 
             proc = subprocess.Popen(
-                [sys.executable, "-m", "dt_image_search.index_server", "--auth-token", "test-token-xyz"],
+                [sys.executable, "-m", "dt_image_search.index_server", "--auth-token", "test-token-xyz", "--skip-model-init"],
                 cwd=REPO_ROOT,
                 env=env,
                 stdout=subprocess.PIPE,
