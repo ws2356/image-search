@@ -89,7 +89,7 @@ class TestSearchController(unittest.TestCase):
     @patch('dt_image_search.search.SearchController.get_all_folders')
     @patch('dt_image_search.search.SearchController.query_index')
     @patch('dt_image_search.search.SearchController.dispatcher')
-    @patch('dt_image_search.search.SearchController.status_bar_messenger')
+    @patch('dt_image_search.search.SearchController.status_messenger')
     @patch('dt_image_search.search.SearchController.log')
     @patch('dt_image_search.search.SearchController.index_path_for_folder')
     @patch('pathlib.Path.exists')
@@ -110,15 +110,15 @@ class TestSearchController(unittest.TestCase):
         self.controller.on_search_query("test query")
         
         # Verify
-        mock_status_bar.show_status_message.emit.assert_any_call("Searching for: test query")
+        mock_status_bar.show.assert_any_call("Searching for: test query")
         mock_query_index.assert_called_once_with(ctx=self.mock_ctx, folder_id="1", index_path="/mock/index/path", query_text="test query")
         self.mock_image_list_model.load_images.assert_called_once_with([("/mock/image.jpg", 0.9)])
-        mock_status_bar.show_status_message.emit.assert_any_call("Search completed with 1 results.")
+        mock_status_bar.show.assert_any_call("Search completed with 1 results.")
 
     @patch('dt_image_search.search.SearchController.create_db_conn')
     @patch('dt_image_search.search.SearchController.get_all_folders')
     @patch('dt_image_search.search.SearchController.dispatcher')
-    @patch('dt_image_search.search.SearchController.status_bar_messenger')
+    @patch('dt_image_search.search.SearchController.status_messenger')
     @patch('dt_image_search.search.SearchController.log')
     def test_on_search_query_empty(self, mock_log, mock_status_bar, mock_dispatcher, mock_get_folders, mock_db_conn):
         # Setup
@@ -129,9 +129,9 @@ class TestSearchController(unittest.TestCase):
         self.controller.on_search_query("")
         
         # Verify
-        mock_status_bar.show_status_message.emit.assert_any_call("Searching for: ")
+        mock_status_bar.show.assert_any_call("Searching for: ")
         self.mock_image_list_model.load_images.assert_called_with([])
-        mock_status_bar.show_status_message.emit.assert_any_call("Search completed with 0 results.")
+        mock_status_bar.show.assert_any_call("Search completed with 0 results.")
 
     def test_is_active_setter(self):
         # Test that setting is_active to False calls on_detach

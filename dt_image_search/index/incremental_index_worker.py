@@ -20,7 +20,7 @@ from dt_image_search.model.dts_db import (
     rename_files_in_folder
 )
 from pc_common.telemetry.telemetry_client import log, with_trace
-from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools import status_messenger
 from dt_image_search.index.index_worker import resume_index_workers
 from dt_image_search.tools.dts_event_bus import default_bus
 from dt_image_search.bm_context import BMContext 
@@ -78,7 +78,7 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
                     log("info", message="No files to incrementally index.")
                     return
 
-                status_bar_messenger.show_status_message.emit(f"Indexing new files...")
+                status_messenger.show(f"Indexing new files...")
 
                 for folder_id, files in folderId2FilePaths.items():
                     folder = folderId2Folders.get(folder_id)
@@ -109,7 +109,7 @@ class FileCreationIndexWorker(BaseIncrementalIndexWorker):
                     else:
                         update_folder_status(conn, folder_id, 1)  # For failing case, set status to indexing so that it can be picked up by index_worker
                         resume_index_workers(ctx=self.ctx)
-                status_bar_messenger.show_status_message.emit(f"Incremental updating index completed.")
+                status_messenger.show(f"Incremental updating index completed.")
         finally:
             # Always remove worker from list when done, even if an exception occurred
             with _workers_lock:
@@ -133,7 +133,7 @@ def _on_created(ctx: BMContext, events: list[watchdog.events.FileCreatedEvent]):
 @with_trace("incremental_index_worker._on_deleted")
 def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     try:
-        status_bar_messenger.show_status_message.emit(f"File deletion started...")
+        status_messenger.show(f"File deletion started...")
         with create_db_conn() as conn:
             file_id_set = set()
             folder_id_folder_map = {}
@@ -164,12 +164,12 @@ def _on_deleted(ctx: BMContext, events: list[watchdog.events.FileDeletedEvent]):
     except Exception as e:
         log("error", message=f"Error during file deletion handling: {e}")
     finally:
-        status_bar_messenger.show_status_message.emit(f"File deletion completed.")
+        status_messenger.show(f"File deletion completed.")
 
 @with_trace("incremental_index_worker._on_moved")
 def _on_moved(ctx: BMContext, events: list[watchdog.events.FileMovedEvent]):
     try:
-        # status_bar_messenger.show_status_message.emit(f"File/folder renaming started...")
+        # status_messenger.show(f"File/folder renaming started...")
         created_events = []
         deleted_events = []
         internal_rename_events = []

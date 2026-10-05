@@ -86,6 +86,7 @@ from pc_common.telemetry.telemetry_client import flush_telemetry, startup_counte
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.tools.dts_util import normalized_folder_path
 from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools import status_messenger
 from dt_image_search.view.dts_esc_clear_event_filter import DTSEscClearEventFilter
 from dt_image_search.view.folder_tree_item_delegate import FolderTreeItemDelegate
 from dt_image_search.fs.bm_fs_monitor import start_watch, stop_watch, remove_folder
@@ -367,6 +368,9 @@ class MainWindow(QMainWindow):
             view.setSelectionMode(QAbstractItemView.NoSelection)
 
         status_bar_messenger.show_status_message.connect(self._on_show_status_message)
+        # Bridge the Qt-free status stream into the legacy Qt status bar.
+        # Kept until the Qt UI is retired; the web EventBridge reads the same stream directly.
+        status_messenger.subscribe(lambda m: status_bar_messenger.show_status_message.emit(m))
 
         self.esc_clear_filter = DTSEscClearEventFilter(self)
         self.ui.searchInputField.installEventFilter(self.esc_clear_filter)

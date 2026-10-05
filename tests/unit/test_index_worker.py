@@ -80,7 +80,7 @@ class TestIndexWorkerTraversalErrors(unittest.TestCase):
                     "dt_image_search.index.index_worker.build_index",
                     return_value=iter([{"files_processed": 1, "total_files": 1, "batch_result": True}]),
                 ),
-                patch("dt_image_search.index.index_worker.status_bar_messenger", status_bar_mock),
+                patch("dt_image_search.index.index_worker.status_messenger", status_bar_mock),
                 patch("dt_image_search.index.index_worker.os.scandir", side_effect=_scandir),
             ):
                 worker._run_impl()
@@ -90,7 +90,7 @@ class TestIndexWorkerTraversalErrors(unittest.TestCase):
                 [call.args[2] for call in update_folder_status_mock.call_args_list],
                 [0, 1, 3],
             )
-            status_bar_mock.show_status_message.emit.assert_any_call(f"Indexing partially failed: {folder.path}")
+            status_bar_mock.show.assert_any_call(f"Indexing partially failed: {folder.path}")
 
 
 if __name__ == "__main__":

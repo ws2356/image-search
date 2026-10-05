@@ -12,7 +12,7 @@ from dt_image_search.index.dts_index import (
 from dt_image_search.model.dts_db import create_db_conn, insert_file, update_folder_status, get_all_folders, get_folder_by_path
 from pc_common.telemetry.telemetry_client import log, with_trace
 from dt_image_search.tools.dts_util import normalized_folder_path
-from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools import status_messenger
 from dt_image_search.bm_context import BMContext
 from dt_image_search.tools.dts_event_bus import default_bus
 
@@ -44,7 +44,7 @@ class IndexWorker:
         try:
             # Check if the worker is stopped regularly to avoid unnecessary processing
             with create_db_conn() as conn:
-                status_bar_messenger.show_status_message.emit(f"Indexing folder: {self.folder.path}")
+                status_messenger.show(f"Indexing folder: {self.folder.path}")
 
                 folder_id = self.folder.id
                 update_folder_status(conn, folder_id, 0)
@@ -98,7 +98,7 @@ class IndexWorker:
                 _traverse_dir(folder_path=folder_path)
                 if self._is_stopped:
                     log("info", message="Indexing stopped by user.")
-                    status_bar_messenger.show_status_message.emit(f"Indexing canceled: {self.folder.path}")
+                    status_messenger.show(f"Indexing canceled: {self.folder.path}")
                     return
 
                 update_folder_status(conn, folder_id, 1)
@@ -109,17 +109,17 @@ class IndexWorker:
                 for progress in build_index(ctx=self.ctx, index_path=index_path, folder_id=folder_id):
                     if self._is_stopped:
                         log("info", message="Indexing stopped by user during build_index.")
-                        status_bar_messenger.show_status_message.emit(f"Indexing canceled: {self.folder.path}")
+                        status_messenger.show(f"Indexing canceled: {self.folder.path}")
                         return
                     log("debug", message=f"Index progress: {progress['files_processed']}/{progress['total_files']} files processed")
-                    status_bar_messenger.show_status_message.emit(f"Indexing folder ({self.folder.path}) - {progress['files_processed']}/{progress['total_files']} files processed")
+                    status_messenger.show(f"Indexing folder ({self.folder.path}) - {progress['files_processed']}/{progress['total_files']} files processed")
                     if not progress['batch_result']:
                         all_success = False
                 
                 if all_success and traversal_issue_count == 0:
                     log("info", message="Indexing succeeded.")
                     update_folder_status(conn, folder_id, 2)
-                    status_bar_messenger.show_status_message.emit(f"Indexing completed: {self.folder.path}")
+                    status_messenger.show(f"Indexing completed: {self.folder.path}")
                 else:
                     log(
                         "error",
@@ -133,7 +133,7 @@ class IndexWorker:
                         ),
                     )
                     update_folder_status(conn, folder_id, 3)
-                    status_bar_messenger.show_status_message.emit(f"Indexing partially failed: {self.folder.path}")
+                    status_messenger.show(f"Indexing partially failed: {self.folder.path}")
         finally:
             # Always remove worker from list when done, even if an exception occurred
             with _workers_lock:

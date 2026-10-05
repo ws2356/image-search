@@ -26,7 +26,7 @@ from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.tools.dts_throttle import ThrottledCallback
 from pc_common.telemetry.telemetry_client import log, with_trace
 from dt_image_search.dts_constants import IS_MODEL_DOWNLOADED
-from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools import status_messenger
 from dt_image_search.tools.dts_event_bus import default_bus
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
@@ -601,7 +601,7 @@ def _set_model_failed(message: str):
         _model_load_failed_event.set()
         _model_reload_ready.clear()
     default_bus.publish("model_load_failed")
-    status_bar_messenger.show_status_message.emit(message)
+    status_messenger.show(message)
     log("error", "model", message=message)
 
 
@@ -663,7 +663,7 @@ def _preload_model(ctx: BMContext):
     def progress_callback(downloaded_bytes: int, total_bytes: typing.Optional[int], filename: str):
         if total_bytes:
             percent = (downloaded_bytes / total_bytes) * 100
-            status_bar_messenger.show_status_message.emit(
+            status_messenger.show(
                 f"Downloading model... {percent:.1f}%"
             )
     _throttled_progress_callback = ThrottledCallback(progress_callback, throttle_interval=1.0)
@@ -671,7 +671,7 @@ def _preload_model(ctx: BMContext):
     _MAX_ATTEMPTS = 3
     for _attempt in range(_MAX_ATTEMPTS):
         try:
-            status_bar_messenger.show_status_message.emit("Model init...")
+            status_messenger.show("Model init...")
             torch.set_grad_enabled(False)
             log("info", message=f"Attempt {_attempt + 1} before loading model")
             model, _, preprocess = open_clip.create_model_and_transforms(
@@ -680,7 +680,7 @@ def _preload_model(ctx: BMContext):
                 download_callback=_throttled_progress_callback
                 )
             log("info", message=f"Attempt {_attempt + 1} model downloaded")
-            status_bar_messenger.show_status_message.emit("Model downloaded")
+            status_messenger.show("Model downloaded")
 
             _preprocess = preprocess
             _tokenizer = open_clip.get_tokenizer(ctx.model_name)
@@ -692,7 +692,7 @@ def _preload_model(ctx: BMContext):
                 _model_state = MODEL_STATE_READY
                 _model_loaded_event.set()
 
-            status_bar_messenger.show_status_message.emit("Model inited")
+            status_messenger.show("Model inited")
             # with create_db_conn() as conn:
             #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
             break
@@ -713,7 +713,7 @@ def _preload_model(ctx: BMContext):
         time.sleep(3)
     if _model_state == MODEL_STATE_READY:
         _model_reload_ready.set()
-        status_bar_messenger.show_status_message.emit("Model inited")
+        status_messenger.show("Model inited")
     else:
         _set_model_failed("Model loading failed after retries.")
 

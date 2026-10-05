@@ -4,7 +4,7 @@ import requests
 import threading
 import datetime
 from pc_common.telemetry.telemetry_client import with_trace, log
-from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools import status_messenger
 from dt_image_search.bm_context import BMContext
 
 model_downloaded_event = threading.Event()
@@ -26,7 +26,7 @@ def _download_pretrained_model(ctx: BMContext):
         except Exception as exc:
             log("error", "model_download", message=f"Failed to remove tmp file: {exc}")
         _cleanup_partial_download(ctx)
-        status_bar_messenger.show_status_message.emit("Downloading model...")
+        status_messenger.show("Downloading model...")
         for _ in range(3):
             try:
                 _download_with_progress(ctx.get_model_download_url(), tmp_path)
@@ -38,11 +38,11 @@ def _download_pretrained_model(ctx: BMContext):
                 log("error", "model_download", message=f"Pretrained model download failed: {exc}")
         ctx.process_downloaded_file(tmp_path)
         log("info", "model_download", message="Succeeded downloading pretrained model")
-        status_bar_messenger.show_status_message.emit("Model downloaded")
+        status_messenger.show("Model downloaded")
         model_downloaded_event.set()
     except Exception as exc:
         log("error", "model_download", message=f"Failed to download pretrained model: {exc}")
-        status_bar_messenger.show_status_message.emit("Model download failed")
+        status_messenger.show("Model download failed")
         _cleanup_partial_download(ctx)
         model_download_failed_event.set()
     finally:
@@ -120,5 +120,5 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
             now = datetime.datetime.now()
             if _last_report_time is None or (now - _last_report_time).total_seconds() >= 3 or percent >= 100:
                 _last_report_time = now
-                status_bar_messenger.show_status_message.emit(f"Downloading model... {percent:.1f}%")
+                status_messenger.show(f"Downloading model... {percent:.1f}%")
                 log("debug", message=f"Download progress: {percent:.1f}%")

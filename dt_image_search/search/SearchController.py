@@ -17,7 +17,7 @@ from dt_image_search.tools.dts_perf import perffunc as profile
 from dt_image_search.tools.dts_dispatcher import dispatcher
 from pc_common.telemetry.telemetry_client import log
 from dt_image_search.bm_context import BMContext
-from dt_image_search.base.status_bar_messenger import status_bar_messenger
+from dt_image_search.tools import status_messenger
 
 class SearchController(BaseController):
     def __init__(self, ctx: BMContext):
@@ -47,7 +47,7 @@ class SearchController(BaseController):
             return
 
         log("info", message=f"Search query: {query}")
-        status_bar_messenger.show_status_message.emit(f"Searching for: {query}")
+        status_messenger.show(f"Searching for: {query}")
         # TODO: do this in async job which can be cancelled
         dispatcher.post(lambda: self.imageListModel.load_images_from_paths([]))
 
@@ -64,7 +64,7 @@ class SearchController(BaseController):
                 results = sorted(results, key=lambda x: x[1], reverse=True)[:TOP_K]
         if not results:
             log("info", message="No results found for the search query")
-        status_bar_messenger.show_status_message.emit(f"Search completed with {len(results)} results.")
+        status_messenger.show(f"Search completed with {len(results)} results.")
         dispatcher.post(lambda: self.imageListModel.load_images(results))
     
     @profile
