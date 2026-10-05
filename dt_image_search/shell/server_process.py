@@ -1,6 +1,7 @@
 # Supervises the index server child process: spawns it with a one-time token,
 # parses the DTS_READY stdout handshake, and restarts it once on unexpected
 # exit (deliberately not unlimited — repeated crashes surface as an exit).
+import os
 import secrets
 import subprocess
 import sys
@@ -37,15 +38,23 @@ class ServerProcess:
         if reader is not None:
             reader.join(timeout=10)
 
+    def child_command(self) -> list:
+        """The command line for the index server child process.
+
+        Dev runs use `python -m`; a PyInstaller bundle has no embedded
+        python, so the sibling executable bundled by COLLECT is launched with
+        an explicit static dir pointing at the bundled web UI resources.
+        """
+        if getattr(sys, "frozen", False):
+            sibling = os.path.join(os.path.dirname(sys.executable), "AuSearchIndexServer")
+            if sys.platform == "win32":
+                sibling += ".exe"
+            static_dir = os.path.join(sys._MEIPASS, "webui", "dist")
+            return [sibling, "--auth-token", self.token, "--static-dir", static_dir]
+        return [self._python_exe, "-m", "dt_image_search.index_server", "--auth-token", self.token, *self._extra_args]
+
     def _spawn(self) -> None:
-        args = [
-            self._python_exe,
-            "-m",
-            "dt_image_search.index_server",
-            "--auth-token",
-            self.token,
-            *self._extra_args,
-        ]
+        args = self.child_command()
         self._proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
         self._reader_thread.start()

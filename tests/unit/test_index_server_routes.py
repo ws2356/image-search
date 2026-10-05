@@ -249,6 +249,31 @@ class TestSearchRoute(unittest.TestCase):
             self.assertEqual(resp.status_code, 422)
 
 
+class TestStatusRoute(unittest.TestCase):
+    def test_status_returns_model_state_and_folders(self):
+        db = _SqliteFixture()
+        with db:
+            conn = db.connect()
+            conn.execute("INSERT INTO folders (path, status) VALUES ('/p/', 1)")
+            conn.commit()
+            conn.close()
+            with patch(f'{ROUTES}.get_model_state', return_value='ready'):
+                for client in db.client():
+                    resp = client.get("/status", headers=HEADERS)
+            self.assertEqual(resp.status_code, 200)
+            body = resp.json()
+            self.assertEqual(body["model_state"], "ready")
+            self.assertEqual(len(body["folders"]), 1)
+            self.assertEqual(body["folders"][0]["path"], "/p/")
+
+    def test_status_requires_token(self):
+        db = _SqliteFixture()
+        with db:
+            for client in db.client():
+                resp = client.get("/status")
+            self.assertEqual(resp.status_code, 401)
+
+
 class TestBrowseRoute(unittest.TestCase):
     def _seed(self, db):
         conn = db.connect()

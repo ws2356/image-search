@@ -86,5 +86,23 @@ class TestServerProcess(unittest.TestCase):
         self.assertEqual(len(spawns), 1)  # no restart after explicit stop
 
 
+class TestChildCommand(unittest.TestCase):
+    def test_dev_mode_uses_python_dash_m(self):
+        server = ServerProcess(python_exe="/venv/python")
+        cmd = server.child_command()
+        self.assertEqual(cmd, ["/venv/python", "-m", "dt_image_search.index_server", "--auth-token", server.token])
+
+    def test_frozen_mode_uses_sibling_executable_and_bundle_static_dir(self):
+        fake_meipass = "/fake/bundle/_internal"
+        with patch('dt_image_search.shell.server_process.sys') as fake_sys:
+            fake_sys.frozen = True
+            fake_sys.executable = "/fake/bundle/AuSearch"
+            fake_sys.platform = "darwin"
+            fake_sys._MEIPASS = fake_meipass
+            server = ServerProcess()
+            cmd = server.child_command()
+        self.assertEqual(cmd, ["/fake/bundle/AuSearchIndexServer", "--auth-token", server.token, "--static-dir", f"{fake_meipass}/webui/dist"])
+
+
 if __name__ == "__main__":
     unittest.main()
