@@ -3,6 +3,7 @@
 # (folder_service / search_service) and dts_db; handlers are async and wrap
 # sync core calls with asyncio.to_thread (see 2026-10-04-asyncio-migration-notes.md).
 import asyncio
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
@@ -11,9 +12,11 @@ from pydantic import BaseModel, field_validator
 
 from dt_image_search.browse.folder_service import register_folder, watch_and_index, remove_folder, reindex_folder
 from dt_image_search.index.dts_index import is_image_file
+from dt_image_search.index_server.media import ThumbnailCache, FileGoneError
 from dt_image_search.model.dts_db import (
     create_db_conn,
     get_all_folders,
+    get_file_by_id,
     get_folder_by_id,
     get_subfolders,
     get_direct_child_files,
@@ -25,6 +28,8 @@ from dt_image_search.index_server.serializers import (
     search_result_to_dict,
 )
 from dt_image_search.tools.dts_util import is_same_folder_path
+from pc_common.model.dts_fs import get_app_data_path
+from fastapi.responses import FileResponse
 
 
 class FolderAddRequest(BaseModel):
@@ -62,8 +67,14 @@ def _browse_payload(folder, path: str | None):
     return subfolders, files
 
 
+def _file_by_id(file_id: int):
+    with create_db_conn() as conn:
+        return get_file_by_id(conn, file_id)
+
+
 def attach_routes(app) -> None:
     protected = APIRouter(dependencies=app.auth_dependencies)
+    app.state.thumbnail_cache = None  # built lazily on first /thumb call
 
     @protected.get("/ping")
     async def ping():
@@ -129,5 +140,29 @@ def attach_routes(app) -> None:
             "subfolders": [folder_to_dict(f) for f in subfolders],
             "files": [file_to_dict(f) for f in files],
         }
+
+    @protected.get("/thumb/{file_id}")
+    async def thumb_route(request: Request, file_id: int):
+        file = await asyncio.to_thread(_file_by_id, file_id)
+        if file is None:
+            raise HTTPException(status_code=404, detail="file not found")
+        cache = request.app.state.thumbnail_cache
+        if cache is None:
+            cache = ThumbnailCache(cache_dir=str(get_app_data_path() / "thumb_cache"))
+            request.app.state.thumbnail_cache = cache
+        try:
+            thumb_path = await asyncio.to_thread(cache.get_or_build, file)
+        except FileGoneError:
+            raise HTTPException(status_code=404, detail="source image is gone")
+        return FileResponse(thumb_path, media_type="image/jpeg")
+
+    @protected.get("/file/{file_id}")
+    async def file_route(request: Request, file_id: int):
+        file = await asyncio.to_thread(_file_by_id, file_id)
+        if file is None:
+            raise HTTPException(status_code=404, detail="file not found")
+        if not await asyncio.to_thread(os.path.isfile, file.path):
+            raise HTTPException(status_code=404, detail="source image is gone")
+        return FileResponse(file.path)
 
     app.include_router(protected)
