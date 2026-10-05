@@ -6,17 +6,19 @@
 
 **Architecture:** 壳进程(pywebview+pystray)拉起 index server 子进程(FastAPI,stdio 握手 port+token),server 静态托管 Vue3 构建产物并复用现有核心模块(`dts_index`/`dts_db`/worker/`bm_fs_monitor`);`dts_event_bus` 事件经 EventBridge 推送 WS。
 
-**Tech Stack:** Python 3.10 + FastAPI/uvicorn + pywebview + pystray;Vue3 + Vite + Pinia + Vitest(pnpm)。
+**Tech Stack:** Python 3.10 + FastAPI/uvicorn + pywebview + pystray(新增代码 async-first,渐进迁移);Vue3 + Vite + Pinia + **Element Plus**(design token 主题)+ Vitest(pnpm);Python 命令一律 `uv run`。
 
 **Spec:** `docs/superpowers/specs/2026-10-04-web-ui-refactor-design.md`
 
 ## Global Constraints
 
-- Python 3.10;测试通过 `bash scripts/run_tests.sh`(全量)或 `python -m pytest <file> -v`(单文件)验证。
+- Python 3.10;所有 Python 进程/命令一律经 `uv run` 执行(仓库根有 `uv.lock`),禁止直接裸调 `python`/`pip`。测试:`uv run bash scripts/run_tests.sh`(全量)或 `uv run pytest <file> -v`(单文件)。
 - **数据格式完全不变**:app data 路径、`app_data.sqlite` schema、`*.faiss` 文件名/格式、`model_cache/` 结构、`app_config` 键值。新文件只允许出现在新增子目录 `app_data/thumb_cache/`(旧版本会忽略,属增量不属变更)。
 - index server 仅监听 `127.0.0.1`;所有 HTTP 端点与 WS 要求 token(header `X-Auth-Token` 或 query `auth`)。
 - 本期**不改动、不接线** mobile 功能(`mobile/` 目录与 mobile 相关测试保持原样;Qt 移除仅限主 UI 路径)。
 - 前端包管理一律 `pnpm`(禁止 npm/yarn);webui 依赖固定版本。
+- **UI 框架**:webui 一律使用 **Element Plus** 组件(按官方最佳实践:`unplugin-auto-import` + `unplugin-vue-components` 的 `ElementPlusResolver` 自动导入);样式值(颜色/间距/字号/圆角)只允许引用 design token(`webui/src/styles/tokens.css` 的 `--dts-*` 变量,并映射到 Element Plus 的 `--el-*` 主题变量),组件内禁止写裸色值/尺寸。
+- **asyncio 迁移原则(渐进式)**:以本次重构为起点,**新增代码 async-first**——index server 路由 handler 一律 `async def`,调用既有同步核心模块经 `asyncio.to_thread(...)` 包装,事件循环内禁止直接执行阻塞 I/O;既有同步代码**不要求**重写为 asyncio。
 - 每个任务完成:测试通过 → `git commit -m "... [LLM: glm-5.3-flash]"`。
 - 新 Python 测试文件需要 stub 重依赖时,沿用 `tests/unit/test_dts_index.py:22-62` 的 `sys.modules` stub 模式;`dt_image_search/conftest.py` 已 stub `aiortc`。
 
@@ -29,6 +31,22 @@
 5. **模型未就绪时搜索**:返回 503 + 当前 model state,UI 显示"模型加载中"提示,而非空结果假象(Task 5 步骤 2)。
 
 ---
+
+### Task 0: 前置准备——asyncio 集成约定落地
+
+**Files:**
+- Create: `docs/superpowers/specs/2026-10-04-asyncio-migration-notes.md`
+- Test: 无(文档任务;后续任务的测试即其验证)
+
+**Interfaces:**
+- Produces: 仓库级 asyncio 约定文档,后续任务(Task 4-8)引用执行。内容钉死为:
+  1. **范围**:index server 与 webui 配套的 Python 侧新代码 async-first;既有同步核心(`dts_db`/`dts_index`/worker/`bm_fs_monitor`)不重写。
+  2. **边界规则**:async → sync 只允许一种写法:`await asyncio.to_thread(fn, ...)`(或路由内直接 `await to_thread` 包装的 service 调用);sync → async 只允许一种写法:EventBridge 的 `broadcast_threadsafe`(`asyncio.run_coroutine_threadsafe` 到 uvicorn 主 loop)。禁止再引入其他桥接方式(one way to do things)。
+  3. **禁止事项**:在 `async def` 内直接调用阻塞 I/O(文件/SQLite/网络);在事件循环线程内启动自己的 `asyncio.run`;在线程内创建事件循环后与主 loop 通信(必须走 broadcast 模式)。
+  4. **演进方向**:后续 Touch 到的同步模块逐步迁 asyncio;mobile 迁移(下一期)时新代码同样 async-first。
+
+- [ ] **Step 1:** 写上述四节内容到 `docs/superpowers/specs/2026-10-04-asyncio-migration-notes.md`,不超过一页。
+- [ ] **Step 2: Commit** `docs: asyncio migration conventions for web-ui refactor`
 
 ### Task 1: Qt-free 状态消息通道(替代 status_bar_messenger)
 
@@ -43,10 +61,10 @@
 - 兼容:Qt UI 仍工作——`__main__.py` 中 `status_messenger.subscribe(lambda m: status_bar_messenger.show_status_message.emit(m))`(桥接保留至 Qt UI 删除)。
 
 - [ ] **Step 1: 写失败测试** — `show` 依次调用所有已订阅 callback;`dispose` 后不再收到;callback 异常不影响其他订阅者(沿用 `dts_event_bus` 的打印-不抛约定)。
-- [ ] **Step 2:** `python -m pytest tests/unit/test_status_messenger.py -v` → FAIL(模块不存在)。
+- [ ] **Step 2:** `uv run pytest tests/unit/test_status_messenger.py -v` → FAIL(模块不存在)。
 - [ ] **Step 3:** 实现 `tools/status_messenger.py`(纯 Python,无 Qt import,`threading.Lock` 保护订阅列表)。
 - [ ] **Step 4:** 上述 5 个文件把 `from dt_image_search.base.status_bar_messenger import status_bar_messenger` 换成新通道(emit→show);`__main__.py` 加桥接订阅。
-- [ ] **Step 5:** `python -m pytest tests/unit/ -v` 全绿(尤其 `test_index_worker.py`、`test_model_state.py`、`test_search_controller.py`)。
+- [ ] **Step 5:** `uv run pytest tests/unit/ -v` 全绿(尤其 `test_index_worker.py`、`test_model_state.py`、`test_search_controller.py`)。
 - [ ] **Step 6: Commit** `refactor: qt-free status messenger for core modules`
 
 ### Task 2: Qt-free 搜索编排 search_service
@@ -98,8 +116,8 @@
 
 **Interfaces:**
 - Produces:
-  - `create_app(ctx: BMContext, token: str, static_dir: str | None = None) -> FastAPI`;`GET /health` 200(health 不需要 token,供壳探活;其余路由挂 `require_token` 依赖:`X-Auth-Token` header 或 `auth` query,失败 401)。
-  - `main.py`:`python -m dt_image_search.index_server --auth-token <t> [--static-dir <dir>]`:解析参数 → 建 `BMContext`(沿用 `__main__.py` 顶部的 env 设定,提取为函数 `setup_process_env()` 复用)→ uvicorn 监听 `127.0.0.1`、`port=0` → 启动完成后向 stdout 打印一行 `DTS_READY <port>`(uvicorn `startup` 事件里从 `server.servers[0].sockets[0].getsockname()[1]` 取实际端口)。
+  - `create_app(ctx: BMContext, token: str, static_dir: str | None = None) -> FastAPI`;`GET /health` 200(health 不需要 token,供壳探活;其余路由挂 `require_token` 依赖:`X-Auth-Token` header 或 `auth` query,失败 401)。**所有路由 `async def`**(asyncio 约定,见 Task 0 文档)。
+  - `main.py`:`uv run python -m dt_image_search.index_server --auth-token <t> [--static-dir <dir>]`:解析参数 → 建 `BMContext`(沿用 `__main__.py` 顶部的 env 设定,提取为函数 `setup_process_env()` 复用)→ uvicorn 监听 `127.0.0.1`、`port=0` → 启动完成后向 stdout 打印一行 `DTS_READY <port>`(uvicorn `startup` 事件里从 `server.servers[0].sockets[0].getsockname()[1]` 取实际端口)。
   - `static_dir` 提供时挂 `StaticFiles(html=True)` 于 `/` 并带 SPA fallback(未知路径→`index.html`)。
 
 - [ ] **Step 1: 写失败测试** — 无 token 访问受保护路由 → 401;带 `X-Auth-Token`/`auth` query → 200;`/health` 无 token → 200。
@@ -119,7 +137,7 @@
 - Test: `tests/unit/test_index_server_routes.py`、`tests/unit/test_get_file_by_id.py`
 
 **Interfaces:**
-- Consumes: Task 2/3 的 `search_folders`/`add_folder`/`remove_folder`/`reindex_folder`;`dts_db.get_all_folders/get_folder_by_id/delete_folders`。
+- Consumes: Task 2/3 的 `search_folders`/`add_folder`/`remove_folder`/`reindex_folder`;`dts_db.get_all_folders/get_folder_by_id/delete_folders`。路由一律 `async def`,对同步核心的调用经 `asyncio.to_thread(...)`(Task 0 约定)。
 - Produces(序列化契约,Task 9-12 前端依赖):
   - `GET /folders` → `{"folders": [{"id","path","status","added_at"}]}`(id 为字符串)
   - `POST /folders {"path": str}` → 201 + folder 对象;已在库/命中父级 → 200 + 既有 folder(幂等)
@@ -143,7 +161,7 @@
 
 **Interfaces:**
 - Produces: `class ThumbnailCache: __init__(cache_dir: str, max_memory_items: int = 512)`;`get_or_build(file: File, size: int = 300) -> str`(缩略图磁盘路径;磁盘缓存键为 `<sha1(file.path)>_<size>.jpg`,位于 `app_data/thumb_cache/`,内存 LRU 存路径;源文件已消失 → `FileGoneError`)。路由:`GET /thumb/{file_id}` 与 `GET /file/{file_id}`(原图 `FileResponse`),按 `file.path` 供给;id 不存在或文件缺失 → 404。
-- 缩略图生成:PIL `draft()` 降采样(pillow-heif 支持 heic,沿用 `image_processor.py` 的尺寸上限策略)。
+- 缩略图生成:PIL `draft()` 降采样(pillow-heif 支持 heic,沿用 `image_processor.py` 的尺寸上限策略);路由 `async def`,生成/读盘经 `asyncio.to_thread`。
 
 - [ ] **Step 1: 写失败测试** — 生成缩略图并二次命中磁盘缓存(不重新解码);不存在的 id → 404;`cache_dir` 外路径不会被拼接(用 `file.path` 只作数据源断言);原图路由返回 `image/jpeg|png` Content-Type。
 - [ ] **Step 2:** pytest → FAIL。
@@ -183,24 +201,28 @@
 - [ ] **Step 1: 写失败测试** — monkeypatch 上述 init 函数,断言装配顺序与退出清理顺序;`--skip-model-init`(测试开关)时不调用模型 init。
 - [ ] **Step 2:** pytest → FAIL。
 - [ ] **Step 3:** 实现(从 `__main__.py:875-879` + `cleanup():808-816` 提取共享函数,`__main__.py` 与 `main.py` 共用,DRY)。
-- [ ] **Step 4:** pytest → PASS;`bash scripts/run_tests.sh` 全绿。
+- [ ] **Step 4:** pytest → PASS;`uv run bash scripts/run_tests.sh` 全绿。
 - [ ] **Step 5: Commit** `feat: index server process assembly`
 
 ### Task 9: webui 脚手架(pnpm + Vite + Vue3 + Pinia + Vitest)
 
 **Files:**
 - Create: `dt_image_search/webui/`(`package.json`、`vite.config.ts`、`tsconfig.json`、`index.html`、`src/main.ts`、`src/App.vue`、`src/router/index.ts`)
+- Create: `dt_image_search/webui/src/styles/tokens.css`(design token:语义变量 `--dts-color-*`/`--dts-space-*`/`--dts-font-*`/`--dts-radius-*`,并在 `:root` 映射到 Element Plus 主题变量 `--el-color-primary`、`--el-bg-color` 等)
 - Create: `dt_image_search/webui/.gitignore`(`node_modules/`、`dist/`)
 - Modify: `dt_image_search/index_server/app.py`:`--static-dir` 缺省指向 `webui/dist`(存在时)
-- Test: `dt_image_search/webui/tests/smoke.spec.ts`
+- Test: `dt_image_search/webui/tests/smoke.spec.ts`、`tests/tokens.spec.ts`
 
 **Interfaces:**
 - Produces: `pnpm -C webui dev`(开发,vite proxy 将业务前缀 `/folders|/search|/browse|/status|/events|/thumb|/file` 转发到 `http://127.0.0.1:<DTS_DEV_PORT>`,token 从 `VITE_DTS_TOKEN` 读)、`pnpm -C webui build`(产出 `webui/dist`)、`pnpm -C webui test`(vitest)。路由:`/`(浏览)、`/search`、`/settings`、`/viewer/:fileId`(createWebHistory)。
-- 固定版本:vue ^3.5、vite ^7、pinia ^3、vue-router ^4.5、vitest ^3(以锁定日期最新 minor 为准,写死在 package.json)。
+- **Element Plus 集成(官方最佳实践)**:依赖 `element-plus` + `unplugin-auto-import` + `unplugin-vue-components`(resolver: `ElementPlusResolver`);`main.ts` 引入 `tokens.css`;组件经 auto-import 使用,不手写 `import { ElButton }`。
+- **Design token 约则**:`tokens.css` 定义语义层 `--dts-*`(色板、间距、字号、圆角、阴影),`--el-*` 主题变量全部由 `--dts-*` 映射(如 `--el-color-primary: var(--dts-color-primary)`);后续所有组件样式只引用 `--dts-*`,不允许出现裸 hex/px 尺寸。
+- 固定版本:vue ^3.5、element-plus ^2.13、vite ^7、pinia ^3、vue-router ^4.5、vitest ^3(以锁定日期最新 minor 为准,写死在 package.json)。
 
-- [ ] **Step 1:** `pnpm create vue` 等价手写脚手架(无 TS lint 争议项,最小化);`smoke.spec.ts` 断言 `App.vue` 渲染出根容器。
-- [ ] **Step 2:** `pnpm -C webui test` → PASS;`pnpm -C webui build` 成功。
-- [ ] **Step 3: Commit** `feat: webui scaffold (vue3 + vite + pinia, pnpm)`
+- [ ] **Step 1:** 手写最小脚手架(含上述 Element Plus 插件配置);`tokens.css` 初版定义 Primary/语义色与间距/字号/圆角三组 token。
+- [ ] **Step 2:** `smoke.spec.ts` 断言 `App.vue` 渲染出根容器;`tokens.spec.ts` 断言构建产物 CSS 含 `--dts-*` 定义且 `--el-color-primary` 由其映射。
+- [ ] **Step 3:** `pnpm -C webui test` → PASS;`pnpm -C webui build` 成功。
+- [ ] **Step 4: Commit** `feat: webui scaffold (vue3 + vite + pinia + element plus, pnpm, design tokens)`
 
 ### Task 10: webui API client(带 token)
 
@@ -232,6 +254,7 @@
   - `useSearchStore`: `query, results, searching, modelState`;action `runSearch(q)`(输入 300ms 防抖、`ModelNotReady` → `modelState='loading'` 提示而非空结果)。
   - `useFoldersStore`: `folders, load(), add(path)(幂等分支:200 既有/201 新建都收敛为同一 refresh), remove(id)`。
   - `ImageGrid`:缩略图 `thumbUrl` 懒加载(`loading="lazy"`),点击 → `router.push('/viewer/'+id)`;`FolderTree`:folder 状态徽标(0/1/2/3)与删除按钮。
+  - **组件约定**:优先复用 Element Plus 组件(`el-input`/`el-button`/`el-empty`/`el-tooltip` 等),自定义组件只补 EP 没有的形态;样式只引用 `--dts-*` token(见 Task 9)。
 - [ ] **Step 1: 写失败 store 测试**(防抖只发一次请求;幂等添加后 folders 恰好一条;503 分支)。
 - [ ] **Step 2:** vitest → FAIL。
 - [ ] **Step 3:** 实现两个 store + 三个组件 + 两个视图(纯展示与状态编排,无业务计算)。
@@ -269,7 +292,7 @@
 - [ ] **Step 1: 写失败测试** — ShellApi:fake `webview` 模块下 pick_folder 返回选中/None;reveal 按平台映射正确命令(monkeypatch subprocess)。ServerProcess:fake Popen,READY 行解析、崩溃重启一次后不再无限重启。
 - [ ] **Step 2:** pytest → FAIL。
 - [ ] **Step 3:** 实现四个模块。
-- [ ] **Step 4:** pytest PASS;`bash scripts/run_tests.sh` 全绿;手动冒烟:`python -m dt_image_search.shell --static-dir webui/dist` 能选目录→建索引→搜索→查看(记录进 PR 描述)。
+- [ ] **Step 4:** pytest PASS;`uv run bash scripts/run_tests.sh` 全绿;手动冒烟:`uv run python -m dt_image_search.shell --static-dir webui/dist` 能选目录→建索引→搜索→查看(记录进 PR 描述)。
 - [ ] **Step 5: Commit** `feat: pywebview shell with tray and server process management`
 
 ### Task 14: 打包、入口切换、Qt 清理与数据兼容验收
@@ -287,7 +310,7 @@
 - [ ] **Step 1:** 更新 spec 文件与构建脚本,产出可启动的 app(macOS 先行;MSIX 留 TODO 注释)。
 - [ ] **Step 2:** 手动冒烟:打包产物完成 Task 13 冒烟清单。
 - [ ] **Step 3:** **数据兼容验收**(对照 Spec 兼容性约束):用既有 app data 目录 ① 旧 Qt 版启动 → 记录 `app_data` 文件清单与 `app_config` 内容;② 新壳版启动同一目录 → 对比清单(允许新增 `thumb_cache/`,不允许缺失/改名/改格式);③ 新版添加 folder + 索引 → 旧 Qt 版再启动能读同一 DB/faiss 并正常搜索;结论写入 `docs/mobile-folder/[dev]webui-refactor-data-compat-checklist.md`。
-- [ ] **Step 4:** `bash scripts/run_tests.sh` 全绿。
+- [ ] **Step 4:** `uv run bash scripts/run_tests.sh` 全绿。
 - [ ] **Step 5: Commit** `feat: package shell+index server, switch default entry, data-compat acceptance`
 
 > 备注(下一期入口):`tools/dts_dispatcher.py`、`base/status_bar_messenger.py` 及全部 Qt UI 文件(`view/`、`base/` Qt model、`browse/` Qt model)在 mobile 迁移完成后随 PySide6 依赖一并删除;本期它们保持冻结、仅作为回退入口。

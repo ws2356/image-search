@@ -24,6 +24,8 @@
 | D4 | mobile-folder **推迟到下一期**;本期 web UI 不含 mobile 功能 | 先完成主流程重构,缩小首期范围与风险 |
 | D5 | Qt 相关的 `dts_dispatcher`/`status_bar_messenger` **直接删除**,不抽接口保留 | 无 Qt 后无 Qt 消费者;进程内事件统一走 EventBridge → WS |
 | D6 | 打包形态锁死**单 .app bundle(macOS)/ 单安装目录(Windows),index server 为壳的子进程** | TCC 权限归属同一签名身份,shell 选目录 → server 访问自动共享,无需权限转移机制 |
+| D7 | webui 使用 **Element Plus** 组件库 + **design token**(`--dts-*` 映射 `--el-*` 主题变量) | 官方推荐的成熟组件库,auto-import 最佳实践;token 统一样式来源,禁止裸色值 |
+| D8 | **渐进式 asyncio 迁移**:新增代码 async-first(路由 `async def`,同步核心经 `asyncio.to_thread` 包装);既有同步代码不重写 | 以重构为契机建立进程边界内的统一异步模型,又不大规模重写可用的同步核心;约定见 `2026-10-04-asyncio-migration-notes.md` |
 
 ## 兼容性约束(必须满足)
 
@@ -121,7 +123,7 @@ WebSocket `/events`(服务端推送,统一信封 schema):
 
 1. **拆除 Qt 耦合点**:删除 `dts_dispatcher`/`status_bar_messenger` 等 Qt 专用线程派发/状态栏组件;controller 类改为不依赖 Qt 主线程的事件回调;为 controller 类补无 Qt 单测。
 2. **搭建 index server 骨架**:`index_server/main.py`(FastAPI + 仅 127.0.0.1 + token 校验 + 静态托管占位),接入 search/browse/folder/thumb/status API,复用现有模块;补 TestClient 集成测试与数据兼容验证。
-3. **搭建 webui 骨架**:`webui/` Vue3 + Vite + Pinia(pnpm 管理);实现搜索页、浏览页、缩略图加载三件套,先 mock 数据开发再对接真实 server。
+3. **搭建 webui 骨架**:`webui/` Vue3 + Vite + Pinia + Element Plus + design token(pnpm 管理);实现搜索页、浏览页、缩略图加载三件套,先 mock 数据开发再对接真实 server。
 4. **EventBridge**:`default_bus` 事件 → WS 推送;WebUI 实时显示索引进度/状态消息;schema 契约测试。
 5. **添加 folder 全链路**:WebUI → `pywebview.api.pick_folder()`(原生对话框)→ `POST /folders` → 索引入队;reveal-in-Finder 走 JS 桥;浏览器直开时桥缺失需优雅降级(隐藏入口)。
 6. **壳进程**:pywebview 窗口 + loading→ready 握手 + pystray 托盘 + 单实例锁 + macOS 菜单(PyObjC)。
