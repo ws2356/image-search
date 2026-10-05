@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from dt_image_search.browse.folder_service import register_folder, watch_and_index, remove_folder, reindex_folder
-from dt_image_search.index.dts_index import is_image_file
+from dt_image_search.index.dts_index import is_image_file, get_model_state
 from dt_image_search.index_server.media import ThumbnailCache, FileGoneError
 from dt_image_search.model.dts_db import (
     create_db_conn,
@@ -140,6 +140,11 @@ def attach_routes(app) -> None:
             "subfolders": [folder_to_dict(f) for f in subfolders],
             "files": [file_to_dict(f) for f in files],
         }
+
+    @protected.get("/status")
+    async def status_route():
+        folders = await asyncio.to_thread(_list_folders)
+        return {"model_state": get_model_state(), "folders": [folder_to_dict(f) for f in folders]}
 
     @protected.get("/thumb/{file_id}")
     async def thumb_route(request: Request, file_id: int):
