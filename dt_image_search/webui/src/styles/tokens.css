@@ -1,0 +1,66 @@
+/* Design tokens — the single source of styling values for the web UI.
+ * Component styles may only reference --dts-* variables; Element Plus theme
+ * variables (--el-*) are mapped from tokens here, never redefined elsewhere.
+ */
+:root {
+  /* Color palette */
+  --dts-color-primary: #409eff;
+  --dts-color-primary-contrast: #ffffff;
+  --dts-color-success: #67c23a;
+  --dts-color-warning: #e6a23c;
+  --dts-color-danger: #f56c6c;
+  --dts-color-info: #909399;
+  --dts-color-text-primary: #303133;
+  --dts-color-text-secondary: #606266;
+  --dts-color-text-muted: #909399;
+  --dts-color-border: #dcdfe6;
+  --dts-color-bg-page: #f2f3f5;
+  --dts-color-bg-surface: #ffffff;
+
+  /* Spacing */
+  --dts-space-xs: 4px;
+  --dts-space-s: 8px;
+  --dts-space-m: 16px;
+  --dts-space-l: 24px;
+  --dts-space-xl: 32px;
+
+  /* Typography */
+  --dts-font-size-xs: 12px;
+  --dts-font-size-s: 13px;
+  --dts-font-size-m: 14px;
+  --dts-font-size-l: 16px;
+  --dts-font-size-xl: 20px;
+  --dts-font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', Arial, sans-serif;
+
+  /* Radius & shadow */
+  --dts-radius-s: 4px;
+  --dts-radius-m: 8px;
+  --dts-radius-l: 12px;
+  --dts-shadow-1: 0 2px 4px rgba(0, 0, 0, 0.12);
+
+  /* ---- Element Plus theme mapping ---- */
+  --el-color-primary: var(--dts-color-primary);
+  --el-color-success: var(--dts-color-success);
+  --el-color-warning: var(--dts-color-warning);
+  --el-color-danger: var(--dts-color-danger);
+  --el-color-info: var(--dts-color-info);
+  --el-text-color-primary: var(--dts-color-text-primary);
+  --el-text-color-regular: var(--dts-color-text-secondary);
+  --el-text-color-secondary: var(--dts-color-text-muted);
+  --el-border-color: var(--dts-color-border);
+  --el-bg-color: var(--dts-color-bg-surface);
+  --el-bg-color-page: var(--dts-color-bg-page);
+  --el-fill-color-blank: var(--dts-color-bg-surface);
+  --el-font-size-base: var(--dts-font-size-m);
+  --el-border-radius-base: var(--dts-radius-s);
+  --el-border-radius-small: var(--dts-radius-s);
+}
+
+body {
+  margin: 0;
+  font-family: var(--dts-font-family);
+  font-size: var(--dts-font-size-m);
+  color: var(--dts-color-text-primary);
+  background-color: var(--dts-color-bg-page);
+}

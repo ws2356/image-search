@@ -6,8 +6,16 @@ import argparse
 import signal
 import threading
 import time
+from pathlib import Path
 
 from dt_image_search.tools.process_env import setup_process_env
+
+_WEBUI_DIST = Path(__file__).resolve().parent.parent / "webui" / "dist"
+
+
+def default_static_dir() -> str | None:
+    """Serve the built web UI when it exists (packaged/dev runs)."""
+    return str(_WEBUI_DIST) if _WEBUI_DIST.is_dir() else None
 
 
 def run_server(token: str, static_dir: str | None = None, skip_model_init: bool = False) -> None:
@@ -57,7 +65,7 @@ def main() -> None:
     parser.add_argument("--static-dir", default=None, help="Directory of the webui build to serve")
     parser.add_argument("--skip-model-init", action="store_true", help="Testing switch: skip model downloader/preload")
     args = parser.parse_args()
-    run_server(token=args.auth_token, static_dir=args.static_dir, skip_model_init=args.skip_model_init)
+    run_server(token=args.auth_token, static_dir=args.static_dir or default_static_dir(), skip_model_init=args.skip_model_init)
 
 
 if __name__ == "__main__":
