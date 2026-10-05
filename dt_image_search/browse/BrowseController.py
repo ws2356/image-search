@@ -11,11 +11,12 @@ from dt_image_search.mobile.mobile_pairing_store import (
     get_mobile_folder_summaries_by_path,
     get_mobile_folder_transfer_states,
 )
-from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_folder_by_path, insert_folder, match_parent_folder
+from dt_image_search.browse.folder_service import register_folder, watch_and_index, remove_folder as remove_folder_service
+from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_folder_by_path, insert_folder
 from pc_common.model.feature_flags import is_mobile_folder_enabled
 from dt_image_search.base.FolderTreeModel import FolderTreeModel
 from dt_image_search.base.image_list_model import ImageListModel
-from dt_image_search.index.dts_index import index_path_for_folder, delete_folder, is_image_file
+from dt_image_search.index.dts_index import index_path_for_folder, is_image_file
 from dt_image_search.tools.dts_debounce import debounce, throttle
 from dt_image_search.index.index_worker import add_index_worker
 from pc_common.telemetry.telemetry_client import log
@@ -73,19 +74,25 @@ class BrowseController(BaseController):
 
     def on_folder_added(self, folder_path: str):
         log("debug", message=f"BrowseController/on_folder_added: adding folder {folder_path}")
-        folder_path = normalized_folder_path(folder_path).replace('\\', '/')
-        with create_db_conn() as conn:
-            parent_folder = match_parent_folder(conn, folder_path)
-        if parent_folder and not is_same_folder_path(parent_folder.path, folder_path):
-            log("debug", message=f"BrowseController/on_folder_added: found parent folder {parent_folder.path}")
-            folder_item = self.folder_list_model().find_folder_item(parent_folder.path)
+        folder, created = register_folder(ctx=self.ctx, folder_path=folder_path)
+        if folder is None:
+            return
+        child_path = normalized_folder_path(folder_path).replace('\\', '/')
+        if not is_same_folder_path(folder.path, child_path):
+            # Path lives inside an already-registered folder: just select the parent.
+            folder_item = self.folder_list_model().find_folder_item(folder.path)
             if folder_item:
-                log("debug", message=f"BrowseController/on_folder_added: emitting select_folder for parent item {parent_folder.path}")
+                log("debug", message=f"BrowseController/on_folder_added: emitting select_folder for parent item {folder.path}")
                 self._folder_selection_signal.select_folder.emit(folder_item)
             else:
-                log("warning", message=f"BrowseController/on_folder_added: parent folder item not found in model for {parent_folder.path}")
+                log("warning", message=f"BrowseController/on_folder_added: parent folder item not found in model for {folder.path}")
             return
-        self.ensure_folder_registered(folder_path, insert_if_missing=True, select_folder=True)
+        if created:
+            # Fresh registration: service owns the fs watch + indexing side effects.
+            self.folder_list_model().add_root_folder([folder.path])
+            self._refresh_mobile_transfer_states()
+            watch_and_index(ctx=self.ctx, folder=folder)
+        self.ensure_folder_registered(folder.path, insert_if_missing=False, select_folder=True)
 
     def ensure_folder_registered(self, folder_path: str, *, insert_if_missing: bool = False, select_folder: bool = False) -> None:
         folder_path = normalized_folder_path(folder_path).replace('\\', '/')
@@ -184,20 +191,15 @@ class BrowseController(BaseController):
 
     def on_delete_folder(self, index: QPersistentModelIndex, data: str = None):
         log("info", message=f"Removing folder: {data}")
-        log("debug", message=f"BrowseController/on_delete_folder: removing folder {data} from FS monitor")
-        
-        remove_folder(data)
-        
+
         if self._selected_folder_path and data and normalized_folder_path(self._selected_folder_path) == normalized_folder_path(data):
             log("debug", message=f"BrowseController/on_delete_folder: clearing selection as selected folder is being deleted: {data}")
             self._selected_folder_path = ''
             self.image_list_model().load_images_from_paths([])
-            
-        default_bus.publish("folder_deleted_from_ui", folder_path=data)
+
+        remove_folder_service(ctx=self.ctx, folder_path=data)
         log("debug", message=f"BrowseController/on_delete_folder: deleting folder from model at index row {index.row()}")
         self.folder_list_model().deleteFolder(index)
-        log("debug", message=f"BrowseController/on_delete_folder: deleting folder from DB/Index: {data}")
-        delete_folder(ctx=self.ctx, folder_path=data)
 
     def _init_folders(self):
         self._refresh_mobile_transfer_states()
