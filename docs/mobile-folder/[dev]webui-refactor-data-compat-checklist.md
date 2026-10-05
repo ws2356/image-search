@@ -24,10 +24,10 @@ uv run --frozen python -m dt_image_search   # Qt 版入口(回退入口,保持�
 # 在 Qt UI 里对任一已有 folder 做一次搜索,确认正常,然后退出。
 ```
 
-记录 app data 目录(默认 `~/Library/Application Support/DTImageSearch/`,dev 构建为 `DTImageSearch-dev`):
+记录 app data 目录(QStandardPaths 实际解析:`~/Library/Application Support/net.boldman/imagesearch[-dev]/DTImageSearch[-dev]`;dev 构建为 `-dev` 段):
 
 ```bash
-APP_DATA="$HOME/Library/Application Support/DTImageSearch"
+APP_DATA="$HOME/Library/Application Support/net.boldman/imagesearch/DTImageSearch"
 find "$APP_DATA" -maxdepth 1 | sort > /tmp/before-files.txt
 sqlite3 "$APP_DATA/app_data.sqlite" "SELECT key, value FROM app_config ORDER BY key;" > /tmp/before-config.txt
 sqlite3 "$APP_DATA/app_data.sqlite" "SELECT id, path, status FROM folders ORDER BY id;" > /tmp/before-folders.txt
@@ -53,7 +53,7 @@ bash scripts/run_app.sh   # 默认入口 = pywebview 壳 + index server
 验收后对比:
 
 ```bash
-APP_DATA="$HOME/Library/Application Support/DTImageSearch"
+APP_DATA="$HOME/Library/Application Support/net.boldman/imagesearch/DTImageSearch"
 find "$APP_DATA" -maxdepth 1 | sort > /tmp/after-files.txt
 sqlite3 "$APP_DATA/app_data.sqlite" "SELECT key, value FROM app_config ORDER BY key;" > /tmp/after-config.txt
 sqlite3 "$APP_DATA/app_data.sqlite" ".schema" > /tmp/after-schema.txt

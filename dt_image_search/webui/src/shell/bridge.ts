@@ -2,7 +2,7 @@
 // shell (plain browser), the API is absent and callers degrade gracefully.
 export interface ShellApi {
   pick_folder(): Promise<string | null>
-  reveal(fileId: string): Promise<void>
+  reveal(path: string): Promise<void>
 }
 
 declare global {

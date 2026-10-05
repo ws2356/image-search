@@ -143,6 +143,41 @@ class TestWsIntegration(unittest.TestCase):
                 data = ws.receive_json()
         self.assertEqual(data, {"event": "status_message", "data": {"message": "via integration"}})
 
+    def test_ws_connects_even_when_static_dir_is_mounted(self):
+        # Regression: the catch-all SPA mount used to swallow the WS handshake
+        # whenever a static dir was set (i.e. always in production).
+        import os
+        import tempfile
+        from dt_image_search.tools import status_messenger
+        from dt_image_search.index_server.app import create_app
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(os.path.join(temp_dir, "index.html"), "w") as f:
+                f.write("<html></html>")
+            app = create_app(ctx=None, token="tok", static_dir=temp_dir)
+            with TestClient(app) as client:
+                with client.websocket_connect("/events?auth=tok") as ws:
+                    status_messenger.show("with static")
+                    data = ws.receive_json()
+        self.assertEqual(data["data"]["message"], "with static")
+
+    def test_spa_entry_is_token_gated(self):
+        import os
+        import tempfile
+        from dt_image_search.index_server.app import create_app
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(os.path.join(temp_dir, "index.html"), "w") as f:
+                f.write("<html>app</html>")
+            app = create_app(ctx=None, token="tok", static_dir=temp_dir)
+            client = TestClient(app)
+            self.assertEqual(client.get("/").status_code, 401)
+            self.assertEqual(client.get("/some/spa/route").status_code, 401)
+            ok = client.get("/", params={"auth": "tok"})
+            self.assertEqual(ok.status_code, 200)
+
     def test_ws_with_invalid_token_is_rejected(self):
         from dt_image_search.index_server.app import create_app
         from fastapi.testclient import TestClient

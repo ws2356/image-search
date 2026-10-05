@@ -2,6 +2,7 @@
 # Opens the window immediately with a loading page, swaps in the real URL
 # once the index server announces its port, and hosts the pystray tray on
 # platforms where it can run off the main thread.
+import queue
 import sys
 import threading
 
@@ -17,6 +18,23 @@ _LOADING_HTML = (
 )
 
 _READY_TIMEOUT_SECONDS = 60
+
+
+def run_url_swap(port_queue, window, token: str, timeout: float = _READY_TIMEOUT_SECONDS) -> None:
+    """Swap the loading page for the app URL; re-applied after every server
+    restart announcement (each restart binds a new ephemeral port)."""
+    import queue as _queue
+
+    while True:
+        try:
+            port = port_queue.get(timeout=timeout)
+        except _queue.Empty:
+            window.load_html("AuSearch 启动失败,请重启应用。")
+            return
+        try:
+            window.load_url(f"http://127.0.0.1:{port}/?auth={token}")
+        except Exception:
+            return  # window destroyed (quit) — stop swapping
 
 
 def main() -> None:
@@ -36,12 +54,10 @@ def main() -> None:
         log("error", message="shell_main: another instance is already running")
         return
 
-    ready_event = threading.Event()
-    port_holder = []
+    ready_ports: queue.Queue = queue.Queue()
 
     def on_ready(port: int) -> None:
-        port_holder.append(port)
-        ready_event.set()
+        ready_ports.put(port)
 
     def on_exit() -> None:
         # Server gave up; close the window so the process exits.
@@ -62,10 +78,7 @@ def main() -> None:
     )
 
     def swap_to_app() -> None:
-        if ready_event.wait(timeout=_READY_TIMEOUT_SECONDS) and port_holder:
-            window.load_url(f"http://127.0.0.1:{port_holder[0]}/?auth={server.token}")
-        else:
-            window.load_html("AuSearch 启动失败,请重启应用。")
+        run_url_swap(ready_ports, window, server.token)
 
     threading.Thread(target=swap_to_app, daemon=True).start()
 

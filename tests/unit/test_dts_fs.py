@@ -62,21 +62,33 @@ class TestDtsFs(unittest.TestCase):
 
 
 class TestQtFreeBasePathMatchesQt(unittest.TestCase):
-    """Nail test: the Qt-free base resolver must match QStandardPaths exactly,
-    otherwise the Qt-free shell/server processes would read a different data
-    directory than the Qt build — breaking data compatibility."""
+    """Nail test: the Qt-free resolver must match QStandardPaths EXACTLY,
+    including the org/app name segments the Qt entry installs
+    (app_setting.py: org=net.boldman, app=imagesearch[-dev]) — otherwise the
+    Qt-free shell/server would read a different data directory than the Qt
+    build, breaking data compatibility."""
 
-    def test_base_path_equals_qstandardpaths(self) -> None:
+    def test_base_path_equals_qstandardpaths_with_real_names(self) -> None:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PySide6.QtCore import QCoreApplication, QStandardPaths
 
-        QCoreApplication.setOrganizationName("")
-        QCoreApplication.setApplicationName("")
+        # Same identity the Qt entry installs (app_setting.py: org=net.boldman,
+        # app=imagesearch[-dev] per build type).
+        QCoreApplication.setOrganizationName("net.boldman")
+        QCoreApplication.setApplicationName(
+            "imagesearch-dev" if dts_fs.get_build_type() == "dev" else "imagesearch"
+        )
 
         qt_base = Path(QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation))
         qt_free_base = dts_fs.get_app_data_base_path()
 
         self.assertEqual(qt_free_base, qt_base)
+
+    def test_dev_build_uses_dev_segments(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir, patch.object(
+            dts_fs, "get_app_data_os_base_path", return_value=Path(temp_dir)
+        ), patch.object(dts_fs, "get_build_type", return_value="dev"):
+            self.assertEqual(get_app_data_path(), Path(temp_dir) / "net.boldman" / "imagesearch-dev" / "DTImageSearch-dev")
 
 
 if __name__ == "__main__":

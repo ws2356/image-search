@@ -5,14 +5,22 @@ import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { useViewerStore } from '../stores/viewer'
+import { shellApi, hasShellApi } from '../shell/bridge'
 
 const route = useRoute()
 const router = useRouter()
 const viewer = useViewerStore()
 
 const fileId = computed(() => String(route.params.fileId))
+const currentItem = computed(() => viewer.current(fileId.value))
 const prevId = computed(() => viewer.neighborOf(fileId.value, -1))
 const nextId = computed(() => viewer.neighborOf(fileId.value, +1))
+
+function reveal() {
+  if (currentItem.value) {
+    void shellApi()?.reveal(currentItem.value.path)
+  }
+}
 
 function goTo(id: string | null) {
   if (id) void router.push(`/viewer/${id}`)
@@ -37,7 +45,8 @@ onUnmounted(() => {
     <div class="viewer-toolbar">
       <el-button :disabled="!prevId" @click="goTo(prevId)">← 上一张</el-button>
       <el-button :disabled="!nextId" @click="goTo(nextId)">下一张 →</el-button>
-      <span class="viewer-path">{{ fileId }}</span>
+      <el-button v-if="hasShellApi()" link @click="reveal">在文件管理器中显示</el-button>
+      <span class="viewer-path">{{ currentItem?.path ?? fileId }}</span>
     </div>
     <div class="viewer-stage">
       <img class="viewer-image" :src="api.fileUrl(fileId)" :alt="fileId" />

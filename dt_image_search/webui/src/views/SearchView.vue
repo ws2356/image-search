@@ -10,7 +10,7 @@ const viewer = useViewerStore()
 const router = useRouter()
 
 function open(id: string) {
-  viewer.setContext(store.results.map((r) => r.id))
+  viewer.setContext(store.results.map((r) => ({ id: r.id, path: r.path })))
   void router.push(`/viewer/${id}`)
 }
 </script>
