@@ -1,4 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
+# Main AuSearch bundle spec: the pywebview shell is the shipped executable,
+# with the index server sidecar and the bundled Vue web UI static assets.
 import json
 import os
 import plistlib
@@ -9,11 +11,18 @@ from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metada
 
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
+# The web UI build (Vue3) is hosted by the index server from inside the bundle.
+datas += [("dt_image_search/webui/dist", "webui/dist")]
 platform_resource_includes = [
     "resources/ios_bitten_apple_gray.png",
     "resources/icon.png",
     "resources/appicon.icns",
 ]
+# Place the LaunchAgent plist at Resources root so the PKG postinstall script
+# can find it at a well-known path inside the .app bundle.
+datas += [("resources/net.boldman.ausearch.instantshare.plist", ".")]
+# The Apple mobile device installer payload is only used on Windows. Shipping it
+# in macOS bundles adds tens of megabytes of dead weight to the .app/.dmg.
 if sys.platform == "win32":
     platform_resource_includes += [
         "resources/*.msi",
@@ -48,22 +57,33 @@ build_vars_path.write_text(
 )
 datas += [(str(build_vars_path), "pc_common/resources")]
 
+# UPX is disabled on macOS: UPX modifies Mach-O headers in a way that breaks
+# code signatures and notarization.  Enable it only on non-macOS platforms.
 upx_enabled = sys.platform != "darwin"
 excludes = []
 if sys.platform == "darwin":
+    # These packages are not used by the shipped macOS app path, but PyInstaller
+    # still discovers them through optional imports in third-party libraries.
     excludes += [
         "IPython",
         "jedi",
+        "parso",
         "timm",
     ]
 
 a = Analysis(
-    ['__main__.py'],
+    ['dt_image_search/shell_main_entry.py', 'dt_image_search/index_server_main.py', '__main__.py', 'scripts/instant_share_agent_main.py'],
     pathex=[],
     binaries=heif_binaries,
     datas=datas,
     hiddenimports=[
         'hf_xet',
+        # Qt-free shell dependencies (imported lazily inside functions).
+        'webview',
+        'pystray',
+        # Import only the modules the desktop app uses. collect_all("pymobiledevice3")
+        # also bundles sslpsk_pmd3's OpenSSL dylibs, which can shadow Python's
+        # own libcrypto/libssl inside the app bundle and break import ssl.
         'pymobiledevice3.exceptions',
         'pymobiledevice3.usbmux',
         'AppKit',
@@ -79,11 +99,35 @@ a = Analysis(
     optimize=1,
 )
 
+# Split the combined scripts TOC into separate entry points
+_shell_script = None
+_index_server_script = None
+_main_script = None
+_daemon_script = None
+for _entry in a.scripts:
+    _src = _entry[1]
+    if _src.endswith('shell_main_entry.py'):
+        _shell_script = _entry
+    elif _src.endswith('index_server_main.py'):
+        _index_server_script = _entry
+    elif _src.endswith('__main__.py'):
+        _main_script = _entry
+    elif _src.endswith('instant_share_agent_main.py'):
+        _daemon_script = _entry
+
+if None in (_shell_script, _index_server_script, _main_script, _daemon_script):
+    raise ValueError(
+        "Could not identify entry-point scripts in the Analysis TOC. "
+        "Expected 'shell_main_entry.py', 'index_server_main.py', '__main__.py' "
+        "and 'instant_share_agent_main.py'."
+    )
+
 pyz = PYZ(a.pure)
 
-exe = EXE(
+# The shell is the shipped executable; the index server is its sidecar child.
+exe_shell = EXE(
     pyz,
-    a.scripts,
+    [_shell_script],
     [],
     exclude_binaries=True,
     name=app_name,
@@ -99,8 +143,65 @@ exe = EXE(
     entitlements_file=None,
 )
 
+exe_index_server = EXE(
+    pyz,
+    [_index_server_script],
+    [],
+    exclude_binaries=True,
+    name="AuSearchIndexServer",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=upx_enabled,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+exe_daemon = EXE(
+    pyz,
+    [_daemon_script],
+    [],
+    exclude_binaries=True,
+    name="InstantShareAgent",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=upx_enabled,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+exe_qt_fallback = EXE(
+    pyz,
+    [_main_script],
+    [],
+    exclude_binaries=True,
+    name=f"{app_name}QtFallback",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=upx_enabled,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 coll = COLLECT(
-    exe,
+    exe_shell,
+    exe_index_server,
+    exe_qt_fallback,
+    exe_daemon,
     a.binaries,
     a.datas,
     strip=False,

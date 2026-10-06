@@ -40,6 +40,11 @@ export DTIS_REVISION="$revision"
 
 "$this_dir/compile_pyside6_ui.sh"
 
+if [ "$product" == "main" ]; then
+    # The web UI is bundled into the main product as static assets.
+    bash "$this_dir/build_webui.sh"
+fi
+
 if [ -z "$distpath" ]; then
     distpath="$project_root/pyinstaller-dist-${build_type}"
 fi
