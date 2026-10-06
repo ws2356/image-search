@@ -50,7 +50,7 @@ if [ -z "$distpath" ]; then
 fi
 
 if [[ -d "$distpath" ]]; then
-    (cd "$distpath" && sudo rm -rf ./*.app)
+    (cd "$distpath" && rm -rf ./*.app)
 fi
 
 case "$product" in

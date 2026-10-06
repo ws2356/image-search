@@ -149,7 +149,7 @@ if [ "$skip_build" == false ] ;  then
         sudo pkgutil --forget "$pkg_identifier" || true
 
         echo "──── Step 8: Remove the app bundle if it exists to ensure a clean install for testing"
-        sudo rm -rf "$app_path"
+        rm -rf "$app_path"
     fi
 else
     if [ "$product" == "snapget" ]; then
