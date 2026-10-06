@@ -24,4 +24,6 @@ obj/
 .build/
 pyinstaller-dist*/
 .env.credential
+dt_image_search/.env-applecredential
+dt_image_search/.env-build-keychain
 /web/www/.env

@@ -146,7 +146,9 @@ if [ "$skip_build" == false ] ;  then
         fi
 
         echo "──── Step 7: Forget and remove old bundle (helpful for local testing)"
-        sudo pkgutil --forget "$pkg_identifier" || true
+        # sudo -n avoids an interactive password prompt in automation; forgetting
+        # a system receipt is best-effort for local testing only.
+        sudo -n pkgutil --forget "$pkg_identifier" 2>/dev/null || pkgutil --forget "$pkg_identifier" 2>/dev/null || true
 
         echo "──── Step 8: Remove the app bundle if it exists to ensure a clean install for testing"
         rm -rf "$app_path"
