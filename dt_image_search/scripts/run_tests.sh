@@ -94,6 +94,7 @@ unit_and_functional_tests=(
   tests/unit/test_shell_api.py
   tests/unit/test_server_process.py
   tests/unit/test_shell_main.py
+  tests/unit/test_pyinstaller_spec_paths.py
   tests/unit/test_dts_fs.py
   tests/functional/test_mobile_backup_flow.py
   tests/functional/test_usb_handshake_pc_side.py

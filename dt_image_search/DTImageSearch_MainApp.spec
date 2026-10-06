@@ -12,7 +12,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_all, copy_metada
 sys.path.insert(0, os.path.abspath("."))
 datas = collect_data_files("dt_image_search.model")
 # The web UI build (Vue3) is hosted by the index server from inside the bundle.
-datas += [("dt_image_search/webui/dist", "webui/dist")]
+datas += [("webui/dist", "webui/dist")]
 platform_resource_includes = [
     "resources/ios_bitten_apple_gray.png",
     "resources/icon.png",
@@ -60,7 +60,13 @@ datas += [(str(build_vars_path), "pc_common/resources")]
 # UPX is disabled on macOS: UPX modifies Mach-O headers in a way that breaks
 # code signatures and notarization.  Enable it only on non-macOS platforms.
 upx_enabled = sys.platform != "darwin"
-excludes = []
+excludes = [
+    # pyqtinspect (dev-only debugging tool in pyproject.toml) drags PyQt5 into
+    # the venv; pywebview's Qt backend imports qtpy, which picks it up.  The app
+    # itself is PySide6-only, so PyQt5 must be excluded to avoid PyInstaller's
+    # "multiple Qt bindings packages" abort and to keep the bundle small.
+    "PyQt5",
+]
 if sys.platform == "darwin":
     # These packages are not used by the shipped macOS app path, but PyInstaller
     # still discovers them through optional imports in third-party libraries.
@@ -72,7 +78,7 @@ if sys.platform == "darwin":
     ]
 
 a = Analysis(
-    ['dt_image_search/shell_main_entry.py', 'dt_image_search/index_server_main.py', '__main__.py', 'scripts/instant_share_agent_main.py'],
+    ['shell_main_entry.py', 'index_server_main.py', '__main__.py', 'scripts/instant_share_agent_main.py'],
     pathex=[],
     binaries=heif_binaries,
     datas=datas,
