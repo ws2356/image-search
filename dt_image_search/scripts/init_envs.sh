@@ -8,27 +8,41 @@ fi
 this_dir="$(dirname "$this_file")"
 repo_root="$(cd "${this_dir}/../.." && pwd)"
 
-set -a; . "$repo_root/dt_image_search/.env-applecredential"; set +a
-
-# Prefer a dedicated build keychain: reading the app-specific password from the
-# login keychain would otherwise require unlocking (and prompting for) the
-# login keychain password.  The custom keychain is unlocked non-interactively
-# with its own password, stored in a local gitignored env file.
-keychain="$HOME/Library/Keychains/cicd-ausearch.keychain-db"
-if [ -f "$keychain" ]; then
-    cred_file="$repo_root/dt_image_search/.env-build-keychain"
-    if [ -f "$cred_file" ]; then
-        set -a; . "$cred_file"; set +a
-    fi
-    if [ -z "${DTIS_BUILD_KEYCHAIN_PASSWORD:-}" ]; then
-        echo "Error: $cred_file missing or DTIS_BUILD_KEYCHAIN_PASSWORD not set" >&2
-        exit 1
-    fi
-    security unlock-keychain -p '' "$keychain"
-    APPLE_APP_SPECIFIC_PASSWORD=$(security find-generic-password -w "$keychain" -l 'apple app specific password - ws2356' || true)
-fi
-if [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] ; then
-    echo "Failed to find APPLE_APP_SPECIFIC_PASSWORD"
+# Credential sources, in priority order:
+#   1. The dedicated, passwordless build keychain (empty password is by design,
+#      so it can always be unlocked non-interactively in CI/automation sessions).
+#   2. The gitignored .env-applecredential file (legacy fallback; also holds the
+#      non-secret identifiers below).
+cred_file="$repo_root/dt_image_search/.env-applecredential"
+if [ ! -f "$cred_file" ]; then
+    echo "Error: credential file not found: $cred_file" >&2
     exit 1
 fi
-export APPLE_APP_SPECIFIC_PASSWORD
+set -a; . "$cred_file"; set +a
+
+keychain="$HOME/Library/Keychains/cicd-ausearch.keychain-db"
+if [ -f "$keychain" ]; then
+    security unlock-keychain -p '' "$keychain"
+    found_pw=$(security find-generic-password -w "$keychain" -l 'apple app specific password - ws2356' 2>/dev/null || true)
+    if [ -n "$found_pw" ]; then
+        APPLE_APP_SPECIFIC_PASSWORD="$found_pw"
+    fi
+fi
+
+# Reusable helper: find a generic-password item by its label in the dedicated
+# build keychain (new secrets should be added there, then wired up like the
+# app-specific password above).
+find_keychain_item() {
+    local label="$1"
+    security find-generic-password -w "$keychain" -l "$label" 2>/dev/null
+}
+
+for var in APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID DEVELOPER_ID_IDENTITY DEVELOPER_ID_INSTALLER; do
+    if [ -z "${!var:-}" ]; then
+        echo "Error: $var is not set (keychain: $keychain or $cred_file)" >&2
+        exit 1
+    fi
+done
+
+export APPLE_APP_SPECIFIC_PASSWORD APPLE_ID APPLE_TEAM_ID
+export DEVELOPER_ID_IDENTITY DEVELOPER_ID_INSTALLER
