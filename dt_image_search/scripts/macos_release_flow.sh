@@ -111,9 +111,18 @@ if [ "$skip_build" == false ] ;  then
     fi
 
     echo "──── Step 3: Codesign the .app"
+    # Entitlements are per product, not per build type: dev bundles reuse the
+    # prod entitlements unless a dedicated <Product>-<build_type> file exists.
+    entitlements="$this_dir/../resources/${app_bundle_name}.entitlements"
+    if [[ ! -f "$entitlements" ]]; then
+        case "$product" in
+            main)   entitlements="$this_dir/../resources/AuSearch.entitlements";;
+            snapget) entitlements="$this_dir/../resources/SnapGet.entitlements";;
+        esac
+    fi
     "$this_dir/codesign_app.sh" \
         --app-path "$app_path" \
-        --entitlements "$this_dir/../resources/${app_bundle_name}.entitlements" \
+        --entitlements "$entitlements" \
         --identity "$DEVELOPER_ID_IDENTITY"
 
     if [ "$skip_pkg" == false ] ;  then
