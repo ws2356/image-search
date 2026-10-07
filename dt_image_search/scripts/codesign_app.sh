@@ -14,18 +14,23 @@ set -euo pipefail
 #       [--identity   "Developer ID Application: NAME (TEAMID)"] \
 #       [--entitlements ./AuSearch.entitlements]
 #
-# The signing identity may also be supplied via $DEVELOPER_ID_IDENTITY.
+# The signing identity may also be supplied via $DEVELOPER_ID_IDENTITY, and the
+# keychain holding the identity via --keychain / $DEVELOPER_ID_KEYCHAIN
+# (required in automation sessions, which do not inherit the user's keychain
+# search list).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 APP_PATH=""
 IDENTITY="${DEVELOPER_ID_IDENTITY:-}"
+KEYCHAIN="${DEVELOPER_ID_KEYCHAIN:-}"
 ENTITLEMENTS=
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --app-path)     APP_PATH="$2";     shift 2 ;;
         --identity)     IDENTITY="$2";     shift 2 ;;
+        --keychain)     KEYCHAIN="$2";     shift 2 ;;
         --entitlements) ENTITLEMENTS="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
@@ -43,7 +48,14 @@ if [[ -d "$SHARE_EXTENSION_PATH" ]]; then
     echo "==> Share Extension:   $SHARE_EXTENSION_PATH"
 fi
 echo "==> Identity:          $IDENTITY"
+echo "==> Keychain:          ${KEYCHAIN:-<default search list>}"
 echo "==> Entitlements:      $ENTITLEMENTS"
+
+# codesign --keychain restricts identity lookup to the given keychain file;
+# without it the session's keychain search list is used, which automation
+# sessions (launchd daemons, SSH) may not populate.
+KEYCHAIN_ARGS=()
+[[ -n "$KEYCHAIN" ]] && KEYCHAIN_ARGS+=(--keychain "$KEYCHAIN")
 
 # ── codesign_bundle: reusable function to codesign an entire bundle ──────────
 # Usage:
@@ -92,7 +104,7 @@ codesign_bundle() {
         $skip && continue
 
         echo "    framework: $fw"
-        if ! codesign --sign "$IDENTITY" --timestamp --options runtime --force "$fw"; then
+        if ! codesign --sign "$IDENTITY" --timestamp --options runtime --force "${KEYCHAIN_ARGS[@]}" "$fw"; then
             echo "Error: failed to sign framework: $fw" >&2
             return 1
         fi
@@ -121,6 +133,7 @@ codesign_bundle() {
                      --timestamp \
                      --options runtime \
                      --force \
+                     "${KEYCHAIN_ARGS[@]}" \
                      "$bin" 2>/dev/null ; then
                 echo "Error: failed to sign binary: $bin" >&2
                 return 1
@@ -141,7 +154,7 @@ codesign_bundle() {
         --force
     )
     [[ -n "$entitlements_path" ]] && sign_args+=(--entitlements "$entitlements_path")
-    if ! codesign "${sign_args[@]}" "$bundle_path" ; then
+    if ! codesign "${sign_args[@]}" "${KEYCHAIN_ARGS[@]}" "$bundle_path" ; then
         echo "Error: failed to sign bundle: $bundle_path" >&2
         return 1
     fi

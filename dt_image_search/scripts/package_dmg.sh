@@ -13,12 +13,16 @@ set -euo pipefail
 #       [--volume-name "AuSearch"] \
 #       [--identity   "Developer ID Application: NAME (TEAMID)"]
 #
-# The signing identity may also be supplied via $DEVELOPER_ID_IDENTITY.
+# The signing identity may also be supplied via $DEVELOPER_ID_IDENTITY, and the
+# keychain holding the identity via --keychain / $DEVELOPER_ID_KEYCHAIN
+# (required in automation sessions, which do not inherit the user's keychain
+# search list).
 # Omit both to create an unsigned DMG (not recommended for distribution).
 
 APP_PATH=""
 VOLUME_NAME=""
 IDENTITY="${DEVELOPER_ID_IDENTITY:-}"
+KEYCHAIN="${DEVELOPER_ID_KEYCHAIN:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 while [[ $# -gt 0 ]]; do
@@ -26,6 +30,7 @@ while [[ $# -gt 0 ]]; do
         --app-path)    APP_PATH="$2";    shift 2 ;;
         --volume-name) VOLUME_NAME="$2"; shift 2 ;;
         --identity)    IDENTITY="$2";    shift 2 ;;
+        --keychain)    KEYCHAIN="$2";    shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -86,7 +91,9 @@ hdiutil create \
 # ── Sign the DMG ─────────────────────────────────────────────────────────────
 if [[ -n "$IDENTITY" ]]; then
     echo "Signing DMG..."
-    codesign --sign "$IDENTITY" --timestamp "$OUTPUT_DMG"
+    keychain_args=()
+    [[ -n "$KEYCHAIN" ]] && keychain_args+=(--keychain "$KEYCHAIN")
+    codesign --sign "$IDENTITY" --timestamp "${keychain_args[@]}" "$OUTPUT_DMG"
     echo "  Signed."
 else
     echo "WARNING: No signing identity provided — DMG is unsigned."

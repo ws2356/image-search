@@ -46,3 +46,11 @@ done
 
 export APPLE_APP_SPECIFIC_PASSWORD APPLE_ID APPLE_TEAM_ID
 export DEVELOPER_ID_IDENTITY DEVELOPER_ID_INSTALLER
+
+# Keychain that holds the signing identities (same dedicated, passwordless
+# keychain as above).  Signing scripts pass it to codesign/pkgbuild explicitly
+# because automation sessions (launchd daemons, SSH) do not inherit the user's
+# keychain search list.
+if [ -f "$keychain" ]; then
+    export DEVELOPER_ID_KEYCHAIN="$keychain"
+fi

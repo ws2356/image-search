@@ -25,11 +25,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 APP_PATH=""
 INSTALLER_IDENTITY="${DEVELOPER_ID_INSTALLER:-}"
+KEYCHAIN="${DEVELOPER_ID_KEYCHAIN:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --app-path)    APP_PATH="$2";    shift 2 ;;
         --identity)    INSTALLER_IDENTITY="$2"; shift 2 ;;
+        --keychain)    KEYCHAIN="$2";    shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -74,12 +76,16 @@ if [[ -z "$INSTALLER_IDENTITY" ]]; then
     echo "         Note: This is the *Installer* identity, not the *Application* identity."
 fi
 
+keychain_args=()
+[[ -n "$KEYCHAIN" ]] && keychain_args+=(--keychain "$KEYCHAIN")
+
 pkgbuild \
     --component "$APP_PATH" \
     --install-location "/Applications" \
     --scripts "$PKG_SCRIPTS" \
     --ownership recommended \
     --sign "$INSTALLER_IDENTITY" \
+    "${keychain_args[@]}" \
     "$OUTPUT_PKG"
 
 
