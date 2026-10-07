@@ -45,6 +45,12 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
+# Dev builds are for internal testing: the DMG is still signed, but notarization
+# (several minutes per submission, for end-user distribution) is skipped.
+if [[ "$build_type" != "prod" ]]; then
+    skip_notarize=true
+fi
+
 case "$product" in
     main)
         app_bundle_name="AuSearch"
