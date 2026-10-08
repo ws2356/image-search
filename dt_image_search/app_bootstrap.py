@@ -6,6 +6,10 @@ from dt_image_search.bm_context import BMContext
 def init_indexing_pipeline(ctx: BMContext, skip_model_init: bool = False) -> None:
     """Start the model downloader, index system, incremental + bulk index
     workers and the filesystem watcher — in the legacy startup order."""
+    # Must run before the first torch/open_clip import pulls transformers in.
+    from dt_image_search.tools.transformers_frozen_compat import install_transformers_pyinstaller_compat
+    install_transformers_pyinstaller_compat()
+
     from dt_image_search.index.dts_model_downloader import init as model_downloader_init
     from dt_image_search.index.dts_index import init as index_init
 

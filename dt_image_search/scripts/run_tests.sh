@@ -48,6 +48,7 @@ unit_and_functional_tests=(
   tests/unit/test_instant_share_telemetry.py
   tests/unit/test_model_state.py
   tests/unit/test_dts_model_downloader.py
+  tests/unit/test_transformers_frozen_compat.py
   tests/unit/test_index_model_failure.py
   tests/unit/test_mobile_apple_mobile_device_support.py
   tests/unit/test_dts_index.py

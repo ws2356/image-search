@@ -697,7 +697,15 @@ def _preload_model(ctx: BMContext):
             #     set_config(conn, IS_MODEL_DOWNLOADED, "1")
             break
         except Exception as e:
-            log("error", "model", message=f"Attempt {_attempt + 1}. Pretrained: {ctx.get_pretrained_model_name()}. offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. model version: {ctx.version}. offline mode: {ctx.offline_mode}. Preloading model failed: {e}")
+            import traceback
+            log(
+                "error",
+                "model",
+                message=f"Attempt {_attempt + 1}. Pretrained: {ctx.get_pretrained_model_name()}. "
+                f"offline: {os.getenv('HF_HUB_OFFLINE', '0')}. cache: {os.getenv('HUGGINGFACE_HUB_CACHE', '')}. "
+                f"model version: {ctx.version}. offline mode: {ctx.offline_mode}. "
+                f"Preloading model failed: {e}\n{traceback.format_exc()}",
+            )
             if _attempt == _MAX_ATTEMPTS - 1:
                 log(
                     "error",
