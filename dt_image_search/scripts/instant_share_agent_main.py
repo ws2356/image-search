@@ -32,22 +32,16 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QCoreApplication, QTimer
 
 from pc_common.build_flavor import get_build_type
-from pc_common.dts_logging import get_other_handlers
 from instant_sharing import InstantShareRuntime
 from instant_sharing.mdns import INSTANT_SHARE_MDNS_SERVICE_TYPE
 from instant_sharing.mini_window_factory import InstantShareMiniWindowFactory
 from instant_sharing.qr_trigger_mini_window_factory import QRTriggerMiniWindowFactory
-from pc_common.model.dt_device_id import get_device_id
-from pc_common.model.dts_config import get_log_level, get_revision
-from pc_common.model.feature_flags import get_desktop_root_trace_sample_rate
-from pc_common.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
+from pc_common.telemetry.desktop_telemetry import init_desktop_telemetry
 from pc_common.telemetry.telemetry_client import (
     flush_telemetry,
     flush_telemetry_for_fatal,
-    init_telemetry,
     log,
 )
-from pc_common.tools.dt_is_debug import is_debug
 
 _WHERE = "instant_share.agent_main"
 
@@ -200,18 +194,7 @@ def main() -> int:
     # Telemetry is entry-point-wired: the launch agent passes its own values so
     # telemetry_client carries no app-storage dependencies. Resolve paths after
     # the app identity is fixed so QStandardPaths is stable.
-    init_telemetry(
-        device_id=get_device_id(),
-        session_id=str(uuid.uuid4()),
-        revision=get_revision(),
-        log_level=get_log_level(),
-        root_trace_sample_rate=get_desktop_root_trace_sample_rate(),
-        # The Image Search entry point keeps the legacy identity.
-        service_name="snapget_pc",
-        resource_attributes=RESOURCE_ATTRIBUTES,
-        log_handlers=get_other_handlers(),
-        debug_mode=is_debug(),
-    )
+    init_desktop_telemetry(service_name="snapget_pc")
 
     app = QApplication(sys.argv)
     app.setOrganizationDomain("net.boldman")

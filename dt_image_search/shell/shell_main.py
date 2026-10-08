@@ -9,6 +9,7 @@ import threading
 from dt_image_search.shell.pywebview_api import ShellApi
 from dt_image_search.shell.server_process import ServerProcess
 from dt_image_search.shell.single_instance import acquire_instance_lock, release_instance_lock
+from pc_common.telemetry.desktop_telemetry import init_desktop_telemetry
 from pc_common.telemetry.telemetry_client import log
 
 _LOADING_HTML = (
@@ -40,6 +41,8 @@ def run_url_swap(port_queue, window, token: str, timeout: float = _READY_TIMEOUT
 def main() -> None:
     import argparse
     import webview
+
+    init_desktop_telemetry(service_name="imagesearch_shell")
 
     parser = argparse.ArgumentParser(description="AuSearch web shell")
     parser.add_argument("--static-dir", default=None, help="Passed through to the index server (optional)")

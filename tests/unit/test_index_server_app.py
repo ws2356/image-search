@@ -42,6 +42,14 @@ class TestIndexServerReadyHandshake(unittest.TestCase):
 
                 with urllib.request.urlopen(f"http://127.0.0.1:{ready_port}/health", timeout=5) as resp:
                     self.assertEqual(resp.status, 200)
+
+                # The server process must wire desktop telemetry so logs are
+                # written to the shared app data directory, not only stdout.
+                log_file = os.path.join(temp_dir, "logs", "app-utf8.log")
+                deadline = time.time() + 10
+                while time.time() < deadline and not os.path.exists(log_file):
+                    time.sleep(0.2)
+                self.assertTrue(os.path.exists(log_file), "index server did not create logs/app-utf8.log")
             finally:
                 proc.terminate()
                 proc.wait(timeout=15)

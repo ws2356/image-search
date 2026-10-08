@@ -3,6 +3,7 @@ from pathlib import Path
 import requests
 import threading
 import datetime
+import time
 from pc_common.telemetry.telemetry_client import with_trace, log
 from dt_image_search.tools import status_messenger
 from dt_image_search.bm_context import BMContext
@@ -11,6 +12,13 @@ model_downloaded_event = threading.Event()
 model_download_failed_event = threading.Event()
 _download_active = False
 _download_state_lock = threading.Lock()
+
+_MAX_DOWNLOAD_ATTEMPTS = 3
+_RETRY_PAUSE_SECONDS = 5
+# (connect timeout, read timeout between chunks) — a dead connection must not
+# block the model-download thread forever.
+_HTTP_CONNECT_TIMEOUT_SECONDS = 10
+_HTTP_READ_TIMEOUT_SECONDS = 120
 
 @with_trace("Model.DownloadAttempt")
 def _download_pretrained_model(ctx: BMContext):
@@ -21,25 +29,29 @@ def _download_pretrained_model(ctx: BMContext):
             model_downloaded_event.set()
             return
         tmp_path = f"{ctx.get_model_cache_path()}.tmp"
-        try:
-            Path(tmp_path).unlink(missing_ok=True)
-        except Exception as exc:
-            log("error", "model_download", message=f"Failed to remove tmp file: {exc}")
+        # Keep any interrupted-download partial in place (this run and previous
+        # runs continue from it via a Range request); it is only deleted when a
+        # checksum proves the content corrupt.
         _cleanup_partial_download(ctx)
         status_messenger.show("Downloading model...")
-        for _ in range(3):
+        for attempt in range(_MAX_DOWNLOAD_ATTEMPTS):
             try:
                 _download_with_progress(ctx.get_model_download_url(), tmp_path)
                 if ctx.is_downloaded_file_valid(tmp_path):
+                    ctx.process_downloaded_file(tmp_path)
+                    log("info", "model_download", message="Succeeded downloading pretrained model")
+                    status_messenger.show("Model downloaded")
+                    model_downloaded_event.set()
                     break
-                os.remove(tmp_path)
                 log("error", "model_download", message="Pretrained model checksum failed")
+                Path(tmp_path).unlink(missing_ok=True)
             except Exception as exc:
+                # transfer interrupted mid-stream: keep the partial tmp file for the next attempt's Range resume
                 log("error", "model_download", message=f"Pretrained model download failed: {exc}")
-        ctx.process_downloaded_file(tmp_path)
-        log("info", "model_download", message="Succeeded downloading pretrained model")
-        status_messenger.show("Model downloaded")
-        model_downloaded_event.set()
+            if attempt < _MAX_DOWNLOAD_ATTEMPTS - 1:
+                time.sleep(_RETRY_PAUSE_SECONDS)
+        else:
+            raise RuntimeError(f"Model download failed after {_MAX_DOWNLOAD_ATTEMPTS} attempts")
     except Exception as exc:
         log("error", "model_download", message=f"Failed to download pretrained model: {exc}")
         status_messenger.show("Model download failed")
@@ -98,9 +110,19 @@ def _download_with_progress(url, dest_path, chunk_size=4096):
     if os.path.exists(dest_path):
         downloaded = os.path.getsize(dest_path)
         headers = {"Range": f"bytes={downloaded}-"}
-    response = requests.get(url, stream=True, headers=headers, allow_redirects=True)
+    response = requests.get(
+        url,
+        stream=True,
+        headers=headers,
+        allow_redirects=True,
+        timeout=(_HTTP_CONNECT_TIMEOUT_SECONDS, _HTTP_READ_TIMEOUT_SECONDS),
+    )
     if response.status_code not in (200, 206):
         raise Exception(f"Failed to download file: {response.status_code}")
+    if downloaded > 0 and response.status_code != 206:
+        # Server ignored the Range request and is sending the full body again —
+        # appending would corrupt the file, so restart from scratch.
+        downloaded = 0
 
     total_length = response.headers.get("content-length")
     if total_length is not None:

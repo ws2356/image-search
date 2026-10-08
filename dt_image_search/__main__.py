@@ -44,25 +44,9 @@ initialize_app_settings(app_name="imagesearch")
 
 # Telemetry is entry-point-wired: telemetry_client carries no app-storage
 # dependencies so the instant-share launch agent can reuse it independently.
-from pc_common.dts_logging import get_other_handlers
-from pc_common.model.dt_device_id import get_device_id
-from pc_common.model.dts_config import get_log_level, get_revision
-from pc_common.model.feature_flags import get_desktop_root_trace_sample_rate
-from pc_common.telemetry.runtime_metadata import RESOURCE_ATTRIBUTES
-from pc_common.telemetry.telemetry_client import init_telemetry
-from pc_common.tools.dt_is_debug import is_debug
+from pc_common.telemetry.desktop_telemetry import init_desktop_telemetry
 
-init_telemetry(
-    device_id=get_device_id(),
-    session_id=str(uuid.uuid4()),
-    revision=get_revision(),
-    log_level=get_log_level(),
-    root_trace_sample_rate=get_desktop_root_trace_sample_rate(),
-    service_name="imagesearch_client",
-    resource_attributes=RESOURCE_ATTRIBUTES,
-    log_handlers=get_other_handlers(),
-    debug_mode=is_debug(),
-)
+init_desktop_telemetry(service_name="imagesearch_client")
 
 from dt_image_search.bm_context import get_context, BMContext, setup_model_cache
 from dt_image_search.app_bootstrap import init_indexing_pipeline, deinit_indexing_pipeline

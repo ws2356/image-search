@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from dt_image_search.tools.process_env import setup_process_env
+from pc_common.telemetry.desktop_telemetry import init_desktop_telemetry
 
 _WEBUI_DIST = Path(__file__).resolve().parent.parent / "webui" / "dist"
 
@@ -20,6 +21,12 @@ def default_static_dir() -> str | None:
 
 def run_server(token: str, static_dir: str | None = None, skip_model_init: bool = False) -> None:
     setup_process_env()
+
+    # The server runs the pipeline the user actually diagnoses (model
+    # download, indexing), so it owns the local log file. debug_mode is
+    # pinned True on purpose: sys.stdout must survive because the shell
+    # parses the DTS_READY handshake from this process's piped stdout.
+    init_desktop_telemetry(service_name="imagesearch_server", debug_mode=True)
 
     from pc_common.model.feature_flags import initialize_feature_flags
     from dt_image_search.bm_context import get_context, setup_model_cache
