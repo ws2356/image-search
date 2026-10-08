@@ -1,4 +1,25 @@
-# Fix: no log files + model download failure (dev build)
+# Fix: no log files + model download failure (dev build) — RESOLVED 2026-10-09
+
+## Outcome
+1. **No logs** — non-Qt entry points (shell, index server) now call
+   `init_desktop_telemetry` → rotating `logs/app-utf8.log` in the app data dir.
+   Verified for shell (smoke test) and server (extended
+   tests/unit/test_index_server_app.py).
+2. **Model download** — was an interrupted transfer (partial `model_cache.tmp`
+   stalled at 34% of the 1.28 GB models.tar.gz; GitHub needs the system proxy).
+   The downloader now resumes partial tmp across launches, validates checksums
+   before extraction, times out HTTP, and pauses between retries. Verified
+   live: resumed from 459 MB, checksum passed, extracted, model loaded.
+3. **(Found via the new logs)** frozen model load crashed with a bare
+   `IndexError` inside transformers 4.57 `auto_docstring` (short PyInstaller
+   paths). Fixed with `dt_image_search/tools/transformers_frozen_compat.py`
+   + tests/unit/test_transformers_frozen_compat.py; verified in the packaged
+   dev build (attempt 1 load success, /health 200).
+
+Pre-existing, out of scope: OTLP upload in the frozen app fails with
+"Could not find a suitable TLS CA certificate bundle … /_internal/certifi/cacert.pem"
+(certifi data not collected for the telemetry exporter). Also `git push` untested
+locally due to GitHub auth device-flow errors.
 
 Date: 2026-10-09
 
