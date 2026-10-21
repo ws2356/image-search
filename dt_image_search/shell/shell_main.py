@@ -74,7 +74,7 @@ def main() -> None:
 
     window = webview.create_window(
         "AuSearch",
-        url=f"data:text/html;charset=utf-8,{_LOADING_HTML}",
+        html=_LOADING_HTML,
         js_api=ShellApi(),
         width=1280,
         height=800,
