@@ -9,6 +9,7 @@ vi.mock('../src/api/client', () => ({
   api: {
     listFolders: vi.fn().mockResolvedValue({ folders: [] }),
     browse: vi.fn(),
+    thumbUrl: vi.fn((id: string) => `/thumb/${id}`),
   },
 }))
 
@@ -22,6 +23,11 @@ vi.mock('../src/stores/folders', () => {
   }
   return { useFoldersStore: () => store }
 })
+
+vi.mock('../src/shell/bridge', () => ({
+  hasShellApi: vi.fn(() => true),
+  pickFolder: vi.fn(),
+}))
 
 import { api } from '../src/api/client'
 
