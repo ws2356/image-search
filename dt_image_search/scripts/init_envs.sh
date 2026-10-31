@@ -11,9 +11,8 @@ repo_root="$(cd "${this_dir}/../.." && pwd)"
 # Credential sources, in priority order:
 #   1. The dedicated, passwordless build keychain (empty password is by design,
 #      so it can always be unlocked non-interactively in CI/automation sessions).
-#   2. The gitignored .env-applecredential file (legacy fallback; also holds the
 #      non-secret identifiers below).
-cred_file="$repo_root/dt_image_search/.env-applecredential"
+cred_file="$repo_root/dt_image_search/.env-apple-id"
 if [ ! -f "$cred_file" ]; then
     echo "Error: credential file not found: $cred_file" >&2
     exit 1
