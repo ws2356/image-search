@@ -1,63 +1,57 @@
 # Unit tests for the shell's pywebview JS API and single-instance lock.
-# webview module is faked; subprocess calls are monkeypatched per platform.
+# Native dialog and subprocess calls are replaced at the OS boundary.
 import os
 import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
+import webview
+
 from dt_image_search.shell.pywebview_api import ShellApi
 
 
-class _FakeWebviewModule:
-    FOLDER_DIALOG = 33
-
-    def __init__(self, dialog_result=None):
-        self.FOLDER_DIALOG = _FakeWebviewModule.FOLDER_DIALOG
-        self._dialog_result = dialog_result
-        self.calls = []
-
-    def create_file_dialog(self, dialog_type):
-        self.calls.append(dialog_type)
-        return self._dialog_result
-
-
 class TestPickFolder(unittest.TestCase):
+    def setUp(self):
+        self.window = webview.Window("test", "AuSearch", url=None)
+        self.window.gui = MagicMock()
+        self.window.events.shown.set()
+        self.api = ShellApi(window_provider=lambda: self.window)
+
     def test_returns_first_selection(self):
-        fake = _FakeWebviewModule(dialog_result=["/selected/dir"])
-        api = ShellApi(webview_module=fake)
-        self.assertEqual(api.pick_folder(), "/selected/dir")
-        self.assertEqual(fake.calls, [_FakeWebviewModule.FOLDER_DIALOG])
+        self.window.gui.create_file_dialog.return_value = ("/selected/dir",)
+
+        self.assertEqual(self.api.pick_folder(), "/selected/dir")
+        self.window.gui.create_file_dialog.assert_called_once_with(
+            webview.FOLDER_DIALOG, "", False, "", (), self.window.uid
+        )
 
     def test_cancel_returns_none(self):
-        fake = _FakeWebviewModule(dialog_result=[])
-        api = ShellApi(webview_module=fake)
-        self.assertIsNone(api.pick_folder())
+        self.window.gui.create_file_dialog.return_value = []
+        self.assertIsNone(self.api.pick_folder())
 
     def test_js_none_returns_none(self):
-        # pywebview passes JS undefined through as None in some versions.
-        fake = _FakeWebviewModule(dialog_result=None)
-        api = ShellApi(webview_module=fake)
-        self.assertIsNone(api.pick_folder())
+        self.window.gui.create_file_dialog.return_value = None
+        self.assertIsNone(self.api.pick_folder())
 
 
 class TestReveal(unittest.TestCase):
     def test_macos_uses_open_R(self):
-        api = ShellApi(webview_module=_FakeWebviewModule())
+        api = ShellApi(window_provider=lambda: None)
         with patch('dt_image_search.shell.pywebview_api.sys.platform', 'darwin'), \
              patch('dt_image_search.shell.pywebview_api.subprocess.run') as mock_run:
             api.reveal("/photos/a.jpg")
         mock_run.assert_called_once_with(["open", "-R", "/photos/a.jpg"], check=False)
 
     def test_windows_uses_explorer_select(self):
-        api = ShellApi(webview_module=_FakeWebviewModule())
+        api = ShellApi(window_provider=lambda: None)
         with patch('dt_image_search.shell.pywebview_api.sys.platform', 'win32'), \
              patch('dt_image_search.shell.pywebview_api.subprocess.run') as mock_run:
             api.reveal("/photos/a.jpg")
         mock_run.assert_called_once_with(["explorer", "/select,/photos/a.jpg"], check=False)
 
     def test_linux_opens_parent_directory(self):
-        api = ShellApi(webview_module=_FakeWebviewModule())
+        api = ShellApi(window_provider=lambda: None)
         with patch('dt_image_search.shell.pywebview_api.sys.platform', 'linux'), \
              patch('dt_image_search.shell.pywebview_api.subprocess.run') as mock_run:
             api.reveal("/photos/a.jpg")

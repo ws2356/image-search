@@ -5,22 +5,21 @@
 import os
 import subprocess
 import sys
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from webview import Window
 
 
 class ShellApi:
-    def __init__(self, webview_module=None):
-        self._webview_module = webview_module
-
-    def _webview(self):
-        if self._webview_module is not None:
-            return self._webview_module
-        import webview
-
-        return webview
+    def __init__(self, window_provider: Callable[[], "Window"]):
+        self._window_provider = window_provider
 
     def pick_folder(self) -> str | None:
         """Open the native directory chooser; None when cancelled."""
-        result = self._webview().create_file_dialog(self._webview().FOLDER_DIALOG)
+        import webview
+
+        result = self._window_provider().create_file_dialog(webview.FOLDER_DIALOG)
         if result:
             return result[0]
         return None

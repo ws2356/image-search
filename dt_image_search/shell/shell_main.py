@@ -23,19 +23,23 @@ _READY_TIMEOUT_SECONDS = 60
 
 def run_url_swap(port_queue, window, token: str, timeout: float = _READY_TIMEOUT_SECONDS) -> None:
     """Swap the loading page for the app URL; re-applied after every server
-    restart announcement (each restart binds a new ephemeral port)."""
-    import queue as _queue
-
+    restart announcement. None ends the loop when the shell shuts down."""
+    waiting_for_startup = True
     while True:
         try:
-            port = port_queue.get(timeout=timeout)
-        except _queue.Empty:
+            # A healthy server announces its port only once, so the startup
+            # deadline must not expire while waiting for a later restart.
+            port = port_queue.get(timeout=timeout if waiting_for_startup else None)
+        except queue.Empty:
             window.load_html("AuSearch 启动失败,请重启应用。")
+            return
+        if port is None:
             return
         try:
             window.load_url(f"http://127.0.0.1:{port}/?auth={token}")
         except Exception:
             return  # window destroyed (quit) — stop swapping
+        waiting_for_startup = False
 
 
 def main() -> None:
@@ -64,6 +68,7 @@ def main() -> None:
 
     def on_exit() -> None:
         # Server gave up; close the window so the process exits.
+        ready_ports.put(None)
         try:
             window.destroy()
         except Exception:
@@ -75,7 +80,7 @@ def main() -> None:
     window = webview.create_window(
         "AuSearch",
         html=_LOADING_HTML,
-        js_api=ShellApi(),
+        js_api=ShellApi(window_provider=lambda: window),
         width=1280,
         height=800,
     )
@@ -91,6 +96,7 @@ def main() -> None:
     try:
         webview.start()
     finally:
+        ready_ports.put(None)
         server.stop()
         release_instance_lock(lock_handle)
 
