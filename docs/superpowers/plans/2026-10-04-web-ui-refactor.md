@@ -1,7 +1,5 @@
 # AuSearch Web UI 重构实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** 将 AuSearch 主 UI 迁移为 Vue3 Web UI(HTTP+WS),核心索引/查询逻辑收敛到独立 index server 进程,壳用 pywebview,移除主 UI 路径上的 Qt 依赖。
 
 **Architecture:** 壳进程(pywebview+pystray)拉起 index server 子进程(FastAPI,stdio 握手 port+token),server 静态托管 Vue3 构建产物并复用现有核心模块(`dts_index`/`dts_db`/worker/`bm_fs_monitor`);`dts_event_bus` 事件经 EventBridge 推送 WS。
@@ -15,7 +13,7 @@
 - Python 3.10;所有 Python 进程/命令一律经 `uv run` 执行(仓库根有 `uv.lock`),禁止直接裸调 `python`/`pip`。测试:`uv run bash scripts/run_tests.sh`(全量)或 `uv run pytest <file> -v`(单文件)。
 - **数据格式完全不变**:app data 路径、`app_data.sqlite` schema、`*.faiss` 文件名/格式、`model_cache/` 结构、`app_config` 键值。新文件只允许出现在新增子目录 `app_data/thumb_cache/`(旧版本会忽略,属增量不属变更)。
 - index server 仅监听 `127.0.0.1`;所有 HTTP 端点与 WS 要求 token(header `X-Auth-Token` 或 query `auth`)。
-- 本期**不改动、不接线** mobile 功能(`mobile/` 目录与 mobile 相关测试保持原样;Qt 移除仅限主 UI 路径)。
+- 本期**不改动、不接线** mobile_folder 功能(`mobile/` 目录与 mobile_folder相关测试保持原样;Qt 移除仅限主 UI 路径，原有的UI和controller相关的测试可以不再维护甚至删除，其他测试暂时保留如果失败了需要检查是否仍然有保留的必要如果有则需要修复)。
 - 前端包管理一律 `pnpm`(禁止 npm/yarn);webui 依赖固定版本。
 - **UI 框架**:webui 一律使用 **Element Plus** 组件(按官方最佳实践:`unplugin-auto-import` + `unplugin-vue-components` 的 `ElementPlusResolver` 自动导入);样式值(颜色/间距/字号/圆角)只允许引用 design token(`webui/src/styles/tokens.css` 的 `--dts-*` 变量,并映射到 Element Plus 的 `--el-*` 主题变量),组件内禁止写裸色值/尺寸。
 - **asyncio 迁移原则(渐进式)**:以本次重构为起点,**新增代码 async-first**——index server 路由 handler 一律 `async def`,调用既有同步核心模块经 `asyncio.to_thread(...)` 包装,事件循环内禁止直接执行阻塞 I/O;既有同步代码**不要求**重写为 asyncio。
