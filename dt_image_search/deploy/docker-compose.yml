@@ -23,16 +23,20 @@ services:
       - "9009:9009"
   tempo:
     image: grafana/tempo:2.9.0
+    restart: unless-stopped
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./otel/tempo/tempo.yml:/etc/tempo.yaml
     ports:
+      - "127.0.0.1:3200:3200"
       - "4317:4317"
       - "7946:7946"
 
   loki:
     image: grafana/loki:latest
     command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "127.0.0.1:3100:3100"
 
   grafana:
     image: grafana/grafana-oss
