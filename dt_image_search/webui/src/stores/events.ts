@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { api } from '../api/client'
+import { computed, onScopeDispose, ref } from 'vue'
 import { getToken } from '../auth/token'
+import { useStatusStore } from './status'
 
 type Listener = (event: string, data: Record<string, unknown>) => void
 
@@ -10,11 +10,14 @@ const MAX_DELAY_MS = 30000
 
 export const useEventsStore = defineStore('events', () => {
   const latestStatusMessage = ref<string | null>(null)
-  const modelLoadFailed = ref(false)
+  const failureDismissed = ref(false)
   const connected = ref(false)
+  const status = useStatusStore()
+  const modelLoadFailed = computed(() => status.modelState === 'failed' && !failureDismissed.value)
 
   let ws: WebSocket | null = null
   let attempt = 0
+  let messageRevision = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   const listeners = new Set<Listener>()
 
@@ -31,22 +34,31 @@ export const useEventsStore = defineStore('events', () => {
     if (!token) return // unauthenticated (plain browser) → no live events
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    ws = new WebSocket(`${proto}://${window.location.host}/events?auth=${encodeURIComponent(token)}`)
-    ws.onopen = () => {
+    const socket = new WebSocket(`${proto}://${window.location.host}/events?auth=${encodeURIComponent(token)}`)
+    ws = socket
+    socket.onopen = async () => {
+      if (ws !== socket) return
       connected.value = true
       attempt = 0 // reset backoff after a successful connection
-      void api.getStatus() // refresh state after (re)connect
+      const previousMessageRevision = messageRevision
+      const refreshed = await status.refresh()
+      if (!refreshed || ws !== socket) return
+      if (messageRevision === previousMessageRevision) latestStatusMessage.value = null
+      failureDismissed.value = false
+      listeners.forEach((fn) => fn('status_refreshed', {}))
     }
-    ws.onmessage = (msg) => {
+    socket.onmessage = (msg) => {
       const envelope = JSON.parse(String(msg.data)) as { event: string; data: Record<string, unknown> }
       handle(envelope.event, envelope.data ?? {})
     }
-    ws.onclose = () => {
+    socket.onclose = () => {
+      if (ws !== socket) return
       ws = null
       connected.value = false
+      status.cancelRefresh()
       scheduleReconnect()
     }
-    ws.onerror = () => {
+    socket.onerror = () => {
       /* close handler drives reconnection */
     }
   }
@@ -63,9 +75,12 @@ export const useEventsStore = defineStore('events', () => {
 
   function handle(event: string, data: Record<string, unknown>) {
     if (event === 'status_message') {
+      messageRevision += 1
       latestStatusMessage.value = String(data.message ?? '')
     } else if (event === 'model_load_failed') {
-      modelLoadFailed.value = true
+      failureDismissed.value = false
+      status.cancelRefresh()
+      status.modelState = 'failed'
     }
     listeners.forEach((fn) => fn(event, data))
   }
@@ -75,8 +90,20 @@ export const useEventsStore = defineStore('events', () => {
   }
 
   function clearModelLoadFailed() {
-    modelLoadFailed.value = false
+    failureDismissed.value = true
   }
+
+  function disconnect() {
+    if (reconnectTimer) clearTimeout(reconnectTimer)
+    reconnectTimer = null
+    const socket = ws
+    ws = null
+    socket?.close()
+    connected.value = false
+    status.cancelRefresh()
+  }
+
+  onScopeDispose(disconnect)
 
   return {
     latestStatusMessage,
@@ -84,6 +111,7 @@ export const useEventsStore = defineStore('events', () => {
     connected,
     onEvent,
     connect,
+    disconnect,
     clearStatusMessage,
     clearModelLoadFailed,
   }

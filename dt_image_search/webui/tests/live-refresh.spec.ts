@@ -55,12 +55,22 @@ describe('useLiveRefresh', () => {
     expect(calls).toHaveBeenCalledTimes(1)
   })
 
+  it('refreshes browse data after a reconnected status snapshot', async () => {
+    const refresh = vi.fn()
+    const events = new FakeEvents()
+    useLiveRefresh(events, refresh)
+    events.fire('status_refreshed')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
   it('unsubscribes on dispose', async () => {
     const calls = vi.fn()
     const events = new FakeEvents()
     const dispose = useLiveRefresh(events, calls)
     expect(events.listenerCount).toBe(1)
 
+    events.fire('fs_changed')
     dispose!()
     expect(events.listenerCount).toBe(0)
     events.fire('fs_changed')

@@ -5,13 +5,13 @@ import type { useEventsStore } from '../stores/events'
 
 const DEBOUNCE_MS = 1000
 
-type EventsLike = ReturnType<typeof useEventsStore>
+type EventsLike = Pick<ReturnType<typeof useEventsStore>, 'onEvent'>
 
 export function useLiveRefresh(
   events: EventsLike,
   onFsChanged: () => void,
   debounceMs: number = DEBOUNCE_MS,
-): (() => void) | undefined {
+): () => void {
   let timer: ReturnType<typeof setTimeout> | null = null
 
   const schedule = () => {
@@ -22,16 +22,17 @@ export function useLiveRefresh(
     }, debounceMs)
   }
 
-  const dispose = events.onEvent((event) => {
-    if (event === 'fs_changed') schedule()
+  const unsubscribe = events.onEvent((event) => {
+    if (event === 'fs_changed' || event === 'status_refreshed') schedule()
   })
 
-  if (getCurrentInstance()) {
-    onUnmounted(() => {
-      if (timer) clearTimeout(timer)
-      dispose?.()
-    })
+  const dispose = () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+    unsubscribe()
   }
+
+  if (getCurrentInstance()) onUnmounted(dispose)
 
   return dispose
 }

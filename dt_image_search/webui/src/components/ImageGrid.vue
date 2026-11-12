@@ -47,7 +47,7 @@ function open(id: string) {
 <style scoped>
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--dts-layout-thumbnail-min)), 1fr));
   gap: var(--dts-space-s);
 }
 

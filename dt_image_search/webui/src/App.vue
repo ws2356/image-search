@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // App shell: top navigation + global status banner + routed view.
 // Live events connect once here.
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useEventsStore } from './stores/events'
 import StatusBanner from './components/StatusBanner.vue'
 
@@ -10,6 +10,8 @@ const events = useEventsStore()
 onMounted(() => {
   events.connect()
 })
+
+onUnmounted(events.disconnect)
 </script>
 
 <template>
@@ -36,14 +38,14 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--dts-space-l);
-  border-block-end: 1px solid var(--dts-color-border);
+  border-block-end: var(--dts-border-width) solid var(--dts-color-border);
   height: auto;
   padding: var(--dts-space-s) var(--dts-space-l);
 }
 
 .app-title {
   font-size: var(--dts-font-size-xl);
-  font-weight: 600;
+  font-weight: var(--dts-font-weight-semibold);
 }
 
 .app-nav {

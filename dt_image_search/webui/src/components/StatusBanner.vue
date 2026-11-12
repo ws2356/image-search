@@ -2,11 +2,22 @@
 // Global status banner: latest status_message from the live event stream,
 // plus the model-load-failure alarm. Rendered once in App.vue.
 import { useEventsStore } from '../stores/events'
+import { useStatusStore } from '../stores/status'
 
 const store = useEventsStore()
+const status = useStatusStore()
 </script>
 
 <template>
+  <el-alert
+    v-if="status.error"
+    class="banner"
+    type="warning"
+    :title="status.error"
+    :closable="false"
+  >
+    <el-button link @click="status.refresh">重试</el-button>
+  </el-alert>
   <el-alert
     v-if="store.modelLoadFailed"
     class="banner"

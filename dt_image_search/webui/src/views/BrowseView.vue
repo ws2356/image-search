@@ -93,7 +93,7 @@ const crumbs = computed(() => {
 
 <template>
   <el-container class="browse-view">
-    <el-aside width="320px" class="folder-aside">
+    <el-aside width="var(--dts-layout-sidebar-width)" class="folder-aside">
       <div class="aside-header">
         <AddFolderButton @changed="onTreeChanged" />
         <el-button link @click="refresh">刷新</el-button>
@@ -137,7 +137,7 @@ const crumbs = computed(() => {
 }
 
 .folder-aside {
-  border-inline-end: 1px solid var(--dts-color-border);
+  border-inline-end: var(--dts-border-width) solid var(--dts-color-border);
   padding: var(--dts-space-m);
   overflow: auto;
 }

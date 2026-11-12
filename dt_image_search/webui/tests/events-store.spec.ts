@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
-import { setActivePinia, createPinia } from 'pinia'
+import { setActivePinia, createPinia, disposePinia } from 'pinia'
 
 vi.mock('../src/api/client', () => ({
   api: { getStatus: vi.fn() },
@@ -7,6 +7,8 @@ vi.mock('../src/api/client', () => ({
 
 import { api } from '../src/api/client'
 import { useEventsStore } from '../src/stores/events'
+import { useStatusStore } from '../src/stores/status'
+import { useFoldersStore } from '../src/stores/folders'
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = []
@@ -34,8 +36,11 @@ class FakeWebSocket {
 }
 
 describe('useEventsStore', () => {
+  let pinia: ReturnType<typeof createPinia>
+
   beforeEach(() => {
-    setActivePinia(createPinia())
+    pinia = createPinia()
+    setActivePinia(pinia)
     vi.useFakeTimers()
     FakeWebSocket.instances = []
     vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket)
@@ -43,6 +48,7 @@ describe('useEventsStore', () => {
   })
 
   afterEach(() => {
+    disposePinia(pinia)
     vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
@@ -127,5 +133,75 @@ describe('useEventsStore', () => {
     FakeWebSocket.instances[1].open()
     await vi.runAllTimersAsync()
     expect(api.getStatus).toHaveBeenCalledTimes(2)
+  })
+
+  it('replaces stale folder/model state and banners after reconnect', async () => {
+    const folder = { id: '1', path: '/photos/', status: 2, added_at: 'today' }
+    vi.mocked(api.getStatus).mockResolvedValue({ model_state: 'ready', folders: [folder] })
+    const events = useEventsStore()
+    const status = useStatusStore()
+    const folders = useFoldersStore()
+    status.modelState = 'loading'
+    folders.folders = [{ ...folder, status: 1 }]
+    events.connect()
+    const first = FakeWebSocket.instances[0]
+    first.receive({ event: 'status_message', data: { message: 'indexing' } })
+    first.receive({ event: 'model_load_failed', data: {} })
+    first.close()
+    await vi.advanceTimersByTimeAsync(1000)
+    FakeWebSocket.instances[1].open()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(status.modelState).toBe('ready')
+    expect(folders.folders).toEqual([folder])
+    expect(status.snapshot?.folders).toEqual([folder])
+    expect(events.latestStatusMessage).toBeNull()
+    expect(events.modelLoadFailed).toBe(false)
+  })
+
+  it('preserves progress messages received while the status request is pending', async () => {
+    let finish!: (value: { model_state: string; folders: [] }) => void
+    vi.mocked(api.getStatus).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const events = useEventsStore()
+    events.connect()
+    const ws = FakeWebSocket.instances[0]
+    ws.open()
+    ws.receive({ event: 'status_message', data: { message: 'new work' } })
+    finish({ model_state: 'ready', folders: [] })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(events.latestStatusMessage).toBe('new work')
+  })
+
+  it('reports a failed status refresh and recovers on the next connection', async () => {
+    vi.mocked(api.getStatus).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(api.getStatus).mockResolvedValueOnce({ model_state: 'failed', folders: [] })
+    const events = useEventsStore()
+    const status = useStatusStore()
+    events.connect()
+    FakeWebSocket.instances[0].open()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(status.error).toContain('加载状态失败')
+    FakeWebSocket.instances[0].close()
+    await vi.advanceTimersByTimeAsync(1000)
+    FakeWebSocket.instances[1].open()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(status.error).toBeNull()
+    expect(events.modelLoadFailed).toBe(true)
+  })
+
+  it('discards an old connection snapshot and stops reconnecting on disposal', async () => {
+    let finish!: (value: { model_state: string; folders: [] }) => void
+    vi.mocked(api.getStatus).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const events = useEventsStore()
+    const status = useStatusStore()
+    events.connect()
+    FakeWebSocket.instances[0].open()
+    FakeWebSocket.instances[0].close()
+    events.disconnect()
+    finish({ model_state: 'ready', folders: [] })
+    await vi.advanceTimersByTimeAsync(30000)
+    expect(status.snapshot).toBeNull()
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(events.connected).toBe(false)
   })
 })

@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vitest/globals"],
+    "types": ["vitest/globals", "vite/client", "node"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]

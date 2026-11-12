@@ -60,7 +60,7 @@ function open(id: string) {
 }
 
 .search-input {
-  max-width: 640px;
+  max-width: var(--dts-layout-search-width);
   font-size: var(--dts-font-size-m);
 }
 </style>
