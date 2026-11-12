@@ -4,7 +4,7 @@ Author: Codex
 Created: 2026-11-13
 """
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 from dt_image_search.shell.macos_menu import create_window_menu
 
@@ -17,8 +17,8 @@ class TestMacOSMenu(unittest.TestCase):
         self.assertEqual(len(menus[0].items), 1)
         menus[0].items[0].function()
         self.assertEqual(window.method_calls, [
-            unittest.mock.call.restore(),
-            unittest.mock.call.show(),
+            call.restore(),
+            call.show(),
         ])
 
 

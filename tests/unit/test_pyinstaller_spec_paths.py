@@ -3,18 +3,35 @@
 Author: Codex
 Created: 2026-11-13
 """
+import runpy
+import sys
 import tempfile
 import types
 import unittest
-import sys
-import runpy
-from unittest.mock import Mock
+from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SPEC = REPO_ROOT / "dt_image_search" / "DTImageSearch_MainApp.spec"
 RUNTIME_HOOK = ("pyi_rth_example", "/hooks/pyi_rth_example.py", "PYSOURCE")
+
+
+@contextmanager
+def _temporary_modules(replacements):
+    # Restore only our entries; wholesale sys.modules restoration can remove
+    # modules that background dependency threads imported during this scope.
+    missing = object()
+    originals = {name: sys.modules.get(name, missing) for name in replacements}
+    sys.modules.update(replacements)
+    try:
+        yield
+    finally:
+        for name, original in originals.items():
+            if original is missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
 
 class TestMainBundleContract(unittest.TestCase):
@@ -51,7 +68,7 @@ class TestMainBundleContract(unittest.TestCase):
             "BUNDLE": lambda *args, **kwargs: None,
         }
         with (
-            patch.dict("sys.modules", {
+            _temporary_modules({
                 "PyInstaller": types.ModuleType("PyInstaller"),
                 "PyInstaller.utils": types.ModuleType("PyInstaller.utils"),
                 "PyInstaller.utils.hooks": hooks,
@@ -94,7 +111,7 @@ class TestFrozenIndexEntrypoint(unittest.TestCase):
         multiprocessing.freeze_support = Mock(side_effect=SystemExit(0))
         server_main = types.ModuleType("dt_image_search.index_server.main")
         server_main.main = Mock()
-        with patch.dict("sys.modules", {
+        with _temporary_modules({
             "multiprocessing": multiprocessing,
             "dt_image_search.index_server.main": server_main,
         }):
