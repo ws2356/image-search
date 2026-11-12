@@ -4,7 +4,6 @@
 # fed by the dts_event_bus bridge.
 import asyncio
 import secrets
-import urllib.parse
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from fastapi import Depends, FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
+from starlette.requests import Request
 
 from dt_image_search.index_server.auth import token_verifier
 from dt_image_search.index_server.routes import attach_routes
@@ -24,7 +24,7 @@ class SPAStaticFiles(StaticFiles):
     """StaticFiles with a history-mode SPA fallback to index.html.
 
     The SPA entry (index.html — direct or via fallback) is token-gated via
-    the auth query param. Hashed asset bundles are not user data and stay
+    the auth query param or X-Auth-Token header. Hashed asset bundles stay
     reachable so plain <script src> tags can load without per-URL tokens.
     """
 
@@ -33,9 +33,8 @@ class SPAStaticFiles(StaticFiles):
         self._token = token
 
     def _authorized(self, scope) -> bool:
-        query_string = scope.get("query_string", b"")
-        params = urllib.parse.parse_qs(query_string.decode("latin-1"))
-        supplied = (params.get("auth") or [None])[0]
+        request = Request(scope)
+        supplied = request.headers.get("X-Auth-Token") or request.query_params.get("auth")
         return bool(supplied) and secrets.compare_digest(supplied, self._token)
 
     _SPA_ENTRY_PATHS = ("", ".", "index.html", "./index.html")
@@ -68,7 +67,7 @@ def create_app(ctx: BMContext, token: str, static_dir: str | None = None) -> Fas
         yield
         bridge.dispose()
 
-    app = FastAPI(lifespan=lifespan)
+    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ctx = ctx
     app.state.token = token
 

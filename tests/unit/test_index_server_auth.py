@@ -1,5 +1,7 @@
 # Unit tests for the index server token auth dependency and health endpoint.
 import unittest
+import tempfile
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -40,6 +42,23 @@ class TestTokenAuth(unittest.TestCase):
         resp = client.get("/ping", params={"auth": TOKEN})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"ok": True})
+
+    def test_generated_documentation_is_not_exposed(self):
+        client = _client()
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            with self.subTest(path=path):
+                self.assertEqual(client.get(path).status_code, 404)
+
+    def test_spa_entry_accepts_header_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "index.html").write_text("<html>AuSearch</html>")
+            client = _client(static_dir=directory)
+            for path in ("/", "/index.html", "/settings"):
+                with self.subTest(path=path):
+                    self.assertEqual(client.get(path).status_code, 401)
+                    response = client.get(path, headers={"X-Auth-Token": TOKEN})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn("AuSearch", response.text)
 
 
 if __name__ == '__main__':

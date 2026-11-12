@@ -9,7 +9,7 @@ from fastapi import Header, HTTPException, Query, Request
 def token_verifier(token: str):
     """Build a FastAPI dependency enforcing the shared one-time token."""
 
-    def verify(
+    async def verify(
         request: Request,
         x_auth_token: str | None = Header(default=None),
         auth: str | None = Query(default=None),

@@ -102,6 +102,15 @@ class TestThumbnailCache(unittest.TestCase):
         with self.assertRaises(FileGoneError):
             cache.get_or_build(f, size=300)
 
+    def test_cached_thumbnail_does_not_hide_deleted_source(self):
+        cache = ThumbnailCache(cache_dir=self.cache_dir)
+        file = File(id=1, path=self.src, folder_id=1)
+        cache.get_or_build(file)
+        os.unlink(self.src)
+
+        with self.assertRaises(FileGoneError):
+            cache.get_or_build(file)
+
     def test_lru_eviction_keeps_disk_cache(self):
         cache = ThumbnailCache(cache_dir=self.cache_dir, max_memory_items=2)
         paths = []
@@ -178,6 +187,16 @@ class TestMediaRoutes(unittest.TestCase):
             for client in db.client():
                 resp = client.get(f"/thumb/{file_id}", headers=HEADERS)
             self.assertEqual(resp.status_code, 404)
+
+    def test_thumb_source_deleted_after_caching_is_404(self):
+        with _SqliteFixture() as db:
+            src = os.path.join(db._tmp.name, "cat.jpg")
+            _make_jpeg(src)
+            file_id = self._seed(db, src)
+            for client in db.client():
+                self.assertEqual(client.get(f"/thumb/{file_id}", headers=HEADERS).status_code, 200)
+                os.unlink(src)
+                self.assertEqual(client.get(f"/thumb/{file_id}", headers=HEADERS).status_code, 404)
 
     def test_file_serves_original_with_content_type(self):
         with _SqliteFixture() as db:

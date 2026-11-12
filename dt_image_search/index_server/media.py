@@ -29,6 +29,9 @@ class ThumbnailCache:
         self._lock = threading.Lock()
 
     def get_or_build(self, file: File, size: int = 300) -> str:
+        # A cached derivative must not outlive the source from the UI's perspective.
+        if not Path(file.path).is_file():
+            raise FileGoneError(str(file.path))
         key = f"{hashlib.sha1(file.path.encode()).hexdigest()}_{size}.jpg"
         disk_path = self._cache_dir / key
         if disk_path.exists():
