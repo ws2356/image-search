@@ -63,6 +63,15 @@ class TestServerProcess(unittest.TestCase):
         self.assertEqual(len(spawns), 2)  # never a third spawn
         self.assertEqual(exited.is_set(), True)
 
+    def test_ignores_invalid_ready_announcements_without_losing_supervision(self):
+        _, spawns, ports, exited = self._run_with_procs([
+            _FakeProc("DTS_READY broken\nDTS_READY 0\nDTS_READY 70000\nDTS_READY 5173\n"),
+            _FakeProc(""),
+        ])
+        self.assertEqual(ports, [5173])
+        self.assertEqual(len(spawns), 2)
+        self.assertTrue(exited.is_set())
+
     def test_stop_terminates_without_restart(self):
         proc = _FakeProc("")
         # keep the reader blocked on an endless stream
@@ -84,6 +93,7 @@ class TestServerProcess(unittest.TestCase):
             server.stop()
         self.assertTrue(proc.terminated)
         self.assertEqual(len(spawns), 1)  # no restart after explicit stop
+        self.assertFalse(exited.is_set())  # explicit shutdown must not destroy the window again
 
 
 class TestChildCommand(unittest.TestCase):

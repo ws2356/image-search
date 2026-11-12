@@ -130,10 +130,15 @@ if None in (_shell_script, _index_server_script, _main_script, _daemon_script):
 
 pyz = PYZ(a.pure)
 
+# Analysis prepends runtime hooks (multiprocessing, Qt, package paths, etc.).
+# Each executable needs those hooks before its own entry, without the other entries.
+_entry_scripts = (_shell_script, _index_server_script, _main_script, _daemon_script)
+_runtime_scripts = [entry for entry in a.scripts if entry not in _entry_scripts]
+
 # The shell is the shipped executable; the index server is its sidecar child.
 exe_shell = EXE(
     pyz,
-    [_shell_script],
+    [*_runtime_scripts, _shell_script],
     [],
     exclude_binaries=True,
     name=app_name,
@@ -151,7 +156,7 @@ exe_shell = EXE(
 
 exe_index_server = EXE(
     pyz,
-    [_index_server_script],
+    [*_runtime_scripts, _index_server_script],
     [],
     exclude_binaries=True,
     name="AuSearchIndexServer",
@@ -159,7 +164,7 @@ exe_index_server = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=upx_enabled,
-    console=False,
+    console=True,  # DTS_READY travels over the shell's stdout pipe.
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -169,7 +174,7 @@ exe_index_server = EXE(
 
 exe_daemon = EXE(
     pyz,
-    [_daemon_script],
+    [*_runtime_scripts, _daemon_script],
     [],
     exclude_binaries=True,
     name="InstantShareAgent",
@@ -187,7 +192,7 @@ exe_daemon = EXE(
 
 exe_qt_fallback = EXE(
     pyz,
-    [_main_script],
+    [*_runtime_scripts, _main_script],
     [],
     exclude_binaries=True,
     name=f"{app_name}QtFallback",

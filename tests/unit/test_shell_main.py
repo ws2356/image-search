@@ -1,10 +1,47 @@
 # Unit tests for the shell's URL swap loop (loading page → app URL, re-applied
 # after every server restart announcement).
 import queue
+import subprocess
+import sys
 import threading
 import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from dt_image_search.shell.shell_main import run_url_swap
+
+
+class TestShellEntrypoint(unittest.TestCase):
+    def test_default_launcher_module_supports_help_without_starting_a_server(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "dt_image_search.shell", "--help"],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--static-dir", result.stdout)
+
+    def test_window_creation_failure_still_releases_instance_lock(self):
+        from dt_image_search.shell.shell_main import main
+
+        webview = MagicMock()
+        webview.create_window.side_effect = RuntimeError("no display")
+        with (
+            patch.dict(sys.modules, {"webview": webview}),
+            patch.object(sys, "argv", ["shell"]),
+            patch("dt_image_search.shell.shell_main.init_desktop_telemetry"),
+            patch("dt_image_search.shell.shell_main.acquire_instance_lock", return_value=42),
+            patch("dt_image_search.shell.shell_main.release_instance_lock") as release,
+            patch("dt_image_search.shell.shell_main._lock_path", return_value=Path("/unused")),
+            patch("dt_image_search.shell.shell_main.ServerProcess") as server,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "no display"):
+                main()
+        release.assert_called_once_with(42)
+        server.return_value.stop.assert_called_once()
+        server.return_value.start.assert_not_called()
 
 
 class FakeWindow:

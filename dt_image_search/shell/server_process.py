@@ -22,21 +22,29 @@ class ServerProcess:
         self._reader_thread: threading.Thread | None = None
         self._restarts = 0
         self._stopped = False
+        self._process_lock = threading.Lock()
 
     def start(self) -> None:
         self._spawn()
 
     def stop(self) -> None:
-        self._stopped = True
-        proc = self._proc
+        with self._process_lock:
+            self._stopped = True
+            proc = self._proc
+            reader = self._reader_thread
         if proc is not None:
             try:
                 proc.terminate()
             except OSError:
                 pass
-        reader = self._reader_thread
-        if reader is not None:
+        if reader is not None and reader is not threading.current_thread():
             reader.join(timeout=10)
+            if reader.is_alive() and proc is not None:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                reader.join(timeout=5)
 
     def child_command(self) -> list:
         """The command line for the index server child process.
@@ -54,26 +62,45 @@ class ServerProcess:
         return [self._python_exe, "-m", "dt_image_search.index_server", "--auth-token", self.token, *self._extra_args]
 
     def _spawn(self) -> None:
-        args = self.child_command()
-        self._proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
-        self._reader_thread.start()
+        with self._process_lock:
+            if self._stopped:
+                return
+            self._proc = subprocess.Popen(
+                self.child_command(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            self._reader_thread = threading.Thread(target=self._read_loop, args=(self._proc,), daemon=True)
+            self._reader_thread.start()
 
-    def _read_loop(self) -> None:
-        for line in self._proc.stdout:
+    def _read_loop(self, proc: subprocess.Popen) -> None:
+        for line in proc.stdout:
             line = line.strip()
             if line.startswith("DTS_READY "):
-                self.port = int(line.split()[1])
+                try:
+                    port = int(line.removeprefix("DTS_READY "))
+                    if not 0 < port < 65536:
+                        raise ValueError("port out of range")
+                except ValueError:
+                    log("warning", message="ServerProcess: ignoring invalid READY announcement")
+                    continue
+                self.port = port
                 self._on_ready(self.port)
-        self._proc.wait()
+        proc.stdout.close()
+        proc.wait()
 
         if self._stopped:
-            self._on_exit()
             return
         self._restarts += 1
         if self._restarts <= 1:
             log("warning", message="ServerProcess: index server exited unexpectedly; restarting once")
-            self._spawn()
+            try:
+                self._spawn()
+            except OSError as error:
+                log("error", message=f"ServerProcess: restart failed: {error}")
+                self._on_exit()
         else:
             log("error", message="ServerProcess: index server exited again; giving up")
             self._on_exit()

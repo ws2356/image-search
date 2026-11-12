@@ -46,11 +46,10 @@ def main() -> None:
     import argparse
     import webview
 
-    init_desktop_telemetry(service_name="imagesearch_shell")
-
     parser = argparse.ArgumentParser(description="AuSearch web shell")
     parser.add_argument("--static-dir", default=None, help="Passed through to the index server (optional)")
     args = parser.parse_args()
+    init_desktop_telemetry(service_name="imagesearch_shell")
 
     server_args = []
     if args.static_dir:
@@ -75,26 +74,31 @@ def main() -> None:
             pass
 
     server = ServerProcess(on_ready=on_ready, on_exit=on_exit, extra_args=server_args)
-    server.start()
-
-    window = webview.create_window(
-        "AuSearch",
-        html=_LOADING_HTML,
-        js_api=ShellApi(window_provider=lambda: window),
-        width=1280,
-        height=800,
-    )
-
-    def swap_to_app() -> None:
-        run_url_swap(ready_ports, window, server.token)
-
-    threading.Thread(target=swap_to_app, daemon=True).start()
-
-    if sys.platform != "darwin":
-        _start_tray(show_window=lambda: window.show(), quit_app=lambda: (server.stop(), window.destroy()))
-
     try:
-        webview.start()
+        window = webview.create_window(
+            "AuSearch",
+            html=_LOADING_HTML,
+            js_api=ShellApi(window_provider=lambda: window),
+            width=1280,
+            height=800,
+        )
+        # Cocoa's native Quit may terminate the GUI before start() returns.
+        # Stop the child synchronously while the window can still close.
+        window.events.closing += server.stop
+        server.start()
+
+        start_options = {}
+        if sys.platform == "darwin":
+            from dt_image_search.shell.macos_menu import create_window_menu
+
+            start_options["menu"] = create_window_menu(window)
+        else:
+            _start_tray(show_window=window.show, quit_app=window.destroy)
+
+        webview.start(
+            lambda: run_url_swap(ready_ports, window, server.token),
+            **start_options,
+        )
     finally:
         ready_ports.put(None)
         server.stop()

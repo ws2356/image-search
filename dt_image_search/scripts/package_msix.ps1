@@ -1,4 +1,7 @@
 #Requires -Version 5.1
+# TODO(web-ui-refactor): Validate the shell + AuSearchIndexServer.exe sidecar,
+# bundled webui/dist, WebView2 runtime, loopback HTTP/WS and Qt fallback on
+# Windows before treating this MSIX path as accepted. macOS is verified first.
 
 <#
 .SYNOPSIS

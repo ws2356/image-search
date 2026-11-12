@@ -12,8 +12,11 @@ _MAX_EMBEDDING_IMAGE_DIM = 4096
 _worker_preprocess = None
 
 def _initialize_worker(ctx: BMContext):
-    import open_clip
     """Initialize worker process with preloaded model"""
+    from dt_image_search.tools.transformers_frozen_compat import install_transformers_pyinstaller_compat
+
+    install_transformers_pyinstaller_compat()
+    import open_clip
     global _worker_preprocess
     # Load model once per worker process
     try:
