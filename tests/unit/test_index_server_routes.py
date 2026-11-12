@@ -220,6 +220,44 @@ class TestFolderRoutes(unittest.TestCase):
 
 
 class TestSearchRoute(unittest.TestCase):
+    def test_search_resolves_core_paths_to_registered_files(self):
+        from pathlib import Path
+        from contextlib import contextmanager
+
+        @contextmanager
+        def connect():
+            conn = db.connect()
+            try:
+                yield conn
+            finally:
+                conn.close()
+
+        with _SqliteFixture() as db:
+            folder_path = db._tmp.name + "/"
+            image_path = folder_path + "cat.jpg"
+            Path(folder_path, "1.faiss").touch()
+            with db.connect() as conn:
+                conn.execute("INSERT INTO folders (id, path, status) VALUES (1, ?, 2)", (folder_path,))
+                conn.execute(
+                    "INSERT INTO files (id, path, folder_id, clip_index, status) VALUES (11, ?, 1, 0, 1)",
+                    (image_path,),
+                )
+            # Replace only model inference and storage boundaries. Exercise the real
+            # core path lookup, search service and HTTP serialization together.
+            with (
+                patch("dt_image_search.search.search_service.create_db_conn", connect),
+                patch("dt_image_search.index.dts_index.create_db_conn", connect),
+                patch("dt_image_search.index.dts_index.get_app_data_path", return_value=Path(folder_path)),
+                patch("dt_image_search.search.search_service.get_model_state", return_value="ready"),
+                patch("dt_image_search.index.dts_index._query_internal", return_value=[[0, 0.87]]),
+            ):
+                for client in db.client():
+                    response = client.get("/search?q=cat", headers=HEADERS)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["results"], [
+                {"id": "11", "path": image_path, "folder_id": "1", "score": 0.87},
+            ])
+
     def test_search_returns_merged_results(self):
         db = _SqliteFixture()
         with db:

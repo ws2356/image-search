@@ -2,11 +2,12 @@
 # ranked result list. Shared by the legacy Qt controller and the index server.
 from pathlib import Path
 
-from dt_image_search.model.dts_db import create_db_conn, get_all_folders
+from dt_image_search.model.dts_db import create_db_conn, get_all_folders, get_file_by_path
 from dt_image_search.index.dts_index import query_index, index_path_for_folder, TOP_K, get_model_state, MODEL_STATE_READY
 from pc_common.telemetry.telemetry_client import log
 from dt_image_search.bm_context import BMContext
 from dt_image_search.model.dts_folder import Folder
+from dt_image_search.model.dts_file import File
 
 
 class ModelNotReadyError(Exception):
@@ -17,7 +18,7 @@ class ModelNotReadyError(Exception):
         super().__init__(f"model not ready: {state}")
 
 
-def search_folders(ctx: BMContext, query: str) -> list:
+def search_folders(ctx: BMContext, query: str) -> list[tuple[File, float]]:
     """Search every registered folder and return up to TOP_K (file, score) pairs,
     sorted by descending score. Raises ModelNotReadyError when the model is
     loading or failed."""
@@ -34,13 +35,18 @@ def search_folders(ctx: BMContext, query: str) -> list:
     return results[:TOP_K]
 
 
-def _search_in_folder(ctx: BMContext, folder: Folder, query: str) -> list:
+def _search_in_folder(ctx: BMContext, folder: Folder, query: str) -> list[tuple[File, float]]:
     log("info", message=f"Searching in folder: {folder.path}")
     index_path = index_path_for_folder(folder=folder)
     if not Path(index_path).exists():
         log("warning", "search", message=f"Index file does not exist for folder: {folder.path}")
         return []
-    items = query_index(ctx=ctx, folder_id=folder.id, index_path=index_path, query_text=query)
-    for item in items:
-        log("debug", message=f"Found item: {item[0]} with score: {item[1]}")
-    return items
+    paths_and_scores = query_index(ctx=ctx, folder_id=folder.id, index_path=index_path, query_text=query)
+    results = []
+    with create_db_conn() as conn:
+        for path, score in paths_and_scores:
+            file = get_file_by_path(conn, path)
+            # An index result can race with removal of its DB row.
+            if file is not None and file.folder_id == folder.id:
+                results.append((file, float(score)))
+    return results

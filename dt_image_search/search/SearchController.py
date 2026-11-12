@@ -56,4 +56,4 @@ class SearchController(BaseController):
         if not results:
             log("info", message="No results found for the search query")
         status_messenger.show(f"Search completed with {len(results)} results.")
-        dispatcher.post(lambda: self.imageListModel.load_images(results))
+        dispatcher.post(lambda: self.imageListModel.load_images([(file.path, score) for file, score in results]))

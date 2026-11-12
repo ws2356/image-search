@@ -91,7 +91,7 @@ class TestSearchController(unittest.TestCase):
     @patch('dt_image_search.search.SearchController.log')
     def test_on_search_query_non_empty(self, mock_log, mock_status_bar, mock_dispatcher, mock_search_folders):
         # Setup
-        mock_search_folders.return_value = [("/mock/image.jpg", 0.9)]
+        mock_search_folders.return_value = [(MagicMock(path="/mock/image.jpg"), 0.9)]
 
         # Mock dispatcher.post to execute immediately
         mock_dispatcher.post.side_effect = lambda f: f()

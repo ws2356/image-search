@@ -56,6 +56,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from dt_image_search.model.dts_folder import Folder
+from dt_image_search.model.dts_file import File
 from dt_image_search.search.search_service import search_folders, ModelNotReadyError
 
 SERVICE = 'dt_image_search.search.search_service'
@@ -78,12 +79,18 @@ class TestSearchFolders(unittest.TestCase):
     def test_merges_results_across_folders_desc_by_score(self, _mock_state):
         f1, f2 = _folder("1", "/a"), _folder("2", "/b")
         conn = MagicMock()
+        records = {
+            "f1": File(id="f1", path="f1", folder_id="1"),
+            "f2": File(id="f2", path="f2", folder_id="1"),
+            "f3": File(id="f3", path="f3", folder_id="2"),
+        }
         with patch(f'{SERVICE}.create_db_conn', return_value=conn), \
              patch(f'{SERVICE}.get_all_folders', return_value=[f1, f2]), \
+             patch(f'{SERVICE}.get_file_by_path', side_effect=lambda conn, path: records.get(path)), \
              patch(f'{SERVICE}.index_path_for_folder', side_effect=lambda folder: f"{folder.path}.faiss"), \
              patch(f'{SERVICE}.query_index', side_effect=[
-                 [(MagicMock(id="f1"), 0.5), (MagicMock(id="f2"), 0.9)],
-                 [(MagicMock(id="f3"), 0.7)],
+                 [("f1", 0.5), ("f2", 0.9)],
+                 [("f3", 0.7)],
              ]):
             results = search_folders(ctx=MagicMock(), query="cat")
 
@@ -95,9 +102,10 @@ class TestSearchFolders(unittest.TestCase):
     def test_truncates_to_top_k(self, _mock_state):
         f1 = _folder("1", "/a")
         conn = MagicMock()
-        items = [(MagicMock(id=f"f{i}"), float(i)) for i in range(150)]
+        items = [(f"f{i}", float(i)) for i in range(150)]
         with patch(f'{SERVICE}.create_db_conn', return_value=conn), \
              patch(f'{SERVICE}.get_all_folders', return_value=[f1]), \
+             patch(f'{SERVICE}.get_file_by_path', side_effect=lambda conn, path: File(id=path, path=path, folder_id="1")), \
              patch(f'{SERVICE}.index_path_for_folder', return_value="/a.faiss"), \
              patch(f'{SERVICE}.query_index', return_value=items), \
              patch(f'{SERVICE}.TOP_K', 100):
@@ -106,6 +114,17 @@ class TestSearchFolders(unittest.TestCase):
         self.assertEqual(len(results), 100)
         self.assertEqual(results[0][1], 149.0)
         self.assertEqual(results[-1][1], 50.0)
+
+    @patch(f'{SERVICE}.Path', MagicMock())
+    @patch(f'{SERVICE}.get_model_state', return_value='ready')
+    def test_ignores_results_removed_from_database_or_owned_by_another_folder(self, _mock_state):
+        with (
+            patch(f'{SERVICE}.create_db_conn', return_value=MagicMock()),
+            patch(f'{SERVICE}.get_all_folders', return_value=[_folder(1, "/a")]),
+            patch(f'{SERVICE}.query_index', return_value=[("/gone.jpg", 0.9), ("/other.jpg", 0.8)]),
+            patch(f'{SERVICE}.get_file_by_path', side_effect=[None, File(2, "/other.jpg", folder_id=2)]),
+        ):
+            self.assertEqual(search_folders(ctx=MagicMock(), query="cat"), [])
 
     @patch(f'{SERVICE}.Path', MagicMock())
     @patch(f'{SERVICE}.get_model_state', return_value='ready')
