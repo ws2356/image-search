@@ -6,12 +6,8 @@ Spec: `docs/superpowers/specs/2026-10-04-web-ui-refactor-design.md`(兼容性约
 ## 环境准备
 
 ```bash
-# 1. 沙箱内无法安装新依赖,先补 uv 依赖(需要网络):
-#    pyproject.toml [project.dependencies] 增加:
-#      "pystray>=0.19,<1.0",
-#      "pywebview>=5.0,<6.0",
-#    然后:
-uv lock && uv sync
+# 1. 安装仓库已锁定的依赖:
+uv sync --frozen
 
 # 2. 构建 web UI(如尚未构建):
 pnpm -C dt_image_search/webui install && pnpm -C dt_image_search/webui build
@@ -83,6 +79,18 @@ uv run --frozen python -m dt_image_search   # 再次启动 Qt 版
 | C 双向可读 | ☐ 待执行 | | |
 
 执行人/日期:__________
+
+## 自动化补充验证(2026-11-13)
+
+以下结果来自 macOS dev 打包产物与既有 app data 的隔离副本,不替代上表的旧 Qt GUI 基线、完整 GUI 操作及双向兼容验收。
+
+- 产物:`/tmp/ausearch-webui-refactor-20261113/AuSearch-dev.app`;PyInstaller 构建成功,壳和 `AuSearchIndexServer` 均正常启动。另行确认 Cocoa 原生菜单包含 About、Quit 和“显示窗口”。
+- 原始数据复制到临时目录,SQLite 使用 backup API 生成一致副本;通过数据路径环境变量让打包产物仅使用该副本。
+- 启动后数据库 schema、`app_config` 内容及两个既有 FAISS 文件的 SHA-256 均与副本基线相同,数据目录根部未新增条目。模型达到 ready,旧 folder 列表可读取。
+- 两个旧 FAISS 索引在基线中均为空,旧数据搜索响应为 200、结果为空;这不能证明旧版已索引内容在新版可搜索。
+- 向测试目录添加两张图片后,新增 folder 返回 201,索引最终达到 status=2;浏览返回两张图片,缩略图及原图均返回 200,搜索返回结果,新 FAISS 文件可由 FAISS 读取。
+- 未认证 SPA/docs 请求返回 401,认证 SPA 请求及 health 返回 200;终止 sidecar 后壳自动重启一次,新 server 的 `/status` 返回 200。
+- 原始 JSON 报告:`/tmp/webui-refactor-packaged-smoke.json`;以上路径是本次本机临时产物,不作为仓库长期测试资源。
 
 ## 已知限制(本期)
 

@@ -8,18 +8,20 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-04-web-ui-refactor-design.md`
 
-**完成情况核对(2026-11-04,代码基线 `0d6f6668`):**
+**完成情况核对(2026-11-13,实现基线 `667524df`):**
 
 - `[x]` 表示对应实现/测试产物已核对,或已有对应提交;Commit 勾选仅确认提交存在,不代表整个 Task 已通过验收。
 - 测试编写步骤按现存测试覆盖勾选;单独的 `→ FAIL` 步骤没有可核验的历史运行记录,保留未勾选,不表示当前测试失败。
-- 已运行 `pnpm -C dt_image_search/webui test`(35/35 通过)与 `pnpm -C dt_image_search/webui build`(成功)。
+- 已运行 `pnpm -C dt_image_search/webui test`(41/41 通过)与 `pnpm -C dt_image_search/webui build`(含 `vue-tsc --noEmit`,成功)。
 - Python 专项测试通过按仓库脚本逐文件运行同一测试文件的结果确认,未逐条重放计划中的 pytest 命令。
-- 全量脚本实际位于 `dt_image_search/scripts/run_tests.sh`。本次 `uv run --frozen bash dt_image_search/scripts/run_tests.sh` 中 66 个测试文件报告 OK(503 个用例,含 2 个跳过),但脚本仍引用不存在的 `tests/unit/test_pyinstaller_spec_paths.py`,最终退出码为 1;要求全量全绿的步骤保留未勾选。Task 1 Step 5 指定的整目录 pytest 也未验证。
+- `uv run --frozen bash dt_image_search/scripts/run_tests.sh` 退出码为 0:68 个测试文件、517 个用例通过(含 2 个跳过);快照测试因未安装 `pytest-qt` 被跳过。已补齐 `test_pyinstaller_spec_paths.py` 并将 macOS 菜单测试纳入脚本。
+- Task 1 Step 5 的整目录 pytest 仍未全绿:既有测试在模块级安装 `sys.modules` stub,同进程收集会相互污染;逐文件隔离执行还发现未纳入脚本的旧测试失配,包括 `test_appx_manifest.py` 仍断言 `DTImageSearch.exe`、`test_instant_share_mini_window.py` 导入已删除的 `_phase_message`、`test_instant_share_qr_trigger.py` 依赖旧 `handle_claim`/image 协议,以及 `test_instant_share_trust_endpoints.py` 依赖旧 PIN/路由契约。未为本次主 UI 重构修改这些既有分享协议测试。
+- macOS dev PyInstaller 构建成功,原生 About/Quit/显示窗口菜单已验证;打包壳与 sidecar 在既有数据的隔离副本上完成 HTTP 索引、搜索、取图和重启验证。完整 GUI 操作及旧 Qt 版双向兼容仍待验收,详情统一记录在 `docs/mobile-folder/[dev]webui-refactor-data-compat-checklist.md`;Windows MSIX 尚未构建验证。
 - folder service 以 `register_folder` + `watch_and_index` 拆分实现计划中的添加流程;启动序列测试位于 `tests/unit/test_app_bootstrap.py`。按行为核对,不要求文件名/内部函数名完全一致。
 
 ## Global Constraints
 
-- Python 3.10;所有 Python 进程/命令一律经 `uv run` 执行(仓库根有 `uv.lock`),禁止直接裸调 `python`/`pip`。测试:`uv run bash scripts/run_tests.sh`(全量)或 `uv run pytest <file> -v`(单文件)。
+- Python 3.10;所有 Python 进程/命令一律经 `uv run` 执行(仓库根有 `uv.lock`),禁止直接裸调 `python`/`pip`。测试:`uv run bash dt_image_search/scripts/run_tests.sh`(仓库脚本)或 `uv run pytest <file> -v`(单文件)。
 - **数据格式完全不变**:app data 路径、`app_data.sqlite` schema、`*.faiss` 文件名/格式、`model_cache/` 结构、`app_config` 键值。新文件只允许出现在新增子目录 `app_data/thumb_cache/`(旧版本会忽略,属增量不属变更)。
 - index server 仅监听 `127.0.0.1`;所有 HTTP 端点与 WS 要求 token(header `X-Auth-Token` 或 query `auth`)。
 - 本期**不改动、不接线** mobile_folder 功能(`mobile/` 目录与 mobile_folder相关测试保持原样;Qt 移除仅限主 UI 路径，原有的UI和controller相关的测试可以不再维护甚至删除，其他测试暂时保留如果失败了需要检查是否仍然有保留的必要如果有则需要修复)。
@@ -133,13 +135,13 @@
 
 - [x] **Step 1: 写失败测试** — 无 token 访问受保护路由 → 401;带 `X-Auth-Token`/`auth` query → 200;`/health` 无 token → 200。
 - [ ] **Step 2:** pytest → FAIL。
-- [ ] **Step 3:** 实现 `auth.py`(FastAPI dependency)+ `app.py` 工厂。
+- [x] **Step 3:** 实现 `auth.py`(FastAPI dependency)+ `app.py` 工厂。
 - [x] **Step 4:** pytest → PASS。
 - [x] **Step 5: 写失败测试(READY 行)** — `subprocess` 起 `main.py`(stub ctx 或 `--skip-model-init` 测试开关),stdout 收到 `DTS_READY <port>` 后 `curl /health` 200、进程退出时清理。
 - [x] **Step 6:** pytest → PASS。
 - [x] **Step 7: Commit** `feat: index server skeleton with token auth and ready handshake`
 
-> Step 3 部分完成:app 工厂、认证、静态托管与握手均已存在,但 `create_app` 使用 FastAPI 默认配置,`/docs`、`/redoc`、`/openapi.json` 未挂 token 校验,未完全满足“除 health 外所有 HTTP 端点需 token”的约束;现有认证测试验证的是业务路由、SPA 入口和 WS。
+> 核对:已关闭 FastAPI 自动 docs/redoc/OpenAPI 端点;SPA 入口与 history fallback 同时支持 header/query token,已覆盖未认证访问。构建后的静态资源保留公开读取,以支持浏览器加载 JS/CSS;业务路由、SPA 入口和 WS 要求 token,health 供壳匿名探活。
 
 ### Task 5: folder / search / browse / reindex 路由 + get_file_by_id
 
@@ -178,11 +180,11 @@
 
 - [x] **Step 1: 写失败测试** — 生成缩略图并二次命中磁盘缓存(不重新解码);不存在的 id → 404;`cache_dir` 外路径不会被拼接(用 `file.path` 只作数据源断言);原图路由返回 `image/jpeg|png` Content-Type。
 - [ ] **Step 2:** pytest → FAIL。
-- [ ] **Step 3:** 实现 `media.py` + 路由(`File.path` 仅供服务端读取文件,客户端永不传路径)。
+- [x] **Step 3:** 实现 `media.py` + 路由(`File.path` 仅供服务端读取文件,客户端永不传路径)。
 - [x] **Step 4:** pytest → PASS。
 - [x] **Step 5: Commit** `feat: index server thumbnail/original-image routes`
 
-> Step 3 部分完成:`media.py` 与按 DB id 取图的路由已存在,但 `ThumbnailCache.get_or_build` 命中磁盘缓存时直接返回,原图随后删除也不会触发 `FileGoneError`/404。现有缺失源文件测试仅覆盖无缓存分支。
+> 核对:缓存命中前也确认原图存在;原图删除后,内存/磁盘缩略图缓存都不会绕过 `FileGoneError`/404。新增回归测试覆盖两种缓存命中分支。
 
 ### Task 7: EventBridge + WS /events
 
@@ -216,7 +218,7 @@
 - [x] **Step 1: 写失败测试** — monkeypatch 上述 init 函数,断言装配顺序与退出清理顺序;`--skip-model-init`(测试开关)时不调用模型 init。
 - [ ] **Step 2:** pytest → FAIL。
 - [x] **Step 3:** 实现(从 `__main__.py:875-879` + `cleanup():808-816` 提取共享函数,`__main__.py` 与 `main.py` 共用,DRY)。
-- [ ] **Step 4:** pytest → PASS;`uv run bash scripts/run_tests.sh` 全绿。
+- [x] **Step 4:** pytest → PASS;`uv run bash dt_image_search/scripts/run_tests.sh` 全绿。
 - [x] **Step 5: Commit** `feat: index server process assembly`
 
 ### Task 9: webui 脚手架(pnpm + Vite + Vue3 + Pinia + Vitest)
@@ -235,11 +237,11 @@
 - 固定版本:vue ^3.5、element-plus ^2.13、vite ^7、pinia ^3、vue-router ^4.5、vitest ^3(以锁定日期最新 minor 为准,写死在 package.json)。
 
 - [x] **Step 1:** 手写最小脚手架(含上述 Element Plus 插件配置);`tokens.css` 初版定义 Primary/语义色与间距/字号/圆角三组 token。
-- [ ] **Step 2:** `smoke.spec.ts` 断言 `App.vue` 渲染出根容器;`tokens.spec.ts` 断言构建产物 CSS 含 `--dts-*` 定义且 `--el-color-primary` 由其映射。
+- [x] **Step 2:** `smoke.spec.ts` 断言 `App.vue` 渲染出根容器;`tokens.spec.ts` 断言构建产物 CSS 含 `--dts-*` 定义且 `--el-color-primary` 由其映射。
 - [x] **Step 3:** `pnpm -C webui test` → PASS;`pnpm -C webui build` 成功。
 - [x] **Step 4: Commit** `feat: webui scaffold (vue3 + vite + pinia + element plus, pnpm, design tokens)`
 
-> Step 2 部分完成:smoke 测试已存在且通过;`tokens.spec.ts` 读取的是 `src/styles/tokens.css`,未按计划检查构建产物 CSS。
+> 核对:`tokens.spec.ts` 在临时目录执行真实 Vite build,检查产物中的 token 定义及最终主题映射声明;同时扫描 Vue 组件以防裸色值/尺寸回归。
 
 ### Task 10: webui API client(带 token)
 
@@ -274,11 +276,11 @@
   - **组件约定**:优先复用 Element Plus 组件(`el-input`/`el-button`/`el-empty`/`el-tooltip` 等),自定义组件只补 EP 没有的形态;样式只引用 `--dts-*` token(见 Task 9)。
 - [x] **Step 1: 写失败 store 测试**(防抖只发一次请求;幂等添加后 folders 恰好一条;503 分支)。
 - [ ] **Step 2:** vitest → FAIL。
-- [ ] **Step 3:** 实现两个 store + 三个组件 + 两个视图(纯展示与状态编排,无业务计算)。
+- [x] **Step 3:** 实现两个 store + 三个组件 + 两个视图(纯展示与状态编排,无业务计算)。
 - [x] **Step 4:** vitest PASS;`pnpm -C webui build` 通过。
 - [x] **Step 5: Commit** `feat: webui search & browse pages`
 
-> Step 3 部分完成:store、组件与页面功能已落地,但尚未满足本 Task 的 design token 约定,例如 `ImageGrid.vue` 的 `150px`、`SearchView.vue` 的 `640px`、`BrowseView.vue` 的 `320px` 与 `1px`。
+> 核对:组件中的网格尺寸、面板宽度与边框均改用语义 token;共享尺寸定义集中在 `tokens.css`,由构建及组件样式测试验证。
 
 ### Task 12: webui 实时事件(WS store)+ 图片查看器 + 设置页
 
@@ -292,11 +294,11 @@
 
 - [x] **Step 1: 写失败测试**(mock WebSocket):事件分发;断线 3 次后退避间隔递增;重连成功触发 status 刷新;`fs_changed` 后调用 browse 刷新回调。
 - [ ] **Step 2:** vitest → FAIL。
-- [ ] **Step 3:** 实现 store + 三个视图/组件。
+- [x] **Step 3:** 实现 store + 三个视图/组件。
 - [x] **Step 4:** vitest PASS;build 通过。
 - [x] **Step 5: Commit** `feat: webui live events, viewer, settings`
 
-> Step 3 部分完成:事件 store、查看器、设置页和横幅已存在,`fs_changed` 刷新另有 `live-refresh.spec.ts` 覆盖;但重连的 `void api.getStatus()` 丢弃返回值,未更新 folders/模型状态或清除旧状态横幅。现有重连测试只断言请求次数,未验证 UI 状态恢复。
+> 核对:重连后消费 `/status`,恢复模型与 folders 状态并清除过期横幅;设置页共用恢复后的状态。测试验证状态值及横幅恢复,`live-refresh.spec.ts` 继续覆盖 `fs_changed` 刷新。
 
 ### Task 13: 壳进程(ShellApi + shell_main + 托盘 + 单实例 + macOS 菜单)
 
@@ -312,11 +314,11 @@
   - `shell_main.py`:单实例锁(复用 `__main__.py` 现有机制)→ 启 ServerProcess → `on_ready` 时 `webview.create_window(url=f"http://127.0.0.1:{port}/?auth={token}", js_api=ShellApi())` → `webview.start()`;托盘(pystray:显示/退出)与窗口共存;`macos_menu.py` 仅 darwin 加载(PyObjC 构造 About/Quit/显示窗口)。
 - [x] **Step 1: 写失败测试** — ShellApi:fake `webview` 模块下 pick_folder 返回选中/None;reveal 按平台映射正确命令(monkeypatch subprocess)。ServerProcess:fake Popen,READY 行解析、崩溃重启一次后不再无限重启。
 - [ ] **Step 2:** pytest → FAIL。
-- [ ] **Step 3:** 实现四个模块。
-- [ ] **Step 4:** pytest PASS;`uv run bash scripts/run_tests.sh` 全绿;手动冒烟:`uv run python -m dt_image_search.shell --static-dir webui/dist` 能选目录→建索引→搜索→查看(记录进 PR 描述)。
+- [x] **Step 3:** 实现四个模块。
+- [ ] **Step 4:** pytest PASS;`uv run bash dt_image_search/scripts/run_tests.sh` 全绿;手动冒烟:`uv run python -m dt_image_search.shell --static-dir dt_image_search/webui/dist` 能选目录→建索引→搜索→查看(记录进 PR 描述)。
 - [x] **Step 5: Commit** `feat: pywebview shell with tray and server process management`
 
-> Step 3 部分完成:ShellApi、server 进程管理、单实例与窗口装配已实现,托盘仅在非 macOS 启动;计划中的 `shell/macos_menu.py` 与 About/Quit/显示窗口菜单装配缺失。Step 4 的自动化专项测试已通过,但全量脚本失败,且未找到完整手动冒烟记录。
+> 核对:已补 `shell/__main__.py` 和 macOS 菜单装配;About/Quit 由 pywebview 的 Cocoa 原生菜单提供,“显示窗口”恢复并显示窗口。服务管理补齐 READY 校验、退出等待及停止/重启并发保护;窗口关闭会清理 sidecar。Step 4 的专项测试、仓库脚本与打包 HTTP 冒烟已通过,但原生目录选择、查看器导航等完整 GUI 清单尚未人工验收,因此整步保留未勾选。
 
 ### Task 14: 打包、入口切换、Qt 清理与数据兼容验收
 
@@ -330,12 +332,12 @@
 **Interfaces:**
 - Produces: 构建命令不变(`bash scripts/build_pyinstaller.sh`);新增验收文档。
 
-- [ ] **Step 1:** 更新 spec 文件与构建脚本,产出可启动的 app(macOS 先行;MSIX 留 TODO 注释)。
+- [x] **Step 1:** 更新 spec 文件与构建脚本,产出可启动的 app(macOS 先行;MSIX 留 TODO 注释)。
 - [ ] **Step 2:** 手动冒烟:打包产物完成 Task 13 冒烟清单。
 - [ ] **Step 3:** **数据兼容验收**(对照 Spec 兼容性约束):用既有 app data 目录 ① 旧 Qt 版启动 → 记录 `app_data` 文件清单与 `app_config` 内容;② 新壳版启动同一目录 → 对比清单(允许新增 `thumb_cache/`,不允许缺失/改名/改格式);③ 新版添加 folder + 索引 → 旧 Qt 版再启动能读同一 DB/faiss 并正常搜索;结论写入 `docs/mobile-folder/[dev]webui-refactor-data-compat-checklist.md`。
-- [ ] **Step 4:** `uv run bash scripts/run_tests.sh` 全绿。
+- [x] **Step 4:** `uv run bash dt_image_search/scripts/run_tests.sh` 全绿。
 - [x] **Step 5: Commit** `feat: package shell+index server, switch default entry, data-compat acceptance`
 
-> Step 1 部分完成:打包已迁到 `dt_image_search/DTImageSearch_MainApp.spec`,含 shell/index server/Qt fallback 可执行文件与 `webui/dist`;构建脚本先构建 webui,`scripts/run_app.sh` 默认启动 shell,Qt 依赖保留了延期移除说明。`plan/fix-dev-logging-model-download.md` 记录了 2026-10-09 打包 dev 版启动、模型加载及 `/health` 成功,但未见本步骤要求的 MSIX 脚本 TODO 注释;MSIX 未验证的限制目前只记录在验收清单中。已有启动记录也不等同于 Step 2 的完整冒烟。Step 3 的验收文档已创建,但其“结果记录”四行仍全部待执行,不能据文档存在判定数据兼容验收完成。
+> 核对:打包入口保留各可执行文件所需 runtime hooks;index server 开启 stdout 以传递 READY;冻结入口先调用 `freeze_support()`,图像 worker 安装 transformers 兼容逻辑。macOS dev app 已实际构建并启动;`package_msix.ps1` 已补待验证 TODO。默认开发入口仍为 `scripts/run_app.sh`,Qt 保留回退入口。Step 2/3 的完整 GUI 与旧 Qt 版双向读写仍待验收,不能以打包成功、HTTP 验证或验收文档存在替代。
 
 > 备注(下一期入口):`tools/dts_dispatcher.py`、`base/status_bar_messenger.py` 及全部 Qt UI 文件(`view/`、`base/` Qt model、`browse/` Qt model)在 mobile 迁移完成后随 PySide6 依赖一并删除;本期它们保持冻结、仅作为回退入口。
