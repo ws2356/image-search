@@ -1,14 +1,48 @@
 <script setup lang="ts">
-// Registered-folder tree with index-status badges and per-node removal.
+// Lazy directory tree; status and removal belong only to registered roots.
+import { ref } from 'vue'
+import type { LoadFunction } from 'element-plus'
 import { useFoldersStore } from '../stores/folders'
+import { useFolderTree, type DirectoryNode } from '../composables/useFolderTree'
 import type { FolderDto } from '../api/types'
 
+const props = defineProps<{ selectedFolderId?: string; selectedPath?: string }>()
 const store = useFoldersStore()
+const { roots, expandedKeys, currentKey, expand, collapse, children } = useFolderTree(
+  () => store.folders,
+  () => ({ folderId: props.selectedFolderId, path: props.selectedPath }),
+)
+const generation = ref(0)
+const loadError = ref<string | null>(null)
 
 const emit = defineEmits<{
-  select: [folder: FolderDto]
+  select: [folder: FolderDto, path: string]
   changed: []
 }>()
+
+const loadNode: LoadFunction = async (node, resolve, reject) => {
+  if (node.level === 0) {
+    resolve(roots.value)
+    return
+  }
+  const directory = node.data as DirectoryNode
+  const requestGeneration = generation.value
+  try {
+    const nodes = await children(directory)
+    resolve(nodes)
+    if (requestGeneration === generation.value) loadError.value = null
+  } catch {
+    if (requestGeneration === generation.value) loadError.value = `无法读取 ${directory.path}，请重试`
+    reject()
+  }
+}
+
+function refresh() {
+  loadError.value = null
+  generation.value += 1
+}
+
+defineExpose({ refresh })
 
 const STATUS_META: Record<number, { label: string; type: 'info' | 'primary' | 'success' | 'warning' }> = {
   0: { label: '扫描中', type: 'info' },
@@ -28,22 +62,31 @@ async function onDelete(folder: FolderDto) {
 </script>
 
 <template>
+  <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />
   <el-tree
+    :key="generation"
     class="folder-tree"
-    :data="store.folders"
-    node-key="id"
-    :props="{ label: 'path' }"
-    :expand-on-click-node="false"
+    :data="roots"
+    node-key="key"
+    :props="{ label: 'label' }"
+    lazy
+    :load="loadNode"
+    :default-expanded-keys="expandedKeys"
+    :current-node-key="currentKey"
+    :auto-expand-parent="false"
+    :expand-on-click-node="true"
     highlight-current
-    @node-click="emit('select', $event as FolderDto)"
+    @node-click="(data: DirectoryNode) => emit('select', data.root, data.path)"
+    @node-expand="expand"
+    @node-collapse="collapse"
   >
     <template #default="{ data }">
       <span class="folder-node">
-        <el-tag size="small" :type="badge(data.status).type">{{ badge(data.status).label }}</el-tag>
-        <span class="folder-path" :title="data.path">{{ data.path }}</span>
-        <el-popconfirm title="移除该文件夹并删除其索引?" confirm-button-text="移除" cancel-button-text="取消" @confirm="onDelete(data as FolderDto)">
+        <el-tag v-if="data.isRoot" size="small" :type="badge(data.root.status).type">{{ badge(data.root.status).label }}</el-tag>
+        <span class="folder-path" :title="data.path">{{ data.label }}</span>
+        <el-popconfirm v-if="data.isRoot" title="移除该文件夹并删除其索引?" confirm-button-text="移除" cancel-button-text="取消" @confirm="onDelete(data.root)">
           <template #reference>
-            <el-button class="delete-btn" link type="danger" size="small">移除</el-button>
+            <el-button class="delete-btn" link type="danger" size="small" @click.stop>移除</el-button>
           </template>
         </el-popconfirm>
       </span>
@@ -61,6 +104,7 @@ async function onDelete(folder: FolderDto) {
   align-items: center;
   gap: var(--dts-space-s);
   width: 100%;
+  min-width: 0;
   padding-inline-end: var(--dts-space-s);
 }
 
@@ -76,7 +120,8 @@ async function onDelete(folder: FolderDto) {
   visibility: hidden;
 }
 
-.folder-node:hover .delete-btn {
+.folder-node:hover .delete-btn,
+.folder-node:focus-within .delete-btn {
   visibility: visible;
 }
 </style>

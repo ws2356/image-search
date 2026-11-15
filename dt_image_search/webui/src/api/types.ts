@@ -31,6 +31,7 @@ export interface SearchResponse {
 
 export interface BrowseResponse {
   folder: FolderDto
+  // Navigation directories share the registered root's id; key them by path.
   subfolders: FolderDto[]
   files: FileDto[]
 }

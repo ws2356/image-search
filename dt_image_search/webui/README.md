@@ -29,6 +29,14 @@ the same status snapshot. Search and settings consume that shared state.
 responses from closed connections and tells mounted browse views to refresh.
 Page-specific selection and loading state remain in their views.
 
+The browse sidebar is a lazy directory tree with one root per registered folder.
+`composables/useFolderTree.ts` keeps expansion and selection local to the page;
+directory keys combine the registered root id and full directory path.
+`GET /browse` enumerates immediate filesystem directories inside that root and
+returns indexed images owned by its id. Navigating a subdirectory never registers
+another folder or creates an index. Refresh and filesystem events reload expanded
+branches, while breadcrumb navigation reveals the selected directory in the tree.
+
 Define visual values in `src/styles/tokens.css`; components reference the
 `--dts-*` variables. The token tests build into a temporary directory, check
 the resulting theme CSS and reject literal colors/dimensions in components.

@@ -3,7 +3,7 @@
 // images on the right (descend into subfolders; breadcrumb to go back up).
 // UI only — all data comes from the index server API; live fs_changed events
 // debounce-refresh the current view.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import type { FolderDto, FileDto } from '../api/types'
@@ -25,31 +25,62 @@ const currentPath = ref<string>('')
 const subfolders = ref<FolderDto[]>([])
 const files = ref<FileDto[]>([])
 const loadingFiles = ref(false)
+const browseError = ref<string | null>(null)
+const folderTree = ref<InstanceType<typeof FolderTree> | null>(null)
+let browseRevision = 0
 
 onMounted(() => {
-  void folderStore.load()
+  void refreshAll()
 })
 
-useLiveRefresh(events, () => {
-  void folderStore.load()
-  void refresh()
+useLiveRefresh(events, () => { void refreshAll() })
+
+watch(() => folderStore.folders, (folders) => {
+  if (!selectedFolder.value) return
+  const root = folders.find((folder) => folder.id === selectedFolder.value?.id)
+  selectedFolder.value = root ?? null
+  if (!root) {
+    browseRevision += 1
+    currentPath.value = ''
+    files.value = []
+    subfolders.value = []
+    loadingFiles.value = false
+    browseError.value = null
+  }
 })
 
 async function refresh() {
   if (!selectedFolder.value) return
+  const revision = ++browseRevision
   loadingFiles.value = true
+  browseError.value = null
+  files.value = []
+  subfolders.value = []
   try {
     const resp = await api.browse(selectedFolder.value.id, currentPath.value)
+    if (revision !== browseRevision) return
     files.value = resp.files
     subfolders.value = resp.subfolders
+  } catch {
+    if (revision === browseRevision) browseError.value = '无法读取目录，请确认目录仍存在且有访问权限后刷新'
   } finally {
-    loadingFiles.value = false
+    if (revision === browseRevision) loadingFiles.value = false
   }
 }
 
-async function onSelect(folder: FolderDto) {
+async function refreshAll() {
+  try {
+    await folderStore.load()
+    folderTree.value?.refresh()
+    await refresh()
+  } catch {
+    browseError.value = '无法刷新文件夹列表，请重试'
+  }
+}
+
+async function onSelect(folder: FolderDto, path: string = folder.path) {
   selectedFolder.value = folder
-  currentPath.value = folder.path
+  currentPath.value = path
   await refresh()
 }
 
@@ -66,9 +97,7 @@ async function toRoot() {
 }
 
 function onTreeChanged() {
-  if (selectedFolder.value) {
-    void refresh()
-  }
+  void refreshAll()
 }
 
 function open(id: string) {
@@ -78,7 +107,7 @@ function open(id: string) {
 
 const crumbs = computed(() => {
   if (!selectedFolder.value || !currentPath.value) return []
-  const root = selectedFolder.value.path
+  const root = selectedFolder.value.path.replace(/\/?$/, '/')
   if (currentPath.value === root) return []
   let acc = root
   return currentPath.value.slice(root.length)
@@ -96,20 +125,28 @@ const crumbs = computed(() => {
     <el-aside width="var(--dts-layout-sidebar-width)" class="folder-aside">
       <div class="aside-header">
         <AddFolderButton @changed="onTreeChanged" />
-        <el-button link @click="refresh">刷新</el-button>
+        <el-button link @click="refreshAll">刷新</el-button>
       </div>
       <el-empty v-if="!hasFolders" description="还没有文件夹,点击“添加文件夹”开始" />
-      <FolderTree v-else @select="onSelect" @changed="onTreeChanged" />
+      <FolderTree
+        v-else
+        ref="folderTree"
+        :selected-folder-id="selectedFolder?.id"
+        :selected-path="currentPath"
+        @select="onSelect"
+        @changed="onTreeChanged"
+      />
     </el-aside>
     <el-main class="files-main" v-loading="loadingFiles">
+      <el-alert v-if="browseError" :title="browseError" type="error" :closable="false" />
       <el-empty v-if="!selectedFolder" description="选择左侧文件夹浏览图片" />
       <template v-else>
         <el-breadcrumb v-if="crumbs.length" class="crumbs">
           <el-breadcrumb-item>
-            <el-link :underline="false" @click="toRoot">根目录</el-link>
+            <el-link underline="never" @click="toRoot">根目录</el-link>
           </el-breadcrumb-item>
           <el-breadcrumb-item v-for="crumb in crumbs" :key="crumb.path">
-            <el-link :underline="false" @click="descend(crumb.path)">{{ crumb.label }}</el-link>
+            <el-link underline="never" @click="descend(crumb.path)">{{ crumb.label }}</el-link>
           </el-breadcrumb-item>
         </el-breadcrumb>
 
@@ -124,7 +161,7 @@ const crumbs = computed(() => {
           </el-button>
         </div>
 
-        <el-empty v-if="!files.length" description="此目录下没有图片" />
+        <el-empty v-if="!files.length && !loadingFiles && !browseError" description="此目录下没有图片" />
         <ImageGrid v-else :items="files" @open="open" />
       </template>
     </el-main>
