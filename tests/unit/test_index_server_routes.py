@@ -4,6 +4,7 @@ import os
 import sys
 import sqlite3
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock
 
 noop_decorator = lambda f: f
@@ -87,7 +88,10 @@ class _SqliteFixture:
         conn_cm = MagicMock()
         conn_cm.return_value.__enter__ = lambda s: self.connect()
         conn_cm.return_value.__exit__ = lambda s, *a: False
-        with patch(f'{ROUTES}.create_db_conn', conn_cm):
+        with (
+            patch(f'{ROUTES}.create_db_conn', conn_cm),
+            patch('dt_image_search.browse.directory_service.create_db_conn', conn_cm),
+        ):
             app = create_app(ctx=MagicMock(), token=TOKEN)
             yield TestClient(app)
 
@@ -314,13 +318,20 @@ class TestStatusRoute(unittest.TestCase):
 
 class TestBrowseRoute(unittest.TestCase):
     def _seed(self, db):
+        self.root = Path(db._tmp.name) / "photos"
+        self.root.mkdir()
+        (self.root / "sub" / "deep").mkdir(parents=True)
+        (self.root / "empty").mkdir()
+        self.root_path = self.root.as_posix() + "/"
         conn = db.connect()
-        conn.execute("INSERT INTO folders (path, status) VALUES ('/p/', 2)")
-        folder_id = conn.execute("SELECT id FROM folders WHERE path = '/p/'").fetchone()[0]
-        conn.execute("INSERT INTO folders (path, status) VALUES ('/p/sub/', 2)")
-        conn.execute("INSERT INTO files (path, folder_id, status) VALUES ('/p/a.jpg', ?, 1)", (folder_id,))
-        conn.execute("INSERT INTO files (path, folder_id, status) VALUES ('/p/a.jpg/', ?, 1)", (folder_id,))
-        conn.execute("INSERT INTO files (path, folder_id, status) VALUES ('/p/sub/deep.jpg', ?, 1)", (folder_id,))
+        folder_id = conn.execute(
+            "INSERT INTO folders (path, status) VALUES (?, 2)", (self.root_path,),
+        ).lastrowid
+        for path in ("a.jpg", "a.jpg/", "notes.txt", "sub/deep.jpg"):
+            conn.execute(
+                "INSERT INTO files (path, folder_id, status) VALUES (?, ?, 1)",
+                (self.root_path + path, folder_id),
+            )
         conn.commit()
         conn.close()
         return folder_id
@@ -333,9 +344,57 @@ class TestBrowseRoute(unittest.TestCase):
                 resp = client.get("/browse", params={"folder_id": folder_id}, headers=HEADERS)
             self.assertEqual(resp.status_code, 200)
             body = resp.json()
-            self.assertEqual(body["folder"]["path"], "/p/")
-            self.assertEqual([f["path"] for f in body["subfolders"]], ["/p/sub/"])
-            self.assertEqual([f["path"] for f in body["files"]], ["/p/a.jpg"])
+            self.assertEqual(body["folder"]["path"], self.root_path)
+            self.assertEqual([f["path"] for f in body["subfolders"]], [
+                self.root_path + "empty/", self.root_path + "sub/",
+            ])
+            self.assertTrue(all(f["id"] == str(folder_id) for f in body["subfolders"]))
+            self.assertEqual([f["path"] for f in body["files"]], [self.root_path + "a.jpg"])
+            with db.connect() as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM folders").fetchone()[0], 1)
+
+    def test_browse_nested_directory_uses_registered_root_for_files(self):
+        with _SqliteFixture() as db:
+            folder_id = self._seed(db)
+            for client in db.client():
+                resp = client.get("/browse", params={
+                    "folder_id": folder_id, "path": self.root_path + "sub/",
+                }, headers=HEADERS)
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual([f["path"] for f in resp.json()["subfolders"]], [self.root_path + "sub/deep/"])
+            self.assertEqual([f["path"] for f in resp.json()["files"]], [self.root_path + "sub/deep.jpg"])
+
+    def test_browse_rejects_paths_outside_root(self):
+        with _SqliteFixture() as db:
+            folder_id = self._seed(db)
+            sibling = self.root.with_name("photos-other")
+            sibling.mkdir()
+            for client in db.client():
+                for path in (str(sibling), self.root_path + "../", self.root_path + "../photos-other/"):
+                    with self.subTest(path=path):
+                        resp = client.get("/browse", params={"folder_id": folder_id, "path": path}, headers=HEADERS)
+                        self.assertEqual(resp.status_code, 400)
+
+    @unittest.skipIf(sys.platform == "win32", "symlink creation requires extra Windows permissions")
+    def test_browse_hides_and_rejects_symlinks_outside_root(self):
+        with _SqliteFixture() as db:
+            folder_id = self._seed(db)
+            link = self.root / "outside"
+            link.symlink_to(Path(db._tmp.name), target_is_directory=True)
+            for client in db.client():
+                resp = client.get("/browse", params={"folder_id": folder_id}, headers=HEADERS)
+                self.assertNotIn(link.as_posix() + "/", [f["path"] for f in resp.json()["subfolders"]])
+                resp = client.get("/browse", params={"folder_id": folder_id, "path": str(link)}, headers=HEADERS)
+                self.assertEqual(resp.status_code, 400)
+
+    def test_browse_missing_directory_is_404(self):
+        with _SqliteFixture() as db:
+            folder_id = self._seed(db)
+            for client in db.client():
+                resp = client.get("/browse", params={
+                    "folder_id": folder_id, "path": self.root_path + "gone/",
+                }, headers=HEADERS)
+            self.assertEqual(resp.status_code, 404)
 
     def test_browse_missing_folder_is_404(self):
         db = _SqliteFixture()

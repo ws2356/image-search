@@ -11,15 +11,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from dt_image_search.browse.folder_service import register_folder, watch_and_index, remove_folder, reindex_folder
-from dt_image_search.index.dts_index import is_image_file, get_model_state
+from dt_image_search.browse.directory_service import browse_directory
+from dt_image_search.index.dts_index import get_model_state
 from dt_image_search.index_server.media import ThumbnailCache, FileGoneError
 from dt_image_search.model.dts_db import (
     create_db_conn,
     get_all_folders,
     get_file_by_id,
     get_folder_by_id,
-    get_subfolders,
-    get_direct_child_files,
 )
 from dt_image_search.search.search_service import search_folders, ModelNotReadyError
 from dt_image_search.index_server.serializers import (
@@ -27,7 +26,6 @@ from dt_image_search.index_server.serializers import (
     file_to_dict,
     search_result_to_dict,
 )
-from dt_image_search.tools.dts_util import is_same_folder_path
 from pc_common.model.dts_fs import get_app_data_path
 from fastapi.responses import FileResponse
 
@@ -51,20 +49,6 @@ def _folder_by_id(folder_id: int):
 def _list_folders():
     with create_db_conn() as conn:
         return get_all_folders(conn)
-
-
-def _browse_payload(folder, path: str | None):
-    root = path if path else folder.path
-    with create_db_conn() as conn:
-        subfolders = [
-            f for f in get_subfolders(conn, root)
-            if not is_same_folder_path(f.path, folder.path)
-        ]
-        files = [
-            f for f in get_direct_child_files(conn, root)
-            if f.folder_id == folder.id and is_image_file(f.path)
-        ]
-    return subfolders, files
 
 
 def _file_by_id(file_id: int):
@@ -134,7 +118,14 @@ def attach_routes(app) -> None:
         folder = await asyncio.to_thread(_folder_by_id, folder_id)
         if folder is None:
             raise HTTPException(status_code=404, detail="folder not found")
-        subfolders, files = await asyncio.to_thread(_browse_payload, folder, path)
+        try:
+            subfolders, files = await asyncio.to_thread(browse_directory, folder, path)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="directory is outside the registered folder")
+        except (FileNotFoundError, NotADirectoryError):
+            raise HTTPException(status_code=404, detail="directory not found")
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="directory is not readable")
         return {
             "folder": folder_to_dict(folder),
             "subfolders": [folder_to_dict(f) for f in subfolders],
