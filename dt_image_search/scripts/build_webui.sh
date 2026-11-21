@@ -14,25 +14,20 @@ if [ -f "$HOME/.nvm/nvm.sh" ] && ! command -v node >/dev/null 2>&1; then
     . "$HOME/.nvm/nvm.sh"
 fi
 command -v node >/dev/null 2>&1 || { echo "Error: node not found in PATH" >&2; exit 1; }
-
-# corepack ships with node and reads "packageManager" from package.json, so the
-# persona manager version stays pinned without a global pnpm install.
-export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-pnpm_cmd=""
-if command -v pnpm >/dev/null 2>&1; then
-    pnpm_cmd="pnpm"
-elif command -v corepack >/dev/null 2>&1; then
-    pnpm_cmd="corepack pnpm"
-else
-    echo "Error: neither pnpm nor corepack found in PATH" >&2
-    exit 1
-fi
+command -v npm >/dev/null 2>&1 || { echo "Error: npm not found in PATH" >&2; exit 1; }
 
 cd "$webui_dir"
-echo "==> Installing webui dependencies ($pnpm_cmd)"
-$pnpm_cmd install --frozen-lockfile
+package_manager="$(node -p "require('./package.json').packageManager")"
+if [[ "$package_manager" != pnpm@* ]]; then
+    echo "Error: webui/package.json must pin pnpm in packageManager" >&2
+    exit 1
+fi
+pnpm_cmd=(npm exec --yes "--package=$package_manager" -- pnpm)
+
+echo "==> Installing webui dependencies (${pnpm_cmd[*]})"
+"${pnpm_cmd[@]}" install --frozen-lockfile
 echo "==> Building webui (vite build)"
-$pnpm_cmd run build
+"${pnpm_cmd[@]}" run build
 
 if [ ! -f "$webui_dir/dist/index.html" ]; then
     echo "Error: webui build did not produce dist/index.html" >&2

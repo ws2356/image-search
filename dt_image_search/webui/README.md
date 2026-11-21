@@ -13,6 +13,12 @@ pnpm -C dt_image_search/webui build
 bash scripts/run_app.sh
 ```
 
+For packaging, run `bash dt_image_search/scripts/build_webui.sh` with Node.js
+and npm on `PATH`. It uses `npm exec` to run the pnpm version pinned in
+`package.json`, avoiding older global pnpm/Corepack launchers that can try to
+load pnpm 12's native executable as JavaScript. The first run needs network access
+to populate npm's cache.
+
 `build` checks TypeScript (including Vue templates) before producing `dist/`.
 For frontend development, start an index server, then run Vite with its port
 and token:
