@@ -94,7 +94,7 @@ DEBUG:urllib3.connectionpool:https://otel.wansong.vip:443 "POST /v1/logs HTTP/1.
     3. Host new model as zip archive in AFD
     4. Fork open_clip supporting passing cache dir
     5. Download archive and unzip
-37. Still has corner cases file deletion is unknown to app while app is not running
+37. Still has corner cases file deletion is unknown to app while app is not running (currently mitigated by full refresh on app launch)
 38. handle subfolder permission error: need to ignore  them
 39. fix multiple writer conflicts: 方案 1（最重要）：启用 WAL 模式
 

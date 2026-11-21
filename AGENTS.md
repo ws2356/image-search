@@ -12,6 +12,7 @@ This repository contains multiple products/platform combinations.
 | Product | Location |
 |----------|----------|
 | AuSearch Desktop | dt_image_search |
+| AuSearch Desktop WebUI | dt_image_search/webui |
 | AuBackup iOS | mobile/ios |
 | AuBackup Android | mobile/rn |
 | SnapGet Desktop | dt_image_search |
@@ -19,27 +20,15 @@ This repository contains multiple products/platform combinations.
 
 ## Product Specs
 
-Desktop/iOS/Android implement the same backup & sharing protocol.
-
 Specifications:
 
 - Backup Spec (manually maintained): docs/mobile-folder/
 - Sharing Spec (maintained by the superpowers skill): docs/superpowers/
 
-## Shared Engineering Principles
-
-- Ask for clarification if requirements are ambiguous.
-- Prefer maintainable solutions over quick fixes.
-- Do not duplicate documentation. Instead, maintain a single source of truth and refer to the source as needed.
-- Build must pass before task completion.
-- Think critically.
-- Keep commits small. Leave the LLM name in the commit message with format `[LLM: <LLM_NAME>]` where `<LLM_NAME>` can be, e.g. gpt-5.4, gpt-5.3-codex, opus-4.7, deepseek-v4-pro, glm-5.1, opencode/mimo-v2.5-pro ..., which will be used for audit and assessment of the LLM's performance.
+## Engineering principals
 - Commit & push frequently. This is mainly to avoid data loss.
-- The `SOLID` principles.  Single Responsibility (Every module, class, or function should be responsible for a single part of the functionality); Open/Closed (You should be able to add new features or behaviors without changing the existing source code); Liskov Substitution (Don't "empty out" inherited methods. If a subclass cannot actually perform the action of its parent, the inheritance hierarchy is wrong); Interface Segregation (It is better to have many small, specific interfaces than one large, general-purpose one); Dependency Inversion (Use Dependency Injection).
-- DRY (Don't Repeat Yourself). Abstract common logic into reusable functions or modules. Avoid copy-pasting code blocks.
-- KISS (Keep It Simple, Stupid). Avoid over-engineering. Choose the simplest solution that fully satisfies the requirements.
+- Leave the LLM name in the commit message with format `[LLM(s): <LLM_NAME>...]` where `<LLM_NAME>` can be, e.g. gpt-5.4, gpt-5.3-codex, opus-4.7, deepseek-v4-pro, glm-5.1, opencode/mimo-v2.5-pro ..., separated by comma, which will be used for audit and assessment of the LLM's performance.
 - YAGNI (You Ain't Gonna Need It). Do not add functionality until it is necessary. Avoid "future-proofing" that complicates the current design.
-
 - **Clean &amp; Maintainable Code**: Clean &amp; Maintanable code is as important functionality. Always ask yourself if there are cleaner &amp; simpler plan/implementation that satisfies the requirements, even when that means the requirement to refactor existing code in which case you need to pause and ask the user whether do a refactor first before implementing the new changes.
 - **One way to do things**: For any given problem, there should ideally be one clear and consistent way to solve it within the codebase. This reduces cognitive load and makes it easier for developers to understand and contribute.
 - **Separation of Concerns**: UI code should not contain business logic. Business logic should be in separate controller or worker classes. Each file should have a clear and often singular responsibility.
