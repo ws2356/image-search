@@ -19,7 +19,13 @@ def default_static_dir() -> str | None:
     return str(_WEBUI_DIST) if _WEBUI_DIST.is_dir() else None
 
 
-def run_server(token: str, static_dir: str | None = None, skip_model_init: bool = False) -> None:
+def run_server(
+    token: str,
+    static_dir: str | None = None,
+    skip_model_init: bool = False,
+    port: int = 0,
+) -> None:
+    """Run on loopback, letting the OS choose a free port when port is zero."""
     setup_process_env()
 
     # The server runs the pipeline the user actually diagnoses (model
@@ -41,7 +47,7 @@ def run_server(token: str, static_dir: str | None = None, skip_model_init: bool 
     import uvicorn
 
     app = create_app(ctx, token, static_dir)
-    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
 
     def request_shutdown(signum, frame):
@@ -69,10 +75,18 @@ def run_server(token: str, static_dir: str | None = None, skip_model_init: bool 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AuSearch index server")
     parser.add_argument("--auth-token", required=True, help="One-time token shared with the shell/webui")
+    parser.add_argument("--port", type=int, default=0, help="Loopback port (default: 0, automatically choose a free port)")
     parser.add_argument("--static-dir", default=None, help="Directory of the webui build to serve")
     parser.add_argument("--skip-model-init", action="store_true", help="Testing switch: skip model downloader/preload")
     args = parser.parse_args()
-    run_server(token=args.auth_token, static_dir=args.static_dir or default_static_dir(), skip_model_init=args.skip_model_init)
+    if not 0 <= args.port <= 65535:
+        parser.error("--port must be between 0 and 65535")
+    run_server(
+        token=args.auth_token,
+        static_dir=args.static_dir or default_static_dir(),
+        skip_model_init=args.skip_model_init,
+        port=args.port,
+    )
 
 
 if __name__ == "__main__":

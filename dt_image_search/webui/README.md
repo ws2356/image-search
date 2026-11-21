@@ -20,14 +20,23 @@ load pnpm 12's native executable as JavaScript. The first run needs network acce
 to populate npm's cache.
 
 `build` checks TypeScript (including Vue templates) before producing `dist/`.
-For frontend development, start an index server, then run Vite with its port
+For frontend development, start an index server on port 8000:
+
+```bash
+uv run --frozen python -m dt_image_search.index_server --auth-token local-dev --port 8000
+```
+
+Wait for `DTS_READY 8000`, then run Vite in a second terminal with the same port
 and token:
 
 ```bash
-uv run --frozen python -m dt_image_search.index_server --auth-token local-dev
-# Use the port from DTS_READY:
 DTS_DEV_PORT=8000 VITE_DTS_TOKEN=local-dev pnpm -C dt_image_search/webui dev
 ```
+
+Without `--port`, the index server chooses a free port automatically for the
+desktop shell. To use that mode with Vite, set `DTS_DEV_PORT` to the actual
+port printed in `DTS_READY`; Vite defaults to 8000 when it is unset. Restart
+Vite after changing `DTS_DEV_PORT`.
 
 `stores/status.ts` owns model readiness and refreshes the folder store from
 the same status snapshot. Search and settings consume that shared state.
